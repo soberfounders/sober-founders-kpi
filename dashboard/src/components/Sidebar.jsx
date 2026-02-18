@@ -8,21 +8,26 @@ import {
   CheckSquare, 
   BarChart2, 
   Megaphone,
-  Mail 
+  Mail,
+  Database,
+  Calendar,
+  Globe
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const sidebarItems = [
   { id: 'Dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { id: 'Attendance', icon: Calendar, label: 'Attendance' },
   { id: 'Leads', icon: Users, label: 'Leads' },
   { id: 'Email', icon: Mail, label: 'Email' },
+  { id: 'Website Traffic', icon: Globe, label: 'Website Traffic' },
   { id: 'Marketing', icon: Megaphone, label: 'Marketing' },
   { id: 'Sales', icon: TrendingUp, label: 'Sales' },
   { id: 'Revenue', icon: DollarSign, label: 'Revenue' },
   { id: 'Operations', icon: Briefcase, label: 'Operations' },
   { id: 'To-Do\'s', icon: CheckSquare, label: 'To-Do\'s' },
-  { id: 'Email Marketing', icon: Megaphone, label: 'Email Marketing' },
   { id: 'Analysis', icon: BarChart2, label: 'Analysis' },
+  { id: 'Data Cleaning', icon: Database, label: 'Data Cleaning' },
 ];
 
 const Sidebar = ({ activeTab, setActiveTab }) => {

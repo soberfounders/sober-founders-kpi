@@ -26,6 +26,19 @@ serve(async (req: Request) => {
     const triggerRefresh = url.searchParams.get("trigger_refresh") === 'true';
     const weekStart = url.searchParams.get("week_start") || new Date().toISOString().slice(0, 10);
 
+    // Dynamic Routing for Write Operations
+    if (req.method === 'PATCH') {
+      const { pageId, properties } = await req.json();
+      const result = await updateNotionTask(pageId, properties);
+      return new Response(JSON.stringify(result), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (req.method === 'POST' && (url.pathname.endsWith('/tasks') || req.headers.get('x-pathname')?.endsWith('/tasks'))) {
+      const { properties } = await req.json();
+      const result = await createNotionTask(properties);
+      return new Response(JSON.stringify(result), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     console.log(`Starting Master Sync for week: ${weekStart}, force refresh: ${triggerRefresh}`);
 
     const results = [];
@@ -71,7 +84,105 @@ serve(async (req: Request) => {
   }
 });
 
+
 async function syncNotion(supabase: any) {
-  // logic to fetch from user_integrations and call Notion API
-  return [];
+  const secret = Deno.env.get('NOTION_API_KEY') ?? '';
+  const databaseId = Deno.env.get('NOTION_DATABASE_ID') ?? '';
+
+  if (!secret || !databaseId) {
+    console.error("Missing Notion credentials");
+    throw new Error("Missing Notion credentials in environment variables");
+  }
+
+
+  const response = await fetch(`https://api.notion.com/v1/databases/${databaseId}/query`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${secret}`,
+      'Notion-Version': '2022-06-28',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ page_size: 100 }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(`Notion Sync failed: ${error.message}`);
+  }
+
+  const data = await response.json();
+  const pages = data.results;
+
+  const todos = pages.map((page: any) => {
+    const props = page.properties;
+    const title = props.Name?.title?.[0]?.plain_text || props.Title?.title?.[0]?.plain_text || 'Untitled';
+    const status = props.Status?.status?.name || props.Status?.select?.name || 'No Status';
+    const dueDate = props.Date?.date?.start || null;
+    
+    return {
+      notion_page_id: page.id,
+      task_title: title,
+      status: status,
+      due_date: dueDate,
+      url: page.url,
+      metadata: props,
+    };
+  });
+
+  if (todos.length > 0) {
+    const { error } = await supabase
+      .from('notion_todos')
+      .upsert(todos, { onConflict: 'notion_page_id' });
+    if (error) throw error;
+  }
+
+  const openTasks = todos.filter((t: any) => t.status !== 'Done' && t.status !== 'Completed').length;
+  
+  return [{
+    metric_name: 'Open Notion Tasks',
+    metric_value: openTasks,
+    source_slug: 'notion',
+    metadata: { total_tasks: todos.length }
+  }];
+}
+
+async function updateNotionTask(pageId: string, properties: any) {
+  const response = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
+    method: 'PATCH',
+    headers: {
+      'Authorization': `Bearer ${Deno.env.get('NOTION_API_KEY')}`,
+      'Notion-Version': '2022-06-28',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ properties }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(`Notion Update failed: ${error.message}`);
+  }
+
+  return await response.json();
+}
+
+async function createNotionTask(properties: any) {
+  const response = await fetch(`https://api.notion.com/v1/pages`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${Deno.env.get('NOTION_API_KEY')}`,
+      'Notion-Version': '2022-06-28',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      parent: { database_id: Deno.env.get('NOTION_DATABASE_ID') },
+      properties,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(`Notion Create failed: ${error.message}`);
+  }
+
+  return await response.json();
 }

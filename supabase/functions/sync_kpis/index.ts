@@ -40,15 +40,26 @@ async function hubspotSearchContactsCreatedBetween(
     "annual_revenue_in_dollars",
     "membership_s_",
     "membership_s",
+    "hs_latest_meeting_activity",
+    "first_conversion_event_name",
+    "recent_conversion_event_name",
 
     // Traffic source + drilldowns
     "hs_analytics_source",
     "hs_analytics_source_data_1",
     "hs_analytics_source_data_2",
+    "hs_latest_source",
+    "hs_latest_source_data_1",
+    "hs_latest_source_data_2",
 
     // "campaign" equivalents we can use later to infer lead form / campaign
     "hs_analytics_first_touch_converting_campaign",
     "hs_analytics_last_touch_converting_campaign",
+    "engagements_last_meeting_booked_campaign",
+    "engagements_last_meeting_booked_medium",
+    "engagements_last_meeting_booked_source",
+    "num_conversion_events",
+    "num_unique_conversion_events",
 
     // Optional if you use it elsewhere
     "campaign_source",
@@ -146,6 +157,24 @@ async function pgRpcUpsertHubspotContacts(
       hs_analytics_source: hsSource,
       hs_analytics_source_data_1: p.hs_analytics_source_data_1 ?? null,
       hs_analytics_source_data_2: p.hs_analytics_source_data_2 ?? null,
+      hs_latest_source: p.hs_latest_source ?? null,
+      hs_latest_source_data_1: p.hs_latest_source_data_1 ?? null,
+      hs_latest_source_data_2: p.hs_latest_source_data_2 ?? null,
+      first_conversion_event_name: p.first_conversion_event_name ?? null,
+      recent_conversion_event_name: p.recent_conversion_event_name ?? null,
+      engagements_last_meeting_booked_campaign: p.engagements_last_meeting_booked_campaign ?? null,
+      engagements_last_meeting_booked_medium: p.engagements_last_meeting_booked_medium ?? null,
+      engagements_last_meeting_booked_source: p.engagements_last_meeting_booked_source ?? null,
+      num_conversion_events:
+        p.num_conversion_events === null || p.num_conversion_events === undefined || p.num_conversion_events === ""
+          ? null
+          : Number(p.num_conversion_events),
+      num_unique_conversion_events:
+        p.num_unique_conversion_events === null ||
+          p.num_unique_conversion_events === undefined ||
+          p.num_unique_conversion_events === ""
+          ? null
+          : Number(p.num_unique_conversion_events),
 
       // NOTE: we are not writing hs_latest_form_submission_name because we have not confirmed the exact property name
       // We can add it once we confirm it exists in your portal.
@@ -210,7 +239,7 @@ serve(async (req) => {
     }), {
       headers: { "content-type": "application/json" },
     });
-  } catch (e) {
+  } catch (e: any) {
     return new Response(JSON.stringify({ ok: false, error: String(e?.message ?? e) }), {
       status: 500,
       headers: { "content-type": "application/json" },

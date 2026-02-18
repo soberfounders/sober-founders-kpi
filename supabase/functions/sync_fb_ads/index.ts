@@ -16,6 +16,10 @@ function addDays(dateStr: string, days: number) {
   return isoDateOnly(d);
 }
 
+function normalizeAdAccountId(value: unknown): string {
+  return String(value ?? "").replace(/^act_/i, "");
+}
+
 // Fetch fb_funnel_rules from Supabase
 async function fetchFunnelRules(supabaseUrl: string, serviceRoleKey: string) {
   const endpoint = `${supabaseUrl}/rest/v1/fb_funnel_rules?is_active=eq.true&order=priority.asc`;
@@ -38,6 +42,14 @@ async function fetchFunnelRules(supabaseUrl: string, serviceRoleKey: string) {
 // Determine funnel_key for a row based on rules
 function applyFunnelRules(rules: any[], row: any): string {
   for (const rule of rules) {
+    // Check if rule applies to this ad account (if specified)
+    if (
+      rule.ad_account_id &&
+      normalizeAdAccountId(rule.ad_account_id) !== normalizeAdAccountId(row.ad_account_id)
+    ) {
+        continue;
+    }
+
     const fieldValue = row[rule.match_field];
     if (!fieldValue) continue;
 
@@ -48,7 +60,8 @@ function applyFunnelRules(rules: any[], row: any): string {
       return rule.funnel_key;
     }
   }
-  return 'unknown'; // fallback
+  // Business rule: everything that is not Phoenix maps to free Tue/Thu funnel.
+  return 'free';
 }
 
 // Fetch Meta ads insights
@@ -84,14 +97,16 @@ async function fetchMetaAdsInsights(
   let nextUrl: string | null = url;
 
   while (nextUrl) {
-    const resp = await fetch(nextUrl);
+    const resp: Response = await fetch(nextUrl);
     
     if (!resp.ok) {
       const txt = await resp.text();
-      throw new Error(`Meta API failed: ${resp.status} ${txt}`);
+      // Log error but don't fail entire batch if one account fails? 
+      // For now, let's throw to be safe.
+      throw new Error(`Meta API failed for ${adAccountId}: ${resp.status} ${txt}`);
     }
 
-    const json = await resp.json();
+    const json: any = await resp.json();
     allData.push(...(json.data ?? []));
 
     nextUrl = json.paging?.next ?? null;
@@ -106,6 +121,8 @@ async function upsertFbAdsData(
   serviceRoleKey: string,
   rows: any[],
 ) {
+  if (rows.length === 0) return 0;
+  
   const endpoint = `${supabaseUrl}/rest/v1/raw_fb_ads_insights_daily?on_conflict=ad_account_id,date_day,ad_id`;
 
   const resp = await fetch(endpoint, {
@@ -131,7 +148,12 @@ async function upsertFbAdsData(
 serve(async (req) => {
   try {
     const META_ACCESS_TOKEN = mustGetEnv("META_ACCESS_TOKEN");
-    const META_AD_ACCOUNT_ID = mustGetEnv("META_AD_ACCOUNT_ID");
+    // Support multiple comma-separated IDs
+    const META_AD_ACCOUNT_IDS_STR = Deno.env.get("META_AD_ACCOUNT_IDS") || Deno.env.get("META_AD_ACCOUNT_ID") || "";
+    if (!META_AD_ACCOUNT_IDS_STR) throw new Error("Missing META_AD_ACCOUNT_IDS or META_AD_ACCOUNT_ID");
+
+    const adAccountIds = META_AD_ACCOUNT_IDS_STR.split(',').map(s => s.trim()).filter(Boolean);
+
     const SUPABASE_URL = mustGetEnv("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = mustGetEnv("SUPABASE_SERVICE_ROLE_KEY");
 
@@ -154,61 +176,84 @@ serve(async (req) => {
     // Fetch funnel rules
     const funnelRules = await fetchFunnelRules(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Fetch Meta ads data
-    const adsData = await fetchMetaAdsInsights(
-      META_ACCESS_TOKEN,
-      META_AD_ACCOUNT_ID,
-      weekStart,
-      weekEnd,
-    );
+    let totalAdsFetched = 0;
+    let totalUpserted = 0;
+    let allRows: any[] = [];
 
-    // Transform and apply funnel rules
-    const rows = adsData.map((row: any) => {
-      const leadAction = row.actions?.find((a: any) => a.action_type === 'lead');
-      const leads = leadAction ? parseInt(leadAction.value) : 0;
+    // Iterate over each ad account
+    for (const adAccountId of adAccountIds) {
+        try {
+            // Fetch Meta ads data
+            const adsData = await fetchMetaAdsInsights(
+              META_ACCESS_TOKEN,
+              adAccountId,
+              weekStart,
+              weekEnd,
+            );
+            
+            totalAdsFetched += adsData.length;
 
-      const transformedRow = {
-        ad_account_id: META_AD_ACCOUNT_ID,
-        date_day: row.date_start,
-        campaign_id: row.campaign_id,
-        campaign_name: row.campaign_name,
-        adset_id: row.adset_id,
-        adset_name: row.adset_name,
-        ad_id: row.ad_id,
-        ad_name: row.ad_name,
-        spend: parseFloat(row.spend) || 0,
-        impressions: parseInt(row.impressions) || 0,
-        clicks: parseInt(row.clicks) || 0,
-        leads: leads,
-      };
+            // Transform and apply funnel rules
+            const rows = adsData.map((row: any) => {
+              const leadAction = row.actions?.find((a: any) => a.action_type === 'lead');
+              const leads = leadAction ? parseInt(leadAction.value) : 0;
 
-      // Apply funnel rules to determine funnel_key
-      const funnelKey = applyFunnelRules(funnelRules, transformedRow);
-      
-      return {
-        ...transformedRow,
-        funnel_key: funnelKey,
-      };
-    });
+              const transformedRow = {
+                ad_account_id: normalizeAdAccountId(adAccountId),
+                date_day: row.date_start,
+                campaign_id: row.campaign_id,
+                campaign_name: row.campaign_name,
+                adset_id: row.adset_id,
+                adset_name: row.adset_name,
+                ad_id: row.ad_id,
+                ad_name: row.ad_name,
+                spend: parseFloat(row.spend) || 0,
+                impressions: parseInt(row.impressions) || 0,
+                clicks: parseInt(row.clicks) || 0,
+                leads: leads,
+              };
 
-    // Upsert to database
-    const upserted = await upsertFbAdsData(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, rows);
+              // Apply funnel rules to determine funnel_key
+              // HARDCODED RULE: If campaign name contains "phoenix", map to 'phoenix' funnel
+              let funnelKey = 'unknown';
+              if ((transformedRow.campaign_name || '').toLowerCase().includes('phoenix')) {
+                  funnelKey = 'phoenix';
+              } else {
+                  funnelKey = applyFunnelRules(funnelRules, transformedRow);
+              }
+              
+              return {
+                ...transformedRow,
+                funnel_key: funnelKey,
+              };
+            });
+            
+            allRows.push(...rows);
+        } catch (err) {
+            console.error(`Error fetching/processing ads for account ${adAccountId}:`, err);
+            // Continue to next account
+        }
+    }
+
+    // Upsert to database (batch per account or all at once? All at once is fine for small scale)
+    const upserted = await upsertFbAdsData(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, allRows);
 
     return new Response(JSON.stringify({
       ok: true,
       week_start: weekStart,
       week_end: weekEnd,
-      ads_fetched: adsData.length,
+      ads_fetched: totalAdsFetched,
       rows_upserted: upserted,
       funnel_breakdown: {
-        phoenix: rows.filter(r => r.funnel_key === 'phoenix').length,
-        free: rows.filter(r => r.funnel_key === 'free').length,
+        phoenix: allRows.filter(r => r.funnel_key === 'phoenix').length,
+        free: allRows.filter(r => r.funnel_key === 'free').length,
+        unknown: allRows.filter(r => r.funnel_key === 'unknown').length,
       },
     }), {
       headers: { "content-type": "application/json" },
     });
 
-  } catch (e) {
+  } catch (e: any) {
     console.error("sync_fb_ads error:", e);
     return new Response(JSON.stringify({ 
       ok: false, 

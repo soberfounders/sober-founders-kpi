@@ -1,0 +1,22 @@
+=== REPORT FOR 2026-02-17 ===
+Total Joined: 13
+Net Attendees: 10
+
+--- INCLUDED (10) ---
++ Andrew Lassise
++ Austin Rampt
++ Josh Cougler On the wall
++ Matthew S
++ Renee
++ Robert D
++ ryan
++ Stephen Deason
++ Steven Barela
++ Tim 323 819 2403
+
+--- REMOVED DUPLICATES (1) ---
+- Steven Barela -> Steven Barela (Name Match)
+
+--- REMOVED BOTS (2) ---
+x Andrew's Fathom Notetaker
+x read.ai meeting notes

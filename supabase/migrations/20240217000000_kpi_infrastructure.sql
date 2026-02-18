@@ -35,16 +35,30 @@ CREATE TABLE IF NOT EXISTS public.integration_credentials (
   UNIQUE(user_integration_id, credential_key)
 );
 
+-- 5. Notion To-Dos (Specific list storage)
+CREATE TABLE IF NOT EXISTS public.notion_todos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  notion_page_id TEXT UNIQUE NOT NULL,
+  task_title TEXT NOT NULL,
+  status TEXT,
+  due_date TIMESTAMPTZ,
+  priority TEXT,
+  url TEXT,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  last_updated_at TIMESTAMPTZ DEFAULT now(),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- 4. Unified KPI Metrics
--- This table aggregates data from various sources into a common format for the dashboard
 CREATE TABLE IF NOT EXISTS public.kpi_metrics (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  source_slug TEXT NOT NULL, -- 'hubspot', 'facebook', 'notion', etc.
-  metric_name TEXT NOT NULL, -- e.g., 'Total Leads', 'Ad Spend', 'Attendees'
+  source_slug TEXT NOT NULL,
+  metric_name TEXT NOT NULL,
   metric_value NUMERIC NOT NULL,
   metric_date DATE NOT NULL DEFAULT CURRENT_DATE,
-  period TEXT DEFAULT 'daily', -- 'daily', 'weekly', 'monthly'
+  period TEXT DEFAULT 'daily',
   metadata JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT now()
 );
@@ -54,10 +68,18 @@ ALTER TABLE public.supported_integrations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_integrations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.integration_credentials ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.kpi_metrics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notion_todos ENABLE ROW LEVEL SECURITY;
 
--- Everyone can see supported integrations
+-- Everyone can see supported integrations (including anon for dev)
 CREATE POLICY "Public read supported_integrations" ON public.supported_integrations
-  FOR SELECT TO authenticated USING (true);
+  FOR SELECT TO anon, authenticated USING (true);
+
+-- Public read access for dashboard (development mode)
+CREATE POLICY "Public read access for todos" ON public.notion_todos
+  FOR SELECT TO anon, authenticated USING (true);
+
+CREATE POLICY "Public read access for metrics" ON public.kpi_metrics
+  FOR SELECT TO anon, authenticated USING (true);
 
 -- Users can only see their own connections
 CREATE POLICY "Users view own integrations" ON public.user_integrations
@@ -73,8 +95,11 @@ CREATE POLICY "Users view own credentials" ON public.integration_credentials
     )
   );
 
--- Users can only see their own metrics
-CREATE POLICY "Users view own metrics" ON public.kpi_metrics
+-- Users can only see/edit their own data (full access)
+CREATE POLICY "Users manage own todos" ON public.notion_todos
+  FOR ALL TO authenticated USING (auth.uid() = user_id);
+
+CREATE POLICY "Users manage own metrics" ON public.kpi_metrics
   FOR ALL TO authenticated USING (auth.uid() = user_id);
 
 -- SEED DATA

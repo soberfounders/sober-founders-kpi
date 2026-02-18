@@ -4,6 +4,11 @@ import Header from './components/Header';
 import DashboardOverview from './views/DashboardOverview';
 import LeadsDashboard from './views/LeadsDashboard';
 import EmailDashboard from './views/EmailDashboard';
+import TodosDashboard from './views/TodosDashboard';
+import DataCleaning from './views/DataCleaning'; // Added import
+import AttendanceDashboard from './views/AttendanceDashboard'; // Added import
+import EmailMarketingDashboard from './views/EmailMarketingDashboard';
+import WebsiteTrafficDashboard from './views/WebsiteTrafficDashboard';
 
 function App() {
   const [activeTab, setActiveTab] = useState('Dashboard');
@@ -14,6 +19,16 @@ function App() {
         return <LeadsDashboard />;
       case 'Email':
         return <EmailDashboard />;
+      case 'Marketing':
+        return <EmailMarketingDashboard />;
+      case 'Website Traffic':
+        return <WebsiteTrafficDashboard />;
+      case "To-Do's":
+        return <TodosDashboard />;
+      case 'Data Cleaning':
+        return <DataCleaning />;
+      case 'Attendance': // Added case for AttendanceDashboard
+        return <AttendanceDashboard />;
       default:
         return <DashboardOverview />;
     }

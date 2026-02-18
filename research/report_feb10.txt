@@ -1,0 +1,25 @@
+=== REPORT FOR 2026-02-10 ===
+Total Joined: 16
+Net Attendees: 10
+
+--- INCLUDED (10) ---
++ Brian Poth (he/they)
++ David Mathias
++ iPad
++ Josh Cougler On the wall
++ Mark Howley
++ Matthew S
++ sam ghanem
++ Stephen Deason
++ Steven Barela
++ Tim Stivers
+
+--- REMOVED DUPLICATES (3) ---
+- Steven Barela -> Steven Barela (Name Match)
+- Mark Howley -> Mark Howley (Name Match)
+- Mark Howley -> Mark Howley (Name Match)
+
+--- REMOVED BOTS (3) ---
+x Andrew's Fathom Notetaker
+x Fireflies.ai Notetaker Sam
+x read.ai meeting notes

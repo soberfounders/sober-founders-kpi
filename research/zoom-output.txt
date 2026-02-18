@@ -1,0 +1,87 @@
+1. Authenticating with Zoom...
+✅ Authenticated!
+
+2. Checking Instances for Meeting ID: 84242212480...
+   Found 38 past instances.
+
+   🔎 Analyzing Instance: 2026-02-12T15:55:56Z (UUID: 1rW7AIiMTnup4UqkGyy1yQ==)
+      ✅ Raw Count: 26
+      ✅ Filtered Count: 21
+      ❌ Excluded: 5 (Fireflies.ai Notetaker Diane, Andrew's Fathom Notetaker, read.ai meeting notes, Ken's Notetaker (Otter.ai), read.ai meeting notes)
+      Attendees:
+        - Arlina Allen ()
+        - Andrew Lassise (alassise@soberfounders.org)
+        - Emil ()
+        - Bert W ()
+        - Peter Moulton ()
+        - Carrie Campbell ()
+        - Kandace Arena (kandace@soberfounders.org)
+        - Emil Bakiyev ()
+        - Tom Walsh ()
+        - Erik Speakman ()
+        - Keith K ()
+        - admin ()
+        - Diane Prince ()
+        - Jb. ()
+        - Lori’s iPhone ()
+        - Marshall ()
+        - Brendan H ()
+        - Chris Lipper: Functional Business Coach ()
+        - Sayeed Aljamal ()
+        - tom deem ()
+        - Rachel N ()
+
+   🔎 Analyzing Instance: 2026-02-12T18:35:22Z (UUID: 4uuG+VDXTDS83dgj/JCYTA==)
+      ✅ Raw Count: 2
+      ✅ Filtered Count: 1
+      ❌ Excluded: 1 (Andrew's Fathom Notetaker)
+      Attendees:
+        - brittin ()
+
+   🔎 Analyzing Instance: 2026-02-16T06:56:12Z (UUID: 85ddn4jpR3mMwjOrLT/E0w==)
+      ✅ Raw Count: 2
+      ✅ Filtered Count: 1
+      ❌ Excluded: 1 (Andrew's Fathom Notetaker)
+      Attendees:
+        - Jam Chan ()
+
+   🔎 Analyzing Instance: 2026-02-05T15:48:32Z (UUID: H1lss4y5QSqfv9CbKvkRqQ==)
+      ✅ Raw Count: 35
+      ✅ Filtered Count: 23
+      ❌ Excluded: 4 (Andrew's Fathom Notetaker, read.ai meeting notes, read.ai meeting notes, Fireflies.ai Notetaker Diane)
+      Attendees:
+        - Andrew Lassise (alassise@soberfounders.org)
+        - Arlina Allen ()
+        - Fred L ()
+        - Danielle Hargro ()
+        - Clear Path Interventions ()
+        - Rachel N ()
+        - michael damato  ()
+        - Carrie Campbell ()
+        - Chris Lipper: Functional Business Coach ()
+        - Tia ()
+        - Peter Moulton ()
+        - Sukhwa Young ()
+        - Marshall ()
+        - Diane Prince ()
+        - Ken Nakamura ()
+        - Samantha Lander ()
+        - Bernadette Smith ()
+        - Kandace Arena (kandace@soberfounders.org)
+        - Rafael Requena - Southern California ()
+        - Rourke Smith ()
+        - Emily Torraca ()
+        - New Daune Strength ()
+        - Kim Sawyer - Houston - 9/24/1990 ()
+
+   🔎 Analyzing Instance: 2026-02-09T20:45:41Z (UUID: mpMuCGHURxKsLzcy3hIp0g==)
+      ✅ Raw Count: 1
+      ✅ Filtered Count: 1
+      ❌ Excluded: 0 ()
+      Attendees:
+        - Jam Chan ()
+
+   🔎 Analyzing Instance: 2026-02-09T20:45:52Z (UUID: nzH1zN3hTa+Jea1hI2WxsA==)
+      ✅ Raw Count: 1
+      ✅ Filtered Count: 0
+      ❌ Excluded: 1 (Andrew's Fathom Notetaker)

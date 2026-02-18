@@ -1,0 +1,188 @@
+=== ATTENDANCE TRENDS REPORT ===
+Analyzed 74 meetings.
+
+--- MEETING LOG ---
+Date       | Day | Total | New | Returning
+-----------|-----|-------|-----|----------
+2025-03-04 | Tue | 6     | 6   | 0
+2025-03-11 | Tue | 5     | 1   | 4
+2025-03-18 | Tue | 4     | 1   | 3
+2025-03-25 | Tue | 6     | 2   | 4
+2025-04-01 | Tue | 7     | 2   | 5
+2025-04-08 | Tue | 4     | 1   | 3
+2025-04-15 | Tue | 7     | 4   | 3
+2025-04-22 | Tue | 9     | 3   | 6
+2025-04-29 | Tue | 8     | 2   | 6
+2025-05-06 | Tue | 6     | 0   | 6
+2025-05-13 | Tue | 8     | 0   | 8
+2025-05-20 | Tue | 6     | 0   | 6
+2025-05-27 | Tue | 6     | 1   | 5
+2025-06-03 | Tue | 6     | 2   | 4
+2025-06-10 | Tue | 5     | 0   | 5
+2025-06-17 | Tue | 7     | 1   | 6
+2025-06-24 | Tue | 3     | 0   | 3
+2025-07-01 | Tue | 4     | 0   | 4
+2025-07-08 | Tue | 6     | 0   | 6
+2025-07-15 | Tue | 7     | 3   | 4
+2025-07-22 | Tue | 8     | 2   | 6
+2025-07-29 | Tue | 9     | 3   | 6
+2025-08-05 | Tue | 7     | 1   | 6
+2025-08-12 | Tue | 6     | 1   | 5
+2025-08-19 | Tue | 5     | 1   | 4
+2025-08-26 | Tue | 5     | 0   | 5
+2025-09-02 | Tue | 6     | 0   | 6
+2025-09-04 | Thu | 11    | 10  | 1
+2025-09-09 | Tue | 8     | 0   | 8
+2025-09-11 | Thu | 13    | 7   | 6
+2025-09-16 | Tue | 6     | 0   | 6
+2025-09-18 | Thu | 16    | 7   | 9
+2025-09-23 | Tue | 8     | 1   | 7
+2025-09-25 | Thu | 14    | 7   | 7
+2025-09-30 | Tue | 4     | 0   | 4
+2025-10-02 | Thu | 13    | 5   | 8
+2025-10-07 | Tue | 5     | 0   | 5
+2025-10-09 | Thu | 13    | 7   | 6
+2025-10-14 | Tue | 5     | 0   | 5
+2025-10-16 | Thu | 16    | 10  | 6
+2025-10-21 | Tue | 6     | 1   | 5
+2025-10-23 | Thu | 14    | 9   | 5
+2025-10-28 | Tue | 7     | 2   | 5
+2025-10-30 | Thu | 18    | 8   | 10
+2025-11-04 | Tue | 11    | 3   | 8
+2025-11-06 | Thu | 22    | 12  | 10
+2025-11-11 | Tue | 9     | 3   | 6
+2025-11-13 | Thu | 15    | 4   | 11
+2025-11-18 | Tue | 13    | 3   | 10
+2025-11-20 | Thu | 16    | 6   | 10
+2025-11-25 | Tue | 6     | 0   | 6
+2025-11-27 | Thu | 8     | 3   | 5
+2025-12-02 | Tue | 10    | 1   | 9
+2025-12-04 | Thu | 15    | 8   | 7
+2025-12-09 | Tue | 9     | 2   | 7
+2025-12-11 | Thu | 17    | 5   | 12
+2025-12-16 | Tue | 9     | 4   | 5
+2025-12-18 | Thu | 16    | 7   | 9
+2025-12-23 | Tue | 5     | 2   | 3
+2025-12-30 | Tue | 9     | 2   | 7
+2026-01-01 | Thu | 7     | 5   | 2
+2026-01-06 | Tue | 8     | 2   | 6
+2026-01-08 | Thu | 28    | 15  | 13
+2026-01-13 | Tue | 7     | 1   | 6
+2026-01-15 | Thu | 23    | 4   | 19
+2026-01-20 | Tue | 9     | 2   | 7
+2026-01-22 | Thu | 23    | 6   | 17
+2026-01-27 | Tue | 7     | 1   | 6
+2026-01-29 | Thu | 22    | 11  | 11
+2026-02-03 | Tue | 9     | 0   | 9
+2026-02-05 | Thu | 23    | 8   | 15
+2026-02-10 | Tue | 10    | 1   | 9
+2026-02-12 | Thu | 20    | 7   | 13
+2026-02-17 | Tue | 10    | 1   | 9
+
+--- GLOBAL STATS ---
+Total Unique People: 240
+Avg Attendance (Overall): 3.08
+
+--- TUESDAY STATS ---
+Unique Attendees: 75
+Avg Attendance:   4.75
+Repeat Rate (>1): 58.7%
+
+--- THURSDAY STATS ---
+Unique Attendees: 175
+Avg Attendance:   2.19
+Repeat Rate (>1): 35.4%
+
+Attendance Distribution:
+1 time:    136 people (56.7%)
+2-4 times: 65 people
+5-10 times:27 people
+11+ times: 12 people
+
+--- TUESDAY ATTENDEES (75) ---
++ Adam
++ Adam Henry
++ Alex Shohet
++ Allen
++ Allen G. - Area 40, Victor 164 GSR, District 93
++ Allen G. - Mechanical Engineer - Full Curl Manufacturing
++ Allen G. - Mechanical Engineer - Red Summit Machineworks
++ Allen Godard
++ Andrew Engbring
++ Andrew L
++ Andrew Lassise
++ Andrew Silk
++ Austin Moss
++ Austin Rampt
++ Brad’s iPad
++ Brandan
++ Brandan Molthan
++ Brian Poth (he/they)
++ Clint Hedin
++ Conor G
++ Dave
++ Dave Homyak
++ David Mathias
++ Eric Wirks
++ George Lewis
++ Jen Cox - CO
++ Jessica Dehn
++ Jessica Dehn: ABCDino Academy, Dino Drop-In,  Explore Academy
++ Jim Zimmerman
++ Josh Cougler On the wall
++ Josh Cougler On the wall home entertainment
++ Karl Soderstrom
++ Karl ’s iPhone (2)
++ Kip C
++ Kristi Steiert
++ Kristilee
++ Kyle Griffin
++ Lawrence
++ Liz Picarazzi - CITIBIN
++ Mario Torrez
++ Mark Howley
++ Matthew S
++ Michael Brody-Waite
++ Nathaniel Winkler
++ Nicholas Pietrangelo
++ Renee
++ Robert D
++ Ron
++ Ron Rice
++ Ron Rice Painting He/him
++ Ryan R
++ Ryan Rittendale
++ SBP (secret bat phone)
++ Sayeed Aljamal
++ Stephen Deason
++ Steven Barela
++ Steven Thompson
++ TJ Dowling
++ Tanner Krenzien
++ Taylor
++ Tim 323 819 2403
++ Tim Lynch
++ Tim Murray
++ Tim Stivers
++ Zach Bridges
++ geocl
++ iPad
++ kristileelahaye
++ matt
++ robert d
++ ryan
++ sam ghanem
++ scott
++ steven
++ therry hansen cpa
+
+--- NEWEST ATTENDEES (Last 3 Meetings) ---
+[2026-02-10] Brian Poth (he/they)
+[2026-02-12] Erik Speakman
+[2026-02-12] Emil Bakiyev
+[2026-02-12] Tom Walsh
+[2026-02-12] Brendan H
+[2026-02-12] tom deem
+[2026-02-12] admin
+[2026-02-12] Jb.
+[2026-02-17] Austin Rampt

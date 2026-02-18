@@ -1,0 +1,44 @@
+=== REPORT FOR 2026-02-05 ===
+Total Joined: 35
+Net Attendees: 23
+
+--- INCLUDED (23) ---
++ Andrew Lassise
++ Arlina Allen
++ Bernadette Smith
++ Carrie Campbell
++ Chris Lipper: Functional Business Coach
++ Clear Path Interventions
++ Danielle Hargro
++ Diane Prince
++ Emily Torraca
++ Fred L
++ Kandace Arena
++ Ken Nakamura
++ Kim Sawyer - Houston - 9/24/1990
++ Marshall
++ michael damato
++ New Daune Strength
++ Peter Moulton
++ Rachel N
++ Rafael Requena - Southern California
++ Rourke Smith
++ Samantha Lander
++ Sukhwa Young
++ Tia
+
+--- REMOVED DUPLICATES (8) ---
+- Chris Lipper: Functional Business Coach -> Chris Lipper: Functional Business Coach (Name Match)
+- Emily Torraca -> Emily Torraca (Name Match)
+- Rourke Smith -> Rourke Smith (Name Match)
+- Rourke Smith -> Rourke Smith (Name Match)
+- Sukhwa Young -> Sukhwa Young (Name Match)
+- Rourke Smith -> Rourke Smith (Name Match)
+- Sukhwa Young -> Sukhwa Young (Name Match)
+- Rachel N -> Rachel N (Name Match)
+
+--- REMOVED BOTS (4) ---
+x Andrew's Fathom Notetaker
+x read.ai meeting notes
+x read.ai meeting notes
+x Fireflies.ai Notetaker Diane
