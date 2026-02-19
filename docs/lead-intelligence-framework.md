@@ -41,6 +41,15 @@ Conversion rates:
 - Net new means the attendee has not appeared in prior Tue/Thu sessions in the historical window.
 - Returning attendees are excluded from net-new counts.
 
+## Monthly Visit Trend Definition
+
+- Monthly average visits are evaluated at the start of each month (UTC, `YYYY-MM-01`).
+- Value for a month is cumulative:
+  - `total historical visits before month start / unique attendees seen before month start`.
+- Month-over-month change compares the current month-start value to the previous month-start value.
+- Year-over-year change compares to the same month-start one year prior (when available).
+- Tuesday and Thursday are computed independently.
+
 ## Alias Merge Rules
 
 - Merge actions should map alias variants into a stable canonical display name.

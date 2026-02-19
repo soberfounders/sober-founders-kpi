@@ -273,6 +273,12 @@ function formatPct(value) {
   return `${(value * 100).toFixed(1)}%`;
 }
 
+function formatChangePct(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) return 'N/A';
+  const pct = (Number(value) * 100).toFixed(1);
+  return `${Number(value) >= 0 ? '+' : ''}${pct}%`;
+}
+
 /** Format date as MM/DD/YYYY (e.g., "02/12/2026") */
 function formatDateMMDDYY(dateLike) {
   if (!dateLike) return '';
@@ -290,6 +296,31 @@ function getDayName(dateLike) {
   const d = new Date(dateLike);
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   return days[d.getUTCDay()] || '';
+}
+
+function monthStartUTC(dateLike) {
+  const d = new Date(dateLike);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+}
+
+function addMonthsUTC(monthStartDate, months) {
+  if (!(monthStartDate instanceof Date) || Number.isNaN(monthStartDate.getTime())) return null;
+  return new Date(Date.UTC(monthStartDate.getUTCFullYear(), monthStartDate.getUTCMonth() + months, 1));
+}
+
+function monthKeyUTC(monthStartDate) {
+  if (!(monthStartDate instanceof Date) || Number.isNaN(monthStartDate.getTime())) return '';
+  return monthStartDate.toISOString().slice(0, 10);
+}
+
+function formatMonthLabelUTC(monthStartDate) {
+  if (!(monthStartDate instanceof Date) || Number.isNaN(monthStartDate.getTime())) return '';
+  return monthStartDate.toLocaleDateString('en-US', {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
 }
 
 function safeDate(dateLike) {
@@ -407,6 +438,129 @@ function buildCohortBuckets(peopleArr, visitKey) {
       color: colors[i],
     };
   });
+}
+
+function buildCombinedAvgTimeline(avgTrendTue = [], avgTrendThu = []) {
+  const byDate = new Map();
+
+  (avgTrendTue || []).forEach((row) => {
+    const fullDate = row?.fullDate || '';
+    if (!fullDate) return;
+    const next = byDate.get(fullDate) || {
+      fullDate,
+      date: formatDateMMDDYY(fullDate),
+      tuesdayAvg: null,
+      thursdayAvg: null,
+    };
+    next.tuesdayAvg = Number(row.avgVisits);
+    byDate.set(fullDate, next);
+  });
+
+  (avgTrendThu || []).forEach((row) => {
+    const fullDate = row?.fullDate || '';
+    if (!fullDate) return;
+    const next = byDate.get(fullDate) || {
+      fullDate,
+      date: formatDateMMDDYY(fullDate),
+      tuesdayAvg: null,
+      thursdayAvg: null,
+    };
+    next.thursdayAvg = Number(row.avgVisits);
+    byDate.set(fullDate, next);
+  });
+
+  return Array.from(byDate.values()).sort((a, b) => a.fullDate.localeCompare(b.fullDate));
+}
+
+function buildMonthlyAverageSeries(sessions = [], groupType = 'Tuesday') {
+  const groupSessions = (sessions || [])
+    .filter((s) => s?.type === groupType && s?.date instanceof Date && !Number.isNaN(s.date.getTime()))
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  if (groupSessions.length === 0) {
+    return { series: [], summary: null };
+  }
+
+  const firstSessionMonth = monthStartUTC(groupSessions[0].date);
+  let cursor = addMonthsUTC(firstSessionMonth, 1);
+  const latestSessionDate = groupSessions[groupSessions.length - 1].date;
+  const now = new Date();
+  const maxDate = latestSessionDate.getTime() > now.getTime() ? latestSessionDate : now;
+  const endMonth = monthStartUTC(maxDate);
+
+  if (!cursor || !endMonth || cursor.getTime() > endMonth.getTime()) {
+    return { series: [], summary: null };
+  }
+
+  let sessionIdx = 0;
+  let cumulativeVisits = 0;
+  const cumulativePeople = new Set();
+  const series = [];
+
+  while (cursor.getTime() <= endMonth.getTime()) {
+    while (sessionIdx < groupSessions.length && groupSessions[sessionIdx].date.getTime() < cursor.getTime()) {
+      const session = groupSessions[sessionIdx];
+      cumulativeVisits += Number(session.derivedCount || 0);
+      (session.attendees || []).forEach((name) => {
+        const key = normalizeName(name);
+        if (key) cumulativePeople.add(key);
+      });
+      sessionIdx += 1;
+    }
+
+    const uniqueCount = cumulativePeople.size;
+    const avgVisits = uniqueCount > 0 ? cumulativeVisits / uniqueCount : 0;
+
+    series.push({
+      monthKey: monthKeyUTC(cursor),
+      monthLabel: formatMonthLabelUTC(cursor),
+      avgVisits: Number(avgVisits.toFixed(2)),
+      totalVisits: cumulativeVisits,
+      uniquePeople: uniqueCount,
+      momChange: null,
+      yoyChange: null,
+    });
+
+    cursor = addMonthsUTC(cursor, 1);
+  }
+
+  if (series.length === 0) {
+    return { series: [], summary: null };
+  }
+
+  const byMonthKey = new Map(series.map((row) => [row.monthKey, row]));
+
+  series.forEach((row, idx) => {
+    if (idx > 0) {
+      const prev = series[idx - 1];
+      row.momChange = prev.avgVisits > 0 ? (row.avgVisits - prev.avgVisits) / prev.avgVisits : null;
+    }
+
+    const currentMonth = new Date(`${row.monthKey}T00:00:00.000Z`);
+    const prevYearMonth = addMonthsUTC(currentMonth, -12);
+    const prevYear = byMonthKey.get(monthKeyUTC(prevYearMonth));
+    row.yoyChange = prevYear && prevYear.avgVisits > 0
+      ? (row.avgVisits - prevYear.avgVisits) / prevYear.avgVisits
+      : null;
+  });
+
+  const latest = series[series.length - 1];
+  const prevMonth = series.length > 1 ? series[series.length - 2] : null;
+  const prevYearMonth = addMonthsUTC(new Date(`${latest.monthKey}T00:00:00.000Z`), -12);
+  const prevYear = byMonthKey.get(monthKeyUTC(prevYearMonth)) || null;
+
+  return {
+    series,
+    summary: {
+      asOfMonth: latest.monthLabel,
+      avgVisits: latest.avgVisits,
+      momChange: latest.momChange,
+      yoyChange: latest.yoyChange,
+      prevMonthAvg: prevMonth ? prevMonth.avgVisits : null,
+      prevYearAvg: prevYear ? prevYear.avgVisits : null,
+      hasYoY: !!prevYear,
+    },
+  };
 }
 
 function computeAnalytics(metrics, aliases) {
@@ -611,6 +765,9 @@ function computeAnalytics(metrics, aliases) {
   // Cohort data — separated by day
   const cohortDataTue = buildCohortBuckets(peopleArr, 'tueVisits');
   const cohortDataThu = buildCohortBuckets(peopleArr, 'thuVisits');
+  const avgTimelineCombined = buildCombinedAvgTimeline(groupStats.Tuesday.trend, groupStats.Thursday.trend);
+  const monthlyAvgTue = buildMonthlyAverageSeries(sessions, 'Tuesday');
+  const monthlyAvgThu = buildMonthlyAverageSeries(sessions, 'Thursday');
 
   return {
     sessions,
@@ -630,6 +787,11 @@ function computeAnalytics(metrics, aliases) {
     trendDataThu,
     avgTrendTue: groupStats.Tuesday.trend,
     avgTrendThu: groupStats.Thursday.trend,
+    avgTimelineCombined,
+    monthlyAvgTrendTue: monthlyAvgTue.series,
+    monthlyAvgTrendThu: monthlyAvgThu.series,
+    monthlyAvgSummaryTue: monthlyAvgTue.summary,
+    monthlyAvgSummaryThu: monthlyAvgThu.summary,
     cohortDataTue,
     cohortDataThu,
     topRepeaters: [...peopleArr].sort((a, b) => b.visits - a.visits).slice(0, 10),
@@ -1061,6 +1223,60 @@ const AttendanceDashboard = () => {
     </div>
   );
 
+  const monthlyTrendTooltip = ({ active, payload, label }) => {
+    if (!active || !payload || payload.length === 0) return null;
+    const row = payload[0]?.payload || {};
+    return (
+      <div style={{ backgroundColor: 'white', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
+        <p style={{ fontWeight: 700, marginBottom: '6px' }}>{label}</p>
+        <p style={{ fontSize: '13px', color: '#0f172a', margin: 0 }}>Avg Visits: <strong>{row.avgVisits ?? '-'}</strong></p>
+        <p style={{ fontSize: '12px', color: '#475569', margin: '4px 0 0 0' }}>MoM: {formatChangePct(row.momChange)}</p>
+        <p style={{ fontSize: '12px', color: '#475569', margin: '2px 0 0 0' }}>YoY: {formatChangePct(row.yoyChange)}</p>
+      </div>
+    );
+  };
+
+  const MonthlyAverageCard = ({ title, color, series, summary }) => (
+    <div style={cardStyle}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+        <TrendingUp size={17} color={color} />
+        <h3 style={{ fontSize: '18px' }}>{title}</h3>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(110px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+        <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px' }}>
+          <p style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Current</p>
+          <p style={{ marginTop: '4px', fontSize: '20px', fontWeight: 700, color }}>{summary ? summary.avgVisits : '-'}</p>
+          <p style={{ marginTop: '2px', fontSize: '11px', color: '#64748b' }}>{summary?.asOfMonth || 'N/A'}</p>
+        </div>
+        <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px' }}>
+          <p style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Vs Last Month</p>
+          <p style={{ marginTop: '4px', fontSize: '20px', fontWeight: 700, color: summary?.momChange === null || summary?.momChange === undefined ? '#475569' : (summary?.momChange >= 0 ? '#15803d' : '#b91c1c') }}>
+            {formatChangePct(summary?.momChange)}
+          </p>
+          <p style={{ marginTop: '2px', fontSize: '11px', color: '#64748b' }}>{summary?.prevMonthAvg ?? '-'} prior avg</p>
+        </div>
+        <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px' }}>
+          <p style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Vs Previous Year</p>
+          <p style={{ marginTop: '4px', fontSize: '20px', fontWeight: 700, color: summary?.yoyChange === null || summary?.yoyChange === undefined ? '#475569' : (summary?.yoyChange >= 0 ? '#15803d' : '#b91c1c') }}>
+            {formatChangePct(summary?.yoyChange)}
+          </p>
+          <p style={{ marginTop: '2px', fontSize: '11px', color: '#64748b' }}>{summary?.hasYoY ? `${summary?.prevYearAvg} prior avg` : 'Not available yet'}</p>
+        </div>
+      </div>
+      <div style={{ height: '240px' }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={series || []}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+            <XAxis dataKey="monthLabel" tick={{ fill: '#64748b', fontSize: 10 }} />
+            <YAxis domain={[1, 'auto']} tick={{ fill: '#64748b', fontSize: 10 }} />
+            <Tooltip content={monthlyTrendTooltip} />
+            <Line type="monotone" dataKey="avgVisits" name="Avg Visits / Person" stroke={color} strokeWidth={2} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {aliasWarning && (
@@ -1424,24 +1640,44 @@ const AttendanceDashboard = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
           <TrendingUp size={17} color="#2563eb" />
           <h3 style={{ fontSize: '18px' }}>Average Visits per Person (Trend)</h3>
-          <span style={{ fontSize: '12px', color: '#64748b', marginLeft: 'auto' }}>Two lines, same axis — compare Tue vs Thu engagement trajectory</span>
+          <span style={{ fontSize: '12px', color: '#64748b', marginLeft: 'auto' }}>Unified timeline by actual meeting date</span>
         </div>
         <div style={{ height: '260px' }}>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart>
+            <LineChart data={analytics.avgTimelineCombined}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="date" allowDuplicatedCategory={false} tick={{ fill: '#64748b', fontSize: 10 }} />
               <YAxis domain={[1, 'auto']} tick={{ fill: '#64748b', fontSize: 10 }} />
-              <Tooltip />
+              <Tooltip
+                labelFormatter={(label, payload) => {
+                  const fullDate = payload?.[0]?.payload?.fullDate;
+                  return fullDate ? `${label} (${fullDate})` : label;
+                }}
+                formatter={(value, name) => [value ?? '-', name]}
+              />
               <Legend />
-              <Line data={analytics.avgTrendTue} type="monotone" dataKey="avgVisits" name="Tuesday" stroke="#0ea5e9" strokeWidth={2} dot={false} />
-              <Line data={analytics.avgTrendThu} type="monotone" dataKey="avgVisits" name="Thursday" stroke="#6366f1" strokeWidth={2} dot={false} />
+              <Line type="monotone" connectNulls dataKey="tuesdayAvg" name="Tuesday Avg Visits" stroke="#0ea5e9" strokeWidth={2} dot={false} />
+              <Line type="monotone" connectNulls dataKey="thursdayAvg" name="Thursday Avg Visits" stroke="#6366f1" strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* ─── Repeat Cohorts — Separated by Day with Percentages ─── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+        <MonthlyAverageCard
+          title="Tuesday Monthly Avg Visits (MoM / YoY)"
+          color="#0ea5e9"
+          series={analytics.monthlyAvgTrendTue}
+          summary={analytics.monthlyAvgSummaryTue}
+        />
+        <MonthlyAverageCard
+          title="Thursday Monthly Avg Visits (MoM / YoY)"
+          color="#6366f1"
+          series={analytics.monthlyAvgTrendThu}
+          summary={analytics.monthlyAvgSummaryThu}
+        />
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
         <div style={cardStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
@@ -1459,7 +1695,6 @@ const AttendanceDashboard = () => {
           <CohortBreakdown title="Thursday" data={analytics.cohortDataThu} accentColor="#6366f1" />
         </div>
       </div>
-
       {/* ─── Top Repeaters & At-Risk ─── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
         <div style={cardStyle}>
@@ -1595,5 +1830,7 @@ const AttendanceDashboard = () => {
 };
 
 export default AttendanceDashboard;
+
+
 
 
