@@ -1,0 +1,51 @@
+﻿=== Finding Old Zoom Meeting IDs ===
+
+Γ£ô Authenticated
+
+Found 3 users:
+  Kandace Arena (kandace@soberfounders.org)
+  Andrew Lassise (alassise@soberfounders.org)
+  Andrew Lassise (alassise@rushtechsupport.com)
+
+ΓöÇΓöÇ Searching meetings for Kandace Arena ΓöÇΓöÇ
+  Type: previous_meetings
+    Found 8 meetings
+  Type: scheduled
+    Found 9 meetings
+
+ΓöÇΓöÇ Searching meetings for Andrew Lassise ΓöÇΓöÇ
+  Type: previous_meetings
+    Found 104 meetings
+  Type: scheduled
+    Found 28 meetings
+
+ΓöÇΓöÇ Searching meetings for Andrew Lassise ΓöÇΓöÇ
+  Type: previous_meetings
+    Found 27 meetings
+  Type: scheduled
+    Found 1 meetings
+
+
+Total unique meeting IDs found (excluding current): 36
+
+Recurring meeting candidates: 36
+
+  Γÿà MATCH: ID 88955819691
+    Topic: "Sober Founders Free Mastermind Group "
+    Instances: 41 (2024-12-03T16:52:09Z ΓåÆ 2025-11-18T16:59:56Z)
+    In Tue gap: true, In Thu gap: false
+
+
+ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+  FINAL RESULTS
+ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+
+  Meeting ID: 88955819691
+  Topic: "Sober Founders Free Mastermind Group "
+  Hosted by: alassise@rushtechsupport.com
+  Instances: 41
+  Date range: 2024-12-03T16:52:09Z ΓåÆ 2025-11-18T16:59:56Z
+  Tuesday match: true
+  Thursday match: false
+
+=== Complete ===

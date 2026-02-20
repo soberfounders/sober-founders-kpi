@@ -1,0 +1,77 @@
+﻿=== Topic Search for 'Thursday' or 'Mastermind' ===
+
+Checking user: kandace@soberfounders.org
+
+MATCH: 88445512968
+  Topic: " Brian Poth Sober Founders Intro Meeting"
+  Type: 2
+  Created: 2026-01-16T16:23:23Z
+  Start: 2026-01-23T18:00:00Z
+
+MATCH: 88681824746
+  Topic: " Adam Henry Sober Founders Intro Meeting"
+  Type: 2
+  Created: 2026-01-17T19:31:07Z
+  Start: 2026-01-23T20:00:00Z
+
+MATCH: 87177144615
+  Topic: " Kaycie Roberts Sober Founders Intro Meeting"
+  Type: 2
+  Created: 2026-01-15T16:29:05Z
+  Start: 2026-01-23T21:00:00Z
+
+MATCH: 88594780738
+  Topic: " Kate Wade Sober Founders Intro Meeting"
+  Type: 2
+  Created: 2026-01-20T23:26:56Z
+  Start: 2026-01-26T20:30:00Z
+
+MATCH: 89142914981
+  Topic: " Dan Sobocinski Sober Founders Intro Meeting"
+  Type: 2
+  Created: 2026-02-05T19:12:51Z
+  Start: 2026-02-06T20:00:00Z
+
+MATCH: 85973897570
+  Topic: " Matthew Hippert Sober Founders Intro Meeting"
+  Type: 2
+  Created: 2026-02-10T04:02:16Z
+  Start: 2026-02-11T18:00:00Z
+
+MATCH: 89250268710
+  Topic: " Juli Cher Sober Founders Intro Meeting"
+  Type: 2
+  Created: 2026-02-09T19:30:44Z
+  Start: 2026-02-16T16:00:00Z
+
+MATCH: 88429246683
+  Topic: " Austin Rampt Sober Founders Intro Meeting"
+  Type: 2
+  Created: 2026-02-16T00:49:53Z
+  Start: 2026-02-17T16:00:00Z
+Checking user: alassise@soberfounders.org
+
+MATCH: 89444515590
+  Topic: "Entrepreneur's Big Book - Sober Founders w/ Author"
+  Type: 8
+  Created: 2025-10-02T16:02:10Z
+  Start: 2025-12-03T21:00:00Z
+
+MATCH: 87199667045
+  Topic: "Sober Founders Mastermind - Tactic Tuesday"
+  Type: 8
+  Created: 2025-02-25T18:11:50Z
+  Start: 2025-08-19T16:00:00Z
+
+MATCH: 84242212480
+  Topic: "Sober Founders Mastermind On Zoom (All Are Welcome)"
+  Type: 8
+  Created: 2025-08-28T14:20:40Z
+  Start: 2025-09-04T15:00:00Z
+Checking user: alassise@rushtechsupport.com
+
+MATCH: 88955819691
+  Topic: "Sober Founders Free Mastermind Group "
+  Type: 8
+  Created: 2024-11-12T21:09:40Z
+  Start: 2025-08-19T16:00:00Z

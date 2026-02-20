@@ -1,0 +1,7 @@
+﻿=== Diagnosing Sam Ghanem Alias Issue ===
+
+--- attendee_aliases matching 'Sam' ---
+Found 0 aliases pointing to Sam.
+
+--- zoom_identities matching 'Sam' ---
+Found 0 identities canonicalized to Sam.

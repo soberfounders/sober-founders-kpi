@@ -16,15 +16,15 @@ for (const line of envText.split(/\r?\n/)) {
 }
 
 // DEBUG: Verify key loaded
-const key = envVars['SUPABASE_SERVICE_ROLE_KEY'] || '';
+const key = envVars['SUPABASE_ANON_KEY'] || '';
 console.log(`Loaded Key Length: ${key.length}`);
 if (key.length < 10) console.warn("WARNING: Key seems too short/empty");
 
 const supabaseUrl = envVars['SUPABASE_URL'];
-const serviceRoleKey = envVars['SUPABASE_SERVICE_ROLE_KEY'];
+const serviceRoleKey = envVars['SUPABASE_ANON_KEY']; // Using Anon Key because Service Role Key in .env is not a JWT
 
 if (!supabaseUrl || !serviceRoleKey) {
-    console.error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env");
+    console.error("Missing SUPABASE_URL or SUPABASE_ANON_KEY in .env");
     Deno.exit(1);
 }
 

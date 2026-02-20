@@ -25,7 +25,7 @@ function App() {
         return <WebsiteTrafficDashboard />;
       case "To-Do's":
         return <TodosDashboard />;
-      case 'Data Cleaning':
+      case 'Data Integrity':
         return <DataCleaning />;
       case 'Attendance': // Added case for AttendanceDashboard
         return <AttendanceDashboard />;

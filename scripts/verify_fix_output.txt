@@ -1,0 +1,13 @@
+﻿=== Diagnosing Sam & Josh (Post-Fix) ===
+
+--- Finding 'Sam Ghanem' ---
+Sam Ghanem Identity:
+  ID: 5f2e8968-488b-41ed-9089-98857af68db3
+  Visits: 48
+  Aliases (44): sam ghanem, Kip C, Clint, Clint Hedin, Adam Costilo, Kandace Arena, Linda Wilk, Dr. Zac, Kendra Drysdale, jaredschagrin, Dave Homyak, Billy M, Chris Lipper: Small Business Owner Coach, Inventor, Speaker, Author, Creator, Connector..., iPhone, DOUGLAS SHEPHERD, Tim Murray, Trinity Stella, Lexi ΓÿÇ∩╕Å, Kristilee, Samantha Lander, Chris Lipper: Functional Business Coach, Leonard Bade, Kim Sawyer, Leonard B, TJ Dowling, Victoria Frost, Matthew S, Tia, Adam, SML, Eric Wirks, Laney Silverman, Taylor, David Mathias, zacharyyoung, ryan, Adrienne Tichy, Steven Barela, Tim Stivers, Stephen Deason, corry prohens, Mike Anderson, Renee, Carrie Campbell
+Γ£à SUCCESS: Josh is NOT an alias of Sam.
+
+--- Finding 'Josh Cougler' ---
+Josh Cougler Identity:
+  ID: e7586642-37fb-44ac-84cf-f9c4a913a057
+  Visits: 171

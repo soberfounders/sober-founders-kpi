@@ -48,12 +48,13 @@ const Header = ({ activeTab }) => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button 
             onClick={async () => {
-              const [genericSync, zoomSync, gaSync, gscSync] = await Promise.allSettled([
+              const [genericSync, zoomSync, lumaSync, gaSync, gscSync] = await Promise.allSettled([
                 supabase.functions.invoke('sync-metrics', {
                   method: 'GET',
                   queryString: { trigger_refresh: 'true' }
                 }),
                 supabase.functions.invoke('sync_zoom_attendance', { method: 'POST' }),
+                supabase.functions.invoke('sync_luma_registrations', { method: 'POST' }),
                 supabase.functions.invoke('sync_google_analytics', { method: 'POST' }),
                 supabase.functions.invoke('sync_search_console', { method: 'POST' })
               ]);
@@ -72,6 +73,12 @@ const Header = ({ activeTab }) => {
                 errors.push(`Zoom attendance: ${zoomSync.reason?.message || 'failed'}`);
               }
 
+              if (lumaSync.status === 'fulfilled' && lumaSync.value.error) {
+                errors.push(`Lu.ma registrations: ${lumaSync.value.error.message}`);
+              } else if (lumaSync.status === 'rejected') {
+                errors.push(`Lu.ma registrations: ${lumaSync.reason?.message || 'failed'}`);
+              }
+
               if (gaSync.status === 'fulfilled' && gaSync.value.error) {
                 errors.push(`Google Analytics: ${gaSync.value.error.message}`);
               } else if (gaSync.status === 'rejected') {
@@ -87,7 +94,7 @@ const Header = ({ activeTab }) => {
               if (errors.length > 0) {
                 alert('Refresh completed with issues:\n' + errors.join('\n'));
               } else {
-                alert('Data refresh completed, including Zoom, Google Analytics, and Search Console.');
+                alert('Data refresh completed, including Zoom, Lu.ma registrations, Google Analytics, and Search Console.');
               }
             }}
             style={{

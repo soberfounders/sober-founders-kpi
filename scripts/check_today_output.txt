@@ -1,0 +1,5 @@
+﻿Checking for today's meeting instance (ID: 84242212480)...
+Looking for date: 2026-02-19
+
+NO instance found for today yet.
+Latest instance was: 2026-01-15T15:45:42Z

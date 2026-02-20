@@ -27,7 +27,7 @@ const sidebarItems = [
   { id: 'Operations', icon: Briefcase, label: 'Operations' },
   { id: 'To-Do\'s', icon: CheckSquare, label: 'To-Do\'s' },
   { id: 'Analysis', icon: BarChart2, label: 'Analysis' },
-  { id: 'Data Cleaning', icon: Database, label: 'Data Cleaning' },
+  { id: 'Data Integrity', icon: Database, label: 'Data Integrity' },
 ];
 
 const Sidebar = ({ activeTab, setActiveTab }) => {

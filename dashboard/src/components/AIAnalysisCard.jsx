@@ -1,69 +1,120 @@
 import React from 'react';
 
-const AIAnalysisCard = ({ metrics }) => {
-  const generateInsights = () => {
-    const insights = [];
-    const totalLeads = Number(
-      metrics.leads ?? ((metrics.leadsFree || 0) + (metrics.leadsPhoenix || 0))
-    );
-    const totalSpend = Number(
-      metrics.spend ?? ((metrics.spendFree || 0) + (metrics.spendPhoenix || 0))
-    );
-    const costPerLead = Number(
-      metrics.costPerLead ?? (totalLeads > 0 ? totalSpend / totalLeads : 0)
-    );
-    const newShowUps = Number(metrics.newShowUps ?? 0);
+function formatValue(value, format) {
+  const n = Number(value || 0);
+  if (format === 'currency') return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  if (format === 'percent') return `${(n * 100).toFixed(1)}%`;
+  return Math.round(n).toLocaleString();
+}
 
-    if (totalLeads === 0) {
-      insights.push('No leads detected in the last 30 days. Check ad account connection.');
-      return insights;
-    }
+function formatDelta(deltaPct, betterWhen) {
+  if (deltaPct === null || deltaPct === undefined || Number.isNaN(deltaPct)) return 'N/A';
+  const pct = `${deltaPct >= 0 ? '+' : ''}${(deltaPct * 100).toFixed(1)}%`;
+  if (betterWhen === 'lower') return deltaPct <= 0 ? `${pct} (better)` : `${pct} (worse)`;
+  return deltaPct >= 0 ? `${pct} (better)` : `${pct} (worse)`;
+}
 
-    if (costPerLead > 50) {
-      insights.push('Cost per Lead is high (>$50). Consider refining audience targeting or refreshing ad creatives.');
-    } else if (costPerLead < 20) {
-      insights.push('Cost per Lead is excellent (<$20). Consider scaling budget on winning ad sets.');
-    }
+const AIAnalysisCard = ({ analysis }) => {
+  if (!analysis) return null;
 
-    if (newShowUps === 0) {
-      insights.push('No new show ups tracked. Verify Zoom integration.');
-    } else {
-      const conversionRate = (newShowUps / totalLeads) * 100;
-      if (conversionRate < 10) {
-        insights.push(`Lead to Show Up rate is low (${conversionRate.toFixed(1)}%). Consider improving email follow-up sequences.`);
-      } else if (conversionRate > 30) {
-        insights.push('Lead to Show Up rate is strong (>30%). Current nurture flow is effective.');
-      }
-    }
-
-    return insights;
-  };
-
-  const insights = generateInsights();
+  const metricRows = Array.isArray(analysis.metricSnapshotRows)
+    ? analysis.metricSnapshotRows.slice(0, 12)
+    : [];
+  const funnelRows = Array.isArray(analysis.funnelStages) ? analysis.funnelStages : [];
+  const recommendations = Array.isArray(analysis.recommendations) ? analysis.recommendations : [];
+  const alerts = Array.isArray(analysis.alerts) ? analysis.alerts : [];
 
   return (
-    <div style={{ backgroundColor: '#f0f9ff', padding: '24px', borderRadius: '16px', border: '1px solid #bae6fd' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-        <div style={{ backgroundColor: '#0ea5e9', padding: '8px', borderRadius: '8px', color: 'white' }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 2a10 10 0 1 0 10 10H12V2z" />
-            <path d="M12 12 2.1 12a10.01 10.01 0 0 0 1.5 4.3L12 12z" />
-            <path d="M12 12 6.4 19.1a10.01 10.01 0 0 0 5.6 1.9V12z" />
-          </svg>
+    <div style={{ backgroundColor: '#ecfeff', padding: '24px', borderRadius: '16px', border: '1px solid #a5f3fc' }}>
+      <h3 style={{ fontSize: '18px', color: '#0e7490', margin: 0 }}>AI Cost Reduction Summary</h3>
+      <p style={{ marginTop: '10px', color: '#164e63', fontSize: '14px', lineHeight: 1.55 }}>
+        {analysis.headline}
+      </p>
+
+      <div style={{ marginTop: '16px' }}>
+        <p style={{ margin: 0, color: '#155e75', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          Metric Snapshot (30d vs prior 30d)
+        </p>
+        <div style={{ marginTop: '8px', overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#cffafe' }}>
+                <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #a5f3fc' }}>Metric</th>
+                <th style={{ textAlign: 'right', padding: '8px', borderBottom: '1px solid #a5f3fc' }}>Current</th>
+                <th style={{ textAlign: 'right', padding: '8px', borderBottom: '1px solid #a5f3fc' }}>Prior</th>
+                <th style={{ textAlign: 'right', padding: '8px', borderBottom: '1px solid #a5f3fc' }}>MoM</th>
+              </tr>
+            </thead>
+            <tbody>
+              {metricRows.map((row) => (
+                <tr key={row.id}>
+                  <td style={{ padding: '8px', borderBottom: '1px solid #cffafe', color: '#0f172a' }}>{row.label}</td>
+                  <td style={{ padding: '8px', borderBottom: '1px solid #cffafe', textAlign: 'right' }}>{formatValue(row.current, row.format)}</td>
+                  <td style={{ padding: '8px', borderBottom: '1px solid #cffafe', textAlign: 'right' }}>{formatValue(row.previous, row.format)}</td>
+                  <td style={{ padding: '8px', borderBottom: '1px solid #cffafe', textAlign: 'right', color: '#0e7490', fontWeight: 600 }}>
+                    {formatDelta(row.monthlyDelta?.deltaPct, row.betterWhen)}
+                  </td>
+                </tr>
+              ))}
+              {metricRows.length === 0 && (
+                <tr>
+                  <td colSpan={4} style={{ padding: '8px', color: '#164e63' }}>No snapshot metrics available.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
-        <h3 style={{ fontSize: '18px', color: '#0369a1', margin: 0 }}>AI Performance Analysis</h3>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {insights.map((insight, index) => (
-          <div key={index} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-            <span style={{ color: '#0ea5e9', marginTop: '4px' }}>*</span>
-            <p style={{ margin: 0, color: '#0c4a6e', fontSize: '14px', lineHeight: '1.5' }}>{insight}</p>
-          </div>
-        ))}
-        {insights.length === 0 && (
-          <p style={{ margin: 0, color: '#0c4a6e', fontSize: '14px' }}>Performance is stable. No critical actions needed.</p>
-        )}
+      <div style={{ marginTop: '16px' }}>
+        <p style={{ margin: 0, color: '#155e75', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          Funnel Data (Current 30d)
+        </p>
+        <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '8px' }}>
+          {funnelRows.map((row) => (
+            <div key={row.key} style={{ backgroundColor: 'white', border: '1px solid #bae6fd', borderRadius: '10px', padding: '8px' }}>
+              <p style={{ margin: 0, fontSize: '12px', color: '#155e75' }}>{row.label}</p>
+              <p style={{ margin: '4px 0 0 0', fontWeight: 700, color: '#0f172a' }}>{Math.round(row.value).toLocaleString()}</p>
+              <p style={{ margin: '4px 0 0 0', fontSize: '11px', color: '#164e63' }}>
+                {row.conversionFromPrevious === null ? 'Stage start' : `From prior: ${(row.conversionFromPrevious * 100).toFixed(1)}%`}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ marginTop: '16px' }}>
+        <p style={{ margin: 0, color: '#155e75', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          Top 3 Recommendations (Impact Priority)
+        </p>
+        <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {recommendations.map((rec, index) => (
+            <div key={`${rec.title}-${index}`} style={{ backgroundColor: 'white', border: '1px solid #bae6fd', borderRadius: '10px', padding: '10px' }}>
+              <p style={{ margin: 0, fontWeight: 700, color: '#0f172a' }}>{index + 1}. {rec.title}</p>
+              <p style={{ margin: '4px 0 0 0', color: '#334155', fontSize: '13px' }}>{rec.reason}</p>
+              <p style={{ margin: '4px 0 0 0', color: '#0e7490', fontSize: '12px', fontWeight: 600 }}>{rec.impact}</p>
+            </div>
+          ))}
+          {recommendations.length === 0 && (
+            <p style={{ margin: 0, color: '#164e63', fontSize: '13px' }}>No recommendations available yet.</p>
+          )}
+        </div>
+      </div>
+
+      <div style={{ marginTop: '16px' }}>
+        <p style={{ margin: 0, color: '#155e75', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          Alerts / Anomalies
+        </p>
+        <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {alerts.map((alert, index) => (
+            <p key={`${alert}-${index}`} style={{ margin: 0, color: '#9a3412', fontSize: '13px' }}>
+              {alert}
+            </p>
+          ))}
+          {alerts.length === 0 && (
+            <p style={{ margin: 0, color: '#164e63', fontSize: '13px' }}>No alerts.</p>
+          )}
+        </div>
       </div>
     </div>
   );

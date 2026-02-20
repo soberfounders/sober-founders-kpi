@@ -1,0 +1,8 @@
+﻿Recent Thursday Meetings:
+  Date: 2026-02-12 | Time: 15:55 UTC | Count: 26
+  Date: 2026-02-05 | Time: 15:48 UTC | Count: 35
+  Date: 2026-01-29 | Time: 15:40 UTC | Count: 27
+  Date: 2026-01-22 | Time: 15:47 UTC | Count: 31
+  Date: 2026-01-15 | Time: 15:45 UTC | Count: 30
+  Date: 2026-01-08 | Time: 15:04 UTC | Count: 32
+  Date: 2026-01-01 | Time: 15:34 UTC | Count: 11

@@ -1,0 +1,7 @@
+﻿=== Querying Cleaned Net Unique Metrics ===
+Recent Net Unique Attendance (Thursday):
+  Date: 2026-02-12 | Count: 21
+  Date: 2026-02-05 | Count: 23
+  Date: 2026-01-29 | Count: 22
+  Date: 2026-01-22 | Count: 24
+  Date: 2026-01-15 | Count: 23

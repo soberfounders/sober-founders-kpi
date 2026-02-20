@@ -1,0 +1,237 @@
+﻿=== Finding Old Zoom Meeting IDs ===
+
+Γ£ô Authenticated
+
+Found 3 users:
+  - Kandace Arena (kandace@soberfounders.org) ΓÇö ID: 1LxBbba9SmqD4UhaokQBOw
+  - Andrew Lassise (alassise@soberfounders.org) ΓÇö ID: 2Usn1PS2QxyO10kMyAR7Qw
+  - Andrew Lassise (alassise@rushtechsupport.com) ΓÇö ID: AQbQM9LOTOaEsgppBbZ2Ug
+
+ΓöÇΓöÇ Searching meetings for Kandace Arena ΓöÇΓöÇ
+
+  TUESDAY GAP (Oct 2024 - Feb 2025):
+deno :   Error for 
+1LxBbba9SmqD4UhaokQBOw 
+(2024-10-01 to 2024-10-31): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+At line:1 char:1
++ deno run -A scripts/find_ol
+d_meeting_ids.ts 2>&1 | 
+Out-File -FilePath ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo           
+   : NotSpecified: (  Error  
+   for 1Lx...:user:admin].   
+ "}:String) [], RemoteExc    
+eption
+    + FullyQualifiedErrorId  
+   : NativeCommandError
+ 
+  Error for 
+1LxBbba9SmqD4UhaokQBOw 
+(2024-11-01 to 2024-11-30): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+  Error for 
+1LxBbba9SmqD4UhaokQBOw 
+(2024-12-01 to 2024-12-31): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+  Error for 
+1LxBbba9SmqD4UhaokQBOw 
+(2025-01-01 to 2025-01-31): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+  Error for 
+1LxBbba9SmqD4UhaokQBOw 
+(2025-02-01 to 2025-02-28): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+
+  THURSDAY GAP (May 2025 - Aug 2025):
+  Error for 
+1LxBbba9SmqD4UhaokQBOw 
+(2025-05-01 to 2025-05-31): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+  Error for 
+1LxBbba9SmqD4UhaokQBOw 
+(2025-06-01 to 2025-06-30): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+  Error for 
+1LxBbba9SmqD4UhaokQBOw 
+(2025-07-01 to 2025-07-31): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+  Error for 
+1LxBbba9SmqD4UhaokQBOw 
+(2025-08-01 to 2025-08-31): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+
+ΓöÇΓöÇ Searching meetings for Andrew Lassise ΓöÇΓöÇ
+
+  TUESDAY GAP (Oct 2024 - Feb 2025):
+  Error for 
+2Usn1PS2QxyO10kMyAR7Qw 
+(2024-10-01 to 2024-10-31): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+  Error for 
+2Usn1PS2QxyO10kMyAR7Qw 
+(2024-11-01 to 2024-11-30): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+  Error for 
+2Usn1PS2QxyO10kMyAR7Qw 
+(2024-12-01 to 2024-12-31): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+  Error for 
+2Usn1PS2QxyO10kMyAR7Qw 
+(2025-01-01 to 2025-01-31): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+  Error for 
+2Usn1PS2QxyO10kMyAR7Qw 
+(2025-02-01 to 2025-02-28): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+
+  THURSDAY GAP (May 2025 - Aug 2025):
+  Error for 
+2Usn1PS2QxyO10kMyAR7Qw 
+(2025-05-01 to 2025-05-31): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+  Error for 
+2Usn1PS2QxyO10kMyAR7Qw 
+(2025-06-01 to 2025-06-30): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+  Error for 
+2Usn1PS2QxyO10kMyAR7Qw 
+(2025-07-01 to 2025-07-31): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+  Error for 
+2Usn1PS2QxyO10kMyAR7Qw 
+(2025-08-01 to 2025-08-31): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+
+ΓöÇΓöÇ Searching meetings for Andrew Lassise ΓöÇΓöÇ
+
+  TUESDAY GAP (Oct 2024 - Feb 2025):
+  Error for 
+AQbQM9LOTOaEsgppBbZ2Ug 
+(2024-10-01 to 2024-10-31): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+  Error for 
+AQbQM9LOTOaEsgppBbZ2Ug 
+(2024-11-01 to 2024-11-30): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+  Error for 
+AQbQM9LOTOaEsgppBbZ2Ug 
+(2024-12-01 to 2024-12-31): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+  Error for 
+AQbQM9LOTOaEsgppBbZ2Ug 
+(2025-01-01 to 2025-01-31): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+  Error for 
+AQbQM9LOTOaEsgppBbZ2Ug 
+(2025-02-01 to 2025-02-28): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+
+  THURSDAY GAP (May 2025 - Aug 2025):
+  Error for 
+AQbQM9LOTOaEsgppBbZ2Ug 
+(2025-05-01 to 2025-05-31): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+  Error for 
+AQbQM9LOTOaEsgppBbZ2Ug 
+(2025-06-01 to 2025-06-30): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+  Error for 
+AQbQM9LOTOaEsgppBbZ2Ug 
+(2025-07-01 to 2025-07-31): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+  Error for 
+AQbQM9LOTOaEsgppBbZ2Ug 
+(2025-08-01 to 2025-08-31): 
+400 {"code":4711,"message":"I
+nvalid access token, does 
+not contain scopes:[report:re
+ad:user:admin]."}
+
+
+ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+SUMMARY ΓÇö Discovered Meeting IDs
+ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+No old meeting IDs discovered. The meetings may have been hosted by a different Zoom account.
+
+=== Search Complete ===

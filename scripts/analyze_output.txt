@@ -1,0 +1,10 @@
+﻿=== Analyzing LIVE Thursday Meeting ===
+Γ£à Meeting is LIVE! (UUID: VsN6HrpMT9GuI+5hwvxPtg==)
+ΓÜá∩╕Å Dashboard API failed: 400 {"code":4711,"message":"Invalid access token, does not contain scopes:[dashboard:read:list_meeting_participants:admin]."}
+Trying Report API (might be empty if live)...
+Report API Count: 0
+
+--- Comparison with recent Thursdays ---
+Date: 2026-02-16 | Count: 2
+Date: 2026-02-12 | Count: 2
+Date: 2026-02-12 | Count: 26
