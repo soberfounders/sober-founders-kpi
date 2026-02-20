@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { resolveCanonicalAttendeeName } from '../lib/attendeeCanonicalization';
 import {
   ResponsiveContainer,
   LineChart,
@@ -449,10 +450,14 @@ function buildCombinedAvgTimeline(avgTrendTue = [], avgTrendThu = []) {
     const next = byDate.get(fullDate) || {
       fullDate,
       date: formatDateMMDDYY(fullDate),
+      dayName: getDayName(fullDate),
       tuesdayAvg: null,
       thursdayAvg: null,
     };
-    next.tuesdayAvg = Number(row.avgVisits);
+    const parsed = Number(row.avgVisits);
+    if (!Number.isNaN(parsed)) {
+      next.tuesdayAvg = parsed;
+    }
     byDate.set(fullDate, next);
   });
 
@@ -462,14 +467,35 @@ function buildCombinedAvgTimeline(avgTrendTue = [], avgTrendThu = []) {
     const next = byDate.get(fullDate) || {
       fullDate,
       date: formatDateMMDDYY(fullDate),
+      dayName: getDayName(fullDate),
       tuesdayAvg: null,
       thursdayAvg: null,
     };
-    next.thursdayAvg = Number(row.avgVisits);
+    const parsed = Number(row.avgVisits);
+    if (!Number.isNaN(parsed)) {
+      next.thursdayAvg = parsed;
+    }
     byDate.set(fullDate, next);
   });
 
-  return Array.from(byDate.values()).sort((a, b) => a.fullDate.localeCompare(b.fullDate));
+  const sorted = Array.from(byDate.values()).sort((a, b) => a.fullDate.localeCompare(b.fullDate));
+  let lastTuesday = null;
+  let lastThursday = null;
+
+  return sorted.map((row) => {
+    if (row.tuesdayAvg !== null && row.tuesdayAvg !== undefined && !Number.isNaN(row.tuesdayAvg)) {
+      lastTuesday = row.tuesdayAvg;
+    }
+    if (row.thursdayAvg !== null && row.thursdayAvg !== undefined && !Number.isNaN(row.thursdayAvg)) {
+      lastThursday = row.thursdayAvg;
+    }
+
+    return {
+      ...row,
+      tuesdayHoverAvg: lastTuesday,
+      thursdayHoverAvg: lastThursday,
+    };
+  });
 }
 
 function buildMonthlyAverageSeries(sessions = [], groupType = 'Tuesday') {
@@ -580,7 +606,8 @@ function computeAnalytics(metrics, aliases) {
       attendeesRaw.forEach((raw) => {
         const normalized = normalizeName(raw);
         if (!normalized) return;
-        const canonical = resolveAliasTarget(raw, aliasMap) || raw.trim();
+        const aliasResolved = resolveAliasTarget(raw, aliasMap) || raw.trim();
+        const canonical = resolveCanonicalAttendeeName(aliasResolved, aliasMap) || aliasResolved.trim();
         byNormalized.set(normalizeName(canonical), canonical.trim());
       });
 
@@ -756,10 +783,14 @@ function computeAnalytics(metrics, aliases) {
     newNames: s.newNames
   }));
 
-  // Welcome New: last 6 sessions with new attendees (per-day tracking already applied)
-  const welcomeNewSessions = sessions
-    .filter(s => s.newNames && s.newNames.length > 0)
-    .slice(-6)
+  // Welcome New: keep top-of-page focused to 2 Tuesday + 2 Thursday sessions.
+  const welcomeNewSessionsTue = sessions
+    .filter((s) => s.type === 'Tuesday' && s.newNames && s.newNames.length > 0)
+    .slice(-2)
+    .reverse();
+  const welcomeNewSessionsThu = sessions
+    .filter((s) => s.type === 'Thursday' && s.newNames && s.newNames.length > 0)
+    .slice(-2)
     .reverse();
 
   // Cohort data — separated by day
@@ -796,7 +827,9 @@ function computeAnalytics(metrics, aliases) {
     cohortDataThu,
     topRepeaters: [...peopleArr].sort((a, b) => b.visits - a.visits).slice(0, 10),
     atRiskPeople: peopleArr.filter((p) => p.isAtRisk).sort((a, b) => b.visits - a.visits).slice(0, 10),
-    welcomeNewSessions,
+    welcomeNewSessions: [...welcomeNewSessionsTue, ...welcomeNewSessionsThu],
+    welcomeNewSessionsTue,
+    welcomeNewSessionsThu,
     duplicateCandidatesByName,
   };
 }
@@ -819,6 +852,8 @@ const AttendanceDashboard = () => {
   const [aliases, setAliases] = useState([]);
   const [planState, setPlanState] = useState({});
   const [selectedSessionKey, setSelectedSessionKey] = useState('');
+  const [selectedRepeaterName, setSelectedRepeaterName] = useState('');
+  const [selectedRepeaterSessionKey, setSelectedRepeaterSessionKey] = useState('');
   const [detailMessage, setDetailMessage] = useState('');
   const [mergingAliasKey, setMergingAliasKey] = useState('');
 
@@ -921,6 +956,61 @@ const AttendanceDashboard = () => {
       hasTargetDate: session.dateLabel === '2026-02-19',
     };
   }, [analytics, selectedSessionKey]);
+
+  const selectedRepeaterDetail = useMemo(() => {
+    if (!analytics?.sessions?.length || !selectedRepeaterName) return null;
+
+    const person = (analytics.people || []).find(
+      (p) => normalizeName(p.name) === normalizeName(selectedRepeaterName),
+    );
+    if (!person) return null;
+
+    const attendedSessions = (person.sessionIndexes || [])
+      .map((idx) => analytics.sessions[idx])
+      .filter(Boolean)
+      .map((session) => ({
+        sessionKey: `${session.type}|${session.dateLabel}`,
+        type: session.type,
+        dateLabel: session.dateLabel,
+        dateFormatted: session.dateFormatted,
+        derivedCount: Number(session.derivedCount || 0),
+        attendees: Array.isArray(session.attendees) ? session.attendees : [],
+        newNames: Array.isArray(session.newNames) ? session.newNames : [],
+      }))
+      .sort((a, b) => a.dateLabel.localeCompare(b.dateLabel));
+
+    if (attendedSessions.length === 0) {
+      return {
+        person,
+        attendedSessions: [],
+        selectedSessionKey: '',
+        selectedSession: null,
+        otherAttendees: [],
+      };
+    }
+
+    const hasSelected = attendedSessions.some((session) => session.sessionKey === selectedRepeaterSessionKey);
+    const activeSessionKey = hasSelected
+      ? selectedRepeaterSessionKey
+      : attendedSessions[attendedSessions.length - 1].sessionKey;
+    const selectedSession = attendedSessions.find((session) => session.sessionKey === activeSessionKey) || null;
+
+    const otherAttendees = (selectedSession?.attendees || [])
+      .filter((name) => normalizeName(name) !== normalizeName(person.name))
+      .map((name) => ({
+        name,
+        isNew: (selectedSession?.newNames || []).includes(name),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    return {
+      person,
+      attendedSessions,
+      selectedSessionKey: activeSessionKey,
+      selectedSession,
+      otherAttendees,
+    };
+  }, [analytics, selectedRepeaterName, selectedRepeaterSessionKey]);
 
   async function runZoomSync() {
     setSyncing(true);
@@ -1087,6 +1177,15 @@ const AttendanceDashboard = () => {
     setDetailMessage('');
   }
 
+  function handleTopRepeaterClick(name) {
+    setSelectedRepeaterName(name);
+    setSelectedRepeaterSessionKey('');
+  }
+
+  function handleTopRepeaterSessionClick(sessionKey) {
+    setSelectedRepeaterSessionKey(sessionKey);
+  }
+
   async function handleMergeAlias(sourceName, targetName) {
     const source = String(sourceName || '').trim();
     const target = String(targetName || '').trim();
@@ -1236,6 +1335,22 @@ const AttendanceDashboard = () => {
     );
   };
 
+  const avgTimelineTooltip = ({ active, payload, label }) => {
+    if (!active || !payload || payload.length === 0) return null;
+    const row = payload[0]?.payload || {};
+    const fullDate = row.dayName && row.date ? `${row.dayName} ${row.date}` : label;
+    const tue = row.tuesdayHoverAvg ?? row.tuesdayAvg ?? '-';
+    const thu = row.thursdayHoverAvg ?? row.thursdayAvg ?? '-';
+
+    return (
+      <div style={{ backgroundColor: 'white', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
+        <p style={{ fontWeight: 700, marginBottom: '6px' }}>{fullDate}</p>
+        <p style={{ fontSize: '13px', color: '#0ea5e9', margin: 0 }}>Tuesday Avg Visits: <strong>{tue}</strong></p>
+        <p style={{ fontSize: '13px', color: '#6366f1', margin: '4px 0 0 0' }}>Thursday Avg Visits: <strong>{thu}</strong></p>
+      </div>
+    );
+  };
+
   const MonthlyAverageCard = ({ title, color, series, summary }) => (
     <div style={cardStyle}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
@@ -1356,61 +1471,76 @@ const AttendanceDashboard = () => {
       </div>
 
       {/* Welcome New Section */}
-      {analytics.welcomeNewSessions && analytics.welcomeNewSessions.length > 0 && (
+      {(analytics.welcomeNewSessionsTue?.length > 0 || analytics.welcomeNewSessionsThu?.length > 0) && (
         <div style={cardStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
             <Sparkles size={20} color="#0f766e" />
             <h3 style={{ fontSize: '18px', fontWeight: 700 }}>Welcome New</h3>
-            <span style={{ fontSize: '12px', color: '#64748b', marginLeft: 'auto' }}>Last 6 sessions with first-time attendees (per-day tracking)</span>
+            <span style={{ fontSize: '12px', color: '#64748b', marginLeft: 'auto' }}>
+              2 latest Tuesday sessions on left and 2 latest Thursday sessions on right
+            </span>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
-            {analytics.welcomeNewSessions.map((session, idx) => (
-              <div key={idx} style={{
-                border: '1px solid #e2e8f0',
-                borderRadius: '12px',
-                padding: '14px',
-                backgroundColor: '#f0fdf4',
-                borderLeft: `4px solid ${session.type === 'Tuesday' ? '#0ea5e9' : '#6366f1'}`,
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <p style={{ fontWeight: 700, fontSize: '14px', color: session.type === 'Tuesday' ? '#0369a1' : '#4338ca' }}>
-                    Welcome New — {session.type} {session.dateFormatted}
-                  </p>
-                  <span style={{
-                    backgroundColor: '#dcfce7',
-                    color: '#166534',
-                    padding: '2px 8px',
-                    borderRadius: '999px',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                  }}>
-                    {session.newNames.length} new
-                  </span>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {session.newNames.map((name, nIdx) => (
-                    <span key={nIdx} style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      padding: '4px 10px',
-                      borderRadius: '999px',
-                      backgroundColor: 'white',
-                      border: '1px solid #bbf7d0',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      color: '#334155',
-                    }}>
-                      {name}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
+
+          <div style={{ overflowX: 'auto' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px', minWidth: '920px' }}>
+              {[...(analytics.welcomeNewSessionsTue || []), ...(analytics.welcomeNewSessionsThu || [])].map((session, idx) => {
+                const isTuesday = session.type === 'Tuesday';
+                return (
+                  <div
+                    key={`welcome-${session.type}-${session.dateLabel}-${idx}`}
+                    style={{
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '12px',
+                      padding: '14px',
+                      backgroundColor: isTuesday ? '#f0fdf4' : '#fff7ed',
+                      borderLeft: `4px solid ${isTuesday ? '#0ea5e9' : '#f97316'}`,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <p style={{ fontWeight: 700, fontSize: '14px', color: isTuesday ? '#0369a1' : '#c2410c' }}>
+                        Welcome New - {session.type} {session.dateFormatted}
+                      </p>
+                      <span
+                        style={{
+                          backgroundColor: isTuesday ? '#dcfce7' : '#ffedd5',
+                          color: isTuesday ? '#166534' : '#9a3412',
+                          padding: '2px 8px',
+                          borderRadius: '999px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {session.newNames.length} new
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {session.newNames.map((name, nIdx) => (
+                        <span
+                          key={`welcome-name-${idx}-${nIdx}`}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '4px 10px',
+                            borderRadius: '999px',
+                            backgroundColor: 'white',
+                            border: `1px solid ${isTuesday ? '#bbf7d0' : '#fdba74'}`,
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            color: '#334155',
+                          }}
+                        >
+                          {name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
-
       {/* KPI Stats — Separated by Day */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
         <div style={cardStyle}>
@@ -1648,13 +1778,7 @@ const AttendanceDashboard = () => {
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="date" allowDuplicatedCategory={false} tick={{ fill: '#64748b', fontSize: 10 }} />
               <YAxis domain={[1, 'auto']} tick={{ fill: '#64748b', fontSize: 10 }} />
-              <Tooltip
-                labelFormatter={(label, payload) => {
-                  const fullDate = payload?.[0]?.payload?.fullDate;
-                  return fullDate ? `${label} (${fullDate})` : label;
-                }}
-                formatter={(value, name) => [value ?? '-', name]}
-              />
+              <Tooltip content={avgTimelineTooltip} />
               <Legend />
               <Line type="monotone" connectNulls dataKey="tuesdayAvg" name="Tuesday Avg Visits" stroke="#0ea5e9" strokeWidth={2} dot={false} />
               <Line type="monotone" connectNulls dataKey="thursdayAvg" name="Thursday Avg Visits" stroke="#6366f1" strokeWidth={2} dot={false} />
@@ -1702,6 +1826,9 @@ const AttendanceDashboard = () => {
             <UserRoundCheck size={17} color="#0f766e" />
             <h3 style={{ fontSize: '18px' }}>Top Repeat Attendees</h3>
           </div>
+          <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '10px' }}>
+            Click a name to see all meetings they attended, then click a meeting to view the other attendees.
+          </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto' }}>
             {analytics.topRepeaters.map((p) => (
               <div
@@ -1717,7 +1844,23 @@ const AttendanceDashboard = () => {
                 }}
               >
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontWeight: 600, fontSize: '14px' }}>{p.name}</span>
+                  <button
+                    onClick={() => handleTopRepeaterClick(p.name)}
+                    style={{
+                      textAlign: 'left',
+                      border: 'none',
+                      backgroundColor: 'transparent',
+                      padding: 0,
+                      margin: 0,
+                      fontWeight: 700,
+                      fontSize: '14px',
+                      color: normalizeName(selectedRepeaterName) === normalizeName(p.name) ? '#0f766e' : '#0f172a',
+                      textDecoration: 'underline',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {p.name}
+                  </button>
                   <span style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase' }}>
                     Tue: {p.tueVisits} · Thu: {p.thuVisits}
                   </span>
@@ -1728,6 +1871,85 @@ const AttendanceDashboard = () => {
             ))}
             {analytics.topRepeaters.length === 0 && <p style={{ color: 'var(--color-text-secondary)' }}>No attendee rows yet.</p>}
           </div>
+
+          {selectedRepeaterDetail && (
+            <div style={{ marginTop: '12px', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px', backgroundColor: '#f8fafc' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <p style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>
+                  Attendance History: {selectedRepeaterDetail.person.name}
+                </p>
+                <p style={{ fontSize: '12px', color: '#0f766e', fontWeight: 700 }}>
+                  Total Show-Ups: {selectedRepeaterDetail.attendedSessions.length}
+                </p>
+              </div>
+
+              <div style={{ marginTop: '10px', display: 'grid', gridTemplateColumns: 'minmax(220px, 1fr) 1.5fr', gap: '10px' }}>
+                <div style={{ maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {selectedRepeaterDetail.attendedSessions.map((session) => {
+                    const isSelected = session.sessionKey === selectedRepeaterDetail.selectedSessionKey;
+                    return (
+                      <button
+                        key={session.sessionKey}
+                        onClick={() => handleTopRepeaterSessionClick(session.sessionKey)}
+                        style={{
+                          border: `1px solid ${isSelected ? '#0f766e' : '#cbd5e1'}`,
+                          backgroundColor: isSelected ? '#ecfeff' : 'white',
+                          borderRadius: '8px',
+                          padding: '8px 10px',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <p style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>
+                          {session.type} {session.dateFormatted}
+                        </p>
+                        <p style={{ marginTop: '3px', fontSize: '11px', color: '#64748b' }}>
+                          {session.derivedCount} attendees
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', backgroundColor: 'white' }}>
+                  {selectedRepeaterDetail.selectedSession && (
+                    <>
+                      <p style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
+                        Other Attendees in {selectedRepeaterDetail.selectedSession.type} {selectedRepeaterDetail.selectedSession.dateFormatted}
+                      </p>
+                      <p style={{ marginTop: '4px', fontSize: '12px', color: '#64748b' }}>
+                        {selectedRepeaterDetail.otherAttendees.length} attendee{selectedRepeaterDetail.otherAttendees.length === 1 ? '' : 's'} besides {selectedRepeaterDetail.person.name}
+                      </p>
+                      <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: '180px', overflowY: 'auto' }}>
+                        {selectedRepeaterDetail.otherAttendees.map((attendee) => (
+                          <span
+                            key={`${selectedRepeaterDetail.selectedSession.sessionKey}-${attendee.name}`}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '4px 10px',
+                              borderRadius: '999px',
+                              border: '1px solid #e2e8f0',
+                              backgroundColor: attendee.isNew ? '#dcfce7' : '#f8fafc',
+                              color: attendee.isNew ? '#166534' : '#334155',
+                              fontSize: '12px',
+                              fontWeight: 600,
+                            }}
+                          >
+                            {attendee.name}
+                          </span>
+                        ))}
+                        {selectedRepeaterDetail.otherAttendees.length === 0 && (
+                          <span style={{ fontSize: '12px', color: '#94a3b8' }}>No other attendees recorded for this meeting.</span>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div style={{ ...cardStyle, borderLeft: '5px solid #f59e0b' }}>
@@ -1830,6 +2052,8 @@ const AttendanceDashboard = () => {
 };
 
 export default AttendanceDashboard;
+
+
 
 
 

@@ -59,6 +59,16 @@ Conversion rates:
 - Last-name-only fragments should not override a valid first+last canonical name.
 - If an attendee is already represented by a clear first+last name, only suggest merge options when an in-session short alias with the same first name exists (for example, `Drew` or `Drew T`).
 
+Runtime canonicalization guardrails (applied during Zoom/Lu.ma processing and dashboard rollups):
+
+- Hard rules:
+  - Any name starting with `Chris Lipper` resolves to `Chris Lipper`.
+  - `Allen G*` and `Allen Godard` variants resolve to `Allen Goddard`.
+  - Any name starting with `Josh Cougler` resolves to `Josh Cougler`.
+  - `Matt S`/`Matt s` resolves to `Matt Shiebler`.
+- Generic suffix rule:
+  - If a display name starts with a clear `First Last` and then additional words, canonicalize to `First Last` (for example, `Matt Shiebler Interactive Accountants` -> `Matt Shiebler`).
+
 ## Attribution Method (Current)
 
 Direct ad-to-contact IDs are not consistently available in the current schema, so the dashboard uses weighted attribution fallback:
