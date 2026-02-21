@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const THURSDAY_ZOOM_MEETING_ID = "84242212480";
+const CROSS_EMAIL_NAME_MATCH_MAX_HOURS = 720;
 const NON_PERSON_TOKENS = new Set([
   "iphone",
   "ipad",
@@ -186,20 +187,86 @@ async function fetchLumaGuests(apiKey: string, eventApiId: string) {
   return out;
 }
 
-function pickNearestByDate(rows: any[], targetDateKey: string) {
-  if (!rows || rows.length === 0) return null;
-  const targetTs = new Date(`${targetDateKey}T00:00:00.000Z`).getTime();
+function toTimestamp(value: unknown): number | null {
+  if (!value) return null;
+  const parsed = new Date(String(value));
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.getTime();
+}
 
-  let best = rows[0];
+function parseEmailList(value: unknown): string[] {
+  return String(value || "")
+    .split(",")
+    .map((item) => String(item || "").trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function pickNearestByTimestamp(rows: any[], targetTs: number | null, maxHours: number | null = null) {
+  if (!rows || rows.length === 0) return null;
+
+  let best = null;
   let bestDistance = Number.POSITIVE_INFINITY;
+  const maxDistanceMs = maxHours === null ? null : maxHours * 60 * 60 * 1000;
+
   for (const row of rows) {
-    const dateKey = toDateKey(row?.createdate);
-    if (!dateKey) continue;
-    const ts = new Date(`${dateKey}T00:00:00.000Z`).getTime();
-    const distance = Math.abs(ts - targetTs);
+    const rowTs = toTimestamp(row?.createdate);
+    if (rowTs === null) continue;
+
+    const distance = targetTs === null ? 0 : Math.abs(rowTs - targetTs);
+    if (maxDistanceMs !== null && targetTs !== null && distance > maxDistanceMs) continue;
+
     if (distance < bestDistance) {
       bestDistance = distance;
       best = row;
+    }
+  }
+
+  return best;
+}
+
+function hubspotCandidateScore(row: any): number {
+  const officialRevenue = Number(row?.annual_revenue_in_dollars__official_);
+  const fallbackRevenue = Number(row?.annual_revenue_in_dollars);
+  const hasOfficialRevenue = Number.isFinite(officialRevenue);
+  const hasFallbackRevenue = Number.isFinite(fallbackRevenue);
+  const hasSobrietyDate = row?.sobriety_date !== null && row?.sobriety_date !== undefined && row?.sobriety_date !== "";
+  let score = 0;
+  if (hasOfficialRevenue) score += 4;
+  else if (hasFallbackRevenue) score += 2;
+  if (hasSobrietyDate) score += 1;
+  return score;
+}
+
+function pickBestHubspotCandidate(rows: any[], targetTs: number | null, maxHours: number | null = null) {
+  if (!rows || rows.length === 0) return null;
+
+  const maxDistanceMs = maxHours === null ? null : maxHours * 60 * 60 * 1000;
+  const scoped = rows.filter((row) => {
+    const rowTs = toTimestamp(row?.createdate);
+    if (rowTs === null) return false;
+    if (maxDistanceMs === null || targetTs === null) return true;
+    return Math.abs(rowTs - targetTs) <= maxDistanceMs;
+  });
+
+  if (scoped.length === 0) return null;
+
+  // Prefer richer merged/contact records when available, then nearest timestamp.
+  const enriched = scoped.filter((row) => hubspotCandidateScore(row) > 0);
+  const pool = enriched.length > 0 ? enriched : scoped;
+
+  let best = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (const row of pool) {
+    const rowTs = toTimestamp(row?.createdate);
+    if (rowTs === null) continue;
+    const score = hubspotCandidateScore(row);
+    const distance = targetTs === null ? 0 : Math.abs(rowTs - targetTs);
+    if (score > bestScore || (score === bestScore && distance < bestDistance)) {
+      best = row;
+      bestScore = score;
+      bestDistance = distance;
     }
   }
 
@@ -217,6 +284,11 @@ function buildHubspotIndexes(hubspotRows: any[]) {
       byEmail.get(email)!.push(row);
     }
 
+    for (const extraEmail of parseEmailList(row?.hs_additional_emails)) {
+      if (!byEmail.has(extraEmail)) byEmail.set(extraEmail, []);
+      byEmail.get(extraEmail)!.push(row);
+    }
+
     const full = `${String(row?.firstname || "").trim()} ${String(row?.lastname || "").trim()}`.trim();
     const normalized = normalizeName(full);
     if (normalized) {
@@ -226,6 +298,57 @@ function buildHubspotIndexes(hubspotRows: any[]) {
   }
 
   return { byEmail, byName };
+}
+
+function matchHubspotContact(
+  guestEmail: string,
+  normalizedGuestName: string,
+  registeredAt: string | null | undefined,
+  eventDateKey: string,
+  hubspotIndex: ReturnType<typeof buildHubspotIndexes>,
+) {
+  const referenceTs =
+    toTimestamp(registeredAt) ??
+    toTimestamp(`${eventDateKey}T00:00:00.000Z`);
+
+  const emailCandidates = guestEmail
+    ? (hubspotIndex.byEmail.get(guestEmail) || [])
+    : [];
+  const emailMatch = pickBestHubspotCandidate(emailCandidates, referenceTs);
+  if (emailMatch) {
+    return {
+      row: emailMatch,
+      reason: "email_exact",
+      isCrossEmail: false,
+    };
+  }
+
+  if (!normalizedGuestName) {
+    return { row: null, reason: "none", isCrossEmail: false };
+  }
+
+  const nameCandidates = hubspotIndex.byName.get(normalizedGuestName) || [];
+  const strictNameCandidates = nameCandidates.filter((candidate) => {
+    const full = `${String(candidate?.firstname || "").trim()} ${String(candidate?.lastname || "").trim()}`.trim();
+    return normalizeName(full) === normalizedGuestName;
+  });
+  const nameMatch = pickBestHubspotCandidate(
+    strictNameCandidates,
+    referenceTs,
+    CROSS_EMAIL_NAME_MATCH_MAX_HOURS,
+  );
+  if (!nameMatch) {
+    return { row: null, reason: "none", isCrossEmail: false };
+  }
+
+  const matchedEmail = String(nameMatch?.email || "").trim().toLowerCase();
+  const isCrossEmail = !!guestEmail && !!matchedEmail && matchedEmail !== guestEmail;
+
+  return {
+    row: nameMatch,
+    reason: "name_72h",
+    isCrossEmail,
+  };
 }
 
 function buildZoomSessionIndex(zoomRows: any[]) {
@@ -357,7 +480,7 @@ serve(async (req) => {
 
     const { data: hubspotRows, error: hubspotError } = await supabase
       .from("raw_hubspot_contacts")
-      .select("hubspot_contact_id,createdate,email,firstname,lastname,annual_revenue_in_dollars,hs_analytics_source_data_2,campaign,membership_s")
+      .select("hubspot_contact_id,createdate,email,hs_additional_emails,firstname,lastname,annual_revenue_in_dollars,annual_revenue_in_dollars__official_,sobriety_date,hs_analytics_source_data_2,campaign,membership_s")
       .gte("createdate", `${addDays(startKey, -365)}T00:00:00.000Z`)
       .lte("createdate", `${endKey}T23:59:59.999Z`)
       .order("createdate", { ascending: true });
@@ -379,6 +502,9 @@ serve(async (req) => {
 
     const rows: any[] = [];
     let totalGuestsFetched = 0;
+    let hubspotEmailMatches = 0;
+    let hubspotNameMatches72h = 0;
+    let hubspotCrossEmailMatches = 0;
 
     for (const event of candidateEvents) {
       const eventApiId = String(event.api_id || event.id || "");
@@ -401,15 +527,22 @@ serve(async (req) => {
         const guestEmail = String(guest.user_email || guest.email || "").trim().toLowerCase();
         const guestName = String(guest.user_name || guest.name || "").trim();
         const normalizedGuestName = normalizeName(guestName);
-
-        const emailCandidates = guestEmail ? (hubspotIndex.byEmail.get(guestEmail) || []) : [];
-        const nameCandidates = normalizedGuestName ? (hubspotIndex.byName.get(normalizedGuestName) || []) : [];
-        const hubspotMatch = pickNearestByDate(
-          emailCandidates.length > 0 ? emailCandidates : nameCandidates,
+        const hubspotMatchMeta = matchHubspotContact(
+          guestEmail,
+          normalizedGuestName,
+          guest.registered_at || null,
           eventDate,
+          hubspotIndex,
         );
+        const hubspotMatch = hubspotMatchMeta.row;
+        if (hubspotMatchMeta.reason === "email_exact") hubspotEmailMatches += 1;
+        if (hubspotMatchMeta.reason === "name_72h") hubspotNameMatches72h += 1;
+        if (hubspotMatchMeta.isCrossEmail) hubspotCrossEmailMatches += 1;
 
-        const hubspotRevenue = hubspotMatch?.annual_revenue_in_dollars ?? null;
+        const hubspotRevenue =
+          hubspotMatch?.annual_revenue_in_dollars__official_ ??
+          hubspotMatch?.annual_revenue_in_dollars ??
+          null;
         const hubspotTier = classifyHubspotTier(hubspotRevenue);
         const funnelKey = hubspotMatch ? classifyFunnelFromHubspot(hubspotMatch) : "free";
 
@@ -444,7 +577,11 @@ serve(async (req) => {
           matched_hubspot_tier: hubspotMatch ? hubspotTier : null,
           funnel_key: funnelKey,
           event_payload: event,
-          guest_payload: guest,
+          guest_payload: {
+            ...guest,
+            _hubspot_match_reason: hubspotMatchMeta.reason,
+            _hubspot_cross_email: hubspotMatchMeta.isCrossEmail,
+          },
           updated_at: new Date().toISOString(),
         });
       }
@@ -465,6 +602,9 @@ serve(async (req) => {
         zoom_matches: approvedRows.filter((row) => row.matched_zoom).length,
         zoom_net_new_matches: approvedRows.filter((row) => row.matched_zoom_net_new).length,
         hubspot_matches: approvedRows.filter((row) => row.matched_hubspot).length,
+        hubspot_email_matches: hubspotEmailMatches,
+        hubspot_name_matches_72h: hubspotNameMatches72h,
+        hubspot_cross_email_matches: hubspotCrossEmailMatches,
       }),
       { headers: { ...corsHeaders, "content-type": "application/json" } },
     );

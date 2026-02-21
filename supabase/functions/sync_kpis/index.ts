@@ -38,8 +38,13 @@ async function hubspotSearchContactsCreatedBetween(
     // Revenue + membership (your custom fields)
     "annual_revenue_in_dollars__official_",
     "annual_revenue_in_dollars",
+    "sobriety_date",
+    "sobriety_date__official_",
+    "sober_date",
+    "clean_date",
     "membership_s_",
     "membership_s",
+    "hs_additional_emails",
     "hs_latest_meeting_activity",
     "first_conversion_event_name",
     "recent_conversion_event_name",
@@ -120,10 +125,19 @@ async function pgRpcUpsertHubspotContacts(
   const payload = rows.map((r: any) => {
     const p = r.properties ?? {};
 
-    const annualRevenueRaw =
+    const annualRevenueOfficialRaw =
       p.annual_revenue_in_dollars__official_ ??
+      null;
+
+    const annualRevenueRaw =
+      annualRevenueOfficialRaw ??
       p.annual_revenue_in_dollars ??
       null;
+
+    const annualRevenueOfficialNum =
+      annualRevenueOfficialRaw === null || annualRevenueOfficialRaw === undefined || annualRevenueOfficialRaw === ""
+        ? null
+        : Number(annualRevenueOfficialRaw);
 
     const annualRevenueNum =
       annualRevenueRaw === null || annualRevenueRaw === undefined || annualRevenueRaw === ""
@@ -132,6 +146,16 @@ async function pgRpcUpsertHubspotContacts(
 
     const membership =
       p.membership_s_ ?? p.membership_s ?? null;
+
+    const sobrietyDate =
+      p.sobriety_date ??
+      p.sobriety_date__official_ ??
+      p.sober_date ??
+      p.clean_date ??
+      null;
+
+    const hsAdditionalEmails =
+      p.hs_additional_emails ?? null;
 
     const hsSource = p.hs_analytics_source ?? null;
 
@@ -144,7 +168,10 @@ async function pgRpcUpsertHubspotContacts(
       lastname: p.lastname ?? null,
 
       annual_revenue_in_dollars: Number.isFinite(annualRevenueNum) ? annualRevenueNum : null,
+      annual_revenue_in_dollars__official_: Number.isFinite(annualRevenueOfficialNum) ? annualRevenueOfficialNum : null,
+      sobriety_date: sobrietyDate,
       membership_s: membership,
+      hs_additional_emails: hsAdditionalEmails,
 
       // keep this for backward-compat with your SQL that references original_traffic_source
       original_traffic_source: hsSource,

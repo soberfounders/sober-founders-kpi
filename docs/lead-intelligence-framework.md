@@ -96,6 +96,7 @@ Matching performed during sync:
 
 - Lu.ma -> Zoom (`matched_zoom`, `matched_zoom_net_new`) using guest full name against Thursday attendance rosters.
 - Lu.ma -> HubSpot (`matched_hubspot`) using email first, then normalized full name fallback.
+- Cross-email HubSpot guardrail: if email does not match, name-based auto-match only occurs when normalized full name aligns within `72` hours of registration time.
 
 If `raw_luma_registrations` is missing/unavailable, the dashboard falls back to:
 
@@ -106,6 +107,7 @@ If `raw_luma_registrations` is missing/unavailable, the dashboard falls back to:
 - The Leads dashboard reads the last `120` days by default and computes:
 - Week-over-week (`7d` vs prior `7d`)
 - Month-over-month (`30d` vs prior `30d`)
+- Leads includes a Fact Check Drilldown panel with window selector (`current/previous week`, `current/previous month`, `lookback`) and clickable metric drill-ins.
 - `sync_zoom_attendance` should run before analytics review to keep show-up metrics current.
 - `sync_luma_registrations` should run before Thursday funnel reviews to refresh registrations and match statuses.
 - Deploy `manage_attendee_aliases` before using merge buttons in Attendance:

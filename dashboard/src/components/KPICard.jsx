@@ -3,10 +3,12 @@ import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 
-const KPICard = ({ title, value, subvalue, trend, trendValue, color, chartData }) => {
-  const isPositive = trend === 'up';
-  const isNegative = trend === 'down';
-  
+const KPICard = ({ title, value, subvalue, trend, trendValue, color, chartData, invertColor }) => {
+  const isUp = trend === 'up';
+  const isDown = trend === 'down';
+  const better = invertColor ? isDown : isUp;
+  const worse = invertColor ? isUp : isDown;
+
   return (
     <motion.div
       whileHover={{ y: -4, shadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)' }}
@@ -40,10 +42,10 @@ const KPICard = ({ title, value, subvalue, trend, trendValue, color, chartData }
               borderRadius: '20px',
               fontSize: '12px',
               fontWeight: '600',
-              backgroundColor: isPositive ? '#ecfdf5' : isNegative ? '#fef2f2' : '#f1f5f9',
-              color: isPositive ? '#10b981' : isNegative ? '#ef4444' : '#64748b'
+              backgroundColor: better ? '#ecfdf5' : worse ? '#fef2f2' : '#f1f5f9',
+              color: better ? '#10b981' : worse ? '#ef4444' : '#64748b'
             }}>
-              {isPositive ? <TrendingUp size={14} /> : isNegative ? <TrendingDown size={14} /> : <Minus size={14} />}
+              {isUp ? <TrendingUp size={14} /> : isDown ? <TrendingDown size={14} /> : <Minus size={14} />}
               {trendValue}
             </div>
           )}
@@ -61,16 +63,16 @@ const KPICard = ({ title, value, subvalue, trend, trendValue, color, chartData }
             <AreaChart data={chartData}>
               <defs>
                 <linearGradient id={`gradient-${color}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={color} stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor={color} stopOpacity={0}/>
+                  <stop offset="5%" stopColor={color} stopOpacity={0.3} />
+                  <stop offset="95%" stopColor={color} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <Area 
-                type="monotone" 
-                dataKey="value" 
-                stroke={color} 
-                fillOpacity={1} 
-                fill={`url(#gradient-${color})`} 
+              <Area
+                type="monotone"
+                dataKey="value"
+                stroke={color}
+                fillOpacity={1}
+                fill={`url(#gradient-${color})`}
                 strokeWidth={2}
               />
             </AreaChart>

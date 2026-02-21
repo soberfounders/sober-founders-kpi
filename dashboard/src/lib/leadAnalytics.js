@@ -104,6 +104,22 @@ function leadTierFromRevenue(value) {
   return 'standard';
 }
 
+function resolveHubspotRevenue(row) {
+  const officialRaw = row?.annual_revenue_in_dollars__official_;
+  if (officialRaw !== null && officialRaw !== undefined && officialRaw !== '') {
+    const official = Number(officialRaw);
+    if (Number.isFinite(official)) return official;
+  }
+
+  const fallbackRaw = row?.annual_revenue_in_dollars;
+  if (fallbackRaw !== null && fallbackRaw !== undefined && fallbackRaw !== '') {
+    const fallback = Number(fallbackRaw);
+    if (Number.isFinite(fallback)) return fallback;
+  }
+
+  return null;
+}
+
 function isPaidSocialLead(row) {
   const source = String(row?.hs_analytics_source || '').toUpperCase();
   return source === 'PAID_SOCIAL' || source.includes('PAID_SOCIAL');
@@ -162,13 +178,19 @@ function buildZoomNetNew(zoomRows, aliasMap = new Map()) {
   const seen = new Set();
   const firstSeenByName = new Map();
   const dailyMap = new Map();
+  const detailedSessions = [];
 
   sessions.forEach((session) => {
     const newNames = [];
+    const returningNames = [];
 
     session.attendees.forEach((name) => {
       const key = normalizeName(name);
-      if (!key || seen.has(key)) return;
+      if (!key) return;
+      if (seen.has(key)) {
+        returningNames.push(name);
+        return;
+      }
       seen.add(key);
       newNames.push(name);
       firstSeenByName.set(key, {
@@ -198,6 +220,16 @@ function buildZoomNetNew(zoomRows, aliasMap = new Map()) {
       row.thursdaySessions += 1;
     }
     row.total += newNames.length;
+
+    detailedSessions.push({
+      dateKey: session.dateKey,
+      dayType: session.dayType,
+      attendees: session.attendees,
+      newNames,
+      returningNames,
+      netNewCount: newNames.length,
+      totalCount: session.attendees.length,
+    });
   });
 
   const daily = Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date));
@@ -206,6 +238,7 @@ function buildZoomNetNew(zoomRows, aliasMap = new Map()) {
 
   return {
     daily,
+    sessions: detailedSessions,
     firstSeenByName,
     totalNetNew: totalTuesday + totalThursday,
     totalTuesday,
@@ -259,18 +292,28 @@ function buildPaidLeads(hubspotRows, showupIndex) {
       const createdDateKey = parseDateKey(row?.createdate);
       if (!createdDateKey) return null;
 
-      const tier = leadTierFromRevenue(row?.annual_revenue_in_dollars);
+      const revenue = resolveHubspotRevenue(row);
+      const tier = leadTierFromRevenue(revenue);
       const leadName = getLeadName(row);
       const showupMatch = matchLeadToShowup(leadName, createdDateKey, showupIndex);
 
       return {
         createdDateKey,
+        createdAt: row?.createdate || null,
         funnel: classifyLeadFunnel(row),
         tier,
         isRegistration: isLumaRegistrationLead(row),
         matchedShowup: !!showupMatch,
         matchedShowupDateKey: showupMatch?.dateKey || null,
         leadName,
+        email: String(row?.email || '').trim().toLowerCase(),
+        firstName: String(row?.firstname || '').trim(),
+        lastName: String(row?.lastname || '').trim(),
+        membership: String(row?.membership_s || '').trim(),
+        campaign: String(row?.campaign || '').trim(),
+        sourceData1: String(row?.hs_analytics_source_data_1 || '').trim(),
+        sourceData2: String(row?.hs_analytics_source_data_2 || '').trim(),
+        revenue,
       };
     })
     .filter(Boolean)
@@ -887,6 +930,240 @@ function buildLeadQualityBreakdown(snapshot) {
   };
 }
 
+function buildWindowDrilldown({
+  startKey,
+  endKey,
+  adsRows,
+  paidLeads,
+  lumaRegistrations,
+  zoomSessions,
+  hasDirectLumaData,
+}) {
+  const adsInRange = (adsRows || []).filter((row) => dateInRange(row.dateKey, startKey, endKey));
+  const leadsInRange = (paidLeads || []).filter((row) => dateInRange(row.createdDateKey, startKey, endKey));
+  const lumaInRange = (lumaRegistrations || []).filter((row) => dateInRange(row.dateKey, startKey, endKey));
+  const sessionsInRange = (zoomSessions || []).filter((row) => dateInRange(row.dateKey, startKey, endKey));
+
+  const adRows = adsInRange.map((row) => ({
+    date: row.dateKey,
+    campaign: row.campaignName,
+    adset: row.adsetName,
+    ad: row.adName,
+    funnel: row.funnel,
+    spend: round(row.spend, 2),
+    impressions: round(row.impressions, 0),
+    clicks: round(row.clicks, 0),
+    metaLeads: round(row.leads, 0),
+  }));
+
+  const leadRows = leadsInRange.map((row) => ({
+    leadDate: row.createdDateKey,
+    leadName: row.leadName,
+    email: row.email || '',
+    funnel: row.funnel,
+    tier: row.tier,
+    revenue: row.revenue,
+    matchedShowup: row.matchedShowup ? 'Yes' : 'No',
+    matchedShowupDate: row.matchedShowupDateKey || '',
+    registrationProxy: row.isRegistration ? 'Yes' : 'No',
+    campaign: row.campaign || '',
+    membership: row.membership || '',
+    sourceData2: row.sourceData2 || '',
+  }));
+
+  const standardLeadRows = leadRows.filter((row) => row.tier === 'standard');
+  const qualifiedLeadRows = leadRows.filter((row) => row.tier === 'qualified');
+  const greatLeadRows = leadRows.filter((row) => row.tier === 'great');
+
+  const fallbackRegistrationRows = leadsInRange
+    .filter((row) => row.isRegistration)
+    .map((row) => ({
+      eventDate: row.createdDateKey,
+      guestName: row.leadName,
+      guestEmail: row.email || '',
+      funnel: row.funnel,
+      hubspotTier: row.tier,
+      matchedZoom: row.matchedShowup ? 'Yes' : 'No',
+      matchedZoomNetNew: row.matchedShowup ? 'Yes' : 'No',
+      matchedHubspot: 'Yes',
+      source: 'HubSpot Proxy',
+    }));
+
+  const lumaRows = lumaInRange.map((row) => ({
+    eventDate: row.dateKey,
+    guestName: row.guestName || '',
+    guestEmail: row.guestEmail || '',
+    funnel: row.funnel,
+    hubspotTier: row.tier,
+    matchedZoom: row.matchedZoom ? 'Yes' : 'No',
+    matchedZoomNetNew: row.matchedZoomNetNew ? 'Yes' : 'No',
+    matchedHubspot: row.matchedHubspot ? 'Yes' : 'No',
+    source: 'Luma',
+  }));
+
+  const registrationRows = hasDirectLumaData ? lumaRows : fallbackRegistrationRows;
+  const lumaZoomMatchRows = lumaRows.filter((row) => row.matchedZoom === 'Yes');
+  const lumaZoomNetNewMatchRows = lumaRows.filter((row) => row.matchedZoomNetNew === 'Yes');
+  const lumaHubspotMatchRows = lumaRows.filter((row) => row.matchedHubspot === 'Yes');
+
+  const showupRows = [];
+  sessionsInRange.forEach((session) => {
+    const names = Array.isArray(session?.newNames) ? session.newNames : [];
+    names.forEach((attendee) => {
+      showupRows.push({
+        sessionDate: session.dateKey,
+        dayType: session.dayType,
+        attendeeName: attendee,
+      });
+    });
+  });
+
+  const adColumns = [
+    { key: 'date', label: 'Date', type: 'text' },
+    { key: 'campaign', label: 'Campaign', type: 'text' },
+    { key: 'adset', label: 'Ad Set', type: 'text' },
+    { key: 'ad', label: 'Ad', type: 'text' },
+    { key: 'funnel', label: 'Funnel', type: 'text' },
+    { key: 'spend', label: 'Spend', type: 'currency' },
+  ];
+
+  const tables = {
+    impressions: {
+      columns: [...adColumns, { key: 'impressions', label: 'Impressions', type: 'number' }],
+      rows: adRows.filter((row) => row.impressions > 0),
+      emptyMessage: 'No Meta impression rows in this window.',
+    },
+    clicks: {
+      columns: [...adColumns, { key: 'clicks', label: 'Clicks', type: 'number' }],
+      rows: adRows.filter((row) => row.clicks > 0),
+      emptyMessage: 'No Meta click rows in this window.',
+    },
+    leads: {
+      columns: [
+        { key: 'leadDate', label: 'Lead Date', type: 'text' },
+        { key: 'leadName', label: 'Lead Name', type: 'text' },
+        { key: 'email', label: 'Email', type: 'text' },
+        { key: 'funnel', label: 'Funnel', type: 'text' },
+        { key: 'tier', label: 'Tier', type: 'text' },
+        { key: 'revenue', label: 'Revenue', type: 'currency' },
+        { key: 'matchedShowup', label: 'Matched Show-Up', type: 'text' },
+        { key: 'matchedShowupDate', label: 'Show-Up Date', type: 'text' },
+        { key: 'campaign', label: 'Campaign', type: 'text' },
+      ],
+      rows: leadRows,
+      emptyMessage: 'No paid-social leads in this window.',
+    },
+    registrations: {
+      columns: [
+        { key: 'eventDate', label: 'Registration Date', type: 'text' },
+        { key: 'guestName', label: 'Name', type: 'text' },
+        { key: 'guestEmail', label: 'Email', type: 'text' },
+        { key: 'funnel', label: 'Funnel', type: 'text' },
+        { key: 'hubspotTier', label: 'HubSpot Tier', type: 'text' },
+        { key: 'matchedZoom', label: 'Matched Zoom', type: 'text' },
+        { key: 'matchedZoomNetNew', label: 'Matched Net New', type: 'text' },
+        { key: 'matchedHubspot', label: 'Matched HubSpot', type: 'text' },
+        { key: 'source', label: 'Source', type: 'text' },
+      ],
+      rows: registrationRows,
+      emptyMessage: hasDirectLumaData
+        ? 'No Lu.ma registrations in this window.'
+        : 'No HubSpot membership proxy registrations in this window.',
+    },
+    showups: {
+      columns: [
+        { key: 'sessionDate', label: 'Session Date', type: 'text' },
+        { key: 'dayType', label: 'Day', type: 'text' },
+        { key: 'attendeeName', label: 'Net New Attendee', type: 'text' },
+      ],
+      rows: showupRows,
+      emptyMessage: 'No net-new Zoom show-ups in this window.',
+    },
+    standard: {
+      columns: [
+        { key: 'leadDate', label: 'Lead Date', type: 'text' },
+        { key: 'leadName', label: 'Lead Name', type: 'text' },
+        { key: 'email', label: 'Email', type: 'text' },
+        { key: 'funnel', label: 'Funnel', type: 'text' },
+        { key: 'revenue', label: 'Revenue', type: 'currency' },
+        { key: 'campaign', label: 'Campaign', type: 'text' },
+      ],
+      rows: standardLeadRows,
+      emptyMessage: 'No standard leads in this window.',
+    },
+    qualified: {
+      columns: [
+        { key: 'leadDate', label: 'Lead Date', type: 'text' },
+        { key: 'leadName', label: 'Lead Name', type: 'text' },
+        { key: 'email', label: 'Email', type: 'text' },
+        { key: 'funnel', label: 'Funnel', type: 'text' },
+        { key: 'revenue', label: 'Revenue', type: 'currency' },
+        { key: 'matchedShowup', label: 'Matched Show-Up', type: 'text' },
+        { key: 'campaign', label: 'Campaign', type: 'text' },
+      ],
+      rows: qualifiedLeadRows,
+      emptyMessage: 'No qualified leads in this window.',
+    },
+    great: {
+      columns: [
+        { key: 'leadDate', label: 'Lead Date', type: 'text' },
+        { key: 'leadName', label: 'Lead Name', type: 'text' },
+        { key: 'email', label: 'Email', type: 'text' },
+        { key: 'funnel', label: 'Funnel', type: 'text' },
+        { key: 'revenue', label: 'Revenue', type: 'currency' },
+        { key: 'matchedShowup', label: 'Matched Show-Up', type: 'text' },
+        { key: 'campaign', label: 'Campaign', type: 'text' },
+      ],
+      rows: greatLeadRows,
+      emptyMessage: 'No great leads in this window.',
+    },
+    luma_zoom_matches: {
+      columns: [
+        { key: 'eventDate', label: 'Registration Date', type: 'text' },
+        { key: 'guestName', label: 'Name', type: 'text' },
+        { key: 'guestEmail', label: 'Email', type: 'text' },
+        { key: 'matchedZoom', label: 'Matched Zoom', type: 'text' },
+        { key: 'matchedZoomNetNew', label: 'Matched Net New', type: 'text' },
+      ],
+      rows: lumaZoomMatchRows,
+      emptyMessage: 'No Lu.ma registrations matched to Zoom in this window.',
+    },
+    luma_zoom_net_new_matches: {
+      columns: [
+        { key: 'eventDate', label: 'Registration Date', type: 'text' },
+        { key: 'guestName', label: 'Name', type: 'text' },
+        { key: 'guestEmail', label: 'Email', type: 'text' },
+        { key: 'matchedZoomNetNew', label: 'Matched Net New', type: 'text' },
+      ],
+      rows: lumaZoomNetNewMatchRows,
+      emptyMessage: 'No Lu.ma registrations matched to net-new Zoom show-ups in this window.',
+    },
+    luma_hubspot_matches: {
+      columns: [
+        { key: 'eventDate', label: 'Registration Date', type: 'text' },
+        { key: 'guestName', label: 'Name', type: 'text' },
+        { key: 'guestEmail', label: 'Email', type: 'text' },
+        { key: 'hubspotTier', label: 'HubSpot Tier', type: 'text' },
+        { key: 'matchedHubspot', label: 'Matched HubSpot', type: 'text' },
+      ],
+      rows: lumaHubspotMatchRows,
+      emptyMessage: 'No Lu.ma registrations matched to HubSpot in this window.',
+    },
+  };
+
+  tables.cpl = tables.leads;
+  tables.cpql = tables.qualified;
+  tables.cpgl = tables.great;
+  tables.cost_per_showup = tables.showups;
+  tables.cost_per_registration = tables.registrations;
+
+  return {
+    startKey,
+    endKey,
+    tables,
+  };
+}
+
 export function buildLeadAnalytics({
   adsRows = [],
   hubspotRows = [],
@@ -945,6 +1222,10 @@ export function buildLeadAnalytics({
     end: addDays(weekCurrentRange.start, -1),
     start: addDays(weekCurrentRange.start, -WEEK_DAYS),
   };
+  const lookbackRange = {
+    start: lookbackStart,
+    end: primaryDate,
+  };
 
   const monthCurrent = getSnapshot(
     { adsRows: adState.normalizedRows, paidLeads, zoomDaily: zoomNetNew.daily, lumaRegistrations, hasDirectLumaData },
@@ -977,6 +1258,43 @@ export function buildLeadAnalytics({
   const hasHubSpotAttributionColumns = hubspotRows.some((row) => Object.prototype.hasOwnProperty.call(row, 'hs_latest_source'));
   const lumaZoomMatchRate = safeDivide(monthCurrent.lumaMatchedNetNewShowUps, monthCurrent.lumaRegistrations);
   const lumaHubspotMatchRate = safeDivide(monthCurrent.lumaHubspotMatches, monthCurrent.lumaRegistrations);
+  const drilldownWindows = {
+    monthCurrent: { label: 'Current 30 Days', startKey: monthCurrentRange.start, endKey: monthCurrentRange.end },
+    monthPrevious: { label: 'Previous 30 Days', startKey: monthPreviousRange.start, endKey: monthPreviousRange.end },
+    weekCurrent: { label: 'Current 7 Days', startKey: weekCurrentRange.start, endKey: weekCurrentRange.end },
+    weekPrevious: { label: 'Previous 7 Days', startKey: weekPreviousRange.start, endKey: weekPreviousRange.end },
+    lookback: { label: 'Lookback Window', startKey: lookbackRange.start, endKey: lookbackRange.end },
+  };
+  const drilldownByWindow = Object.entries(drilldownWindows).reduce((acc, [key, range]) => {
+    acc[key] = buildWindowDrilldown({
+      startKey: range.startKey,
+      endKey: range.endKey,
+      adsRows: adState.normalizedRows,
+      paidLeads,
+      lumaRegistrations,
+      zoomSessions: zoomNetNew.sessions || [],
+      hasDirectLumaData,
+    });
+    return acc;
+  }, {});
+  const drilldownMetricLabels = {
+    impressions: 'Impressions',
+    clicks: 'Clicks',
+    leads: 'Leads Captured',
+    registrations: 'Registrations',
+    showups: 'Net New Show-Ups',
+    standard: 'Standard Leads',
+    qualified: 'Qualified Leads',
+    great: 'Great Leads',
+    cpl: 'CPL',
+    cpql: 'CPQL',
+    cpgl: 'CPGL',
+    cost_per_showup: 'Cost Per Show-Up',
+    cost_per_registration: 'Cost Per Registration',
+    luma_zoom_matches: 'Lu.ma Matched in Zoom',
+    luma_zoom_net_new_matches: 'Lu.ma Matched Net New',
+    luma_hubspot_matches: 'Lu.ma Matched in HubSpot',
+  };
   const dataAvailability = {
     hasDirectLumaData,
     hasHubSpotAttributionColumns,
@@ -1010,6 +1328,7 @@ export function buildLeadAnalytics({
       monthPreviousRange,
       weekCurrentRange,
       weekPreviousRange,
+      lookbackRange,
     },
     dataAvailability,
     current: monthCurrent,
@@ -1044,6 +1363,13 @@ export function buildLeadAnalytics({
     adAttributionRows,
     topAds,
     bottomAds,
+    drilldowns: {
+      defaultWindowKey: 'monthCurrent',
+      defaultMetricKey: 'leads',
+      windows: drilldownWindows,
+      byWindow: drilldownByWindow,
+      metricLabels: drilldownMetricLabels,
+    },
     analysis,
     helpers: {
       round,
