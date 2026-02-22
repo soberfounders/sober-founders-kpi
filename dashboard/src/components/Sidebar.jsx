@@ -1,17 +1,18 @@
 import React from 'react';
-import { 
-  LayoutDashboard, 
-  Users, 
-  TrendingUp, 
-  DollarSign, 
-  Briefcase, 
-  CheckSquare, 
-  BarChart2, 
+import {
+  LayoutDashboard,
+  Users,
+  TrendingUp,
+  DollarSign,
+  Briefcase,
+  CheckSquare,
+  BarChart2,
   Megaphone,
   Mail,
   Database,
   Calendar,
-  Globe
+  Globe,
+  Search
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -21,6 +22,7 @@ const sidebarItems = [
   { id: 'Leads', icon: Users, label: 'Leads' },
   { id: 'Email', icon: Mail, label: 'Email' },
   { id: 'Website Traffic', icon: Globe, label: 'Website Traffic' },
+  { id: 'SEO', icon: Search, label: 'SEO Expert' },
   { id: 'Marketing', icon: Megaphone, label: 'Marketing' },
   { id: 'Sales', icon: TrendingUp, label: 'Sales' },
   { id: 'Revenue', icon: DollarSign, label: 'Revenue' },
@@ -41,15 +43,15 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
       padding: '24px 0'
     }}>
       <div style={{ padding: '0 24px 32px 24px' }}>
-        <h1 style={{ 
-          color: 'var(--color-dark-green)', 
+        <h1 style={{
+          color: 'var(--color-dark-green)',
           fontSize: '24px',
           letterSpacing: '-0.5px'
         }}>
           Sober Founders
         </h1>
-        <p className="tagline" style={{ 
-          fontSize: '12px', 
+        <p className="tagline" style={{
+          fontSize: '12px',
           color: 'var(--color-text-secondary)',
           marginTop: '4px',
           textTransform: 'uppercase',
@@ -64,7 +66,7 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
           {sidebarItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
-            
+
             return (
               <li key={item.id} style={{ padding: '0 12px' }}>
                 <motion.button
@@ -96,9 +98,9 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
       </nav>
 
       <div style={{ padding: '24px', borderTop: '1px solid var(--color-border)' }}>
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
           gap: '12px',
           padding: '12px',
           backgroundColor: '#f1f5f9',

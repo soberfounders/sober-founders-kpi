@@ -9,6 +9,7 @@ import DataCleaning from './views/DataCleaning'; // Added import
 import AttendanceDashboard from './views/AttendanceDashboard'; // Added import
 import EmailMarketingDashboard from './views/EmailMarketingDashboard';
 import WebsiteTrafficDashboard from './views/WebsiteTrafficDashboard';
+import SEODashboard from './views/SEODashboard';
 
 function App() {
   const [activeTab, setActiveTab] = useState('Dashboard');
@@ -23,6 +24,8 @@ function App() {
         return <EmailMarketingDashboard />;
       case 'Website Traffic':
         return <WebsiteTrafficDashboard />;
+      case 'SEO':
+        return <SEODashboard />;
       case "To-Do's":
         return <TodosDashboard />;
       case 'Data Integrity':
