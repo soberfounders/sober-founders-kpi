@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { resolveCanonicalAttendeeName } from '../lib/attendeeCanonicalization';
+import { getZoomAttributionOverride } from '../lib/zoomAttributionOverrides';
 import {
   ResponsiveContainer,
   LineChart,
@@ -29,9 +30,39 @@ import {
 const TUE_MEETING_ID = '87199667045';
 const THU_MEETING_ID = '84242212480';
 const RECENT_WINDOW = 8;
+const HUBSPOT_PORTAL_ID = String(import.meta.env.VITE_HUBSPOT_PORTAL_ID || '45070276').trim();
 
 function normalizeName(name = '') {
   return name.toLowerCase().trim().replace(/\s+/g, ' ');
+}
+
+function normalizeEmail(email = '') {
+  return String(email || '').trim().toLowerCase();
+}
+
+function parseAdditionalEmails(value = '') {
+  return String(value || '')
+    .split(',')
+    .map((v) => normalizeEmail(v))
+    .filter(Boolean);
+}
+
+function fullNameFromHubspot(row = {}) {
+  return `${String(row.firstname || '').trim()} ${String(row.lastname || '').trim()}`.trim();
+}
+
+function buildHubspotContactUrl(contactId, explicitUrl = '') {
+  if (explicitUrl) return explicitUrl;
+  const id = Number(contactId);
+  if (!Number.isFinite(id) || id <= 0) return '';
+  if (!HUBSPOT_PORTAL_ID) return '';
+  return `https://app.hubspot.com/contacts/${HUBSPOT_PORTAL_ID}/record/0-1/${id}`;
+}
+
+function dateKeyDaysAgo(days) {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - Number(days || 0));
+  return d.toISOString().slice(0, 10);
 }
 
 function tokenizeName(name = '') {
@@ -354,7 +385,7 @@ function isMissingTableError(error) {
   if (!error) return false;
   const msg = String(error.message || '').toLowerCase();
   const code = String(error.code || '').toUpperCase();
-  return code === 'PGRST205' || (msg.includes('could not find the table') && msg.includes('attendee_aliases'));
+  return code === 'PGRST205' || msg.includes('could not find the table');
 }
 
 function dayTypeFromMetric(metric) {
@@ -623,6 +654,8 @@ function computeAnalytics(metrics, aliases) {
         date: start,
         dateLabel,
         dateFormatted,
+        meetingId: m?.metadata?.meeting_id ? String(m.metadata.meeting_id) : '',
+        startTimeIso: m?.metadata?.start_time || null,
         attendees,
         derivedCount,
         sourceCount,
@@ -834,6 +867,241 @@ function computeAnalytics(metrics, aliases) {
   };
 }
 
+function buildAttendanceHubspotResolver({ rawHubspot = [], rawLuma = [], attendeeHubspotMappings = [] }) {
+  const hubspotById = new Map();
+  const hubspotByExactName = new Map();
+  const hubspotByFirstLastInitial = new Map();
+  const hubspotByEmail = new Map();
+
+  const addIndexRow = (map, key, row) => {
+    if (!key) return;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(row);
+  };
+
+  const hubspotScore = (row) => {
+    let s = 0;
+    if (row?.email) s += 2;
+    if (row?.hs_analytics_source) s += 1;
+    if (row?.annual_revenue_in_dollars__official_ !== null && row?.annual_revenue_in_dollars__official_ !== undefined && row?.annual_revenue_in_dollars__official_ !== '') s += 1;
+    if (row?.sobriety_date) s += 1;
+    return s;
+  };
+
+  const pickBestHubspot = (rows) => {
+    if (!Array.isArray(rows) || rows.length === 0) return null;
+    return [...rows].sort((a, b) => {
+      const scoreDiff = hubspotScore(b) - hubspotScore(a);
+      if (scoreDiff) return scoreDiff;
+      const aTs = Date.parse(a?.createdate || '') || 0;
+      const bTs = Date.parse(b?.createdate || '') || 0;
+      return aTs - bTs; // older first is better for attribution anchoring
+    })[0] || rows[0];
+  };
+
+  const buildInitialKey = (name) => {
+    const tokens = normalizeName(name).split(' ').filter(Boolean);
+    if (tokens.length < 2) return '';
+    const first = tokens[0];
+    const last = tokens[tokens.length - 1];
+    const lastInitial = last?.[0] || '';
+    return first && lastInitial ? `${first}|${lastInitial}` : '';
+  };
+
+  (rawHubspot || []).forEach((row) => {
+    const id = Number(row?.hubspot_contact_id);
+    if (Number.isFinite(id)) hubspotById.set(id, row);
+
+    const full = fullNameFromHubspot(row);
+    const nameKey = normalizeName(full);
+    if (nameKey) addIndexRow(hubspotByExactName, nameKey, row);
+
+    const initKey = buildInitialKey(full);
+    if (initKey) addIndexRow(hubspotByFirstLastInitial, initKey, row);
+
+    const primaryEmail = normalizeEmail(row?.email);
+    if (primaryEmail) addIndexRow(hubspotByEmail, primaryEmail, row);
+    parseAdditionalEmails(row?.hs_additional_emails).forEach((email) => addIndexRow(hubspotByEmail, email, row));
+  });
+
+  const lumaByName = new Map();
+  const lumaByEmail = new Map();
+  const pickBestLuma = (existing, candidate) => {
+    if (!existing) return candidate;
+    const score = (row) => {
+      let s = 0;
+      if (row?.matched_hubspot_contact_id) s += 5;
+      if (row?.matched_hubspot_email) s += 4;
+      if (row?.matched_hubspot) s += 3;
+      if (row?.matched_zoom) s += 2;
+      if (row?.guest_email) s += 1;
+      return s;
+    };
+    return score(candidate) > score(existing) ? candidate : existing;
+  };
+
+  (rawLuma || []).forEach((row) => {
+    const approval = String(row?.approval_status || 'approved').toLowerCase();
+    if (approval && approval !== 'approved') return;
+    const nameKey = normalizeName(row?.guest_name || '');
+    const emailKey = normalizeEmail(row?.guest_email || '');
+    if (nameKey) lumaByName.set(nameKey, pickBestLuma(lumaByName.get(nameKey), row));
+    if (emailKey) lumaByEmail.set(emailKey, pickBestLuma(lumaByEmail.get(emailKey), row));
+  });
+
+  const attendeeMappingsBySessionAndName = new Map();
+  (attendeeHubspotMappings || []).forEach((row) => {
+    const dateKey = String(row?.session_date || '').slice(0, 10);
+    const meetingId = String(row?.meeting_id || '');
+    const nameKey = normalizeName(row?.zoom_attendee_canonical_name || row?.zoom_attendee_raw_name || '');
+    if (!dateKey || !nameKey) return;
+    const key = `${dateKey}|${meetingId}|${nameKey}`;
+    attendeeMappingsBySessionAndName.set(key, row);
+  });
+
+  const resolveFromHubspotRow = (contact, source, note = '') => {
+    if (!contact) return null;
+    const id = Number(contact?.hubspot_contact_id);
+    return {
+      matched: true,
+      hubspotContactId: Number.isFinite(id) ? id : null,
+      hubspotName: fullNameFromHubspot(contact) || 'Not Found',
+      hubspotEmail: normalizeEmail(contact?.email) || 'Not Found',
+      hubspotUrl: buildHubspotContactUrl(id),
+      identityMappingSource: source,
+      identityMappingConfidence: source === 'hubspot_meeting_activity' ? 'High' : source.includes('exact') ? 'High' : 'Medium',
+      identityMappingNote: note || '',
+      hubspotSource: contact?.hs_analytics_source || 'Not Found',
+      missingIdentityReason: '',
+    };
+  };
+
+  const resolveAttendee = (attendeeName, session = null) => {
+    const nameKey = normalizeName(attendeeName || '');
+    if (!nameKey) {
+      return {
+        matched: false,
+        hubspotContactId: null,
+        hubspotName: 'Not Found',
+        hubspotEmail: 'Not Found',
+        hubspotUrl: '',
+        identityMappingSource: 'none',
+        identityMappingConfidence: 'Low',
+        identityMappingNote: '',
+        hubspotSource: 'Not Found',
+        missingIdentityReason: 'Empty attendee name after normalization',
+      };
+    }
+
+    const manualOverride = getZoomAttributionOverride(attendeeName);
+    if (manualOverride) {
+      const manualContactId = Number(manualOverride?.hubspotContactId);
+      const manualContact = Number.isFinite(manualContactId) ? (hubspotById.get(manualContactId) || null) : null;
+      const luma = lumaByName.get(nameKey) || null;
+      const bestEmail = normalizeEmail(manualContact?.email) || normalizeEmail(luma?.guest_email) || normalizeEmail(luma?.matched_hubspot_email) || 'Not Found';
+      return {
+        matched: !!manualOverride?.hubspotContactId || !!manualContact,
+        hubspotContactId: Number.isFinite(manualContactId) ? manualContactId : (Number(manualContact?.hubspot_contact_id) || null),
+        hubspotName: manualOverride?.canonicalHubspotName || fullNameFromHubspot(manualContact) || String(attendeeName || '').trim() || 'Not Found',
+        hubspotEmail: bestEmail,
+        hubspotUrl: buildHubspotContactUrl(manualContactId, manualOverride?.hubspotUrl || ''),
+        identityMappingSource: 'manual_override',
+        identityMappingConfidence: 'High',
+        identityMappingNote: manualOverride?.note || 'User-confirmed HubSpot mapping override',
+        hubspotSource: manualOverride?.originalTrafficSource || manualContact?.hs_analytics_source || 'Not Found',
+        missingIdentityReason: '',
+      };
+    }
+
+    const sessionDateKey = session?.dateLabel || '';
+    const sessionMeetingId = String(session?.meetingId || '');
+    const sessionMapKey = sessionDateKey ? `${sessionDateKey}|${sessionMeetingId}|${nameKey}` : '';
+    const sessionMap = sessionMapKey ? attendeeMappingsBySessionAndName.get(sessionMapKey) : null;
+    if (sessionMap) {
+      const mappedId = Number(sessionMap?.hubspot_contact_id);
+      const mappedContact = Number.isFinite(mappedId) ? (hubspotById.get(mappedId) || null) : null;
+      if (mappedContact) {
+        return resolveFromHubspotRow(mappedContact, 'hubspot_meeting_activity', sessionMap?.mapping_reason || sessionMap?.match_note || '');
+      }
+      return {
+        matched: true,
+        hubspotContactId: Number.isFinite(mappedId) ? mappedId : null,
+        hubspotName: String(sessionMap?.hubspot_name || '').trim() || 'Not Found',
+        hubspotEmail: normalizeEmail(sessionMap?.hubspot_email) || 'Not Found',
+        hubspotUrl: buildHubspotContactUrl(mappedId),
+        identityMappingSource: 'hubspot_meeting_activity',
+        identityMappingConfidence: 'High',
+        identityMappingNote: sessionMap?.mapping_reason || sessionMap?.match_note || '',
+        hubspotSource: 'Not Found',
+        missingIdentityReason: '',
+      };
+    }
+
+    const exactMatch = pickBestHubspot(hubspotByExactName.get(nameKey) || []);
+    if (exactMatch) {
+      return resolveFromHubspotRow(exactMatch, 'hubspot_exact_name', 'Exact normalized full-name match in raw HubSpot cache');
+    }
+
+    const initKey = buildInitialKey(attendeeName);
+    const initialCandidates = hubspotByFirstLastInitial.get(initKey) || [];
+    if (initKey && initialCandidates.length === 1) {
+      return resolveFromHubspotRow(initialCandidates[0], 'hubspot_first_last_initial', 'Unique first name + last initial match in raw HubSpot cache');
+    }
+
+    const lumaEvidence = lumaByName.get(nameKey) || null;
+    if (lumaEvidence) {
+      const matchedId = Number(lumaEvidence?.matched_hubspot_contact_id);
+      const matchedContact = Number.isFinite(matchedId) ? (hubspotById.get(matchedId) || null) : null;
+      if (matchedContact) {
+        return resolveFromHubspotRow(matchedContact, 'luma_matched_hubspot_bridge', 'Mapped through Lu.ma matched_hubspot contact');
+      }
+
+      const lumaEmail = normalizeEmail(lumaEvidence?.matched_hubspot_email || lumaEvidence?.guest_email);
+      const emailContact = pickBestHubspot(hubspotByEmail.get(lumaEmail) || []);
+      if (emailContact) {
+        return resolveFromHubspotRow(emailContact, 'luma_email_bridge', 'Matched through Lu.ma registration email to raw HubSpot cache');
+      }
+
+      return {
+        matched: false,
+        hubspotContactId: Number.isFinite(matchedId) ? matchedId : null,
+        hubspotName: String(lumaEvidence?.matched_hubspot_name || '').trim() || 'Not Found',
+        hubspotEmail: lumaEmail || 'Not Found',
+        hubspotUrl: buildHubspotContactUrl(matchedId),
+        identityMappingSource: 'luma_unresolved_bridge',
+        identityMappingConfidence: 'Medium',
+        identityMappingNote: 'Lu.ma registration exists for this attendee name but HubSpot cache row is missing (likely sync coverage gap)',
+        hubspotSource: 'Not Found',
+        missingIdentityReason: 'Lu.ma attendee found, but matching HubSpot contact is missing from raw_hubspot_contacts cache',
+      };
+    }
+
+    return {
+      matched: false,
+      hubspotContactId: null,
+      hubspotName: 'Not Found',
+      hubspotEmail: 'Not Found',
+      hubspotUrl: '',
+      identityMappingSource: 'none',
+      identityMappingConfidence: 'Low',
+      identityMappingNote: '',
+      hubspotSource: 'Not Found',
+      missingIdentityReason: initialCandidates.length > 1
+        ? 'Ambiguous HubSpot candidates by first name + last initial; needs HubSpot meeting activity mapping or manual cleanup'
+        : 'No HubSpot or Lu.ma identity bridge found for attendee name',
+    };
+  };
+
+  return {
+    resolveAttendee,
+    stats: {
+      hubspotContactsCached: rawHubspot.length,
+      lumaRegistrationsCached: rawLuma.length,
+      meetingActivityMappingsCached: attendeeHubspotMappings.length,
+    },
+  };
+}
+
 const cardStyle = {
   backgroundColor: 'white',
   border: '1px solid var(--color-border)',
@@ -850,6 +1118,10 @@ const AttendanceDashboard = () => {
   const [syncSummary, setSyncSummary] = useState('');
   const [metrics, setMetrics] = useState([]);
   const [aliases, setAliases] = useState([]);
+  const [rawHubspotContacts, setRawHubspotContacts] = useState([]);
+  const [rawLumaRegistrations, setRawLumaRegistrations] = useState([]);
+  const [attendeeHubspotMappings, setAttendeeHubspotMappings] = useState([]);
+  const [identityWarning, setIdentityWarning] = useState('');
   const [planState, setPlanState] = useState({});
   const [selectedSessionKey, setSelectedSessionKey] = useState('');
   const [selectedRepeaterName, setSelectedRepeaterName] = useState('');
@@ -858,6 +1130,14 @@ const AttendanceDashboard = () => {
   const [mergingAliasKey, setMergingAliasKey] = useState('');
 
   const analytics = useMemo(() => computeAnalytics(metrics, aliases), [metrics, aliases]);
+  const attendanceHubspotResolver = useMemo(
+    () => buildAttendanceHubspotResolver({
+      rawHubspot: rawHubspotContacts,
+      rawLuma: rawLumaRegistrations,
+      attendeeHubspotMappings,
+    }),
+    [rawHubspotContacts, rawLumaRegistrations, attendeeHubspotMappings],
+  );
   const planItems = useMemo(() => buildPlan(analytics?.stats), [analytics]);
 
   useEffect(() => {
@@ -917,6 +1197,7 @@ const AttendanceDashboard = () => {
     const inSessionSet = new Set((session.attendees || []).map((n) => normalizeName(n)));
     const attendeeRows = (session.attendees || [])
       .map((name) => {
+        const hubspotIdentity = attendanceHubspotResolver.resolveAttendee(name, session);
         const rawCandidates = findSessionPriorityDuplicates(name, allKnownNames, inSessionSet);
         const dedupe = new Set();
         const duplicateActions = rawCandidates
@@ -941,6 +1222,16 @@ const AttendanceDashboard = () => {
           isNew: newSet.has(name),
           groupVisitsIncludingThisSession: groupVisitsByName.get(name) || 0,
           totalVisitsIncludingThisSession: totalVisitsByName.get(name) || 0,
+          hubspotMatched: !!hubspotIdentity?.matched,
+          hubspotContactId: hubspotIdentity?.hubspotContactId || null,
+          hubspotName: hubspotIdentity?.hubspotName || 'Not Found',
+          hubspotEmail: hubspotIdentity?.hubspotEmail || 'Not Found',
+          hubspotUrl: hubspotIdentity?.hubspotUrl || '',
+          hubspotSource: hubspotIdentity?.hubspotSource || 'Not Found',
+          identityMappingSource: hubspotIdentity?.identityMappingSource || 'none',
+          identityMappingConfidence: hubspotIdentity?.identityMappingConfidence || 'Low',
+          identityMappingNote: hubspotIdentity?.identityMappingNote || '',
+          missingIdentityReason: hubspotIdentity?.missingIdentityReason || '',
           duplicateActions,
         };
       })
@@ -955,7 +1246,7 @@ const AttendanceDashboard = () => {
       attendeeRows,
       hasTargetDate: session.dateLabel === '2026-02-19',
     };
-  }, [analytics, selectedSessionKey]);
+  }, [analytics, selectedSessionKey, attendanceHubspotResolver]);
 
   const selectedRepeaterDetail = useMemo(() => {
     if (!analytics?.sessions?.length || !selectedRepeaterName) return null;
@@ -964,6 +1255,7 @@ const AttendanceDashboard = () => {
       (p) => normalizeName(p.name) === normalizeName(selectedRepeaterName),
     );
     if (!person) return null;
+    const personIdentity = attendanceHubspotResolver.resolveAttendee(person.name, null);
 
     const attendedSessions = (person.sessionIndexes || [])
       .map((idx) => analytics.sessions[idx])
@@ -982,6 +1274,7 @@ const AttendanceDashboard = () => {
     if (attendedSessions.length === 0) {
       return {
         person,
+        personIdentity,
         attendedSessions: [],
         selectedSessionKey: '',
         selectedSession: null,
@@ -1005,12 +1298,13 @@ const AttendanceDashboard = () => {
 
     return {
       person,
+      personIdentity,
       attendedSessions,
       selectedSessionKey: activeSessionKey,
       selectedSession,
       otherAttendees,
     };
-  }, [analytics, selectedRepeaterName, selectedRepeaterSessionKey]);
+  }, [analytics, selectedRepeaterName, selectedRepeaterSessionKey, attendanceHubspotResolver]);
 
   async function runZoomSync() {
     setSyncing(true);
@@ -1121,6 +1415,7 @@ const AttendanceDashboard = () => {
     setLoading(true);
     setError('');
     setAliasWarning('');
+    setIdentityWarning('');
 
     let { data: metricData, error: metricErr } = await supabase
       .from('kpi_metrics')
@@ -1162,6 +1457,61 @@ const AttendanceDashboard = () => {
     const aliasResult = await loadAliasesForDashboard();
     if (aliasResult.warning) {
       setAliasWarning(aliasResult.warning);
+    }
+
+    const identityWarnings = [];
+    const identityStartDate = dateKeyDaysAgo(730);
+
+    const [
+      hubspotResult,
+      lumaResult,
+      attendeeMappingsResult,
+    ] = await Promise.all([
+      supabase
+        .from('raw_hubspot_contacts')
+        .select('hubspot_contact_id,createdate,email,hs_additional_emails,firstname,lastname,annual_revenue_in_dollars__official_,sobriety_date,hs_analytics_source,hs_analytics_source_data_1,hs_analytics_source_data_2')
+        .gte('createdate', `${identityStartDate}T00:00:00.000Z`)
+        .order('createdate', { ascending: false })
+        .limit(20000),
+      supabase
+        .from('raw_luma_registrations')
+        .select('event_date,guest_name,guest_email,approval_status,is_thursday,matched_zoom,matched_hubspot,matched_hubspot_contact_id,matched_hubspot_name,matched_hubspot_email')
+        .gte('event_date', identityStartDate)
+        .order('event_date', { ascending: false })
+        .limit(20000),
+      supabase
+        .from('zoom_attendee_hubspot_mappings')
+        .select('session_date,meeting_id,zoom_attendee_raw_name,zoom_attendee_canonical_name,hubspot_contact_id,hubspot_name,hubspot_email,mapping_source,mapping_reason,mapping_confidence,match_note,hubspot_activity_id')
+        .gte('session_date', identityStartDate)
+        .order('session_date', { ascending: false })
+        .limit(50000),
+    ]);
+
+    if (hubspotResult.error) {
+      identityWarnings.push(`HubSpot cache unavailable: ${hubspotResult.error.message || 'read failed'}`);
+      setRawHubspotContacts([]);
+    } else {
+      setRawHubspotContacts(hubspotResult.data || []);
+    }
+
+    if (lumaResult.error) {
+      identityWarnings.push(`Lu.ma cache unavailable: ${lumaResult.error.message || 'read failed'}`);
+      setRawLumaRegistrations([]);
+    } else {
+      setRawLumaRegistrations(lumaResult.data || []);
+    }
+
+    if (attendeeMappingsResult.error) {
+      if (!isMissingTableError(attendeeMappingsResult.error)) {
+        identityWarnings.push(`HubSpot meeting-attendee mappings unavailable: ${attendeeMappingsResult.error.message || 'read failed'}`);
+      }
+      setAttendeeHubspotMappings([]);
+    } else {
+      setAttendeeHubspotMappings(attendeeMappingsResult.data || []);
+    }
+
+    if (identityWarnings.length > 0) {
+      setIdentityWarning(identityWarnings.join(' | '));
     }
 
     setMetrics(metricData || []);
@@ -1401,6 +1751,16 @@ const AttendanceDashboard = () => {
         </div>
       )}
 
+      {identityWarning && (
+        <div style={{ ...cardStyle, borderLeft: '4px solid #f59e0b', backgroundColor: '#fffbeb' }}>
+          <p style={{ color: '#92400e', fontWeight: 700 }}>Identity Mapping Warning</p>
+          <p style={{ marginTop: '6px', color: '#92400e' }}>{identityWarning}</p>
+          <p style={{ marginTop: '6px', color: '#92400e', fontSize: '12px' }}>
+            Attendance counts remain valid. HubSpot contact/email enrichment is partial until caches and mapping tables are synced.
+          </p>
+        </div>
+      )}
+
       <div
         style={{
           ...cardStyle,
@@ -1418,6 +1778,9 @@ const AttendanceDashboard = () => {
           <h2 style={{ fontSize: '30px', lineHeight: 1.1, marginTop: '6px' }}>Attendance Intelligence Dashboard</h2>
           <p style={{ marginTop: '8px', opacity: 0.9 }}>
             Accurate attendee counts, repeat behavior, and execution plan — Tuesday and Thursday tracked independently.
+          </p>
+          <p style={{ marginTop: '6px', opacity: 0.85, fontSize: '12px' }}>
+            Identity cache: HubSpot contacts {attendanceHubspotResolver?.stats?.hubspotContactsCached || 0}, Lu.ma registrations {attendanceHubspotResolver?.stats?.lumaRegistrationsCached || 0}, HubSpot meeting mappings {attendanceHubspotResolver?.stats?.meetingActivityMappingsCached || 0}
           </p>
           {syncSummary && <p style={{ marginTop: '8px', opacity: 0.9, fontSize: '13px' }}>{syncSummary}</p>}
         </div>
@@ -1681,10 +2044,14 @@ const AttendanceDashboard = () => {
             </div>
 
             <div style={{ marginTop: '14px', border: '1px solid #e2e8f0', borderRadius: '12px', overflowX: 'auto' }}>
-              <table style={{ width: '100%', minWidth: '760px', borderCollapse: 'collapse' }}>
+              <table style={{ width: '100%', minWidth: '1240px', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                     <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Attendee</th>
+                    <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>HubSpot Match</th>
+                    <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>HubSpot Email</th>
+                    <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>HubSpot Contact</th>
+                    <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Mapping Source</th>
                     <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Status</th>
                     <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>{selectedSessionDetail.session.type} Visits</th>
                     <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Total Visits</th>
@@ -1695,6 +2062,64 @@ const AttendanceDashboard = () => {
                   {selectedSessionDetail.attendeeRows.map((row) => (
                     <tr key={row.name} style={{ borderBottom: '1px solid #f1f5f9' }}>
                       <td style={{ padding: '10px', fontSize: '13px', fontWeight: 600, color: '#0f172a' }}>{row.name}</td>
+                      <td style={{ padding: '10px' }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '2px 8px',
+                            borderRadius: '999px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            backgroundColor: row.hubspotMatched ? '#dcfce7' : '#fee2e2',
+                            color: row.hubspotMatched ? '#166534' : '#991b1b',
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          {row.hubspotMatched ? 'Matched' : 'Missing'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px', fontSize: '12px', color: row.hubspotEmail !== 'Not Found' ? '#0f172a' : '#94a3b8' }}>
+                        {row.hubspotEmail || 'Not Found'}
+                      </td>
+                      <td style={{ padding: '10px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <span style={{ fontSize: '12px', color: '#334155', fontWeight: 600 }}>
+                            {row.hubspotName || 'Not Found'}
+                          </span>
+                          {row.hubspotUrl ? (
+                            <a
+                              href={row.hubspotUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 700, textDecoration: 'underline' }}
+                            >
+                              Open in HubSpot
+                            </a>
+                          ) : (
+                            <span style={{ fontSize: '11px', color: '#94a3b8' }}>No HubSpot link</span>
+                          )}
+                          {row.hubspotContactId ? (
+                            <span style={{ fontSize: '10px', color: '#64748b' }}>ID: {row.hubspotContactId}</span>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td style={{ padding: '10px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <span style={{ fontSize: '11px', color: '#0f172a', fontWeight: 700 }}>
+                            {row.identityMappingSource || 'none'}
+                          </span>
+                          <span style={{ fontSize: '10px', color: '#64748b' }}>
+                            Confidence: {row.identityMappingConfidence || 'Low'}
+                          </span>
+                          {row.identityMappingNote ? (
+                            <span style={{ fontSize: '10px', color: '#64748b' }}>{row.identityMappingNote}</span>
+                          ) : null}
+                          {!row.hubspotMatched && row.missingIdentityReason ? (
+                            <span style={{ fontSize: '10px', color: '#b45309' }}>{row.missingIdentityReason}</span>
+                          ) : null}
+                        </div>
+                      </td>
                       <td style={{ padding: '10px' }}>
                         <span
                           style={{
@@ -1755,7 +2180,7 @@ const AttendanceDashboard = () => {
                   ))}
                   {selectedSessionDetail.attendeeRows.length === 0 && (
                     <tr>
-                      <td colSpan={5} style={{ padding: '14px', textAlign: 'center', fontSize: '13px', color: '#64748b' }}>
+                      <td colSpan={9} style={{ padding: '14px', textAlign: 'center', fontSize: '13px', color: '#64748b' }}>
                         No attendees found for this session.
                       </td>
                     </tr>
@@ -1881,6 +2306,19 @@ const AttendanceDashboard = () => {
                 <p style={{ fontSize: '12px', color: '#0f766e', fontWeight: 700 }}>
                   Total Show-Ups: {selectedRepeaterDetail.attendedSessions.length}
                 </p>
+              </div>
+              <div style={{ marginTop: '6px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <span style={{ fontSize: '11px', color: '#64748b' }}>
+                  HubSpot Email: <strong style={{ color: '#0f172a' }}>{selectedRepeaterDetail.personIdentity?.hubspotEmail || 'Not Found'}</strong>
+                </span>
+                <span style={{ fontSize: '11px', color: '#64748b' }}>
+                  Mapping: <strong style={{ color: '#0f172a' }}>{selectedRepeaterDetail.personIdentity?.identityMappingSource || 'none'}</strong>
+                </span>
+                {selectedRepeaterDetail.personIdentity?.hubspotUrl ? (
+                  <a href={selectedRepeaterDetail.personIdentity.hubspotUrl} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 700, textDecoration: 'underline' }}>
+                    Open in HubSpot
+                  </a>
+                ) : null}
               </div>
 
               <div style={{ marginTop: '10px', display: 'grid', gridTemplateColumns: 'minmax(220px, 1fr) 1.5fr', gap: '10px' }}>

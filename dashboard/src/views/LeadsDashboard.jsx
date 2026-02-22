@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient';
 import { buildLeadAnalytics } from '../lib/leadAnalytics';
 import { buildGroupedLeadsSnapshot, buildDateRangeWindows, computeChangePct } from '../lib/leadsGroupAnalytics';
 import { buildAliasMap, resolveCanonicalAttendeeName } from '../lib/attendeeCanonicalization';
+import { applyZoomAttributionOverride, getZoomAttributionOverride } from '../lib/zoomAttributionOverrides';
 import DrillDownModal from '../components/DrillDownModal';
 import AIAnalysisCard from '../components/AIAnalysisCard';
 import KPICard from '../components/KPICard';
@@ -12,6 +13,7 @@ import {
 } from 'recharts';
 
 const LOOKBACK_DAYS = 120;
+const ATTRIBUTION_HISTORY_DAYS = 365;
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 const fmt = {
@@ -67,6 +69,126 @@ function normalizeHearAboutCategoryLabel(rawLabel) {
   if (!rawLabel) return 'Unknown';
   if (HEAR_ABOUT_KEY_BY_LABEL[rawLabel]) return rawLabel;
   return 'Other';
+}
+
+// Shared identity helpers for additive funnel-unification analytics.
+function normalizeEmailKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function parseEmailList(value) {
+  return String(value || '')
+    .split(',')
+    .map((part) => normalizeEmailKey(part))
+    .filter(Boolean);
+}
+
+function normalizePersonNameKey(value = '') {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/['’]s\s*(iphone|ipad|android|galaxy|phone|pc|macbook|desktop|laptop)$/gi, '')
+    .replace(/\((iphone|ipad|android|galaxy|phone)\)$/gi, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function parseDateKeyLoose(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+function addDaysKey(dateKey, days) {
+  if (!dateKey) return dateKey;
+  const d = new Date(`${dateKey}T00:00:00.000Z`);
+  if (Number.isNaN(d.getTime())) return dateKey;
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function hubspotFullName(contact) {
+  return `${String(contact?.firstname || '').trim()} ${String(contact?.lastname || '').trim()}`.trim();
+}
+
+function hubspotContactCreatedTs(contact) {
+  const ts = Date.parse(contact?.createdate || '');
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+function hubspotContactQualityScore(contact) {
+  let score = 0;
+  if (contact?.annual_revenue_in_dollars__official_ !== null && contact?.annual_revenue_in_dollars__official_ !== undefined && contact?.annual_revenue_in_dollars__official_ !== '') score += 4;
+  else if (contact?.annual_revenue_in_dollars !== null && contact?.annual_revenue_in_dollars !== undefined && contact?.annual_revenue_in_dollars !== '') score += 2;
+  if (contact?.sobriety_date) score += 1;
+  if (contact?.hs_analytics_source) score += 2;
+  if (contact?.hs_analytics_source_data_1) score += 1;
+  if (contact?.hs_analytics_source_data_2) score += 1;
+  if (contact?.hs_additional_emails) score += 1;
+  return score;
+}
+
+function pickBestHubspotContact(candidates, eventDateKey) {
+  if (!Array.isArray(candidates) || candidates.length === 0) return null;
+  const eventTs = eventDateKey ? Date.parse(`${eventDateKey}T00:00:00.000Z`) : NaN;
+  const ranked = candidates.map((candidate) => {
+    const createdTs = hubspotContactCreatedTs(candidate);
+    const distance = Number.isFinite(eventTs) ? Math.abs(eventTs - createdTs) : Number.POSITIVE_INFINITY;
+    return {
+      candidate,
+      createdTs,
+      distance,
+      score: hubspotContactQualityScore(candidate),
+    };
+  }).sort((a, b) => {
+    if (a.score !== b.score) return b.score - a.score;
+    if (a.distance !== b.distance) return a.distance - b.distance;
+    return a.createdTs - b.createdTs; // oldest wins tie for merge/original-source anchoring
+  });
+  return ranked[0]?.candidate || candidates[0];
+}
+
+function hubspotSourceBucket(contact) {
+  const src = String(contact?.hs_analytics_source || '').trim().toUpperCase();
+  if (!src) return 'Unknown';
+  if (src === 'PAID_SOCIAL') return 'Paid Social (Meta)';
+  if (src === 'ORGANIC_SEARCH') return 'Organic Search';
+  if (src === 'REFERRALS') return 'Referral';
+  if (src === 'SOCIAL_MEDIA') return 'Social (Organic)';
+  if (src === 'PAID_SEARCH') return 'Paid Search';
+  if (src === 'DIRECT_TRAFFIC') return 'Direct';
+  if (src === 'EMAIL_MARKETING') return 'Email';
+  return src.replace(/_/g, ' ');
+}
+
+function isPaidSocialHubspot(row) {
+  const blob = [row?.hs_analytics_source, row?.hs_latest_source, row?.original_traffic_source].join(' ').toUpperCase();
+  return blob.includes('PAID_SOCIAL');
+}
+
+function isPhoenixHubspot(row) {
+  const blob = [row?.hs_analytics_source_data_2, row?.hs_latest_source_data_2, row?.campaign, row?.campaign_source, row?.membership_s].join(' ').toLowerCase();
+  return blob.includes('phoenix');
+}
+
+function hubspotRevenueValue(contact) {
+  const official = Number(contact?.annual_revenue_in_dollars__official_);
+  if (Number.isFinite(official)) return official;
+  const fallback = Number(contact?.annual_revenue_in_dollars);
+  if (Number.isFinite(fallback)) return fallback;
+  return null;
+}
+
+function mapZoomMatchTypeToConfidence(matchType, matchedHubspot) {
+  const mt = String(matchType || '').toLowerCase();
+  if (!matchedHubspot) return 'unmatched';
+  if (mt.includes('exact_name')) return 'full_name';
+  if (mt.includes('first_last_initial')) return 'fuzzy_name';
+  if (mt.includes('first_prefix_last_initial')) return 'fuzzy_name';
+  if (mt.includes('ambiguous')) return 'unmatched';
+  if (mt.includes('not_found')) return 'unmatched';
+  return 'full_name';
 }
 
 // ─── Change badge ─────────────────────────────────────────────────────────────
@@ -360,6 +482,10 @@ function AIInsightsPanel({ supabaseUrl, supabaseKey, groupedData }) {
 
 // ─── Date range filter ────────────────────────────────────────────────────────
 const RANGE_OPTIONS = [
+  { value: 'this_week', label: 'This Week (to date)' },
+  { value: 'this_month', label: 'This Month (to date)' },
+  { value: 'this_quarter', label: 'This Quarter (to date)' },
+  { value: 'this_year', label: 'This Year (to date)' },
   { value: 'last_week', label: 'Last Week (Mon–Sun)' },
   { value: 'last_2_weeks', label: 'Last 2 Weeks' },
   { value: 'last_month', label: 'Last Month' },
@@ -408,6 +534,9 @@ export default function LeadsDashboard() {
   const [rawLuma, setRawLuma] = useState([]);
   const [rawZoom, setRawZoom] = useState([]);
   const [aliases, setAliases] = useState([]);
+  const [rawHubspotActivities, setRawHubspotActivities] = useState([]);
+  const [rawHubspotActivityAssociations, setRawHubspotActivityAssociations] = useState([]);
+  const [rawZoomHubspotMappings, setRawZoomHubspotMappings] = useState([]);
 
   // Date range state
   const [rangeType, setRangeType] = useState('last_week');
@@ -433,6 +562,9 @@ export default function LeadsDashboard() {
     const startDate = new Date();
     startDate.setUTCDate(startDate.getUTCDate() - LOOKBACK_DAYS);
     const startKey = startDate.toISOString().slice(0, 10);
+    const attributionStartDate = new Date();
+    attributionStartDate.setUTCDate(attributionStartDate.getUTCDate() - ATTRIBUTION_HISTORY_DAYS);
+    const attributionStartKey = attributionStartDate.toISOString().slice(0, 10);
     const errors = [];
 
     const [adsR, zoomR, hubspotR, aliasR] = await Promise.all([
@@ -445,13 +577,13 @@ export default function LeadsDashboard() {
         .gte('metric_date', startKey).order('metric_date', { ascending: true }),
       supabase.from('raw_hubspot_contacts')
         .select('*')
-        .gte('createdate', `${startKey}T00:00:00.000Z`).order('createdate', { ascending: false }),
+        .gte('createdate', `${attributionStartKey}T00:00:00.000Z`).order('createdate', { ascending: false }),
       supabase.from('attendee_aliases').select('original_name,target_name'),
     ]);
 
     const lumaR = await supabase.from('raw_luma_registrations')
       .select('event_date,event_start_at,event_api_id,guest_api_id,guest_name,guest_email,registered_at,approval_status,is_thursday,matched_zoom,matched_zoom_net_new,matched_hubspot,matched_hubspot_tier,funnel_key,matched_hubspot_revenue,registration_answers,custom_source')
-      .gte('event_date', startKey).order('event_date', { ascending: true });
+      .gte('event_date', attributionStartKey).order('event_date', { ascending: true });
 
     if (adsR.error) errors.push(`Meta ads unavailable: ${adsR.error.message}`);
     if (zoomR.error) errors.push(`Zoom data unavailable: ${zoomR.error.message}`);
@@ -459,11 +591,69 @@ export default function LeadsDashboard() {
     if (hubspotR.error) errors.push(`HubSpot data unavailable: ${hubspotR.error.message}`);
     if (aliasR.error) errors.push(`Alias data unavailable: ${aliasR.error.message}`);
 
+    // Optional additive tables for HubSpot Call coverage / attendee identity reconciliation.
+    // These are safe to skip if the migration has not been applied yet.
+    let hubspotActivitiesData = [];
+    let hubspotActivityAssociationsData = [];
+    let zoomHubspotMappingsData = [];
+
+    try {
+      const activitiesR = await supabase.from('raw_hubspot_meeting_activities')
+        .select('hubspot_activity_id,activity_type,hs_timestamp,created_at_hubspot,title,metadata')
+        .gte('hs_timestamp', `${attributionStartKey}T00:00:00.000Z`)
+        .order('hs_timestamp', { ascending: true });
+
+      if (activitiesR.error) {
+        errors.push(`HubSpot call/activity mapping tables not available yet: ${activitiesR.error.message}`);
+      } else {
+        hubspotActivitiesData = activitiesR.data || [];
+      }
+
+      const zoomMappingsR = await supabase.from('zoom_attendee_hubspot_mappings')
+        .select('session_date,meeting_id,zoom_session_key,zoom_attendee_canonical_name,hubspot_contact_id,hubspot_email,hubspot_activity_id,activity_type,mapping_source,mapping_confidence,mapping_reason,match_note')
+        .gte('session_date', startKey)
+        .order('session_date', { ascending: true });
+
+      if (zoomMappingsR.error) {
+        errors.push(`Zoom attendee HubSpot mapping table not available yet: ${zoomMappingsR.error.message}`);
+      } else {
+        zoomHubspotMappingsData = zoomMappingsR.data || [];
+      }
+
+      const activityIds = Array.from(new Set(
+        (hubspotActivitiesData || [])
+          .filter((row) => String(row?.activity_type || '').toLowerCase() === 'call')
+          .map((row) => Number(row?.hubspot_activity_id))
+          .filter((id) => Number.isFinite(id))
+      ));
+
+      if (activityIds.length > 0) {
+        const assocChunks = [];
+        for (const ids of Array.from({ length: Math.ceil(activityIds.length / 100) }, (_, i) => activityIds.slice(i * 100, (i + 1) * 100))) {
+          const assocR = await supabase.from('hubspot_activity_contact_associations')
+            .select('hubspot_activity_id,activity_type,hubspot_contact_id,contact_email,contact_firstname,contact_lastname,association_type')
+            .in('hubspot_activity_id', ids);
+          if (assocR.error) {
+            errors.push(`HubSpot activity associations unavailable: ${assocR.error.message}`);
+            assocChunks.length = 0;
+            break;
+          }
+          assocChunks.push(...(assocR.data || []));
+        }
+        hubspotActivityAssociationsData = assocChunks;
+      }
+    } catch (optionalErr) {
+      errors.push(`Optional HubSpot activity enrichment failed: ${optionalErr.message}`);
+    }
+
     setRawAds(adsR.data || []);
     setRawZoom(zoomR.data || []);
     setRawLuma(lumaR.data || []);
     setRawHubspot(hubspotR.data || []);
     setAliases(aliasR.data || []);
+    setRawHubspotActivities(hubspotActivitiesData);
+    setRawHubspotActivityAssociations(hubspotActivityAssociationsData);
+    setRawZoomHubspotMappings(zoomHubspotMappingsData);
 
     // Legacy analytics for charts
     const nextAnalytics = buildLeadAnalytics({
@@ -760,6 +950,62 @@ export default function LeadsDashboard() {
       return 'Other';
     };
 
+    const ET_TIMEZONE = 'America/New_York';
+    const etDateFormatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: ET_TIMEZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    const etWeekdayFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: ET_TIMEZONE,
+      weekday: 'short',
+    });
+    const etTimePartsFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: ET_TIMEZONE,
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    const hubspotCallScheduledMinuteByDay = {
+      Tuesday: 12 * 60, // 12pm ET
+      Thursday: 11 * 60, // 11am ET
+    };
+    const HUBSPOT_CALL_TIME_TOLERANCE_MINUTES = 240; // intentionally wide for DST/manual timing variance
+
+    const formatEtDateKey = (value) => {
+      if (!value) return null;
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return null;
+      return etDateFormatter.format(d).replace(/\//g, '-');
+    };
+
+    const getEtTimeParts = (value) => {
+      if (!value) return null;
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return null;
+      const weekdayShort = etWeekdayFormatter.format(d);
+      const parts = etTimePartsFormatter.formatToParts(d);
+      const hour = Number(parts.find((p) => p.type === 'hour')?.value || NaN);
+      const minute = Number(parts.find((p) => p.type === 'minute')?.value || NaN);
+      if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+      const etDateKey = formatEtDateKey(d.toISOString());
+      const dayType = weekdayShort === 'Tue' ? 'Tuesday' : (weekdayShort === 'Thu' ? 'Thursday' : null);
+      const minuteOfDay = hour * 60 + minute;
+      const expectedMinute = dayType ? hubspotCallScheduledMinuteByDay[dayType] : null;
+      const minutesFromExpected = Number.isFinite(expectedMinute) ? Math.abs(minuteOfDay - expectedMinute) : null;
+      return {
+        etDateKey,
+        weekdayShort,
+        dayType,
+        hour,
+        minute,
+        minuteOfDay,
+        expectedMinute,
+        minutesFromExpected,
+      };
+    };
+
     const dateInRange = (dateKey, startKey, endKey) => !!dateKey && dateKey >= startKey && dateKey <= endKey;
     const safeRatio = (n, d) => {
       const nn = Number(n);
@@ -786,43 +1032,220 @@ export default function LeadsDashboard() {
 
     const fullNameFromContact = (row) => `${String(row?.firstname || '').trim()} ${String(row?.lastname || '').trim()}`.trim();
 
-    const hubspotNameIndex = new Map();
+    const addIndexRow = (map, key, row) => {
+      if (!key) return;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(row);
+    };
+
+    const nameTokens = (nameKey) => String(nameKey || '').split(' ').map((t) => t.trim()).filter(Boolean);
+
+    const nameKeyVariants = (nameKey) => {
+      const tokens = nameTokens(nameKey);
+      if (tokens.length < 2) return { firstName: tokens[0] || '', firstLastInitial: null, firstPrefixLastInitial: null };
+      const first = tokens[0];
+      const last = tokens[tokens.length - 1];
+      const lastInitial = last?.[0] || '';
+      return {
+        firstName: first,
+        firstLastInitial: first && lastInitial ? `${first}|${lastInitial}` : null,
+        firstPrefixLastInitial: first && first.length >= 3 && lastInitial ? `${first.slice(0, 3)}|${lastInitial}` : null,
+      };
+    };
+
+    const hubspotByExactName = new Map();
+    const hubspotById = new Map();
+    const hubspotByFirstLastInitial = new Map();
+    const hubspotByFirstPrefixLastInitial = new Map();
+    const hubspotByFirstName = new Map();
+
     (rawHubspot || []).forEach((row) => {
+      const id = Number(row?.hubspot_contact_id);
+      if (Number.isFinite(id)) hubspotById.set(id, row);
       const full = fullNameFromContact(row);
       const key = normalizeName(full);
       if (!key) return;
-      if (!hubspotNameIndex.has(key)) hubspotNameIndex.set(key, []);
-      hubspotNameIndex.get(key).push(row);
+      addIndexRow(hubspotByExactName, key, row);
+
+      const variants = nameKeyVariants(key);
+      if (variants.firstName) addIndexRow(hubspotByFirstName, variants.firstName, row);
+      if (variants.firstLastInitial) addIndexRow(hubspotByFirstLastInitial, variants.firstLastInitial, row);
+      if (variants.firstPrefixLastInitial) addIndexRow(hubspotByFirstPrefixLastInitial, variants.firstPrefixLastInitial, row);
     });
 
-    const pickContactForAttendee = (nameKey, eventDateKey) => {
-      const candidates = hubspotNameIndex.get(nameKey) || [];
-      if (!candidates.length) return { contact: null, matchType: 'not_found', candidateCount: 0 };
-      if (candidates.length === 1) return { contact: candidates[0], matchType: 'exact_name', candidateCount: 1 };
+    const materializedZoomHubspotBySessionAttendee = new Map();
+    const materializedZoomHubspotByDateAttendee = new Map();
+    (rawZoomHubspotMappings || []).forEach((row) => {
+      const sessionDate = parseDateKey(row?.session_date);
+      const meetingId = String(row?.meeting_id || '');
+      const attendeeKey = normalizeName(row?.zoom_attendee_canonical_name || '');
+      const contactId = Number(row?.hubspot_contact_id);
+      if (!sessionDate || !attendeeKey || !Number.isFinite(contactId)) return;
+      const contact = hubspotById.get(contactId) || null;
+      const hit = {
+        row,
+        contact,
+        contactId,
+        source: String(row?.mapping_source || ''),
+        confidence: Number(row?.mapping_confidence),
+        reason: String(row?.mapping_reason || ''),
+      };
+      materializedZoomHubspotBySessionAttendee.set(`${sessionDate}|${meetingId}|${attendeeKey}`, hit);
+      addIndexRow(materializedZoomHubspotByDateAttendee, `${sessionDate}|${attendeeKey}`, hit);
+    });
 
+    const rankCandidates = (candidates, eventDateKey) => {
       const eventTs = eventDateKey ? Date.parse(`${eventDateKey}T00:00:00.000Z`) : NaN;
-      let best = null;
-      let bestScore = Number.NEGATIVE_INFINITY;
-      let bestDistance = Number.POSITIVE_INFINITY;
-      let bestCreated = Number.NEGATIVE_INFINITY;
-
-      candidates.forEach((candidate) => {
+      const ranked = (candidates || []).map((candidate) => {
         const score = contactScore(candidate);
         const createdTs = contactCreatedTs(candidate);
         const distance = Number.isFinite(eventTs) ? Math.abs(eventTs - createdTs) : Number.POSITIVE_INFINITY;
-        if (
-          score > bestScore ||
-          (score === bestScore && distance < bestDistance) ||
-          (score === bestScore && distance === bestDistance && createdTs > bestCreated)
-        ) {
-          best = candidate;
-          bestScore = score;
-          bestDistance = distance;
-          bestCreated = createdTs;
-        }
+        return { candidate, score, createdTs, distance };
+      }).sort((a, b) => {
+        if (a.score !== b.score) return b.score - a.score;
+        if (a.distance !== b.distance) return a.distance - b.distance;
+        return b.createdTs - a.createdTs;
       });
+      return ranked;
+    };
 
-      return { contact: best || candidates[0], matchType: 'ambiguous_name', candidateCount: candidates.length };
+    const candidateExamples = (candidates) => (candidates || [])
+      .slice(0, 5)
+      .map((row) => fullNameFromContact(row) || row?.email || 'Unknown')
+      .filter(Boolean)
+      .join(', ');
+
+    const pickContactForAttendee = (nameKey, eventDateKey) => {
+      const variants = nameKeyVariants(nameKey);
+      const exactCandidates = hubspotByExactName.get(nameKey) || [];
+
+      if (exactCandidates.length > 0) {
+        const ranked = rankCandidates(exactCandidates, eventDateKey);
+        return {
+          contact: ranked[0]?.candidate || exactCandidates[0],
+          matchType: exactCandidates.length === 1 ? 'exact_name' : 'exact_name_ambiguous',
+          candidateCount: exactCandidates.length,
+          lookupStrategy: 'exact_name',
+          matchWhy: exactCandidates.length === 1 ? 'Exact normalized full-name match' : 'Exact name matched multiple HubSpot contacts; best candidate selected',
+          candidateExamples: candidateExamples(exactCandidates),
+        };
+      }
+
+      const initialCandidates = variants.firstLastInitial ? (hubspotByFirstLastInitial.get(variants.firstLastInitial) || []) : [];
+      if (initialCandidates.length === 1) {
+        return {
+          contact: initialCandidates[0],
+          matchType: 'first_last_initial',
+          candidateCount: 1,
+          lookupStrategy: 'first_last_initial',
+          matchWhy: 'Matched by first name + last initial',
+          candidateExamples: candidateExamples(initialCandidates),
+        };
+      }
+      if (initialCandidates.length > 1) {
+        return {
+          contact: null,
+          matchType: 'ambiguous_initial',
+          candidateCount: initialCandidates.length,
+          lookupStrategy: 'first_last_initial',
+          matchWhy: 'Multiple HubSpot candidates matched first name + last initial; needs alias/manual resolution',
+          candidateExamples: candidateExamples(initialCandidates),
+        };
+      }
+
+      const prefixCandidates = variants.firstPrefixLastInitial ? (hubspotByFirstPrefixLastInitial.get(variants.firstPrefixLastInitial) || []) : [];
+      if (prefixCandidates.length === 1) {
+        return {
+          contact: prefixCandidates[0],
+          matchType: 'first_prefix_last_initial',
+          candidateCount: 1,
+          lookupStrategy: 'first_prefix_last_initial',
+          matchWhy: 'Matched by first-name prefix + last initial',
+          candidateExamples: candidateExamples(prefixCandidates),
+        };
+      }
+      if (prefixCandidates.length > 1) {
+        return {
+          contact: null,
+          matchType: 'ambiguous_prefix_initial',
+          candidateCount: prefixCandidates.length,
+          lookupStrategy: 'first_prefix_last_initial',
+          matchWhy: 'Multiple HubSpot candidates matched first-name prefix + last initial; needs alias/manual resolution',
+          candidateExamples: candidateExamples(prefixCandidates),
+        };
+      }
+
+      const firstNameCandidates = variants.firstName ? (hubspotByFirstName.get(variants.firstName) || []) : [];
+      if (firstNameCandidates.length > 0) {
+        return {
+          contact: null,
+          matchType: 'no_exact_name_first_name_candidates',
+          candidateCount: firstNameCandidates.length,
+          lookupStrategy: 'first_name_only',
+          matchWhy: 'No exact/initial match. HubSpot has same first name only; likely display-name mismatch or missing alias',
+          candidateExamples: candidateExamples(firstNameCandidates),
+        };
+      }
+
+      return {
+        contact: null,
+        matchType: 'not_found',
+        candidateCount: 0,
+        lookupStrategy: 'none',
+        matchWhy: 'No HubSpot name candidates found',
+        candidateExamples: '',
+      };
+    };
+
+    const pickContactForZoomRow = (row) => {
+      const sessionKey = `${row.date}|${String(row.meetingId || '')}|${row.attendeeKey}`;
+      const materialized = materializedZoomHubspotBySessionAttendee.get(sessionKey);
+      if (materialized?.contact) {
+        return {
+          contact: materialized.contact,
+          matchType: 'hubspot_activity_materialized_session',
+          candidateCount: 1,
+          lookupStrategy: 'hubspot_meeting_activity_session',
+          matchWhy: materialized.reason || 'Matched via materialized Zoom attendee -> HubSpot activity association',
+          candidateExamples: materialized.contact ? (fullNameFromContact(materialized.contact) || materialized.contact?.email || '') : '',
+        };
+      }
+      if (materialized && !materialized.contact) {
+        return {
+          contact: null,
+          matchType: 'hubspot_activity_materialized_missing_contact',
+          candidateCount: 1,
+          lookupStrategy: 'hubspot_meeting_activity_session',
+          matchWhy: `Materialized Zoom->HubSpot mapping exists (contact ${materialized.contactId}) but raw_hubspot_contacts is missing that contact row`,
+          candidateExamples: `HubSpot:${materialized.contactId}`,
+        };
+      }
+
+      const dateCandidates = materializedZoomHubspotByDateAttendee.get(`${row.date}|${row.attendeeKey}`) || [];
+      const resolvedDateCandidates = dateCandidates.filter((hit) => !!hit?.contact);
+      if (resolvedDateCandidates.length === 1) {
+        return {
+          contact: resolvedDateCandidates[0].contact,
+          matchType: 'hubspot_activity_materialized_date',
+          candidateCount: 1,
+          lookupStrategy: 'hubspot_meeting_activity_date',
+          matchWhy: resolvedDateCandidates[0].reason || 'Matched via materialized HubSpot activity association on same date',
+          candidateExamples: fullNameFromContact(resolvedDateCandidates[0].contact) || resolvedDateCandidates[0].contact?.email || '',
+        };
+      }
+      if (resolvedDateCandidates.length > 1) {
+        const ranked = rankCandidates(resolvedDateCandidates.map((hit) => hit.contact), row.date);
+        return {
+          contact: ranked[0]?.candidate || null,
+          matchType: 'hubspot_activity_materialized_date_ambiguous',
+          candidateCount: resolvedDateCandidates.length,
+          lookupStrategy: 'hubspot_meeting_activity_date',
+          matchWhy: 'Multiple materialized HubSpot activity matches found on same date; best candidate selected',
+          candidateExamples: candidateExamples(resolvedDateCandidates.map((hit) => hit.contact)),
+        };
+      }
+
+      return pickContactForAttendee(row.attendeeKey, row.date);
     };
 
     const resolveRevenue = (contact) => {
@@ -884,6 +1307,20 @@ export default function LeadsDashboard() {
     const sourceBucketFromLumaEvidence = (row) => {
       if (!row) return { bucket: 'Unknown', method: 'No Luma Evidence' };
       const ots = String(row?.originalTrafficSource || '').trim().toUpperCase();
+      const heard = String(row?.hearAboutCategory || '').trim();
+      const heardBucket =
+        heard === 'Meta (Facebook/Instagram)' ? { bucket: 'Paid Social (Meta)', method: 'Luma How Heard' } :
+        heard === 'Google' ? { bucket: 'Organic Search', method: 'Luma How Heard' } :
+        heard === 'Referral' ? { bucket: 'Referral', method: 'Luma How Heard' } :
+        heard === 'ChatGPT / AI' ? { bucket: 'ChatGPT / AI', method: 'Luma How Heard' } :
+        heard === 'Other' ? { bucket: 'Other', method: 'Luma How Heard' } :
+        { bucket: 'Unknown', method: 'No Luma Attribution' };
+
+      // OFFLINE on the Lu.ma-linked HubSpot contact is often just integration/record-creation path.
+      // If self-reported "How heard" has a stronger signal, prefer it.
+      if (ots === 'OFFLINE' && heardBucket.bucket !== 'Unknown' && heardBucket.bucket !== 'Other') {
+        return { ...heardBucket, method: `${heardBucket.method} (preferred over Lu.ma HubSpot OFFLINE)` };
+      }
       if (ots && ots !== 'NOT FOUND') {
         if (ots === 'PAID_SOCIAL') return { bucket: 'Paid Social (Meta)', method: 'Luma HubSpot Original Source' };
         if (ots === 'ORGANIC_SEARCH') return { bucket: 'Organic Search', method: 'Luma HubSpot Original Source' };
@@ -894,20 +1331,89 @@ export default function LeadsDashboard() {
         if (ots === 'SOCIAL_MEDIA') return { bucket: 'Social (Organic)', method: 'Luma HubSpot Original Source' };
         return { bucket: ots.replace(/_/g, ' '), method: 'Luma HubSpot Original Source' };
       }
-
-      const heard = String(row?.hearAboutCategory || '').trim();
-      if (heard === 'Meta (Facebook/Instagram)') return { bucket: 'Paid Social (Meta)', method: 'Luma How Heard' };
-      if (heard === 'Google') return { bucket: 'Organic Search', method: 'Luma How Heard' };
-      if (heard === 'Referral') return { bucket: 'Referral', method: 'Luma How Heard' };
-      if (heard === 'ChatGPT / AI') return { bucket: 'ChatGPT / AI', method: 'Luma How Heard' };
-      if (heard === 'Other') return { bucket: 'Other', method: 'Luma How Heard' };
-      return { bucket: 'Unknown', method: 'No Luma Attribution' };
+      return heardBucket;
     };
+
+    const hubspotAssocByActivityId = new Map();
+    (rawHubspotActivityAssociations || []).forEach((assoc) => {
+      if (String(assoc?.activity_type || '').toLowerCase() !== 'call') return;
+      const activityId = Number(assoc?.hubspot_activity_id);
+      if (!Number.isFinite(activityId)) return;
+      if (!hubspotAssocByActivityId.has(activityId)) hubspotAssocByActivityId.set(activityId, []);
+      hubspotAssocByActivityId.get(activityId).push(assoc);
+    });
+
+    const zoomRowsByDateDay = new Map();
+    (rawZoom || [])
+      .filter((row) => row?.metric_name === 'Zoom Meeting Attendees')
+      .forEach((row) => {
+        const dateKey = parseDateKey(row?.metadata?.start_time || row?.metric_date);
+        if (!dateKey) return;
+        const dayType = dayTypeFromZoomMetric(row);
+        if (dayType !== 'Tuesday' && dayType !== 'Thursday') return;
+        const attendees = Array.isArray(row?.metadata?.attendees) ? row.metadata.attendees : [];
+        const key = `${dateKey}|${dayType}`;
+        if (!zoomRowsByDateDay.has(key)) {
+          zoomRowsByDateDay.set(key, { rowCount: 0, maxAttendees: 0, meetingIds: new Set() });
+        }
+        const agg = zoomRowsByDateDay.get(key);
+        agg.rowCount += 1;
+        agg.maxAttendees = Math.max(agg.maxAttendees, attendees.length);
+        if (row?.metadata?.meeting_id) agg.meetingIds.add(String(row.metadata.meeting_id));
+      });
+
+    const hubspotCallCandidatesByDateDay = new Map();
+    (rawHubspotActivities || []).forEach((activity) => {
+      if (String(activity?.activity_type || '').toLowerCase() !== 'call') return;
+      const activityId = Number(activity?.hubspot_activity_id);
+      if (!Number.isFinite(activityId)) return;
+      const ts = activity?.hs_timestamp || activity?.created_at_hubspot;
+      const et = getEtTimeParts(ts);
+      if (!et?.dayType || !et?.etDateKey) return;
+      if (!Number.isFinite(Number(et.minutesFromExpected)) || Number(et.minutesFromExpected) > HUBSPOT_CALL_TIME_TOLERANCE_MINUTES) return;
+
+      const assocs = hubspotAssocByActivityId.get(activityId) || [];
+      const attendeeCount = assocs
+        .filter((a) => Number.isFinite(Number(a?.hubspot_contact_id)))
+        .length;
+      if (attendeeCount < 2) return;
+
+      const title = String(activity?.title || '').trim();
+      const titleLc = title.toLowerCase();
+      const titleScore =
+        (titleLc.includes('sober founders') ? 8 : 0) +
+        (titleLc.includes('mastermind') ? 3 : 0) +
+        (titleLc.includes('zoom') ? 2 : 0);
+      const score = titleScore + (attendeeCount * 0.15) - (Number(et.minutesFromExpected) * 0.01);
+      const key = `${et.etDateKey}|${et.dayType}`;
+      if (!hubspotCallCandidatesByDateDay.has(key)) hubspotCallCandidatesByDateDay.set(key, []);
+      hubspotCallCandidatesByDateDay.get(key).push({
+        activity,
+        activityId,
+        assocs,
+        attendeeCount,
+        et,
+        score,
+        title,
+      });
+    });
+
+    const chosenHubspotCallSessionByDateDay = new Map();
+    hubspotCallCandidatesByDateDay.forEach((candidates, key) => {
+      const ranked = [...(candidates || [])].sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        if (b.attendeeCount !== a.attendeeCount) return b.attendeeCount - a.attendeeCount;
+        const aTs = Date.parse(a.activity?.hs_timestamp || a.activity?.created_at_hubspot || '');
+        const bTs = Date.parse(b.activity?.hs_timestamp || b.activity?.created_at_hubspot || '');
+        return aTs - bTs;
+      });
+      if (ranked[0]) chosenHubspotCallSessionByDateDay.set(key, ranked[0]);
+    });
 
     const aliasMap = buildAliasMap(aliases || []);
 
-    const sessionRows = [];
-    const historyByAttendee = new Map();
+    let sessionRows = [];
+    let historyByAttendee = new Map();
 
     (rawZoom || [])
       .filter((row) => row?.metric_name === 'Zoom Meeting Attendees')
@@ -931,6 +1437,7 @@ export default function LeadsDashboard() {
               date: dateKey,
               dayType,
               sessionKey,
+              meetingId,
               attendeeName: canonical,
               rawName: String(rawName || '').trim() || canonical,
               attendeeKey: key,
@@ -964,8 +1471,140 @@ export default function LeadsDashboard() {
         sessionRows.push(...attendees);
       });
 
+    const buildHubspotCallTruthRows = () => {
+      const rows = [];
+      const history = new Map();
+      chosenHubspotCallSessionByDateDay.forEach((chosen, dateDayKey) => {
+        const [dateKey, dayType] = String(dateDayKey).split('|');
+        const activity = chosen?.activity || {};
+        const meetingId = `hubspot-call-${chosen?.activityId || ''}`;
+        const sessionKey = `${dateKey}|${dayType}|${meetingId}`;
+        const dedup = new Map();
+        (chosen?.assocs || []).forEach((assoc) => {
+          const contactId = Number(assoc?.hubspot_contact_id);
+          const contact = Number.isFinite(contactId) ? (hubspotById.get(contactId) || null) : null;
+          const assocName = `${String(assoc?.contact_firstname || contact?.firstname || '').trim()} ${String(assoc?.contact_lastname || contact?.lastname || '').trim()}`.trim();
+          const assocEmail = String(assoc?.contact_email || contact?.email || '').trim().toLowerCase();
+          const displayName = assocName || assocEmail || `HubSpot Contact ${Number.isFinite(contactId) ? contactId : ''}`.trim();
+          const attendeeKey = Number.isFinite(contactId)
+            ? `hubspot:${contactId}`
+            : (assocEmail ? `email:${assocEmail}` : `name:${normalizeName(displayName)}`);
+          if (!attendeeKey || dedup.has(attendeeKey)) return;
+          dedup.set(attendeeKey, {
+            date: dateKey,
+            dayType,
+            sessionKey,
+            meetingId,
+            attendeeName: displayName,
+            rawName: displayName,
+            attendeeKey,
+            nameLookupKey: normalizeName(displayName),
+            sessionTruthSource: 'hubspot_call',
+            hubspotActivityId: Number(chosen?.activityId) || null,
+            hubspotContactId: Number.isFinite(contactId) ? contactId : null,
+            associationName: assocName || 'Not Found',
+            associationEmail: assocEmail || 'Not Found',
+            hubspotCallTitle: String(activity?.title || '').trim() || 'Not Found',
+            hubspotCallTimestampUtc: String(activity?.hs_timestamp || activity?.created_at_hubspot || ''),
+            hubspotCallEtTime: chosen?.et ? `${String(chosen.et.hour).padStart(2, '0')}:${String(chosen.et.minute).padStart(2, '0')}` : 'Not Found',
+          });
+        });
+
+        const attendees = Array.from(dedup.values());
+        attendees.forEach((attendee) => {
+          if (!history.has(attendee.attendeeKey)) {
+            history.set(attendee.attendeeKey, {
+              totalSessions: 0,
+              tuesdaySessions: 0,
+              thursdaySessions: 0,
+              firstSeenDate: attendee.date,
+              firstSeenDay: attendee.dayType,
+              lastSeenDate: attendee.date,
+            });
+          }
+          const hist = history.get(attendee.attendeeKey);
+          hist.totalSessions += 1;
+          if (attendee.dayType === 'Tuesday') hist.tuesdaySessions += 1;
+          if (attendee.dayType === 'Thursday') hist.thursdaySessions += 1;
+          if (attendee.date < hist.firstSeenDate) {
+            hist.firstSeenDate = attendee.date;
+            hist.firstSeenDay = attendee.dayType;
+          }
+          if (attendee.date > hist.lastSeenDate) hist.lastSeenDate = attendee.date;
+        });
+
+        rows.push(...attendees);
+      });
+      rows.sort((a, b) => (String(a.date || '').localeCompare(String(b.date || '')) || String(a.attendeeName || '').localeCompare(String(b.attendeeName || ''))));
+      return { rows, history };
+    };
+
+    const computeMissingHubspotCallSessions = (startKey, endKey) => {
+      if (!startKey || !endKey) return [];
+      const out = [];
+      let cursor = new Date(`${startKey}T00:00:00.000Z`);
+      const end = new Date(`${endKey}T00:00:00.000Z`);
+      while (cursor <= end) {
+        const dow = cursor.getUTCDay();
+        const dayType = dow === 2 ? 'Tuesday' : (dow === 4 ? 'Thursday' : null);
+        if (dayType) {
+          const dateKey = cursor.toISOString().slice(0, 10);
+          const key = `${dateKey}|${dayType}`;
+          const chosen = chosenHubspotCallSessionByDateDay.get(key);
+          if (!chosen) {
+            const zoomAgg = zoomRowsByDateDay.get(key);
+            const zoomFallbackRowCount = zoomAgg?.rowCount || 0;
+            const zoomFallbackAttendeeCount = zoomAgg?.maxAttendees || 0;
+            const actionable = zoomFallbackRowCount > 0 || zoomFallbackAttendeeCount > 0;
+            out.push({
+              date: dateKey,
+              dayType,
+              expectedEtTime: dayType === 'Tuesday' ? '12:00 ET' : '11:00 ET',
+              hubspotCallPresent: 'No',
+              zoomFallbackRowCount,
+              zoomFallbackAttendeeCount,
+              zoomFallbackMeetingIds: zoomAgg ? Array.from(zoomAgg.meetingIds || []).join(', ') : '',
+              missingCategory: actionable ? 'hubspot_call_missing_with_zoom' : 'likely_no_meeting',
+              actionRequired: actionable ? 'Yes' : 'No',
+            });
+          }
+        }
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
+      return out;
+    };
+
+    const { rows: hubspotCallTruthRows, history: hubspotCallTruthHistory } = buildHubspotCallTruthRows();
+    const useHubspotCallTruth = hubspotCallTruthRows.length > 0;
+    if (useHubspotCallTruth) {
+      sessionRows = hubspotCallTruthRows;
+      historyByAttendee = hubspotCallTruthHistory;
+    }
+
     const enrichRows = (rowsInRange) => rowsInRange.map((row) => {
-      const match = pickContactForAttendee(row.attendeeKey, row.date);
+      const directHubspotContactId = Number(row?.hubspotContactId);
+      const directHubspotContact = Number.isFinite(directHubspotContactId) ? (hubspotById.get(directHubspotContactId) || null) : null;
+      const match = directHubspotContact
+        ? {
+          contact: directHubspotContact,
+          matchType: 'hubspot_call_contact_association',
+          candidateCount: 1,
+          lookupStrategy: 'hubspot_call_contact_association',
+          matchWhy: 'HubSpot Call attendee association linked directly to HubSpot contact',
+          candidateExamples: fullNameFromContact(directHubspotContact) || directHubspotContact?.email || '',
+        }
+        : (
+          row?.sessionTruthSource === 'hubspot_call' && Number.isFinite(directHubspotContactId)
+            ? {
+              contact: null,
+              matchType: 'hubspot_call_contact_missing_raw',
+              candidateCount: 1,
+              lookupStrategy: 'hubspot_call_contact_association',
+              matchWhy: `HubSpot Call attendee association has contact ${directHubspotContactId}, but raw_hubspot_contacts is missing the row`,
+              candidateExamples: `HubSpot:${directHubspotContactId}`,
+            }
+            : pickContactForZoomRow(row)
+        );
       const contact = match.contact;
       const revenue = resolveRevenue(contact || {});
       const hist = historyByAttendee.get(row.attendeeKey) || {
@@ -978,25 +1617,73 @@ export default function LeadsDashboard() {
       const isRepeat = (hist.totalSessions || 0) >= 2;
       const goodRepeat = (hist.totalSessions || 0) >= 3 && Number.isFinite(revenue.revenue) && Number(revenue.revenue) >= 250000;
       const contactSourceBucket = sourceBucketFromContact(contact);
-      const contactEmail = String(contact?.email || '').trim().toLowerCase();
-      const lumaEvidence = (contactEmail && lumaEvidenceByEmail.get(contactEmail)) || lumaEvidenceByName.get(row.attendeeKey) || null;
+      const contactEmail = String(contact?.email || row?.associationEmail || '').trim().toLowerCase();
+      const lumaEvidence = (contactEmail && lumaEvidenceByEmail.get(contactEmail)) || lumaEvidenceByName.get(row.nameLookupKey || row.attendeeKey) || null;
       const lumaFallback = sourceBucketFromLumaEvidence(lumaEvidence);
-      const useLumaFallback = (contactSourceBucket === 'Unknown' || contactSourceBucket === 'Other') && lumaFallback.bucket !== 'Unknown';
+      const hubspotOriginalSourceCode = String(contact?.hs_analytics_source || '').trim().toUpperCase();
+      const hubspotOriginalSourceDetail1 = String(contact?.hs_analytics_source_data_1 || '').trim().toUpperCase();
+      const hubspotOfflineLooksIntegration =
+        hubspotOriginalSourceCode === 'OFFLINE' &&
+        (hubspotOriginalSourceDetail1 === 'INTEGRATION' || hubspotOriginalSourceDetail1 === 'CRM_UI');
+      const useLumaFallback =
+        lumaFallback.bucket !== 'Unknown' &&
+        (
+          contactSourceBucket === 'Unknown' ||
+          contactSourceBucket === 'Other' ||
+          (hubspotOfflineLooksIntegration && lumaFallback.bucket !== 'Other')
+        );
       const sourceBucket = useLumaFallback ? lumaFallback.bucket : contactSourceBucket;
       const sourceAttributionMethod = useLumaFallback
-        ? (contact ? `HubSpot Unknown → ${lumaFallback.method}` : lumaFallback.method)
+        ? (
+          contact
+            ? (
+              hubspotOfflineLooksIntegration
+                ? `HubSpot OFFLINE → ${lumaFallback.method}`
+                : `HubSpot Unknown → ${lumaFallback.method}`
+            )
+            : lumaFallback.method
+        )
         : (contact ? 'HubSpot Original Source' : 'Unattributed');
 
-      return {
+      let missingAttributionReason = '';
+      if (!contact) {
+        if (row?.sessionTruthSource === 'hubspot_call' && Number.isFinite(directHubspotContactId)) {
+          missingAttributionReason = 'HubSpot Call linked attendee/contact exists, but raw_hubspot_contacts is missing that contact row (HubSpot contacts backfill needed for attribution)';
+        } else if (lumaEvidence) {
+          if (String(lumaEvidence?.originalTrafficSource || '').trim().toUpperCase() !== 'NOT FOUND') {
+            missingAttributionReason = 'No HubSpot contact match by Zoom name; using Lu.ma-linked HubSpot source';
+          } else if (String(lumaEvidence?.hearAboutCategory || '').trim() !== 'Unknown') {
+            missingAttributionReason = 'No HubSpot contact match by Zoom name; using Lu.ma self-reported source';
+          } else {
+            missingAttributionReason = 'No HubSpot match by Zoom name; Lu.ma record exists but no usable attribution';
+          }
+        } else {
+          missingAttributionReason = row?.sessionTruthSource === 'hubspot_call'
+            ? 'HubSpot Call attendee row exists but no usable contact/source record found'
+            : 'No HubSpot match by normalized Zoom name; no Lu.ma evidence by name/email';
+        }
+      } else if (hubspotOfflineLooksIntegration) {
+        missingAttributionReason = 'HubSpot original source is OFFLINE (Lu.ma/Zap/CRM create path), acquisition source may require merge/duplicate resolution';
+      } else if (contactSourceBucket === 'Unknown') {
+        missingAttributionReason = 'HubSpot matched but original traffic source missing';
+      }
+
+      const enriched = {
         ...row,
-        matchedHubspot: !!contact,
+        matchedHubspot: row?.sessionTruthSource === 'hubspot_call'
+          ? (Number.isFinite(directHubspotContactId) || !!contact)
+          : !!contact,
         matchType: match.matchType,
         matchCandidateCount: match.candidateCount || 0,
-        hubspotName: contact ? (fullNameFromContact(contact) || 'Not Found') : 'Not Found',
-        email: contact?.email || 'Not Found',
+        matchLookupStrategy: match.lookupStrategy || 'none',
+        matchWhy: match.matchWhy || 'Unknown',
+        matchCandidateExamples: match.candidateExamples || '',
+        hubspotName: contact ? (fullNameFromContact(contact) || 'Not Found') : (row?.associationName || 'Not Found'),
+        email: contact?.email || row?.associationEmail || 'Not Found',
         originalTrafficSource: contact?.hs_analytics_source || 'Not Found',
         originalTrafficSourceDetail1: contact?.hs_analytics_source_data_1 || 'Not Found',
         originalTrafficSourceDetail2: contact?.hs_analytics_source_data_2 || contact?.campaign || 'Not Found',
+        hubspotCreatedDate: parseDateKey(contact?.createdate) || 'Not Found',
         revenue: Number.isFinite(revenue.revenue) ? revenue.revenue : 'Not Found',
         revenueOfficial: Number.isFinite(revenue.revenueOfficial) ? revenue.revenueOfficial : null,
         sourceBucket,
@@ -1004,6 +1691,17 @@ export default function LeadsDashboard() {
         sourceFamily: sourceBucket.startsWith('Paid Social') ? 'Paid' : 'Non-Paid',
         lumaHowHeardCategoryFallback: lumaEvidence?.hearAboutCategory || 'Not Found',
         lumaHowHeardFallback: lumaEvidence?.hearAbout || 'Not Found',
+        missingAttributionReason,
+        manualAttributionOverride: 'No',
+        manualAttributionNote: '',
+        manualHubspotContactId: null,
+        manualHubspotUrl: '',
+        hubspotContactId: Number.isFinite(directHubspotContactId) ? directHubspotContactId : (Number(contact?.hubspot_contact_id) || null),
+        attendanceTruthSource: row?.sessionTruthSource === 'hubspot_call' ? 'HubSpot Call' : 'Zoom KPI',
+        hubspotCallActivityId: row?.hubspotActivityId || null,
+        hubspotCallTitle: row?.hubspotCallTitle || 'Not Found',
+        hubspotCallTimestampUtc: row?.hubspotCallTimestampUtc || 'Not Found',
+        hubspotCallEtTime: row?.hubspotCallEtTime || 'Not Found',
         netNewAttendee: hist.firstSeenDate === row.date ? 'Yes' : 'No',
         repeatAttendee: isRepeat ? 'Yes' : 'No',
         goodRepeatMember: goodRepeat ? 'Yes' : 'No',
@@ -1013,13 +1711,16 @@ export default function LeadsDashboard() {
         firstSeenDate: hist.firstSeenDate || 'Not Found',
         isMetaPaid: sourceBucket === 'Paid Social (Meta)',
       };
+
+      const manualOverride = getZoomAttributionOverride(row.attendeeName || row.attendeeKey);
+      return applyZoomAttributionOverride(enriched, manualOverride);
     });
 
     const buildPeriodRows = (startKey, endKey) => enrichRows(
       sessionRows.filter((row) => dateInRange(row.date, startKey, endKey))
     );
 
-    const aggregatePeriod = (rows, freeSpend) => {
+    const aggregatePeriod = (rows, freeSpend, periodStartKey, periodEndKey) => {
       const bySource = new Map();
       const totalShowUpRows = rows.length;
       const totalTuesdayRows = rows.filter((r) => r.dayType === 'Tuesday').length;
@@ -1031,7 +1732,7 @@ export default function LeadsDashboard() {
       rows.forEach((row) => {
         if (row.matchedHubspot) matchedRows += 1;
         else unmatchedRows += 1;
-        if (row.matchType === 'ambiguous_name') ambiguousRows += 1;
+        if (String(row.matchType || '').includes('ambiguous')) ambiguousRows += 1;
 
         const bucket = row.sourceBucket || 'Unknown';
         if (!bySource.has(bucket)) {
@@ -1061,7 +1762,7 @@ export default function LeadsDashboard() {
         if (row.goodRepeatMember === 'Yes') agg.goodRepeatMembers.add(row.attendeeKey);
         if (row.matchedHubspot) agg.matchedHubspotRows += 1;
         else agg.unmatchedHubspotRows += 1;
-        if (row.matchType === 'ambiguous_name') agg.ambiguousRows += 1;
+        if (String(row.matchType || '').includes('ambiguous')) agg.ambiguousRows += 1;
       });
 
       const sourceRows = Array.from(bySource.values()).map((agg) => ({
@@ -1128,6 +1829,29 @@ export default function LeadsDashboard() {
       const allGoodMemberKeys = new Set(rows.filter((r) => r.goodRepeatMember === 'Yes').map((r) => r.attendeeKey));
       const attributedGoodMemberKeys = new Set(rows.filter((r) => r.goodRepeatMember === 'Yes' && r.sourceBucket !== 'Unknown' && r.sourceBucket !== 'Other').map((r) => r.attendeeKey));
       const unknownOrOtherGoodMemberKeys = new Set(rows.filter((r) => r.goodRepeatMember === 'Yes' && (r.sourceBucket === 'Unknown' || r.sourceBucket === 'Other')).map((r) => r.attendeeKey));
+      const paidGoodRepeatMembersAcquiredInRange = new Set();
+      const paidGoodRepeatMembersAcquiredBeforeRange = new Set();
+      const paidGoodRepeatMembersAcquiredUnknownDate = new Set();
+      const paidGoodRepeatMembersFirstSeenInRange = new Set();
+      rows
+        .filter((r) => r.sourceBucket === 'Paid Social (Meta)' && r.goodRepeatMember === 'Yes')
+        .forEach((r) => {
+          const createdKey = String(r.hubspotCreatedDate || '');
+          if (createdKey && createdKey !== 'Not Found') {
+            if ((!periodStartKey || createdKey >= periodStartKey) && (!periodEndKey || createdKey <= periodEndKey)) {
+              paidGoodRepeatMembersAcquiredInRange.add(r.attendeeKey);
+            } else if (periodStartKey && createdKey < periodStartKey) {
+              paidGoodRepeatMembersAcquiredBeforeRange.add(r.attendeeKey);
+            } else {
+              paidGoodRepeatMembersAcquiredUnknownDate.add(r.attendeeKey);
+            }
+          } else {
+            paidGoodRepeatMembersAcquiredUnknownDate.add(r.attendeeKey);
+          }
+          if (r.firstSeenDate && r.firstSeenDate !== 'Not Found' && (!periodStartKey || r.firstSeenDate >= periodStartKey) && (!periodEndKey || r.firstSeenDate <= periodEndKey)) {
+            paidGoodRepeatMembersFirstSeenInRange.add(r.attendeeKey);
+          }
+        });
       const goodMemberSourceRows = sourceRows
         .filter((r) => r.goodRepeatMembers > 0 || r.bucket === 'Unknown' || r.bucket === 'Other')
         .map((r) => ({
@@ -1135,11 +1859,24 @@ export default function LeadsDashboard() {
           goodMemberShare: safeRatio(r.goodRepeatMembers, allGoodMemberKeys.size),
         }))
         .sort((a, b) => (b.goodRepeatMembers - a.goodRepeatMembers) || (b.repeatMembers - a.repeatMembers) || a.bucket.localeCompare(b.bucket));
+      const unmatchedRepeatByAttendee = new Map();
+      rows
+        .filter((r) => !r.matchedHubspot && r.repeatAttendee === 'Yes')
+        .forEach((r) => {
+          const existing = unmatchedRepeatByAttendee.get(r.attendeeKey);
+          if (!existing || (r.totalZoomAttendances || 0) > (existing.totalZoomAttendances || 0)) {
+            unmatchedRepeatByAttendee.set(r.attendeeKey, r);
+          }
+        });
+      const topUnmatchedRepeatRows = Array.from(unmatchedRepeatByAttendee.values())
+        .sort((a, b) => (b.totalZoomAttendances - a.totalZoomAttendances) || String(a.attendeeName || '').localeCompare(String(b.attendeeName || '')))
+        .slice(0, 15);
 
       return {
         rows,
         sourceRows,
         goodMemberSourceRows,
+        topUnmatchedRepeatRows,
         totalShowUpRows,
         totalTuesdayRows,
         totalThursdayRows,
@@ -1157,6 +1894,12 @@ export default function LeadsDashboard() {
           costPerUniqueAttendee: safeRatio(freeSpend, paidMeta.uniqueAttendees),
           costPerRepeatMember: safeRatio(freeSpend, paidMeta.repeatMembers),
           costPerGoodRepeatMember: safeRatio(freeSpend, paidMeta.goodRepeatMembers),
+          goodRepeatMembersAcquiredInRange: paidGoodRepeatMembersAcquiredInRange.size,
+          goodRepeatMembersAcquiredBeforeRange: paidGoodRepeatMembersAcquiredBeforeRange.size,
+          goodRepeatMembersAcquiredUnknownDate: paidGoodRepeatMembersAcquiredUnknownDate.size,
+          goodRepeatMembersFirstSeenInRange: paidGoodRepeatMembersFirstSeenInRange.size,
+          costPerGoodRepeatMemberAcquiredInRange: safeRatio(freeSpend, paidGoodRepeatMembersAcquiredInRange.size),
+          costPerGoodRepeatMemberFirstSeenInRange: safeRatio(freeSpend, paidGoodRepeatMembersFirstSeenInRange.size),
         },
         nonPaid: {
           showUpRows: nonPaidShowUpRows,
@@ -1174,6 +1917,7 @@ export default function LeadsDashboard() {
           paidMetaShareOfMatchedTuesday: safeRatio(tuesdayPaidRows.length, tuesdayMatchedRows.length),
           unmatchedTuesdayRows: tuesdayRows.filter((r) => !r.matchedHubspot).length,
         },
+        attendanceTruthMode: useHubspotCallTruth ? 'HubSpot Calls (Tue/Thu scheduled) primary' : 'Zoom KPI fallback',
       };
     };
 
@@ -1187,12 +1931,599 @@ export default function LeadsDashboard() {
     const currentFreeSpend = Number(groupedData?.current?.free?.combined?.spend || 0);
     const previousFreeSpend = groupedData?.previous ? Number(groupedData?.previous?.free?.combined?.spend || 0) : 0;
 
-    return {
-      current: aggregatePeriod(currentRows, currentFreeSpend),
-      previous: groupedData?.previous ? aggregatePeriod(previousRows, previousFreeSpend) : null,
-      loadedHistoryDays: LOOKBACK_DAYS,
+    const currentAgg = aggregatePeriod(currentRows, currentFreeSpend, currentStart, currentEnd);
+    const previousAgg = groupedData?.previous ? aggregatePeriod(previousRows, previousFreeSpend, previousStart, previousEnd) : null;
+    const currentMissingHubspotCallSessions = (currentStart && currentEnd) ? computeMissingHubspotCallSessions(currentStart, currentEnd) : [];
+    const previousMissingHubspotCallSessions = (previousStart && previousEnd) ? computeMissingHubspotCallSessions(previousStart, previousEnd) : [];
+    const countHubspotCallTruthSessionsInRange = (startKey, endKey) => {
+      if (!startKey || !endKey) return 0;
+      let count = 0;
+      chosenHubspotCallSessionByDateDay.forEach((_, key) => {
+        const [dateKey] = String(key || '').split('|');
+        if (dateKey && dateKey >= startKey && dateKey <= endKey) count += 1;
+      });
+      return count;
     };
-  }, [rawZoom, rawHubspot, aliases, dateWindows, groupedData]);
+    const currentHubspotCallTruthSessionCount = countHubspotCallTruthSessionsInRange(currentStart, currentEnd);
+    const previousHubspotCallTruthSessionCount = countHubspotCallTruthSessionsInRange(previousStart, previousEnd);
+
+    return {
+      current: {
+        ...currentAgg,
+        missingHubspotCallSessions: currentMissingHubspotCallSessions,
+        hubspotCallTruthSessionCount: currentHubspotCallTruthSessionCount,
+      },
+      previous: previousAgg ? {
+        ...previousAgg,
+        missingHubspotCallSessions: previousMissingHubspotCallSessions,
+        hubspotCallTruthSessionCount: previousHubspotCallTruthSessionCount,
+      } : null,
+      loadedHistoryDays: LOOKBACK_DAYS,
+      attendanceTruthMode: useHubspotCallTruth ? 'HubSpot Calls (Tue/Thu scheduled) primary' : 'Zoom KPI fallback',
+    };
+  }, [rawZoom, rawHubspot, rawHubspotActivities, rawHubspotActivityAssociations, aliases, rawZoomHubspotMappings, dateWindows, groupedData]);
+
+  const unifiedFunnelModule = useMemo(() => {
+    // Source-of-truth behavior (kept inline intentionally):
+    // - Meta lead forms create HubSpot contacts automatically.
+    // - Lu.ma registrations create HubSpot contacts via Zapier.
+    // - Merges often happen later when a person uses a different email, and the absorbed
+    //   email is retained in hs_additional_emails on the surviving HubSpot contact.
+    // - Therefore we must check primary email, then hs_additional_emails, before any name match.
+    // - HubSpot Call records are the highest-confidence Zoom attendee mapping signal when present.
+    const buildHubspotIndex = (rows) => {
+      const byId = new Map();
+      const byPrimaryEmail = new Map();
+      const bySecondaryEmail = new Map();
+      const byExactName = new Map();
+      const byFirstLastInitial = new Map();
+      const byFirstPrefixLastInitial = new Map();
+      const byFirstName = new Map();
+
+      const add = (map, key, row) => {
+        if (!key) return;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(row);
+      };
+      const variants = (nameKey) => {
+        const tokens = String(nameKey || '').split(' ').filter(Boolean);
+        const first = tokens[0] || '';
+        const last = tokens[tokens.length - 1] || '';
+        const lastInitial = last?.[0] || '';
+        return {
+          first,
+          firstLastInitial: first && lastInitial ? `${first}|${lastInitial}` : '',
+          firstPrefixLastInitial: first && first.length >= 2 && lastInitial ? `${first.slice(0, 3)}|${lastInitial}` : '',
+        };
+      };
+
+      (rows || []).forEach((row) => {
+        const id = Number(row?.hubspot_contact_id);
+        if (Number.isFinite(id)) byId.set(id, row);
+
+        const primary = normalizeEmailKey(row?.email);
+        if (primary) add(byPrimaryEmail, primary, row);
+        for (const extra of parseEmailList(row?.hs_additional_emails)) add(bySecondaryEmail, extra, row);
+
+        const full = normalizePersonNameKey(hubspotFullName(row));
+        if (!full) return;
+        add(byExactName, full, row);
+        const v = variants(full);
+        add(byFirstName, v.first, row);
+        add(byFirstLastInitial, v.firstLastInitial, row);
+        add(byFirstPrefixLastInitial, v.firstPrefixLastInitial, row);
+      });
+
+      return { byId, byPrimaryEmail, bySecondaryEmail, byExactName, byFirstLastInitial, byFirstPrefixLastInitial, byFirstName, variants };
+    };
+
+    const hubspotIndex = buildHubspotIndex(rawHubspot || []);
+
+    const candidateHints = (candidates) => (candidates || [])
+      .slice(0, 5)
+      .map((c) => hubspotFullName(c) || c?.email || `HubSpot:${c?.hubspot_contact_id || ''}`)
+      .filter(Boolean)
+      .join(', ');
+
+    const matchHubspotContact = ({ email, name, eventDateKey }) => {
+      const emailKey = normalizeEmailKey(email);
+      const nameKey = normalizePersonNameKey(name);
+
+      if (emailKey) {
+        const primaryCandidates = hubspotIndex.byPrimaryEmail.get(emailKey) || [];
+        if (primaryCandidates.length > 0) {
+          const contact = pickBestHubspotContact(primaryCandidates, eventDateKey);
+          return {
+            contact,
+            confidence: 'email',
+            source: 'primary_email',
+            reason: primaryCandidates.length > 1 ? 'Matched by primary email (multiple candidates; best selected)' : 'Matched by primary email',
+            candidateHints: candidateHints(primaryCandidates),
+          };
+        }
+        const secondaryCandidates = hubspotIndex.bySecondaryEmail.get(emailKey) || [];
+        if (secondaryCandidates.length > 0) {
+          const contact = pickBestHubspotContact(secondaryCandidates, eventDateKey);
+          return {
+            contact,
+            confidence: 'secondary_email',
+            source: 'secondary_email',
+            reason: secondaryCandidates.length > 1 ? 'Matched by hs_additional_emails (multiple candidates; best selected)' : 'Matched by hs_additional_emails',
+            candidateHints: candidateHints(secondaryCandidates),
+          };
+        }
+      }
+
+      if (nameKey) {
+        const exactCandidates = hubspotIndex.byExactName.get(nameKey) || [];
+        if (exactCandidates.length > 0) {
+          const contact = pickBestHubspotContact(exactCandidates, eventDateKey);
+          return {
+            contact,
+            confidence: 'full_name',
+            source: 'full_name',
+            reason: exactCandidates.length > 1 ? 'Matched by normalized full name (multiple candidates; best selected)' : 'Matched by normalized full name',
+            candidateHints: candidateHints(exactCandidates),
+          };
+        }
+
+        const v = hubspotIndex.variants(nameKey);
+        const initialCandidates = v.firstLastInitial ? (hubspotIndex.byFirstLastInitial.get(v.firstLastInitial) || []) : [];
+        if (initialCandidates.length === 1) {
+          return {
+            contact: initialCandidates[0],
+            confidence: 'fuzzy_name',
+            source: 'first_last_initial',
+            reason: 'Matched by first name + last initial (fuzzy fallback)',
+            candidateHints: candidateHints(initialCandidates),
+          };
+        }
+        if (initialCandidates.length > 1) {
+          return {
+            contact: null,
+            confidence: 'unmatched',
+            source: 'ambiguous_first_last_initial',
+            reason: 'Ambiguous first name + last initial; manual review needed',
+            candidateHints: candidateHints(initialCandidates),
+          };
+        }
+
+        const prefixCandidates = v.firstPrefixLastInitial ? (hubspotIndex.byFirstPrefixLastInitial.get(v.firstPrefixLastInitial) || []) : [];
+        if (prefixCandidates.length === 1) {
+          return {
+            contact: prefixCandidates[0],
+            confidence: 'fuzzy_name',
+            source: 'first_prefix_last_initial',
+            reason: 'Matched by first-name prefix + last initial (fuzzy fallback)',
+            candidateHints: candidateHints(prefixCandidates),
+          };
+        }
+        if (prefixCandidates.length > 1) {
+          return {
+            contact: null,
+            confidence: 'unmatched',
+            source: 'ambiguous_prefix_initial',
+            reason: 'Ambiguous first-name prefix + last initial; manual review needed',
+            candidateHints: candidateHints(prefixCandidates),
+          };
+        }
+
+        const firstNameCandidates = v.first ? (hubspotIndex.byFirstName.get(v.first) || []) : [];
+        if (firstNameCandidates.length > 0) {
+          return {
+            contact: null,
+            confidence: 'unmatched',
+            source: 'first_name_only',
+            reason: 'No full-name match; only first-name candidates found',
+            candidateHints: candidateHints(firstNameCandidates),
+          };
+        }
+      }
+
+      return {
+        contact: null,
+        confidence: 'unmatched',
+        source: 'not_found',
+        reason: emailKey ? 'No HubSpot match by primary/secondary email or name fallback' : 'No email available and no HubSpot match by name fallback',
+        candidateHints: '',
+      };
+    };
+
+    const buildCallCoverageIndex = () => {
+      const callActivitiesById = new Map();
+      (rawHubspotActivities || []).forEach((row) => {
+        if (String(row?.activity_type || '').toLowerCase() !== 'call') return;
+        const id = Number(row?.hubspot_activity_id);
+        if (!Number.isFinite(id)) return;
+        callActivitiesById.set(id, {
+          ...row,
+          dateKey: parseDateKeyLoose(row?.hs_timestamp || row?.created_at_hubspot),
+        });
+      });
+
+      const byDateName = new Map();
+      const byDateEmail = new Map();
+      const bySessionAttendee = new Map();
+      const add = (map, key, hit) => {
+        if (!key) return;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(hit);
+      };
+
+      (rawHubspotActivityAssociations || []).forEach((assoc) => {
+        const id = Number(assoc?.hubspot_activity_id);
+        const act = callActivitiesById.get(id);
+        if (!act?.dateKey) return;
+        const contactId = Number(assoc?.hubspot_contact_id);
+        const contact = Number.isFinite(contactId) ? hubspotIndex.byId.get(contactId) : null;
+        const name = `${String(assoc?.contact_firstname || contact?.firstname || '').trim()} ${String(assoc?.contact_lastname || contact?.lastname || '').trim()}`.trim();
+        const email = normalizeEmailKey(assoc?.contact_email || contact?.email);
+        const nameKey = normalizePersonNameKey(name);
+        const hit = { contactId: Number.isFinite(contactId) ? contactId : null, contact, activityId: id, dateKey: act.dateKey, name, email };
+        if (nameKey) add(byDateName, `${act.dateKey}|${nameKey}`, hit);
+        if (email) add(byDateEmail, `${act.dateKey}|${email}`, hit);
+      });
+
+      (rawZoomHubspotMappings || []).forEach((row) => {
+        const sessionDate = parseDateKeyLoose(row?.session_date);
+        const meetingId = String(row?.meeting_id || '');
+        const attendeeKey = normalizePersonNameKey(row?.zoom_attendee_canonical_name);
+        if (!sessionDate || !attendeeKey) return;
+        const source = String(row?.mapping_source || '').toLowerCase();
+        const isHubspotActivity = source.includes('hubspot_meeting_activity') || Number(row?.hubspot_activity_id) > 0;
+        if (!isHubspotActivity) return;
+        bySessionAttendee.set(`${sessionDate}|${meetingId}|${attendeeKey}`, row);
+      });
+
+      return { byDateName, byDateEmail, bySessionAttendee };
+    };
+
+    const callCoverageIndex = buildCallCoverageIndex();
+
+    const summarizeConfidence = (rows, fieldKey) => {
+      const keys = ['email', 'secondary_email', 'full_name', 'fuzzy_name', 'unmatched'];
+      const counts = new Map(keys.map((k) => [k, 0]));
+      (rows || []).forEach((row) => {
+        const key = keys.includes(row?.[fieldKey]) ? row[fieldKey] : 'unmatched';
+        counts.set(key, (counts.get(key) || 0) + 1);
+      });
+      const total = (rows || []).length;
+      return keys.map((confidence) => ({ confidence, count: counts.get(confidence) || 0, pct: counts.get(confidence) ? (counts.get(confidence) / Math.max(total, 1)) : 0 }));
+    };
+
+    const resolveHubspotForZoomRow = (row) => {
+      const manualId = Number(row?.manualHubspotContactId);
+      if (Number.isFinite(manualId) && hubspotIndex.byId.get(manualId)) {
+        return {
+          contact: hubspotIndex.byId.get(manualId),
+          confidence: 'full_name',
+          source: 'manual_hubspot_contact_id',
+          reason: 'Manual override HubSpot contact ID',
+          candidateHints: '',
+        };
+      }
+
+      const email = normalizeEmailKey(row?.email);
+      if (email && email !== 'not found') {
+        return matchHubspotContact({ email, name: row?.hubspotName || row?.attendeeName || row?.rawName, eventDateKey: row?.date });
+      }
+
+      const hubspotNameValue = String(row?.hubspotName || '').trim();
+      if (hubspotNameValue && hubspotNameValue !== 'Not Found') {
+        return matchHubspotContact({ email: '', name: hubspotNameValue, eventDateKey: row?.date });
+      }
+
+      return matchHubspotContact({ email: '', name: row?.attendeeName || row?.rawName, eventDateKey: row?.date });
+    };
+
+    const hasHubspotCallCoverage = (zoomRow, resolvedContact) => {
+      const dateKey = parseDateKeyLoose(zoomRow?.date);
+      if (!dateKey) return { covered: false, source: 'No Date', activityId: null };
+      const meetingId = String(zoomRow?.meetingId || '');
+      const attendeeKey = normalizePersonNameKey(zoomRow?.attendeeName || zoomRow?.rawName);
+      const sessionKey = `${dateKey}|${meetingId}|${attendeeKey}`;
+      const materialized = callCoverageIndex.bySessionAttendee.get(sessionKey);
+      if (materialized) {
+        return { covered: true, source: 'Materialized Zoom->HubSpot mapping', activityId: Number(materialized?.hubspot_activity_id) || null };
+      }
+
+      const contactEmail = normalizeEmailKey(resolvedContact?.contact?.email || zoomRow?.email);
+      const contactId = Number(resolvedContact?.contact?.hubspot_contact_id);
+      const nameKeysToTry = Array.from(new Set([
+        normalizePersonNameKey(zoomRow?.attendeeName),
+        normalizePersonNameKey(zoomRow?.rawName),
+        normalizePersonNameKey(resolvedContact?.contact ? hubspotFullName(resolvedContact.contact) : ''),
+      ].filter(Boolean)));
+      const dateKeysToTry = [dateKey, addDaysKey(dateKey, -1), addDaysKey(dateKey, 1)];
+
+      for (const dk of dateKeysToTry) {
+        if (contactEmail) {
+          const hits = callCoverageIndex.byDateEmail.get(`${dk}|${contactEmail}`) || [];
+          if (hits.length > 0) return { covered: true, source: dk === dateKey ? 'HubSpot Call email (same day)' : 'HubSpot Call email (+/-1 day)', activityId: hits[0]?.activityId || null };
+        }
+        for (const nk of nameKeysToTry) {
+          const hits = callCoverageIndex.byDateName.get(`${dk}|${nk}`) || [];
+          if (hits.length === 0) continue;
+          if (Number.isFinite(contactId)) {
+            const exactContactHit = hits.find((h) => Number(h?.contactId) === contactId);
+            if (exactContactHit) return { covered: true, source: dk === dateKey ? 'HubSpot Call name + contact (same day)' : 'HubSpot Call name + contact (+/-1 day)', activityId: exactContactHit.activityId || null };
+          }
+          return { covered: true, source: dk === dateKey ? 'HubSpot Call name (same day)' : 'HubSpot Call name (+/-1 day)', activityId: hits[0]?.activityId || null };
+        }
+      }
+      return { covered: false, source: 'No HubSpot Call record match', activityId: null };
+    };
+
+    const buildPeriod = (window, zoomPeriodRows) => {
+      if (!window?.start || !window?.end) return null;
+      const startKey = window.start;
+      const endKey = window.end;
+
+      const baseContacts = (rawHubspot || [])
+        .filter((row) => {
+          const createdKey = parseDateKeyLoose(row?.createdate);
+          if (!createdKey || createdKey < startKey || createdKey > endKey) return false;
+          if (!isPaidSocialHubspot(row)) return false;
+          if (isPhoenixHubspot(row)) return false;
+          return true;
+        })
+        .sort((a, b) => hubspotContactCreatedTs(a) - hubspotContactCreatedTs(b));
+
+      const metaById = new Map();
+      baseContacts.forEach((contact) => {
+        const id = Number(contact?.hubspot_contact_id);
+        if (!Number.isFinite(id)) return;
+        if (metaById.has(id)) return;
+        metaById.set(id, {
+          hubspotContactId: id,
+          hubspotName: hubspotFullName(contact) || 'Not Found',
+          hubspotPrimaryEmail: normalizeEmailKey(contact?.email) || 'Not Found',
+          hubspotSecondaryEmails: parseEmailList(contact?.hs_additional_emails),
+          hubspotCreatedDate: parseDateKeyLoose(contact?.createdate) || 'Not Found',
+          originalTrafficSource: contact?.hs_analytics_source || 'Not Found',
+          originalTrafficSourceDetail1: contact?.hs_analytics_source_data_1 || 'Not Found',
+          originalTrafficSourceDetail2: contact?.hs_analytics_source_data_2 || contact?.campaign || 'Not Found',
+          sourceBucket: hubspotSourceBucket(contact),
+          revenue: hubspotRevenueValue(contact),
+          meta_lead: true,
+          luma_registered: false,
+          zoom_attended: false,
+          lumaMatchConfidence: 'unmatched',
+          lumaMatchReason: '',
+          lumaMatchSource: '',
+          zoomMatchConfidence: 'unmatched',
+          zoomMatchReason: '',
+          zoomMatchSource: '',
+          lumaRegistrationCount: 0,
+          zoomAttendanceCount: 0,
+          hubspotCallLinked: false,
+          hubspotCallMatchCount: 0,
+          lumaRows: [],
+          zoomRows: [],
+        });
+      });
+      const metaIdSet = new Set(Array.from(metaById.keys()));
+
+      const lumaRowsDetailed = [];
+      const unmatchedLumaRows = [];
+      const lumaMatchedNonMetaRows = [];
+      (rawLuma || []).forEach((row) => {
+        const dateKey = parseDateKeyLoose(row?.event_date || row?.event_start_at || row?.registered_at);
+        if (!dateKey || dateKey < startKey || dateKey > endKey) return;
+        const approval = String(row?.approval_status || 'approved').toLowerCase();
+        if (approval && approval !== 'approved') return;
+        if (String(row?.funnel_key || '').toLowerCase() === 'phoenix') return;
+
+        const email = normalizeEmailKey(row?.guest_email);
+        const name = String(row?.guest_name || '').trim();
+        const match = matchHubspotContact({ email, name, eventDateKey: dateKey });
+        const matchedId = Number(match?.contact?.hubspot_contact_id);
+        const detailRow = {
+          date: dateKey,
+          name: name || 'Not Found',
+          email: email || 'Not Found',
+          matchConfidence: match.confidence || 'unmatched',
+          matchSource: match.source || 'not_found',
+          matchReason: match.reason || '',
+          candidateHints: match.candidateHints || '',
+          matchedHubspotContactId: Number.isFinite(matchedId) ? matchedId : null,
+          matchedHubspotName: match.contact ? (hubspotFullName(match.contact) || 'Not Found') : 'Not Found',
+          matchedHubspotEmail: match.contact?.email || 'Not Found',
+        };
+        lumaRowsDetailed.push(detailRow);
+
+        if (!match.contact) {
+          unmatchedLumaRows.push({ ...detailRow, missingReason: match.reason || 'No HubSpot contact match for Lu.ma registration' });
+          return;
+        }
+
+        if (!metaIdSet.has(matchedId)) {
+          lumaMatchedNonMetaRows.push({ ...detailRow, missingReason: 'Matched HubSpot contact is not a Meta paid lead in selected date range' });
+          return;
+        }
+
+        const record = metaById.get(matchedId);
+        record.luma_registered = true;
+        record.lumaRegistrationCount += 1;
+        record.lumaRows.push(detailRow);
+        const confidenceRank = { email: 1, secondary_email: 2, full_name: 3, fuzzy_name: 4, unmatched: 99 };
+        if ((confidenceRank[detailRow.matchConfidence] || 99) < (confidenceRank[record.lumaMatchConfidence] || 99)) {
+          record.lumaMatchConfidence = detailRow.matchConfidence;
+          record.lumaMatchReason = detailRow.matchReason;
+          record.lumaMatchSource = detailRow.matchSource;
+        }
+      });
+
+      const zoomRowsDetailed = [];
+      const unmatchedZoomRows = [];
+      const zoomMatchedNonMetaRows = [];
+      (zoomPeriodRows || []).forEach((row) => {
+        const resolved = resolveHubspotForZoomRow(row);
+        const contact = resolved?.contact || null;
+        const matchedId = Number(contact?.hubspot_contact_id);
+        const zoomConfidence = mapZoomMatchTypeToConfidence(row?.matchType, !!contact);
+        const callCoverage = hasHubspotCallCoverage(row, resolved);
+        const detailRow = {
+          date: row?.date || 'Not Found',
+          dayType: row?.dayType || 'Other',
+          attendeeName: row?.attendeeName || row?.rawName || 'Not Found',
+          rawZoomName: row?.rawName || row?.attendeeName || 'Not Found',
+          sessionKey: row?.sessionKey || '',
+          meetingId: row?.meetingId || '',
+          matchedHubspot: contact ? 'Yes' : 'No',
+          matchConfidence: callCoverage.covered ? 'full_name' : zoomConfidence,
+          matchSource: callCoverage.covered ? 'hubspot_call_record' : (resolved?.source || row?.matchLookupStrategy || 'not_found'),
+          matchReason: callCoverage.covered ? `HubSpot Call record match (${callCoverage.source})` : (resolved?.reason || row?.matchWhy || ''),
+          candidateHints: resolved?.candidateHints || row?.matchCandidateExamples || '',
+          matchedHubspotContactId: Number.isFinite(matchedId) ? matchedId : (Number(row?.manualHubspotContactId) || null),
+          matchedHubspotName: contact ? (hubspotFullName(contact) || 'Not Found') : (row?.hubspotName || 'Not Found'),
+          matchedHubspotEmail: contact?.email || row?.email || 'Not Found',
+          hubspotCallLinked: callCoverage.covered ? 'Yes' : 'No',
+          hubspotCallCoverageSource: callCoverage.source,
+          hubspotCallActivityId: callCoverage.activityId,
+          sourceBucket: contact ? hubspotSourceBucket(contact) : (row?.sourceBucket || 'Unknown'),
+          originalTrafficSource: contact?.hs_analytics_source || row?.originalTrafficSource || 'Not Found',
+          totalZoomAttendances: row?.totalZoomAttendances || 1,
+          repeatAttendee: row?.repeatAttendee || ((row?.totalZoomAttendances || 0) >= 2 ? 'Yes' : 'No'),
+          goodRepeatMember: row?.goodRepeatMember || 'No',
+        };
+        zoomRowsDetailed.push(detailRow);
+
+        if (!contact) {
+          unmatchedZoomRows.push({ ...detailRow, missingReason: detailRow.matchReason || 'No HubSpot contact match for Zoom attendee' });
+          return;
+        }
+        if (!metaIdSet.has(matchedId)) {
+          zoomMatchedNonMetaRows.push({ ...detailRow, missingReason: 'Matched HubSpot contact is not a Meta paid lead in selected date range' });
+          return;
+        }
+
+        const record = metaById.get(matchedId);
+        record.zoom_attended = true;
+        record.zoomAttendanceCount += 1;
+        if (detailRow.hubspotCallLinked === 'Yes') {
+          record.hubspotCallLinked = true;
+          record.hubspotCallMatchCount += 1;
+        }
+        record.zoomRows.push(detailRow);
+        const confidenceRank = { email: 1, secondary_email: 2, full_name: 3, fuzzy_name: 4, unmatched: 99 };
+        if ((confidenceRank[detailRow.matchConfidence] || 99) < (confidenceRank[record.zoomMatchConfidence] || 99)) {
+          record.zoomMatchConfidence = detailRow.matchConfidence;
+          record.zoomMatchReason = detailRow.matchReason;
+          record.zoomMatchSource = detailRow.matchSource;
+        }
+      });
+
+      const unifiedLeadRecords = Array.from(metaById.values()).map((record) => ({
+        ...record,
+        luma_registered_label: record.luma_registered ? 'Yes' : 'No',
+        zoom_attended_label: record.zoom_attended ? 'Yes' : 'No',
+        hubspotCallLinkedLabel: record.hubspotCallLinked ? 'Yes' : 'No',
+        hubspotSecondaryEmailsText: record.hubspotSecondaryEmails.length ? record.hubspotSecondaryEmails.join(', ') : 'None',
+        lumaMatchConfidence: record.lumaMatchConfidence || 'unmatched',
+        zoomMatchConfidence: record.zoomMatchConfidence || 'unmatched',
+        revenue: Number.isFinite(Number(record.revenue)) ? Number(record.revenue) : 'Not Found',
+      })).sort((a, b) => {
+        if (a.zoomAttendanceCount !== b.zoomAttendanceCount) return b.zoomAttendanceCount - a.zoomAttendanceCount;
+        if (a.lumaRegistrationCount !== b.lumaRegistrationCount) return b.lumaRegistrationCount - a.lumaRegistrationCount;
+        return String(a.hubspotName || '').localeCompare(String(b.hubspotName || ''));
+      });
+
+      const funnel = {
+        metaLeadCount: unifiedLeadRecords.length,
+        lumaRegisteredCount: unifiedLeadRecords.filter((r) => r.luma_registered).length,
+        zoomAttendedCount: unifiedLeadRecords.filter((r) => r.zoom_attended).length,
+      };
+      funnel.metaToLumaRate = funnel.metaLeadCount ? funnel.lumaRegisteredCount / funnel.metaLeadCount : null;
+      funnel.lumaToZoomRate = funnel.lumaRegisteredCount ? funnel.zoomAttendedCount / funnel.lumaRegisteredCount : null;
+      funnel.metaToZoomRate = funnel.metaLeadCount ? funnel.zoomAttendedCount / funnel.metaLeadCount : null;
+
+      const metaNoLumaRows = unifiedLeadRecords
+        .filter((r) => !r.luma_registered)
+        .map((r) => ({
+          hubspotContactId: r.hubspotContactId,
+          hubspotName: r.hubspotName,
+          hubspotPrimaryEmail: r.hubspotPrimaryEmail,
+          hubspotSecondaryEmails: r.hubspotSecondaryEmailsText,
+          metaLeadDate: r.hubspotCreatedDate,
+          lumaRegistered: 'No',
+          lumaMatchConfidence: r.lumaMatchConfidence,
+          sourceBucket: r.sourceBucket,
+          originalTrafficSource: r.originalTrafficSource,
+          originalTrafficSourceDetail1: r.originalTrafficSourceDetail1,
+          originalTrafficSourceDetail2: r.originalTrafficSourceDetail2,
+          missingReason: 'No matched Lu.ma registration in selected range',
+        }));
+
+      const metaNoZoomRows = unifiedLeadRecords
+        .filter((r) => !r.zoom_attended)
+        .map((r) => ({
+          hubspotContactId: r.hubspotContactId,
+          hubspotName: r.hubspotName,
+          hubspotPrimaryEmail: r.hubspotPrimaryEmail,
+          hubspotSecondaryEmails: r.hubspotSecondaryEmailsText,
+          metaLeadDate: r.hubspotCreatedDate,
+          lumaRegistered: r.luma_registered ? 'Yes' : 'No',
+          lumaMatchConfidence: r.lumaMatchConfidence,
+          sourceBucket: r.sourceBucket,
+          originalTrafficSource: r.originalTrafficSource,
+          originalTrafficSourceDetail1: r.originalTrafficSourceDetail1,
+          originalTrafficSourceDetail2: r.originalTrafficSourceDetail2,
+          missingReason: 'No matched Zoom attendee in selected range',
+        }));
+
+      const reviewQueueRows = [
+        ...unmatchedLumaRows.map((r) => ({ ...r, reviewArea: 'Luma -> HubSpot' })),
+        ...unmatchedZoomRows.map((r) => ({ ...r, reviewArea: 'Zoom -> HubSpot' })),
+        ...lumaRowsDetailed.filter((r) => r.matchConfidence === 'fuzzy_name').map((r) => ({ ...r, reviewArea: 'Luma fuzzy match' })),
+        ...zoomRowsDetailed.filter((r) => r.matchConfidence === 'fuzzy_name').map((r) => ({ ...r, reviewArea: 'Zoom fuzzy match' })),
+      ].sort((a, b) => String(b?.date || '').localeCompare(String(a?.date || '')));
+
+      const callCoveredCount = zoomRowsDetailed.filter((r) => r.hubspotCallLinked === 'Yes').length;
+
+      return {
+        window,
+        unifiedLeadRecords,
+        funnel,
+        matchConfidenceBreakdown: {
+          luma: summarizeConfidence(lumaRowsDetailed, 'matchConfidence'),
+          zoom: summarizeConfidence(zoomRowsDetailed, 'matchConfidence'),
+        },
+        hubspotCallCoverage: {
+          coveredZoomRows: callCoveredCount,
+          totalZoomRows: zoomRowsDetailed.length,
+          rate: zoomRowsDetailed.length ? (callCoveredCount / zoomRowsDetailed.length) : null,
+        },
+        stageRows: {
+          lumaRowsDetailed,
+          zoomRowsDetailed,
+          unmatchedLumaRows,
+          unmatchedZoomRows,
+          lumaMatchedNonMetaRows,
+          zoomMatchedNonMetaRows,
+          metaNoLumaRows,
+          metaNoZoomRows,
+          reviewQueueRows,
+        },
+      };
+    };
+
+    const currentZoomRows = zoomSourceModule?.current?.rows || [];
+    const previousZoomRows = zoomSourceModule?.previous?.rows || [];
+
+    const current = buildPeriod(dateWindows?.current, currentZoomRows);
+    const previous = dateWindows?.previous ? buildPeriod(dateWindows.previous, previousZoomRows) : null;
+
+    return { current, previous };
+  }, [
+    rawHubspot,
+    rawLuma,
+    rawHubspotActivities,
+    rawHubspotActivityAssociations,
+    rawZoomHubspotMappings,
+    zoomSourceModule,
+    dateWindows,
+  ]);
 
   const paidDecisionInsights = useMemo(() => {
     const maybeCurrency = (v) => {
@@ -1229,6 +2560,14 @@ export default function LeadsDashboard() {
     }
     if ((tuesday.totalTuesdayRows || 0) > 0) {
       bullets.push(`Tuesday assumption test: ${tuesday.paidMetaTuesdayRows || 0} of ${tuesday.totalTuesdayRows || 0} Tuesday show-up rows matched to Meta paid (${maybePct(tuesday.paidMetaShareOfTuesday)}).`);
+    }
+    const paidAcqGoodCount = Number(paid.goodRepeatMembersAcquiredInRange || 0);
+    const paidOlderActiveGoodCount = Number(paid.goodRepeatMembersAcquiredBeforeRange || 0);
+    if (paidAcqGoodCount > 0 && Number.isFinite(Number(paid.costPerGoodRepeatMemberAcquiredInRange))) {
+      bullets.push(`Acquisition-window cost per Meta good repeat member is ${maybeCurrency(paid.costPerGoodRepeatMemberAcquiredInRange)} using HubSpot createdate in the selected range (${paidAcqGoodCount} paid good members acquired in-window).`);
+      if (paidOlderActiveGoodCount > 0) {
+        warnings.push(`${paidOlderActiveGoodCount} paid good members active in this window were acquired before the selected date range. Blended cost-per-good-member can look artificially low.`);
+      }
     }
     if (Number.isFinite(Number(paid.costPerGoodRepeatMember))) {
       bullets.push(`Estimated cost per Meta good repeat member is ${maybeCurrency(paid.costPerGoodRepeatMember)} using Group 1 free Meta spend.`);
@@ -1286,12 +2625,312 @@ export default function LeadsDashboard() {
       }
     }
 
-    const headline = (Number.isFinite(Number(paid.costPerGoodRepeatMember)))
-      ? `Meta paid cost to create a good repeating member is currently ${maybeCurrency(paid.costPerGoodRepeatMember)} (estimate).`
+    const preferredGoodMemberCost = Number.isFinite(Number(paid.costPerGoodRepeatMemberAcquiredInRange))
+      ? Number(paid.costPerGoodRepeatMemberAcquiredInRange)
+      : (Number.isFinite(Number(paid.costPerGoodRepeatMember)) ? Number(paid.costPerGoodRepeatMember) : null);
+    const preferredLabel = Number.isFinite(Number(paid.costPerGoodRepeatMemberAcquiredInRange))
+      ? 'acquisition-window estimate'
+      : 'estimate';
+    const headline = (preferredGoodMemberCost !== null)
+      ? `Meta paid cost to create a good repeating member is currently ${maybeCurrency(preferredGoodMemberCost)} (${preferredLabel}).`
       : 'Meta paid is generating show-ups, but there is not yet enough good-repeat volume for a stable cost-per-good-member estimate.';
 
     return { headline, bullets, moves, warnings };
   }, [zoomSourceModule, attendanceCostModule]);
+
+  const leadsDecisionModule = useMemo(() => {
+    const currentCombined = groupedData?.current?.free?.combined;
+    const previousCombined = groupedData?.previous?.free?.combined || null;
+    const currentZoom = zoomSourceModule?.current;
+    const previousZoom = zoomSourceModule?.previous || null;
+    const currentWindow = dateWindows?.current || null;
+    const previousWindow = dateWindows?.previous || null;
+
+    if (!currentCombined || !currentZoom || !currentWindow) return null;
+
+    const safeRatio = (n, d) => {
+      const nn = Number(n);
+      const dd = Number(d);
+      if (!Number.isFinite(nn) || !Number.isFinite(dd) || dd === 0) return null;
+      return nn / dd;
+    };
+    const toNumberOrNull = (v) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
+    const normalizeCampaignKey = (value) => String(value || '')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+    const dateInRangeKey = (dateKey, startKey, endKey) => !!dateKey && !!startKey && !!endKey && dateKey >= startKey && dateKey <= endKey;
+    const mean = (values) => {
+      const nums = values.map((v) => Number(v)).filter((v) => Number.isFinite(v));
+      if (nums.length === 0) return null;
+      return nums.reduce((sum, v) => sum + v, 0) / nums.length;
+    };
+    const median = (values) => {
+      const nums = values.map((v) => Number(v)).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
+      if (nums.length === 0) return null;
+      const mid = Math.floor(nums.length / 2);
+      return nums.length % 2 === 0 ? ((nums[mid - 1] + nums[mid]) / 2) : nums[mid];
+    };
+
+    const buildAdSpendIndex = (startKey, endKey) => {
+      const byCampaign = new Map();
+      (rawAds || []).forEach((row) => {
+        const dateKey = String(row?.date_day || '').slice(0, 10);
+        if (!dateInRangeKey(dateKey, startKey, endKey)) return;
+        const funnel = String(row?.funnel_key || row?.campaign_name || '').toLowerCase();
+        const isPhoenix = funnel.includes('phoenix') || String(row?.campaign_name || '').toLowerCase().includes('phoenix');
+        if (isPhoenix) return;
+
+        const campaignName = String(row?.campaign_name || '').trim();
+        const campaignKey = normalizeCampaignKey(campaignName);
+        if (!campaignKey) return;
+        if (!byCampaign.has(campaignKey)) {
+          byCampaign.set(campaignKey, {
+            campaignKey,
+            campaignName: campaignName || 'Not Found',
+            spend: 0,
+            leads: 0,
+            adsets: new Map(),
+          });
+        }
+        const agg = byCampaign.get(campaignKey);
+        const spend = Number(row?.spend || 0);
+        const leads = Number(row?.leads || 0);
+        agg.spend += Number.isFinite(spend) ? spend : 0;
+        agg.leads += Number.isFinite(leads) ? leads : 0;
+
+        const adsetName = String(row?.adset_name || '').trim() || 'Not Found';
+        if (!agg.adsets.has(adsetName)) {
+          agg.adsets.set(adsetName, { adsetName, spend: 0, leads: 0, ads: new Map() });
+        }
+        const adsetAgg = agg.adsets.get(adsetName);
+        adsetAgg.spend += Number.isFinite(spend) ? spend : 0;
+        adsetAgg.leads += Number.isFinite(leads) ? leads : 0;
+
+        const adName = String(row?.ad_name || '').trim() || 'Not Found';
+        if (!adsetAgg.ads.has(adName)) adsetAgg.ads.set(adName, { adName, spend: 0, leads: 0 });
+        const adAgg = adsetAgg.ads.get(adName);
+        adAgg.spend += Number.isFinite(spend) ? spend : 0;
+        adAgg.leads += Number.isFinite(leads) ? leads : 0;
+      });
+
+      byCampaign.forEach((agg) => {
+        agg.topAdsets = Array.from(agg.adsets.values())
+          .map((adset) => ({
+            ...adset,
+            topAds: Array.from(adset.ads.values()).sort((a, b) => (b.spend - a.spend) || (b.leads - a.leads) || a.adName.localeCompare(b.adName)),
+          }))
+          .sort((a, b) => (b.spend - a.spend) || (b.leads - a.leads) || a.adsetName.localeCompare(b.adsetName));
+      });
+      return byCampaign;
+    };
+
+    const currentAdsByCampaign = buildAdSpendIndex(currentWindow.start, currentWindow.end);
+
+    const dedupeGreatMembers = (rows, window) => {
+      const byKey = new Map();
+      (rows || [])
+        .filter((r) => r?.goodRepeatMember === 'Yes')
+        .forEach((r) => {
+          const key = String(r?.attendeeKey || r?.hubspotContactId || r?.email || r?.attendeeName || '').trim();
+          if (!key) return;
+          const existing = byKey.get(key);
+          const candidateScore = (Number(r?.totalZoomAttendances || 0) * 1_000_000)
+            + (Number.isFinite(Number(r?.revenue)) ? Number(r.revenue) : 0);
+          const existingScore = existing
+            ? ((Number(existing?.totalZoomAttendances || 0) * 1_000_000) + (Number.isFinite(Number(existing?.revenue)) ? Number(existing.revenue) : 0))
+            : -1;
+          if (!existing || candidateScore > existingScore) {
+            const campaignRaw = String(r?.originalTrafficSourceDetail2 || '').trim();
+            const campaignKey = normalizeCampaignKey(campaignRaw);
+            const campaignAgg = campaignKey ? currentAdsByCampaign.get(campaignKey) : null;
+            const topAdset = campaignAgg?.topAdsets?.[0] || null;
+            const topAd = topAdset?.topAds?.[0] || null;
+            const createdDate = String(r?.hubspotCreatedDate || '');
+            const acquiredInRange = createdDate !== 'Not Found' && dateInRangeKey(createdDate, window?.start, window?.end);
+            const bothDays = Number(r?.tuesdayAttendances || 0) > 0 && Number(r?.thursdayAttendances || 0) > 0;
+
+            byKey.set(key, {
+              ...r,
+              greatMemberName: r?.hubspotName && r.hubspotName !== 'Not Found' ? r.hubspotName : (r?.attendeeName || 'Not Found'),
+              greatMemberEmail: r?.email || 'Not Found',
+              metaCampaignRaw: campaignRaw || 'Not Found',
+              metaCampaignKey: campaignKey || '',
+              inferredMetaAdset: topAdset?.adsetName || 'Not Found',
+              inferredMetaAdsetSpendInRange: Number(topAdset?.spend || 0),
+              inferredMetaTopAd: topAd?.adName || 'Not Found',
+              inferredMetaTopAdSpendInRange: Number(topAd?.spend || 0),
+              inferredMetaCampaignSpendInRange: Number(campaignAgg?.spend || 0),
+              inferredMetaCampaignLeadsInRange: Number(campaignAgg?.leads || 0),
+              metaAttributionConfidence: campaignAgg ? 'Campaign match (HubSpot source detail -> Meta spend)' : 'No campaign spend match in selected range',
+              acquiredInSelectedRange: acquiredInRange ? 'Yes' : 'No',
+              greatMemberCrossesTueThu: bothDays ? 'Yes' : 'No',
+            });
+          }
+        });
+
+      return Array.from(byKey.values()).sort((a, b) => {
+        if ((b.totalZoomAttendances || 0) !== (a.totalZoomAttendances || 0)) return (b.totalZoomAttendances || 0) - (a.totalZoomAttendances || 0);
+        const aRev = Number(a?.revenue);
+        const bRev = Number(b?.revenue);
+        if (Number.isFinite(bRev) && Number.isFinite(aRev) && bRev !== aRev) return bRev - aRev;
+        return String(a?.greatMemberName || '').localeCompare(String(b?.greatMemberName || ''));
+      });
+    };
+
+    const currentGreatMembers = dedupeGreatMembers(currentZoom.rows || [], currentWindow);
+    const previousGreatMembers = previousZoom && previousWindow ? dedupeGreatMembers(previousZoom.rows || [], previousWindow) : [];
+
+    const currentGreatSourceRows = (currentZoom.goodMemberSourceRows || []).map((r) => ({
+      ...r,
+      label: r.bucket,
+      greatMembers: Number(r.goodRepeatMembers || 0),
+      repeatMembers: Number(r.repeatMembers || 0),
+      uniqueAttendees: Number(r.uniqueAttendees || 0),
+      share: r.goodMemberShare,
+      goodRate: r.goodRepeatRateAmongUnique,
+    }));
+    const previousGreatSourceRowsByLabel = new Map((previousZoom?.goodMemberSourceRows || []).map((r) => [r.bucket, r]));
+
+    const metaGreatMembers = currentGreatMembers.filter((r) => r.sourceBucket === 'Paid Social (Meta)');
+    const metaGreatByCampaignAdset = new Map();
+    metaGreatMembers.forEach((r) => {
+      const campaign = r.metaCampaignRaw || 'Not Found';
+      const adset = r.inferredMetaAdset || 'Not Found';
+      const key = `${campaign}|||${adset}`;
+      if (!metaGreatByCampaignAdset.has(key)) {
+        metaGreatByCampaignAdset.set(key, {
+          key,
+          metaCampaignRaw: campaign,
+          inferredMetaAdset: adset,
+          inferredMetaTopAd: r.inferredMetaTopAd || 'Not Found',
+          sourceDetail1: r.originalTrafficSourceDetail1 || 'Not Found',
+          greatMembers: [],
+          totalAttendances: 0,
+          revenues: [],
+          acquiredInRangeCount: 0,
+          campaignSpendInRange: Number(r.inferredMetaCampaignSpendInRange || 0),
+          adsetSpendInRange: Number(r.inferredMetaAdsetSpendInRange || 0),
+          campaignLeadsInRange: Number(r.inferredMetaCampaignLeadsInRange || 0),
+        });
+      }
+      const agg = metaGreatByCampaignAdset.get(key);
+      agg.greatMembers.push(r);
+      agg.totalAttendances += Number(r.totalZoomAttendances || 0);
+      if (Number.isFinite(Number(r.revenue))) agg.revenues.push(Number(r.revenue));
+      if (r.acquiredInSelectedRange === 'Yes') agg.acquiredInRangeCount += 1;
+      if (agg.inferredMetaTopAd === 'Not Found' && r.inferredMetaTopAd && r.inferredMetaTopAd !== 'Not Found') agg.inferredMetaTopAd = r.inferredMetaTopAd;
+      if (!agg.campaignSpendInRange && Number(r.inferredMetaCampaignSpendInRange || 0) > 0) agg.campaignSpendInRange = Number(r.inferredMetaCampaignSpendInRange || 0);
+      if (!agg.adsetSpendInRange && Number(r.inferredMetaAdsetSpendInRange || 0) > 0) agg.adsetSpendInRange = Number(r.inferredMetaAdsetSpendInRange || 0);
+      if (!agg.campaignLeadsInRange && Number(r.inferredMetaCampaignLeadsInRange || 0) > 0) agg.campaignLeadsInRange = Number(r.inferredMetaCampaignLeadsInRange || 0);
+    });
+
+    const metaGreatAttributionRows = Array.from(metaGreatByCampaignAdset.values()).map((agg) => ({
+      key: agg.key,
+      metaCampaignRaw: agg.metaCampaignRaw,
+      inferredMetaAdset: agg.inferredMetaAdset,
+      inferredMetaTopAd: agg.inferredMetaTopAd,
+      sourceDetail1: agg.sourceDetail1,
+      greatMemberCount: agg.greatMembers.length,
+      greatMemberNames: agg.greatMembers.map((r) => r.greatMemberName).join(', '),
+      totalAttendances: agg.totalAttendances,
+      avgAttendances: mean(agg.greatMembers.map((r) => Number(r.totalZoomAttendances || 0))),
+      avgRevenue: mean(agg.revenues),
+      medianRevenue: median(agg.revenues),
+      acquiredInRangeCount: agg.acquiredInRangeCount,
+      campaignSpendInRange: agg.campaignSpendInRange,
+      adsetSpendInRange: agg.adsetSpendInRange,
+      campaignLeadsInRange: agg.campaignLeadsInRange,
+      estCostPerGreatMemberCampaignActive: safeRatio(agg.campaignSpendInRange, agg.greatMembers.length),
+      estCostPerGreatMemberCampaignAcqInRange: safeRatio(agg.campaignSpendInRange, agg.acquiredInRangeCount),
+      estCplCampaign: safeRatio(agg.campaignSpendInRange, agg.campaignLeadsInRange),
+      rows: agg.greatMembers,
+    })).sort((a, b) => {
+      if (b.greatMemberCount !== a.greatMemberCount) return b.greatMemberCount - a.greatMemberCount;
+      if ((b.totalAttendances || 0) !== (a.totalAttendances || 0)) return (b.totalAttendances || 0) - (a.totalAttendances || 0);
+      return String(a.metaCampaignRaw || '').localeCompare(String(b.metaCampaignRaw || ''));
+    });
+
+    const currentCat = currentCombined.categorization || {};
+    const prevCat = previousCombined?.categorization || {};
+    const costMetrics = {
+      freeMetaSpend: Number(currentCombined.spend || 0),
+      costPerLumaRegistrant: toNumberOrNull(currentCombined.costPerRegistration),
+      costPerZoomShowUpPaid: toNumberOrNull(currentZoom?.paidMeta?.costPerShowUp),
+      costPerGreatMemberPaidBlended: toNumberOrNull(currentZoom?.paidMeta?.costPerGoodRepeatMember),
+      costPerGreatMemberPaidAcqInRange: toNumberOrNull(currentZoom?.paidMeta?.costPerGoodRepeatMemberAcquiredInRange),
+      costPerBadLead: safeRatio(currentCombined.spend, Number(currentCat.bad || 0)),
+      costPerOkLead: safeRatio(currentCombined.spend, Number(currentCat.ok || 0)),
+      costPerGoodLeadQualified: safeRatio(currentCombined.spend, Number(currentCat.qualified || 0)),
+      costPerGreatLead1m: safeRatio(currentCombined.spend, Number(currentCat.great || 0)),
+      costPerHighQualityLead250kPlus: safeRatio(currentCombined.spend, Number(currentCat.qualified || 0) + Number(currentCat.great || 0)),
+    };
+    const previousCostMetrics = previousCombined && previousZoom ? {
+      freeMetaSpend: Number(previousCombined.spend || 0),
+      costPerLumaRegistrant: toNumberOrNull(previousCombined.costPerRegistration),
+      costPerZoomShowUpPaid: toNumberOrNull(previousZoom?.paidMeta?.costPerShowUp),
+      costPerGreatMemberPaidBlended: toNumberOrNull(previousZoom?.paidMeta?.costPerGoodRepeatMember),
+      costPerGreatMemberPaidAcqInRange: toNumberOrNull(previousZoom?.paidMeta?.costPerGoodRepeatMemberAcquiredInRange),
+      costPerBadLead: safeRatio(previousCombined.spend, Number(prevCat.bad || 0)),
+      costPerOkLead: safeRatio(previousCombined.spend, Number(prevCat.ok || 0)),
+      costPerGoodLeadQualified: safeRatio(previousCombined.spend, Number(prevCat.qualified || 0)),
+      costPerGreatLead1m: safeRatio(previousCombined.spend, Number(prevCat.great || 0)),
+      costPerHighQualityLead250kPlus: safeRatio(previousCombined.spend, Number(prevCat.qualified || 0) + Number(prevCat.great || 0)),
+    } : null;
+
+    const costCards = [
+      { key: 'freeMetaSpend', label: 'Free Meta Spend', value: costMetrics.freeMetaSpend, previous: previousCostMetrics?.freeMetaSpend ?? null, format: 'currency', invertColor: false, note: 'Selected date range' },
+      { key: 'costPerLumaRegistrant', label: 'Cost / Lu.ma Registrant', value: costMetrics.costPerLumaRegistrant, previous: previousCostMetrics?.costPerLumaRegistrant ?? null, format: 'currency', invertColor: true, note: 'Free funnel (Group 1)' },
+      { key: 'costPerZoomShowUpPaid', label: 'Cost / Paid Show-Up', value: costMetrics.costPerZoomShowUpPaid, previous: previousCostMetrics?.costPerZoomShowUpPaid ?? null, format: 'currency', invertColor: true, note: 'HubSpot Calls Tue/Thu truth' },
+      { key: 'costPerGreatMemberPaidAcqInRange', label: 'Cost / Great Member (Acq In Range)', value: costMetrics.costPerGreatMemberPaidAcqInRange, previous: previousCostMetrics?.costPerGreatMemberPaidAcqInRange ?? null, format: 'currency', invertColor: true, note: 'Best current KPI' },
+      { key: 'costPerGreatMemberPaidBlended', label: 'Cost / Great Member (Blended Active)', value: costMetrics.costPerGreatMemberPaidBlended, previous: previousCostMetrics?.costPerGreatMemberPaidBlended ?? null, format: 'currency', invertColor: true, note: 'Includes older cohorts active now' },
+      { key: 'costPerBadLead', label: 'Cost / Bad Lead', value: costMetrics.costPerBadLead, previous: previousCostMetrics?.costPerBadLead ?? null, format: 'currency', invertColor: true, note: 'Lead tier < $100k' },
+      { key: 'costPerGoodLeadQualified', label: 'Cost / Good Lead ($250k-$999k)', value: costMetrics.costPerGoodLeadQualified, previous: previousCostMetrics?.costPerGoodLeadQualified ?? null, format: 'currency', invertColor: true, note: 'Qualified lead tier' },
+      { key: 'costPerGreatLead1m', label: 'Cost / Great Lead ($1M+)', value: costMetrics.costPerGreatLead1m, previous: previousCostMetrics?.costPerGreatLead1m ?? null, format: 'currency', invertColor: true, note: 'Top lead tier' },
+      { key: 'costPerHighQualityLead250kPlus', label: 'Cost / High-Quality Lead ($250k+)', value: costMetrics.costPerHighQualityLead250kPlus, previous: previousCostMetrics?.costPerHighQualityLead250kPlus ?? null, format: 'currency', invertColor: true, note: 'Qualified + Great leads' },
+    ];
+
+    const greatMembersBySource = currentGreatSourceRows.map((row) => ({
+      ...row,
+      previousGreatMembers: Number(previousGreatSourceRowsByLabel.get(row.label)?.goodRepeatMembers || 0),
+      previousShare: previousGreatSourceRowsByLabel.get(row.label)?.goodMemberShare ?? null,
+    })).sort((a, b) => (b.greatMembers - a.greatMembers) || (b.repeatMembers - a.repeatMembers) || a.label.localeCompare(b.label));
+
+    const greatRevenueValues = currentGreatMembers.map((r) => toNumberOrNull(r.revenue)).filter((v) => Number.isFinite(v));
+    const greatAttendanceValues = currentGreatMembers.map((r) => Number(r.totalZoomAttendances || 0)).filter((v) => Number.isFinite(v));
+    const bothDayCount = currentGreatMembers.filter((r) => r.greatMemberCrossesTueThu === 'Yes').length;
+    const topSource = greatMembersBySource[0] || null;
+    const topMetaCohort = metaGreatAttributionRows[0] || null;
+
+    const similarityBullets = [];
+    similarityBullets.push(`Great members (3+ Zoom + $250k+) in range: ${currentGreatMembers.length}.`);
+    if (topSource) similarityBullets.push(`Largest great-member source bucket: ${topSource.label} (${topSource.greatMembers} members, ${fmt.pct(topSource.share || 0)} of great members).`);
+    if (metaGreatMembers.length > 0) similarityBullets.push(`${metaGreatMembers.length} great members are attributed to Paid Social (Meta).`);
+    if (Number.isFinite(mean(greatAttendanceValues))) similarityBullets.push(`Average attendances among great members: ${mean(greatAttendanceValues).toFixed(1)} (median ${median(greatAttendanceValues)?.toFixed(1) || 'N/A'}).`);
+    if (Number.isFinite(mean(greatRevenueValues))) similarityBullets.push(`Average revenue among great members: ${fmt.currency(mean(greatRevenueValues))} (median ${fmt.currency(median(greatRevenueValues))}).`);
+    if (currentGreatMembers.length > 0) similarityBullets.push(`${bothDayCount} of ${currentGreatMembers.length} great members attend both Tuesday and Thursday (${fmt.pct(safeRatio(bothDayCount, currentGreatMembers.length) || 0)}).`);
+    if (topMetaCohort) {
+      similarityBullets.push(`Top Meta great-member cohort: ${topMetaCohort.inferredMetaAdset !== 'Not Found' ? topMetaCohort.inferredMetaAdset : topMetaCohort.metaCampaignRaw} (${topMetaCohort.greatMemberCount} members, est ${fmt.currency(topMetaCohort.estCostPerGreatMemberCampaignAcqInRange ?? topMetaCohort.estCostPerGreatMemberCampaignActive)} per great member using campaign spend in selected range).`);
+    }
+
+    return {
+      currentWindow,
+      previousWindow,
+      costCards,
+      greatMembers: currentGreatMembers,
+      greatMembersBySource,
+      metaGreatAttributionRows,
+      similarityBullets,
+      diagnostics: {
+        totalGreatMembers: currentGreatMembers.length,
+        paidMetaGreatMembers: metaGreatMembers.length,
+        unattributedGreatMembers: currentGreatMembers.filter((r) => ['Unknown', 'Other'].includes(String(r.sourceBucket || ''))).length,
+      },
+    };
+  }, [groupedData, zoomSourceModule, rawAds, dateWindows]);
 
   // Modal helper
   const openModal = useCallback((type, snap, groupLabel) => {
@@ -1394,6 +3033,25 @@ export default function LeadsDashboard() {
     const n = Number(v);
     return Number.isFinite(n) ? fmt.pct(n) : 'N/A';
   };
+  const currentMissingHubspotCallSessions = zoomSourceModule?.current?.missingHubspotCallSessions || [];
+  const currentActionableMissingHubspotCallSessions = currentMissingHubspotCallSessions.filter((r) => String(r?.actionRequired || '') === 'Yes');
+  const currentLikelyNoMeetingHubspotCallSessions = currentMissingHubspotCallSessions.filter((r) => String(r?.missingCategory || '') === 'likely_no_meeting');
+  const unifiedCurrent = unifiedFunnelModule?.current || null;
+  const unifiedPrevious = unifiedFunnelModule?.previous || null;
+  const openUnifiedDrilldown = (title, columns, rows, options = {}) => {
+    setModal({
+      title,
+      columns,
+      rows: rows || [],
+      highlightKey: options.highlightKey,
+    });
+  };
+  const confidenceChangePct = (sectionKey, confidence) => {
+    const curRow = unifiedCurrent?.matchConfidenceBreakdown?.[sectionKey]?.find((r) => r.confidence === confidence);
+    const prevRow = unifiedPrevious?.matchConfidenceBreakdown?.[sectionKey]?.find((r) => r.confidence === confidence);
+    if (!curRow || !prevRow) return null;
+    return computeChangePct(curRow.count || 0, prevRow.count || 0).pct;
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -1418,11 +3076,434 @@ export default function LeadsDashboard() {
 
       {/* ── TOP INSIGHTS: BEST MEMBERS (ZOOM-FIRST) ── */}
       <div style={card}>
+        {/* Additive unified funnel module: HubSpot-first identity stitching */}
+          <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Unified Funnel (Meta to Lu.ma to Zoom)</h3>
+          <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b' }}>
+            Uses HubSpot as source of truth for contacts and attribution. Matching priority is primary email, then <code>hs_additional_emails</code>, then full name, then fuzzy name. HubSpot Call coverage is tracked separately for Zoom reliability monitoring.
+          </p>
+
+          {!unifiedCurrent ? (
+            <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>No unified funnel data available in this window.</p>
+          ) : (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: '10px' }}>
+                {[
+                  { label: 'Meta Leads (Base)', value: fmt.int(unifiedCurrent.funnel.metaLeadCount || 0), changePct: unifiedPrevious ? computeChangePct(unifiedCurrent.funnel.metaLeadCount || 0, unifiedPrevious?.funnel?.metaLeadCount || 0).pct : null, rows: unifiedCurrent.unifiedLeadRecords },
+                  { label: 'Luma Registered', value: fmt.int(unifiedCurrent.funnel.lumaRegisteredCount || 0), changePct: unifiedPrevious ? computeChangePct(unifiedCurrent.funnel.lumaRegisteredCount || 0, unifiedPrevious?.funnel?.lumaRegisteredCount || 0).pct : null, rows: (unifiedCurrent.unifiedLeadRecords || []).filter((r) => r.luma_registered) },
+                  { label: 'Zoom Attended', value: fmt.int(unifiedCurrent.funnel.zoomAttendedCount || 0), changePct: unifiedPrevious ? computeChangePct(unifiedCurrent.funnel.zoomAttendedCount || 0, unifiedPrevious?.funnel?.zoomAttendedCount || 0).pct : null, rows: (unifiedCurrent.unifiedLeadRecords || []).filter((r) => r.zoom_attended) },
+                  { label: 'Meta -> Luma Rate', value: fmtMaybePct(unifiedCurrent.funnel.metaToLumaRate), changePct: unifiedPrevious ? computeChangePct(unifiedCurrent.funnel.metaToLumaRate || 0, unifiedPrevious?.funnel?.metaToLumaRate || 0).pct : null },
+                  { label: 'Luma -> Zoom Rate', value: fmtMaybePct(unifiedCurrent.funnel.lumaToZoomRate), changePct: unifiedPrevious ? computeChangePct(unifiedCurrent.funnel.lumaToZoomRate || 0, unifiedPrevious?.funnel?.lumaToZoomRate || 0).pct : null },
+                  { label: 'Meta -> Zoom Rate', value: fmtMaybePct(unifiedCurrent.funnel.metaToZoomRate), changePct: unifiedPrevious ? computeChangePct(unifiedCurrent.funnel.metaToZoomRate || 0, unifiedPrevious?.funnel?.metaToZoomRate || 0).pct : null },
+                  { label: 'HubSpot Call Coverage (Zoom)', value: fmtMaybePct(unifiedCurrent.hubspotCallCoverage?.rate), changePct: unifiedPrevious ? computeChangePct(unifiedCurrent.hubspotCallCoverage?.rate || 0, unifiedPrevious?.hubspotCallCoverage?.rate || 0).pct : null, rows: unifiedCurrent.stageRows.zoomRowsDetailed },
+                  { label: 'Review Queue', value: fmt.int(unifiedCurrent.stageRows.reviewQueueRows?.length || 0), rows: unifiedCurrent.stageRows.reviewQueueRows },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    onClick={() => {
+                      if (!item.rows) return;
+                      const isBase = item.label === 'Meta Leads (Base)';
+                      const isLuma = item.label === 'Luma Registered';
+                      const isZoom = item.label === 'Zoom Attended';
+                      const isCoverage = item.label.includes('HubSpot Call Coverage');
+                      const columns = isBase ? [
+                        { key: 'hubspotContactId', label: 'HubSpot Contact ID', type: 'number' },
+                        { key: 'hubspotName', label: 'Name' },
+                        { key: 'hubspotPrimaryEmail', label: 'Primary Email' },
+                        { key: 'hubspotSecondaryEmailsText', label: 'Secondary Emails' },
+                        { key: 'hubspotCreatedDate', label: 'Meta Lead Date' },
+                        { key: 'luma_registered_label', label: 'Luma Registered?' },
+                        { key: 'zoom_attended_label', label: 'Zoom Attended?' },
+                        { key: 'lumaMatchConfidence', label: 'Luma Match Confidence' },
+                        { key: 'zoomMatchConfidence', label: 'Zoom Match Confidence' },
+                        { key: 'hubspotCallLinkedLabel', label: 'HubSpot Call Linked?' },
+                        { key: 'sourceBucket', label: 'Source Bucket' },
+                        { key: 'revenue', label: 'Revenue', type: 'currency' },
+                      ] : isLuma ? [
+                        { key: 'hubspotName', label: 'Name' },
+                        { key: 'hubspotPrimaryEmail', label: 'Primary Email' },
+                        { key: 'lumaRegistrationCount', label: 'Luma Registrations', type: 'number' },
+                        { key: 'lumaMatchConfidence', label: 'Luma Match Confidence' },
+                        { key: 'lumaMatchSource', label: 'Luma Match Source' },
+                        { key: 'lumaMatchReason', label: 'Luma Match Reason' },
+                        { key: 'zoom_attended_label', label: 'Zoom Attended?' },
+                      ] : (isZoom || isCoverage) ? [
+                        { key: isZoom ? 'hubspotName' : 'attendeeName', label: isZoom ? 'Name' : 'Zoom Attendee' },
+                        { key: isZoom ? 'hubspotPrimaryEmail' : 'matchedHubspotEmail', label: 'Email' },
+                        { key: isZoom ? 'zoomAttendanceCount' : 'date', label: isZoom ? 'Zoom Attendances' : 'Date', type: isZoom ? 'number' : undefined },
+                        { key: isZoom ? 'zoomMatchConfidence' : 'matchConfidence', label: 'Match Confidence' },
+                        { key: isZoom ? 'zoomMatchSource' : 'matchSource', label: 'Match Source' },
+                        { key: isZoom ? 'hubspotCallLinkedLabel' : 'hubspotCallLinked', label: 'HubSpot Call Linked?' },
+                        { key: isZoom ? 'hubspotCallMatchCount' : 'hubspotCallCoverageSource', label: isZoom ? 'HubSpot Call Matches' : 'Call Coverage Source', type: isZoom ? 'number' : undefined },
+                        { key: isZoom ? 'sourceBucket' : 'matchReason', label: isZoom ? 'Source Bucket' : 'Reason' },
+                        { key: isZoom ? 'revenue' : 'candidateHints', label: isZoom ? 'Revenue' : 'Candidate Hints', type: isZoom ? 'currency' : undefined },
+                      ] : [
+                        { key: 'reviewArea', label: 'Review Area' },
+                        { key: 'date', label: 'Date' },
+                        { key: 'dayType', label: 'Day' },
+                        { key: 'name', label: 'Luma Name' },
+                        { key: 'email', label: 'Email' },
+                        { key: 'attendeeName', label: 'Zoom Attendee' },
+                        { key: 'matchConfidence', label: 'Match Confidence' },
+                        { key: 'matchSource', label: 'Match Source' },
+                        { key: 'missingReason', label: 'Missing Reason' },
+                        { key: 'candidateHints', label: 'Candidate Hints' },
+                      ];
+                      openUnifiedDrilldown(`Unified Funnel - ${item.label}`, columns, item.rows, { highlightKey: isCoverage ? 'hubspotCallLinked' : undefined });
+                    }}
+                    style={{ ...subCard, cursor: item.rows ? 'pointer' : 'default', borderLeft: item.label.includes('Coverage') ? '4px solid #2563eb' : item.label.includes('Rate') ? '4px solid #16a34a' : '4px solid #0f766e' }}
+                  >
+                    <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>{item.label}</p>
+                    <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
+                      {item.value}
+                      {(item.changePct !== null && item.changePct !== undefined) && <ChangeBadge changePct={item.changePct} />}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ marginTop: '14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                {[
+                  { key: 'luma', title: 'Lu.ma -> HubSpot Match Confidence', rows: unifiedCurrent.matchConfidenceBreakdown?.luma || [], sourceRows: unifiedCurrent.stageRows.lumaRowsDetailed || [] },
+                  { key: 'zoom', title: 'Zoom -> HubSpot Match Confidence', rows: unifiedCurrent.matchConfidenceBreakdown?.zoom || [], sourceRows: unifiedCurrent.stageRows.zoomRowsDetailed || [] },
+                ].map((section) => (
+                  <div key={section.key} style={{ ...subCard, border: '1px solid #e2e8f0' }}>
+                    <p style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>{section.title}</p>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#f8fafc' }}>
+                          <th style={{ textAlign: 'left', padding: '6px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#475569' }}>Confidence</th>
+                          <th style={{ textAlign: 'right', padding: '6px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#475569' }}>Count</th>
+                          <th style={{ textAlign: 'right', padding: '6px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#475569' }}>Share</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {section.rows.map((row) => (
+                          <tr
+                            key={`${section.key}-${row.confidence}`}
+                            onClick={() => openUnifiedDrilldown(
+                              `Unified Funnel - ${section.title}: ${row.confidence}`,
+                              section.key === 'luma'
+                                ? [
+                                  { key: 'date', label: 'Date' },
+                                  { key: 'name', label: 'Name' },
+                                  { key: 'email', label: 'Email' },
+                                  { key: 'matchConfidence', label: 'Match Confidence' },
+                                  { key: 'matchSource', label: 'Match Source' },
+                                  { key: 'matchReason', label: 'Reason' },
+                                  { key: 'candidateHints', label: 'Candidate Hints' },
+                                  { key: 'matchedHubspotContactId', label: 'HubSpot Contact ID', type: 'number' },
+                                  { key: 'matchedHubspotName', label: 'HubSpot Name' },
+                                  { key: 'matchedHubspotEmail', label: 'HubSpot Email' },
+                                ]
+                                : [
+                                  { key: 'date', label: 'Date' },
+                                  { key: 'dayType', label: 'Day' },
+                                  { key: 'attendeeName', label: 'Zoom Attendee' },
+                                  { key: 'matchedHubspot', label: 'Matched HubSpot?' },
+                                  { key: 'matchedHubspotName', label: 'HubSpot Name' },
+                                  { key: 'matchedHubspotEmail', label: 'HubSpot Email' },
+                                  { key: 'matchConfidence', label: 'Match Confidence' },
+                                  { key: 'matchSource', label: 'Match Source' },
+                                  { key: 'hubspotCallLinked', label: 'HubSpot Call Linked?' },
+                                  { key: 'hubspotCallCoverageSource', label: 'Call Coverage Source' },
+                                  { key: 'matchReason', label: 'Reason' },
+                                  { key: 'candidateHints', label: 'Candidate Hints' },
+                                ],
+                              section.sourceRows.filter((r) => (r.matchConfidence || 'unmatched') === row.confidence),
+                              { highlightKey: section.key === 'zoom' ? 'hubspotCallLinked' : undefined }
+                            )}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <td style={{ padding: '6px', borderBottom: '1px solid #f1f5f9', fontSize: '11px' }}>{row.confidence}</td>
+                            <td style={{ padding: '6px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmt.int(row.count)}</td>
+                            <td style={{ padding: '6px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>
+                              {fmtMaybePct(row.pct)}
+                              {unifiedPrevious && <ChangeBadge changePct={confidenceChangePct(section.key, row.confidence)} />}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ marginTop: '14px', border: '1px solid #e2e8f0', borderRadius: '12px', overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f8fafc' }}>
+                      <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>Issue Bucket</th>
+                      <th style={{ textAlign: 'right', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>Rows</th>
+                      <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>Why It Matters</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      ['Meta leads missing Lu.ma', unifiedCurrent.stageRows.metaNoLumaRows || [], 'Meta paid contacts with no Lu.ma registration in this window.'],
+                      ['Meta leads missing Zoom', unifiedCurrent.stageRows.metaNoZoomRows || [], 'Meta paid contacts with no Zoom attendance in this window.'],
+                      ['Lu.ma unmatched to HubSpot', unifiedCurrent.stageRows.unmatchedLumaRows || [], 'Usually duplicate/merge timing or alternate-email/name mismatch.'],
+                      ['Zoom unmatched to HubSpot', unifiedCurrent.stageRows.unmatchedZoomRows || [], 'Alias/device-name or missing call mapping problem.'],
+                      ['Lu.ma matched but not Meta lead', unifiedCurrent.stageRows.lumaMatchedNonMetaRows || [], 'Real contacts, but not in the Meta paid base for this date window.'],
+                      ['Zoom matched but not Meta lead', unifiedCurrent.stageRows.zoomMatchedNonMetaRows || [], 'Shows attendance outside the Meta paid base.'],
+                    ].map(([label, rows, note]) => (
+                      <tr
+                        key={label}
+                        onClick={() => {
+                          const lower = String(label).toLowerCase();
+                          const isMetaGap = lower.startsWith('meta leads');
+                          const isZoomBucket = lower.includes('zoom') && !isMetaGap;
+                          const columns = isMetaGap
+                            ? [
+                              { key: 'hubspotContactId', label: 'HubSpot Contact ID', type: 'number' },
+                              { key: 'hubspotName', label: 'Name' },
+                              { key: 'hubspotPrimaryEmail', label: 'Primary Email' },
+                              { key: 'hubspotSecondaryEmails', label: 'Secondary Emails' },
+                              { key: 'metaLeadDate', label: 'Meta Lead Date' },
+                              { key: 'lumaRegistered', label: 'Luma Registered?' },
+                              { key: 'lumaMatchConfidence', label: 'Luma Match Confidence' },
+                              { key: 'sourceBucket', label: 'Source Bucket' },
+                              { key: 'originalTrafficSource', label: 'Original Traffic Source' },
+                              { key: 'originalTrafficSourceDetail1', label: 'OTS Detail 1' },
+                              { key: 'originalTrafficSourceDetail2', label: 'OTS Detail 2' },
+                              { key: 'missingReason', label: 'Missing Reason' },
+                            ]
+                            : isZoomBucket
+                              ? [
+                                { key: 'date', label: 'Date' },
+                                { key: 'dayType', label: 'Day' },
+                                { key: 'attendeeName', label: 'Zoom Attendee' },
+                                { key: 'matchedHubspot', label: 'Matched HubSpot?' },
+                                { key: 'matchedHubspotName', label: 'HubSpot Name' },
+                                { key: 'matchedHubspotEmail', label: 'HubSpot Email' },
+                                { key: 'matchConfidence', label: 'Match Confidence' },
+                                { key: 'matchSource', label: 'Match Source' },
+                                { key: 'hubspotCallLinked', label: 'HubSpot Call Linked?' },
+                                { key: 'missingReason', label: 'Missing Reason' },
+                                { key: 'candidateHints', label: 'Candidate Hints' },
+                              ]
+                              : [
+                                { key: 'date', label: 'Date' },
+                                { key: 'name', label: 'Name' },
+                                { key: 'email', label: 'Email' },
+                                { key: 'matchConfidence', label: 'Match Confidence' },
+                                { key: 'matchSource', label: 'Match Source' },
+                                { key: 'matchedHubspotContactId', label: 'HubSpot Contact ID', type: 'number' },
+                                { key: 'matchedHubspotName', label: 'HubSpot Name' },
+                                { key: 'matchedHubspotEmail', label: 'HubSpot Email' },
+                                { key: 'missingReason', label: 'Missing Reason' },
+                                { key: 'candidateHints', label: 'Candidate Hints' },
+                              ];
+                          openUnifiedDrilldown(`Unified Funnel - ${label}`, columns, rows);
+                        }}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', fontWeight: 600, color: '#0f172a' }}>{label}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right', color: '#334155' }}>{fmt.int(rows.length)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#64748b' }}>{note}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p style={{ margin: '10px 0 0', fontSize: '11px', color: '#64748b' }}>
+                HubSpot Call coverage = % of Zoom attendee rows in this window with a matching HubSpot Call record (materialized mapping if present, otherwise name/email association checks with +/-1 day tolerance).
+              </p>
+            </>
+          )}
+      </div>
+
+      {/* â”€â”€ TOP INSIGHTS: BEST MEMBERS (ZOOM-FIRST) â”€â”€ */}
+      {leadsDecisionModule && (
+        <div style={card}>
+          <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Leads Decision KPIs (Costs + Great Members)</h3>
+          <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b' }}>
+            Decision layer for paid Meta efficiency and member quality. Great member = 3+ Zoom attendances and revenue â‰¥ $250k. HubSpot Calls (Tue/Thu scheduled) are used as the primary attendance truth.
+          </p>
+
+          <div style={{ ...subCard, border: '1px solid #dbeafe', backgroundColor: '#eff6ff', marginBottom: '12px' }}>
+            <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#1d4ed8' }}>Key Findings In This Range</p>
+            {(leadsDecisionModule.similarityBullets || []).slice(0, 6).map((line, idx) => (
+              <p key={`ldm-sim-${idx}`} style={{ margin: '4px 0 0', fontSize: '12px', color: '#1e3a8a' }}>{line}</p>
+            ))}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: '10px' }}>
+            {(leadsDecisionModule.costCards || []).map((metric) => {
+              const changePct = (metric.previous === null || metric.previous === undefined)
+                ? null
+                : computeChangePct(metric.value, metric.previous).pct;
+              return (
+                <div key={metric.key} style={{ ...subCard, borderLeft: `4px solid ${metric.label.toLowerCase().includes('great member') ? '#1d4ed8' : '#0f766e'}` }}>
+                  <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>{metric.label}</p>
+                  <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
+                    {metric.format === 'currency' ? fmtMaybeCurrency(metric.value) : fmt.int(metric.value)}
+                    {changePct !== null && <ChangeBadge changePct={changePct} invertColor={metric.invertColor !== false} />}
+                  </p>
+                  <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#64748b' }}>{metric.note}</p>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ ...subCard, border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Great Members by Source</p>
+                <button
+                  type="button"
+                  onClick={() => setModal({
+                    title: 'Great Members (3+ Zoom + $250k+)',
+                    columns: [
+                      { key: 'greatMemberName', label: 'Name' },
+                      { key: 'greatMemberEmail', label: 'Email' },
+                      { key: 'sourceBucket', label: 'Source Bucket' },
+                      { key: 'sourceAttributionMethod', label: 'Attribution Method' },
+                      { key: 'originalTrafficSource', label: 'Original Traffic Source' },
+                      { key: 'originalTrafficSourceDetail1', label: 'OTS Detail 1' },
+                      { key: 'originalTrafficSourceDetail2', label: 'OTS Detail 2' },
+                      { key: 'inferredMetaAdset', label: 'Inferred Meta Ad Set' },
+                      { key: 'inferredMetaTopAd', label: 'Top Ad (Spend Proxy)' },
+                      { key: 'totalZoomAttendances', label: 'Attendances', type: 'number' },
+                      { key: 'revenue', label: 'Revenue', type: 'currency' },
+                      { key: 'hubspotCreatedDate', label: 'HubSpot Created Date' },
+                      { key: 'acquiredInSelectedRange', label: 'Acq In Range?' },
+                    ],
+                    rows: leadsDecisionModule.greatMembers || [],
+                  })}
+                  style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#fff', fontSize: '11px', cursor: 'pointer' }}
+                >
+                  Open Great Members
+                </button>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '560px' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f8fafc' }}>
+                      {['Source', 'Great Members', '% Great', 'Repeat (2+)', 'Unique', 'Great Rate'].map((h) => (
+                        <th key={h} style={{ textAlign: h === 'Source' ? 'left' : 'right', padding: '6px 8px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#475569' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(leadsDecisionModule.greatMembersBySource || []).slice(0, 8).map((row) => (
+                      <tr key={`great-source-${row.label}`}>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', fontWeight: 600, color: '#0f172a' }}>{row.label}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmt.int(row.greatMembers)}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmtMaybePct(row.share)}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmt.int(row.repeatMembers)}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmt.int(row.uniqueAttendees)}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmtMaybePct(row.goodRate)}</td>
+                      </tr>
+                    ))}
+                    {(leadsDecisionModule.greatMembersBySource || []).length === 0 && (
+                      <tr><td colSpan={6} style={{ padding: '8px', fontSize: '11px', color: '#64748b' }}>No great members in this range.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div style={{ ...subCard, border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Meta Great-Member Cohorts (HubSpot Campaign + Inferred Ad Set)</p>
+                <button
+                  type="button"
+                  onClick={() => setModal({
+                    title: 'Meta Great-Member Attribution Cohorts',
+                    columns: [
+                      { key: 'metaCampaignRaw', label: 'HubSpot Campaign (OTS Detail 2)' },
+                      { key: 'inferredMetaAdset', label: 'Inferred Ad Set' },
+                      { key: 'inferredMetaTopAd', label: 'Top Ad (Spend Proxy)' },
+                      { key: 'greatMemberCount', label: 'Great Members', type: 'number' },
+                      { key: 'acquiredInRangeCount', label: 'Acq In Range', type: 'number' },
+                      { key: 'totalAttendances', label: 'Total Attendances', type: 'number' },
+                      { key: 'avgRevenue', label: 'Avg Revenue', type: 'currency' },
+                      { key: 'medianRevenue', label: 'Median Revenue', type: 'currency' },
+                      { key: 'campaignSpendInRange', label: 'Campaign Spend (Range)', type: 'currency' },
+                      { key: 'estCostPerGreatMemberCampaignActive', label: 'Est Cost / Great (Active)', type: 'currency' },
+                      { key: 'estCostPerGreatMemberCampaignAcqInRange', label: 'Est Cost / Great (Acq In Range)', type: 'currency' },
+                      { key: 'estCplCampaign', label: 'Campaign CPL (Range)', type: 'currency' },
+                      { key: 'greatMemberNames', label: 'Great Members' },
+                    ],
+                    rows: leadsDecisionModule.metaGreatAttributionRows || [],
+                  })}
+                  style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#fff', fontSize: '11px', cursor: 'pointer' }}
+                >
+                  Open Full Table
+                </button>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '820px' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f8fafc' }}>
+                      {['Campaign (HubSpot)', 'Inferred Ad Set', 'Great', 'Acq In Range', 'Campaign Spend', 'Est Cost / Great (Acq)', 'Avg Rev', 'Top Ad (Proxy)'].map((h) => (
+                        <th key={h} style={{ textAlign: (h.includes('Campaign') || h.includes('Set') || h.includes('Proxy')) ? 'left' : 'right', padding: '6px 8px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#475569' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(leadsDecisionModule.metaGreatAttributionRows || []).slice(0, 10).map((row) => (
+                      <tr key={`meta-great-${row.key}`} style={{ backgroundColor: row.greatMemberCount > 1 ? '#fef2f2' : '#fff' }}>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', fontWeight: 600, color: '#0f172a' }}>{row.metaCampaignRaw || 'Not Found'}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155' }}>{row.inferredMetaAdset || 'Not Found'}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmt.int(row.greatMemberCount)}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmt.int(row.acquiredInRangeCount)}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmtMaybeCurrency(row.campaignSpendInRange)}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmtMaybeCurrency(row.estCostPerGreatMemberCampaignAcqInRange ?? row.estCostPerGreatMemberCampaignActive)}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmtMaybeCurrency(row.avgRevenue)}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#64748b' }}>{row.inferredMetaTopAd || 'Not Found'}</td>
+                      </tr>
+                    ))}
+                    {(leadsDecisionModule.metaGreatAttributionRows || []).length === 0 && (
+                      <tr><td colSpan={8} style={{ padding: '8px', fontSize: '11px', color: '#64748b' }}>No paid Meta great-member cohorts found in this range.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <p style={{ margin: '8px 0 0', fontSize: '10px', color: '#64748b' }}>
+                Ad set/ad detail is inferred from Meta spend rows using HubSpot campaign source detail. This is directional until click-ID-level attribution is captured end-to-end.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={card}>
         <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Best Member Source Insights (Zoom-First)</h3>
         <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b' }}>
           Starts from actual Zoom attendance (Tuesday + Thursday), then matches to HubSpot to identify where the best members came from.
           Good member = 3+ Zoom attendances and revenue ≥ $250k.
         </p>
+
+        <div
+          style={{
+            ...subCard,
+            border: `1px solid ${currentActionableMissingHubspotCallSessions.length > 0 ? '#fecaca' : '#bbf7d0'}`,
+            backgroundColor: currentActionableMissingHubspotCallSessions.length > 0 ? '#fef2f2' : '#f0fdf4',
+            marginBottom: '12px',
+          }}
+        >
+          <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Attendance Truth Source</p>
+          <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#334155' }}>
+            {zoomSourceModule.attendanceTruthMode || 'HubSpot Calls (Tue/Thu scheduled) primary'}
+          </p>
+          <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>
+            HubSpot Calls near Tuesday 12:00 ET and Thursday 11:00 ET are the source of truth for show-ups.
+            Zoom is fallback/audit only when a HubSpot Call is missing.
+          </p>
+          <p
+            style={{
+              margin: '4px 0 0',
+              fontSize: '11px',
+              fontWeight: 600,
+              color: currentActionableMissingHubspotCallSessions.length > 0 ? '#991b1b' : '#166534',
+            }}
+          >
+            Missing expected HubSpot Calls in selected range (actionable): {fmt.int(currentActionableMissingHubspotCallSessions.length)}
+            {' '}| HubSpot Call sessions found (Tue/Thu scheduled): {fmt.int(zoomSourceModule.current?.hubspotCallTruthSessionCount || 0)}
+            {' '}| Likely no-meeting/holiday dates: {fmt.int(currentLikelyNoMeetingHubspotCallSessions.length)}
+          </p>
+        </div>
 
         <div style={{ ...subCard, border: '1px solid #dbeafe', backgroundColor: '#eff6ff', marginBottom: '12px' }}>
           <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#1d4ed8' }}>AI Recommendations (Top Priority)</p>
@@ -1458,10 +3539,21 @@ export default function LeadsDashboard() {
           <div style={{ ...subCard, borderLeft: '4px solid #0f766e' }}>
             <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Paid Meta Cost / Good Member</p>
             <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmtMaybeCurrency(zoomSourceModule.current.paidMeta.costPerGoodRepeatMember)}</p>
+            <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#64748b' }}>Blended active-window estimate (can include older paid cohorts)</p>
+          </div>
+          <div style={{ ...subCard, borderLeft: '4px solid #1d4ed8' }}>
+            <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Paid Meta Cost / Good Member (Acq In Range)</p>
+            <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmtMaybeCurrency(zoomSourceModule.current.paidMeta.costPerGoodRepeatMemberAcquiredInRange)}</p>
+            <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#64748b' }}>
+              Uses paid good members whose HubSpot `createdate` is inside the selected window
+            </p>
           </div>
           <div style={{ ...subCard, borderLeft: '4px solid #0f766e' }}>
             <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Paid Meta Good Members</p>
             <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmt.int(zoomSourceModule.current.paidMeta.goodRepeatMembers || 0)}</p>
+            <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#64748b' }}>
+              Acq in range: {fmt.int(zoomSourceModule.current.paidMeta.goodRepeatMembersAcquiredInRange || 0)} | Older cohorts active: {fmt.int(zoomSourceModule.current.paidMeta.goodRepeatMembersAcquiredBeforeRange || 0)}
+            </p>
           </div>
           <div style={{ ...subCard, borderLeft: '4px solid #0f766e' }}>
             <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Tuesday Meta Share (Matched)</p>
@@ -1471,6 +3563,80 @@ export default function LeadsDashboard() {
             <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Zoom Attribution Match Rate</p>
             <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmtMaybePct(zoomSourceModule.current.matchRate)}</p>
           </div>
+          <div style={{ ...subCard, borderLeft: `4px solid ${currentActionableMissingHubspotCallSessions.length > 0 ? '#dc2626' : '#16a34a'}` }}>
+            <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Missing HubSpot Calls (Tue/Thu)</p>
+            <p
+              style={{
+                margin: '6px 0 0',
+                fontSize: '16px',
+                fontWeight: 800,
+                color: currentActionableMissingHubspotCallSessions.length > 0 ? '#991b1b' : '#166534',
+              }}
+            >
+              {fmt.int(currentActionableMissingHubspotCallSessions.length)}
+            </p>
+            <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#64748b' }}>
+              Manually backfill in HubSpot, then re-sync to upgrade attendance truth automatically
+            </p>
+          </div>
+        </div>
+
+        <div style={{ marginTop: '12px', ...subCard, border: '1px solid #e2e8f0' }}>
+          <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>
+            Missing HubSpot Call Sessions (Tuesday/Thursday)
+          </p>
+          <p style={{ margin: '4px 0 8px', fontSize: '11px', color: '#64748b' }}>
+            Expected Tuesday 12:00 ET and Thursday 11:00 ET sessions with no matching HubSpot Call. Rows with no Zoom data are marked as likely no-meeting / holiday.
+          </p>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '860px' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f8fafc' }}>
+                  {['Date', 'Day', 'Expected Time (ET)', 'HubSpot Call Present', 'Zoom Fallback Rows', 'Zoom Fallback Attendees', 'Zoom Meeting IDs (Audit)'].map((h) => (
+                    <th
+                      key={h}
+                      style={{
+                        textAlign: (h === 'Date' || h === 'Day' || h === 'Expected Time (ET)' || h === 'Zoom Meeting IDs (Audit)') ? 'left' : 'right',
+                        padding: '6px 8px',
+                        borderBottom: '1px solid #e2e8f0',
+                        fontSize: '11px',
+                        color: '#475569',
+                      }}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {currentMissingHubspotCallSessions.slice(0, 25).map((row) => (
+                  <tr key={`missing-hs-call-${row.date}-${row.dayType}`} style={{ backgroundColor: row.missingCategory === 'likely_no_meeting' ? '#f8fafc' : '#fff7ed' }}>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#0f172a', fontWeight: 600 }}>{row.date}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155' }}>{row.dayType}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155' }}>{row.expectedEtTime}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: row.missingCategory === 'likely_no_meeting' ? '#64748b' : '#991b1b', fontWeight: 700, textAlign: 'right' }}>
+                      {row.missingCategory === 'likely_no_meeting' ? 'No (Likely No Meeting)' : row.hubspotCallPresent}
+                    </td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155', textAlign: 'right' }}>{fmt.int(row.zoomFallbackRowCount || 0)}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155', textAlign: 'right' }}>{fmt.int(row.zoomFallbackAttendeeCount || 0)}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#64748b' }}>{row.zoomFallbackMeetingIds || '—'}</td>
+                  </tr>
+                ))}
+                {currentMissingHubspotCallSessions.length === 0 && (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '8px', fontSize: '11px', color: '#166534' }}>
+                      No missing Tuesday/Thursday HubSpot Call sessions in the selected range.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          {currentMissingHubspotCallSessions.length > 25 && (
+            <p style={{ margin: '8px 0 0', fontSize: '10px', color: '#64748b' }}>
+              Showing first 25 missing sessions. Narrow the date range to inspect all.
+            </p>
+          )}
         </div>
 
         <div style={{ marginTop: '12px', border: '1px solid #e2e8f0', borderRadius: '12px', overflowX: 'auto' }}>
@@ -1502,6 +3668,42 @@ export default function LeadsDashboard() {
               )}
             </tbody>
           </table>
+        </div>
+
+        <div style={{ marginTop: '12px', ...subCard, border: '1px solid #fde68a', backgroundColor: '#fffbeb' }}>
+          <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#92400e' }}>
+            Top Unmatched Repeat Attendees (Alias / Matching Cleanup Queue)
+          </p>
+          <p style={{ margin: '4px 0 8px', fontSize: '11px', color: '#92400e' }}>
+            These are repeat attendees (2+) with no HubSpot match. This is where alias cleanup will most improve attribution quality.
+          </p>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '820px' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#fef3c7' }}>
+                  {['Zoom Name', 'Attendances', 'Tuesday', 'Thursday', 'Match Type', 'Why Not Matched', 'Candidate Hints'].map((h) => (
+                    <th key={h} style={{ textAlign: h === 'Zoom Name' || h.includes('Why') || h.includes('Hints') ? 'left' : 'right', padding: '6px 8px', borderBottom: '1px solid #fde68a', fontSize: '11px', color: '#78350f' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(zoomSourceModule.current.topUnmatchedRepeatRows || []).map((r) => (
+                  <tr key={`unmatched-repeat-${r.attendeeKey}`}>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #fef3c7', fontSize: '11px', color: '#78350f', fontWeight: 600 }}>{r.attendeeName}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #fef3c7', fontSize: '11px', color: '#78350f', textAlign: 'right' }}>{fmt.int(r.totalZoomAttendances)}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #fef3c7', fontSize: '11px', color: '#78350f', textAlign: 'right' }}>{fmt.int(r.tuesdayAttendances)}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #fef3c7', fontSize: '11px', color: '#78350f', textAlign: 'right' }}>{fmt.int(r.thursdayAttendances)}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #fef3c7', fontSize: '11px', color: '#78350f', textAlign: 'right' }}>{r.matchType}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #fef3c7', fontSize: '11px', color: '#78350f' }}>{r.matchWhy || '—'}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #fef3c7', fontSize: '11px', color: '#78350f' }}>{r.matchCandidateExamples || '—'}</td>
+                  </tr>
+                ))}
+                {(!zoomSourceModule.current.topUnmatchedRepeatRows || zoomSourceModule.current.topUnmatchedRepeatRows.length === 0) && (
+                  <tr><td colSpan={7} style={{ padding: '8px', fontSize: '11px', color: '#78350f' }}>No unmatched repeat attendees in this range.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -1883,11 +4085,19 @@ export default function LeadsDashboard() {
                         { key: 'rawName', label: 'Zoom Attendee (Raw)' },
                         { key: 'matchedHubspot', label: 'Matched HubSpot?' },
                         { key: 'matchType', label: 'Match Type' },
+                        { key: 'matchLookupStrategy', label: 'Lookup Strategy' },
+                        { key: 'matchWhy', label: 'Why / Match Note' },
+                        { key: 'matchCandidateExamples', label: 'Candidate Hints' },
                         { key: 'matchCandidateCount', label: 'Name Candidates', type: 'number' },
                         { key: 'hubspotName', label: 'HubSpot Name' },
                         { key: 'email', label: 'Email Address' },
                         { key: 'sourceBucket', label: 'Source Bucket' },
                         { key: 'sourceAttributionMethod', label: 'Source Attribution Method' },
+                        { key: 'missingAttributionReason', label: 'Missing Attribution Reason' },
+                        { key: 'manualAttributionOverride', label: 'Manual Override?' },
+                        { key: 'manualAttributionNote', label: 'Manual Override Note' },
+                        { key: 'manualHubspotContactId', label: 'Manual HubSpot Contact ID', type: 'number' },
+                        { key: 'manualHubspotUrl', label: 'Manual HubSpot URL' },
                         { key: 'originalTrafficSource', label: 'Original Traffic Source' },
                         { key: 'originalTrafficSourceDetail1', label: 'Original Traffic Detail 1' },
                         { key: 'originalTrafficSourceDetail2', label: 'Original Traffic Detail 2' },

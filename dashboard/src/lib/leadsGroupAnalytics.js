@@ -84,7 +84,9 @@ function parseDateKey(value) {
 // ---------------------------------------------------------------------------
 
 /**
- * @param {string} rangeType  one of: 'last_week'|'last_2_weeks'|'last_month'|'last_quarter'|'last_year'|'custom'
+ * @param {string} rangeType  one of:
+ *   'this_week'|'this_month'|'this_quarter'|'this_year'|
+ *   'last_week'|'last_2_weeks'|'last_month'|'last_quarter'|'last_year'|'custom'
  * @param {string|null} customStart  YYYY-MM-DD (only for rangeType='custom')
  * @param {string|null} customEnd    YYYY-MM-DD (only for rangeType='custom')
  * @param {string} todayKey  YYYY-MM-DD (today's date)
@@ -92,6 +94,17 @@ function parseDateKey(value) {
  */
 export function buildDateRangeWindows(rangeType, customStart, customEnd, todayKey) {
     const today = todayKey || isoDate(new Date());
+    const buildMatchingPreviousWindow = (currentStart, currentEnd, label) => {
+        const currentStartDate = toUtcDate(currentStart);
+        const currentEndDate = toUtcDate(currentEnd);
+        const spanDays = Math.max(1, Math.round((currentEndDate.getTime() - currentStartDate.getTime()) / 86400000) + 1);
+        const previousEnd = addDays(currentStart, -1);
+        const previousStart = addDays(previousEnd, -(spanDays - 1));
+        return {
+            current: { start: currentStart, end: currentEnd, label },
+            previous: { start: previousStart, end: previousEnd, label: `Previous matching ${spanDays}-day period` },
+        };
+    };
 
     if (rangeType === 'custom') {
         const start = customStart || addDays(today, -6);
@@ -100,6 +113,26 @@ export function buildDateRangeWindows(rangeType, customStart, customEnd, todayKe
             current: { start, end, label: `${start} → ${end}` },
             previous: null, // no comparison for custom ranges
         };
+    }
+
+    if (rangeType === 'this_week') {
+        const currentStart = mondayOf(today);
+        return buildMatchingPreviousWindow(currentStart, today, `This Week (${currentStart} to date)`);
+    }
+
+    if (rangeType === 'this_month') {
+        const currentStart = firstDayOfMonth(today);
+        return buildMatchingPreviousWindow(currentStart, today, `This Month (${currentStart.slice(0, 7)} to date)`);
+    }
+
+    if (rangeType === 'this_quarter') {
+        const currentStart = firstDayOfQuarter(today);
+        return buildMatchingPreviousWindow(currentStart, today, `This Quarter (${currentStart} to date)`);
+    }
+
+    if (rangeType === 'this_year') {
+        const currentStart = firstDayOfYear(today);
+        return buildMatchingPreviousWindow(currentStart, today, `This Year (${currentStart.slice(0, 4)} to date)`);
     }
 
     if (rangeType === 'last_week') {
@@ -607,6 +640,32 @@ function classifyHearAbout(value) {
         'paid social',
     ])) {
         return 'Meta (Facebook/Instagram)';
+    }
+
+    // Heuristic: many valid answers are just a person's name ("Andrew", "Brooke R").
+    // Treat short person-name style answers as referrals unless a channel keyword matched above.
+    const compact = text.replace(/\s+/g, ' ').trim();
+    const personLikeTokens = compact
+        .replace(/[^a-zA-Z\s.-]/g, ' ')
+        .split(/\s+/)
+        .filter(Boolean);
+    const lowerCompact = compact.toLowerCase();
+    const looksLikePlaceholder = [
+        'n/a',
+        'na',
+        'none',
+        'unknown',
+        'not sure',
+        'not answering',
+        'no',
+    ].includes(lowerCompact);
+    const looksLikePersonReferral =
+        !looksLikePlaceholder &&
+        personLikeTokens.length >= 1 &&
+        personLikeTokens.length <= 3 &&
+        personLikeTokens.every((token) => /^[a-zA-Z][a-zA-Z.-]*$/.test(token));
+    if (looksLikePersonReferral) {
+        return 'Referral';
     }
 
     return 'Other';
