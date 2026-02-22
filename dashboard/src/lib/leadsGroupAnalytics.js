@@ -678,6 +678,9 @@ function buildLumaRows(lumaRows, startKey, endKey, hubspotRows, adsAdsetIndex) {
             hearAboutCategory,
             hearAbout: hearAbout || 'Not Found',
             hearAboutSource,
+            originalTrafficSource: contact?.hs_analytics_source || 'Not Found',
+            originalTrafficSourceDetail1: contact?.hs_analytics_source_data_1 || 'Not Found',
+            originalTrafficSourceDetail2: contact?.hs_analytics_source_data_2 || 'Not Found',
             recordSource: row?.custom_source || contact?.hs_analytics_source || '—',
             adSource: contact?.hs_analytics_source_data_2 || contact?.campaign || '—',
         };
