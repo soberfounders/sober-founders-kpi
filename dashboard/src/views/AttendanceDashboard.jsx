@@ -18,7 +18,6 @@ import {
 import {
   Calendar,
   Users,
-  RefreshCcw,
   ShieldCheck,
   TrendingUp,
   UserRoundCheck,
@@ -53,6 +52,77 @@ function fullNameFromHubspot(row = {}) {
   return `${String(row.firstname || '').trim()} ${String(row.lastname || '').trim()}`.trim();
 }
 
+const HUBSPOT_REVENUE_FIELDS = [
+  'annual_revenue_in_usd_official',
+  'annual_revenue_in_dollars__official_',
+  'annual_revenue_in_dollars',
+  'annual_revenue',
+];
+
+const HUBSPOT_SOBRIETY_FIELDS = [
+  'sobriety_date',
+  'sobriety_date__official_',
+  'sober_date',
+  'clean_date',
+  'sobrietydate',
+];
+
+function firstPresentHubspotField(row = {}, fieldNames = []) {
+  if (!row || !Array.isArray(fieldNames)) return null;
+  for (const fieldName of fieldNames) {
+    const value = row?.[fieldName];
+    if (value !== null && value !== undefined && value !== '') return value;
+  }
+  return null;
+}
+
+function resolveHubspotRevenueValue(row = {}) {
+  const raw = firstPresentHubspotField(row, HUBSPOT_REVENUE_FIELDS);
+  if (raw === null || raw === undefined || raw === '') return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveHubspotSobrietyValue(row = {}) {
+  return firstPresentHubspotField(row, HUBSPOT_SOBRIETY_FIELDS);
+}
+
+function hubspotEnrichmentRowScore(row = {}) {
+  let score = 0;
+  if (normalizeEmail(row?.email)) score += 2;
+  if (resolveHubspotRevenueValue(row) !== null) score += 4;
+  if (resolveHubspotSobrietyValue(row)) score += 2;
+  if (row?.hs_analytics_source) score += 1;
+  if (row?.hs_additional_emails) score += 1;
+  return score;
+}
+
+function hubspotRowTimestamp(row = {}) {
+  const candidates = [
+    row?.hs_lastmodifieddate,
+    row?.lastmodifieddate,
+    row?.updated_at,
+    row?.createdate,
+  ];
+  for (const candidate of candidates) {
+    const ts = Date.parse(candidate || '');
+    if (Number.isFinite(ts)) return ts;
+  }
+  return 0;
+}
+
+function pickBetterHubspotEnrichmentRow(existing, candidate) {
+  if (!existing) return candidate || null;
+  if (!candidate) return existing;
+  const existingScore = hubspotEnrichmentRowScore(existing);
+  const candidateScore = hubspotEnrichmentRowScore(candidate);
+  if (candidateScore !== existingScore) return candidateScore > existingScore ? candidate : existing;
+  const existingTs = hubspotRowTimestamp(existing);
+  const candidateTs = hubspotRowTimestamp(candidate);
+  if (candidateTs !== existingTs) return candidateTs > existingTs ? candidate : existing;
+  return existing;
+}
+
 function buildHubspotContactUrl(contactId, explicitUrl = '') {
   if (explicitUrl) return explicitUrl;
   const id = Number(contactId);
@@ -65,6 +135,15 @@ function dateKeyDaysAgo(days) {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() - Number(days || 0));
   return d.toISOString().slice(0, 10);
+}
+
+function chunkArray(items = [], chunkSize = 200) {
+  const normalizedSize = Math.max(1, Number(chunkSize) || 200);
+  const chunks = [];
+  for (let i = 0; i < items.length; i += normalizedSize) {
+    chunks.push(items.slice(i, i + normalizedSize));
+  }
+  return chunks;
 }
 
 function tokenizeName(name = '') {
@@ -122,6 +201,45 @@ function hasLikelyFirstLastName(name = '') {
   if (first.length < 2 || second.length < 2) return false;
   if (isLikelyNoiseToken(second)) return false;
   return true;
+}
+
+function uniqueStrings(values = []) {
+  return Array.from(new Set((values || []).filter(Boolean)));
+}
+
+function detectSuspiciousPersonName({ firstName = '', lastName = '', fullName = '', email = '' } = {}) {
+  const reasons = [];
+  const first = String(firstName || '').trim();
+  const last = String(lastName || '').trim();
+  const full = String(fullName || '').trim();
+  const fullNorm = normalizeName(full);
+  const emailNorm = normalizeEmail(email);
+  const emailLocal = emailNorm.includes('@') ? emailNorm.split('@')[0] : '';
+
+  if (!full) reasons.push('Missing first/last name');
+  if (/@/.test(full)) reasons.push('Contains email text');
+  if (/\.(com|net|org|io|co|ai|biz|me)\b/i.test(full)) reasons.push('Contains domain text');
+  if (/\d/.test(full)) reasons.push('Contains digits');
+  if (full && isLikelyDeviceName(full)) reasons.push('Looks like device name');
+
+  if (first && first.length === 1) reasons.push('1-char first name');
+  if (last && last.length === 1) reasons.push('1-char last name');
+
+  if (emailLocal && fullNorm) {
+    const compactName = fullNorm.replace(/\s+/g, '');
+    const compactLocal = String(emailLocal || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (
+      compactLocal
+      && compactName
+      && compactLocal !== compactName
+      && compactLocal.includes(compactName)
+      && (compactLocal.length - compactName.length) >= 6
+    ) {
+      reasons.push('Name resembles email local-part');
+    }
+  }
+
+  return uniqueStrings(reasons);
 }
 
 function getNameParts(name = '') {
@@ -326,6 +444,79 @@ function formatChangePct(value) {
   if (value === null || value === undefined || Number.isNaN(value)) return 'N/A';
   const pct = (Number(value) * 100).toFixed(1);
   return `${Number(value) >= 0 ? '+' : ''}${pct}%`;
+}
+
+function formatCurrencyMaybe(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 'N/A';
+  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+}
+
+function utcDateOnly(dateLike) {
+  const d = safeDate(dateLike);
+  if (!d) return null;
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
+function addYearsUtc(dateObj, years) {
+  if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) return null;
+  const y = dateObj.getUTCFullYear() + Number(years || 0);
+  const m = dateObj.getUTCMonth();
+  const day = dateObj.getUTCDate();
+  // Handle Feb 29 for non-leap years by clamping to last valid day in the month.
+  const candidate = new Date(Date.UTC(y, m, day));
+  if (candidate.getUTCMonth() !== m) {
+    return new Date(Date.UTC(y, m + 1, 0));
+  }
+  return candidate;
+}
+
+function diffYearsMonthsUtc(startDateLike, endDateLike = new Date()) {
+  const start = utcDateOnly(startDateLike);
+  const end = utcDateOnly(endDateLike);
+  if (!start || !end || end < start) return null;
+
+  let years = end.getUTCFullYear() - start.getUTCFullYear();
+  let months = end.getUTCMonth() - start.getUTCMonth();
+  if (end.getUTCDate() < start.getUTCDate()) months -= 1;
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+  if (years < 0) return null;
+  return { years, months };
+}
+
+function daysBetweenUtc(startDateLike, endDateLike) {
+  const start = utcDateOnly(startDateLike);
+  const end = utcDateOnly(endDateLike);
+  if (!start || !end) return null;
+  return Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function sobrietyMilestoneInfo(sobrietyDateLike, today = new Date()) {
+  const sobrietyDate = utcDateOnly(sobrietyDateLike);
+  const todayDate = utcDateOnly(today);
+  if (!sobrietyDate || !todayDate || todayDate < sobrietyDate) return null;
+
+  const elapsed = diffYearsMonthsUtc(sobrietyDate, todayDate);
+  if (!elapsed) return null;
+
+  const nextAnniversaryYears = elapsed.years + 1;
+  const nextAnniversaryDate = addYearsUtc(sobrietyDate, nextAnniversaryYears);
+  const daysUntilNextAnniversary = nextAnniversaryDate ? daysBetweenUtc(todayDate, nextAnniversaryDate) : null;
+  const isSoon = Number.isFinite(daysUntilNextAnniversary) && daysUntilNextAnniversary >= 0 && daysUntilNextAnniversary <= 45;
+
+  return {
+    sobrietyDate,
+    elapsed,
+    nextAnniversaryYears,
+    nextAnniversaryDate,
+    daysUntilNextAnniversary,
+    isSoon,
+    durationLabel: `${elapsed.years} year${elapsed.years === 1 ? '' : 's'} and ${elapsed.months} month${elapsed.months === 1 ? '' : 's'}`,
+    soonLabel: isSoon ? `*${nextAnniversaryYears} Year Anniversary Is Soon*` : '',
+  };
 }
 
 /** Format date as MM/DD/YYYY (e.g., "02/12/2026") */
@@ -723,9 +914,11 @@ function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs 
       })
       .map(a => {
         const contactId = Number(a.hubspot_contact_id);
-        const enriched = contactId ? hubspotContactMap.get(contactId) : {};
-        const firstName = String(a.contact_firstname || enriched.firstname || '').trim();
-        const lastName = String(a.contact_lastname || enriched.lastname || '').trim();
+        const enriched = contactId ? (hubspotContactMap.get(contactId) || {}) : {};
+        // Prefer the current HubSpot contact name so renames in HubSpot backfill
+        // historical attendance rows in the dashboard (association snapshots can be stale/noisy).
+        const firstName = String(enriched.firstname || a.contact_firstname || '').trim();
+        const lastName = String(enriched.lastname || a.contact_lastname || '').trim();
         const displayName = [firstName, lastName].filter(Boolean).join(' ') || (a.contact_email) || `Contact ${contactId || 'Unknown'}`;
 
         return {
@@ -817,6 +1010,10 @@ function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs 
     if (session.mismatch) mismatches += 1;
     totalAppearances += session.derivedCount;
 
+    const attendeeObjByName = new Map(
+      (session.attendeeObjects || []).map((obj) => [normalizeName(obj?.name || ''), obj]),
+    );
+
     session.attendees.forEach((name) => {
       if (!people.has(name)) {
         people.set(name, {
@@ -828,15 +1025,41 @@ function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs 
           firstSeen: session.dateLabel,
           lastSeen: session.dateLabel,
           primaryGroup: session.type,
+          hubspotMatched: false,
+          hubspotContactId: null,
+          hubspotName: '',
+          hubspotEmail: '',
+          hubspotUrl: '',
+          identityMappingSource: '',
+          identityMappingConfidence: '',
+          hubspotSource: '',
+          hubspotContactIdsSeen: [],
         });
       }
 
       const p = people.get(name);
+      const attendeeObj = attendeeObjByName.get(normalizeName(name));
       p.visits += 1;
       if (session.type === 'Tuesday') p.tueVisits += 1;
       if (session.type === 'Thursday') p.thuVisits += 1;
       p.sessionIndexes.push(idx);
       p.lastSeen = session.dateLabel;
+
+      if (attendeeObj?.hubspotContactId) {
+        const currentIds = new Set(Array.isArray(p.hubspotContactIdsSeen) ? p.hubspotContactIdsSeen : []);
+        currentIds.add(Number(attendeeObj.hubspotContactId));
+        p.hubspotContactIdsSeen = Array.from(currentIds);
+
+        // Prefer direct HubSpot call activity identity over later fuzzy/name fallback resolvers.
+        p.hubspotMatched = true;
+        p.hubspotContactId = Number(attendeeObj.hubspotContactId) || p.hubspotContactId || null;
+        p.hubspotName = attendeeObj.hubspotName || attendeeObj.name || p.hubspotName || '';
+        p.hubspotEmail = attendeeObj.hubspotEmail || p.hubspotEmail || '';
+        p.hubspotUrl = attendeeObj.hubspotUrl || p.hubspotUrl || '';
+        p.identityMappingSource = attendeeObj.identityMappingSource || 'hubspot_call_activity';
+        p.identityMappingConfidence = attendeeObj.identityMappingConfidence || 'High';
+        p.hubspotSource = attendeeObj.hubspotSource || p.hubspotSource || '';
+      }
 
       if (normalizeName(name).includes('chris lipper')) {
         p.primaryGroup = 'Thursday';
@@ -848,27 +1071,50 @@ function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs 
 
   const peopleArr = Array.from(people.values()).map((p) => {
     const groupSessions = sessions.filter(s => s.type === p.primaryGroup);
-    const attendedInGroup = groupSessions.filter(gs =>
-      p.sessionIndexes.map(i => sessions[i].id).includes(gs.id)
+    const attendedSessionIds = new Set(
+      (p.sessionIndexes || [])
+        .map((i) => sessions[i])
+        .filter(Boolean)
+        .map((s) => s.id),
     );
+    const attendedInGroup = groupSessions.filter((gs) => attendedSessionIds.has(gs.id));
 
     const recentGroupSessions = groupSessions.slice(-RECENT_WINDOW);
-    const recentGroupShows = recentGroupSessions.filter(gs =>
-      attendedInGroup.some(a => a.id === gs.id)
-    ).length;
+    const recentGroupShows = recentGroupSessions.filter((gs) => attendedSessionIds.has(gs.id)).length;
 
     const recentWindowCount = recentGroupSessions.length;
     const recentShowRate = recentWindowCount ? recentGroupShows / recentWindowCount : 0;
 
     const last3GroupSessions = groupSessions.slice(-3);
-    const last3GroupShows = last3GroupSessions.filter(gs => attendedInGroup.some(a => a.id === gs.id));
-    const isAtRisk = p.visits >= 2 && last3GroupShows.length === 0 && last3GroupSessions.length >= 3;
+    const last3GroupShows = last3GroupSessions.filter((gs) => attendedSessionIds.has(gs.id));
+
+    let missedInRow = 0;
+    for (let i = groupSessions.length - 1; i >= 0; i -= 1) {
+      if (attendedSessionIds.has(groupSessions[i].id)) break;
+      missedInRow += 1;
+    }
+
+    const groupVisits = p.primaryGroup === 'Tuesday' ? p.tueVisits : p.thuVisits;
+    const lastAttendedGroupSession = attendedInGroup[attendedInGroup.length - 1] || null;
+    let atRiskRule = '';
+    if (groupVisits === 1 && missedInRow >= 1) {
+      atRiskRule = 'one_and_done_missed_next';
+    } else if (groupVisits > 1 && missedInRow >= 2) {
+      atRiskRule = 'repeat_missed_two_in_row';
+    }
+    const isAtRisk = !!atRiskRule;
 
     return {
       ...p,
+      groupVisits,
       recentShows: recentGroupShows,
       recentShowRate,
       isAtRisk,
+      atRiskRule,
+      missedInRow,
+      lastAttendedGroupDateLabel: lastAttendedGroupSession?.dateLabel || '',
+      lastAttendedGroupDateFormatted: lastAttendedGroupSession?.dateFormatted || '',
+      last3GroupShowsCount: last3GroupShows.length,
     };
   });
 
@@ -929,6 +1175,20 @@ function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs 
   const avgTimelineCombined = buildCombinedAvgTimeline(groupStats.Tuesday.trend, groupStats.Thursday.trend);
   const monthlyAvgTue = buildMonthlyAverageSeries(sessions, 'Tuesday');
   const monthlyAvgThu = buildMonthlyAverageSeries(sessions, 'Thursday');
+  const atRiskPeople = peopleArr
+    .filter((p) => p.isAtRisk)
+    .sort((a, b) =>
+      (b.lastAttendedGroupDateLabel || '').localeCompare(a.lastAttendedGroupDateLabel || '')
+      || Number(b.atRiskRule === 'repeat_missed_two_in_row') - Number(a.atRiskRule === 'repeat_missed_two_in_row')
+      || a.missedInRow - b.missedInRow
+      || b.groupVisits - a.groupVisits
+      || b.visits - a.visits
+      || a.name.localeCompare(b.name)
+    );
+  const atRiskBreakdown = {
+    oneAndDoneMissedNext: atRiskPeople.filter((p) => p.atRiskRule === 'one_and_done_missed_next').length,
+    repeatMissedTwoInRow: atRiskPeople.filter((p) => p.atRiskRule === 'repeat_missed_two_in_row').length,
+  };
 
   return {
     sessions,
@@ -941,7 +1201,9 @@ function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs 
       repeatRateThu,
       oneTimeShareTue,
       oneTimeShareThu,
-      atRiskCount: peopleArr.filter((p) => p.isAtRisk).length,
+      atRiskCount: atRiskPeople.length,
+      atRiskOneTimers: atRiskBreakdown.oneAndDoneMissedNext,
+      atRiskRepeaters: atRiskBreakdown.repeatMissedTwoInRow,
       lowRecentShowRatePeople,
     },
     trendDataTue,
@@ -956,7 +1218,8 @@ function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs 
     cohortDataTue,
     cohortDataThu,
     topRepeaters: [...peopleArr].sort((a, b) => b.visits - a.visits).slice(0, 10),
-    atRiskPeople: peopleArr.filter((p) => p.isAtRisk).sort((a, b) => b.visits - a.visits).slice(0, 10),
+    atRiskPeople,
+    atRiskBreakdown,
     welcomeNewSessions: [...welcomeNewSessionsTue, ...welcomeNewSessionsThu],
     welcomeNewSessionsTue,
     welcomeNewSessionsThu,
@@ -980,8 +1243,8 @@ function buildAttendanceHubspotResolver({ rawHubspot = [], rawLuma = [], attende
     let s = 0;
     if (row?.email) s += 2;
     if (row?.hs_analytics_source) s += 1;
-    if (row?.annual_revenue_in_dollars__official_ !== null && row?.annual_revenue_in_dollars__official_ !== undefined && row?.annual_revenue_in_dollars__official_ !== '') s += 1;
-    if (row?.sobriety_date) s += 1;
+    if (resolveHubspotRevenueValue(row) !== null) s += 1;
+    if (resolveHubspotSobrietyValue(row)) s += 1;
     return s;
   };
 
@@ -1209,10 +1472,8 @@ const cardStyle = {
 
 const AttendanceDashboard = () => {
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
   const [aliasWarning, setAliasWarning] = useState('');
-  const [syncSummary, setSyncSummary] = useState('');
   const [aliases, setAliases] = useState([]);
   const [rawHubspotContacts, setRawHubspotContacts] = useState([]);
   const [rawLumaRegistrations, setRawLumaRegistrations] = useState([]);
@@ -1227,12 +1488,15 @@ const AttendanceDashboard = () => {
   const [selectedRepeaterSessionKey, setSelectedRepeaterSessionKey] = useState('');
   const [detailMessage, setDetailMessage] = useState('');
   const [mergingAliasKey, setMergingAliasKey] = useState('');
+  const [humanTaskWorkflow, setHumanTaskWorkflow] = useState({});
 
   // Build raw_hubspot_contacts lookup map for enrichment (revenue, source etc.)
   const hubspotContactMap = useMemo(() => {
     const m = new Map();
     (rawHubspotContacts || []).forEach(c => {
-      if (c.hubspot_contact_id) m.set(Number(c.hubspot_contact_id), c);
+      const id = Number(c?.hubspot_contact_id);
+      if (!Number.isFinite(id) || id <= 0) return;
+      m.set(id, pickBetterHubspotEnrichmentRow(m.get(id), c));
     });
     return m;
   }, [rawHubspotContacts]);
@@ -1320,6 +1584,13 @@ const AttendanceDashboard = () => {
         const hubspotIdentity = preResolved
           ? { matched: true, ...preResolved }
           : attendanceHubspotResolver.resolveAttendee(name, session);
+        const resolvedHubspotContactId = Number(hubspotIdentity?.hubspotContactId);
+        const hubspotContact = Number.isFinite(resolvedHubspotContactId)
+          ? (hubspotContactMap.get(resolvedHubspotContactId) || null)
+          : null;
+        const revenue = resolveHubspotRevenueValue(hubspotContact);
+        const sobrietyDate = resolveHubspotSobrietyValue(hubspotContact) || null;
+        const sobrietyInfo = sobrietyMilestoneInfo(sobrietyDate, new Date());
 
         const rawCandidates = findSessionPriorityDuplicates(name, allKnownNames, inSessionSet);
         const dedupe = new Set();
@@ -1342,6 +1613,7 @@ const AttendanceDashboard = () => {
 
         return {
           name,
+          displayName: hubspotIdentity?.hubspotName && hubspotIdentity.hubspotName !== 'Not Found' ? hubspotIdentity.hubspotName : name,
           isNew: newSet.has(name),
           groupVisitsIncludingThisSession: groupVisitsByName.get(name) || 0,
           totalVisitsIncludingThisSession: totalVisitsByName.get(name) || 0,
@@ -1356,13 +1628,26 @@ const AttendanceDashboard = () => {
           identityMappingNote: hubspotIdentity?.identityMappingNote || '',
           missingIdentityReason: preResolved ? '' : (hubspotIdentity?.missingIdentityReason || ''),
           dataSource: session.dataSource || 'zoom',
+          revenue,
+          sobrietyDate,
+          sobrietyDurationLabel: sobrietyInfo?.durationLabel || '',
+          sobrietySoonLabel: sobrietyInfo?.soonLabel || '',
+          sobrietyYears: sobrietyInfo?.elapsed?.years ?? null,
+          sobrietyMonths: sobrietyInfo?.elapsed?.months ?? null,
           duplicateActions,
         };
       })
       .sort((a, b) =>
-        b.groupVisitsIncludingThisSession - a.groupVisitsIncludingThisSession
-        || b.totalVisitsIncludingThisSession - a.totalVisitsIncludingThisSession
-        || a.name.localeCompare(b.name)
+        Number(b.isNew) - Number(a.isNew)
+        || (a.isNew && b.isNew ? a.displayName.localeCompare(b.displayName) : 0)
+        || (!a.isNew && !b.isNew
+          ? (
+              a.groupVisitsIncludingThisSession - b.groupVisitsIncludingThisSession
+              || a.totalVisitsIncludingThisSession - b.totalVisitsIncludingThisSession
+              || a.displayName.localeCompare(b.displayName)
+            )
+          : 0)
+        || a.displayName.localeCompare(b.displayName)
       );
 
     return {
@@ -1370,7 +1655,7 @@ const AttendanceDashboard = () => {
       attendeeRows,
       hasTargetDate: session.dateLabel === '2026-02-19',
     };
-  }, [analytics, selectedSessionKey, attendanceHubspotResolver]);
+  }, [analytics, selectedSessionKey, attendanceHubspotResolver, hubspotContactMap]);
 
   const selectedRepeaterDetail = useMemo(() => {
     if (!analytics?.sessions?.length || !selectedRepeaterName) return null;
@@ -1379,7 +1664,18 @@ const AttendanceDashboard = () => {
       (p) => normalizeName(p.name) === normalizeName(selectedRepeaterName),
     );
     if (!person) return null;
-    const personIdentity = attendanceHubspotResolver.resolveAttendee(person.name, null);
+    const personIdentity = person?.hubspotContactId
+      ? {
+          matched: true,
+          hubspotContactId: person.hubspotContactId,
+          hubspotName: person.hubspotName || person.name,
+          hubspotEmail: person.hubspotEmail || 'Not Found',
+          hubspotUrl: person.hubspotUrl || buildHubspotContactUrl(person.hubspotContactId),
+          identityMappingSource: person.identityMappingSource || 'hubspot_call_activity',
+          identityMappingConfidence: person.identityMappingConfidence || 'High',
+          hubspotSource: person.hubspotSource || 'Not Found',
+        }
+      : attendanceHubspotResolver.resolveAttendee(person.name, null);
 
     const attendedSessions = (person.sessionIndexes || [])
       .map((idx) => analytics.sessions[idx])
@@ -1430,26 +1726,244 @@ const AttendanceDashboard = () => {
     };
   }, [analytics, selectedRepeaterName, selectedRepeaterSessionKey, attendanceHubspotResolver]);
 
-  async function runZoomSync() {
-    setSyncing(true);
-    setSyncSummary('');
-    const { data, error: syncError } = await supabase.functions.invoke('sync_zoom_attendance', {
-      method: 'POST',
+  const atRiskOutreachRows = useMemo(() => {
+    return (analytics.atRiskPeople || []).map((person) => {
+      const identity = person?.hubspotContactId
+        ? {
+            matched: true,
+            hubspotContactId: person.hubspotContactId,
+            hubspotName: person.hubspotName || person.name,
+            hubspotEmail: person.hubspotEmail || 'Not Found',
+            hubspotUrl: person.hubspotUrl || buildHubspotContactUrl(person.hubspotContactId),
+            identityMappingSource: person.identityMappingSource || 'hubspot_call_activity',
+          }
+        : attendanceHubspotResolver.resolveAttendee(person.name, null);
+      return {
+        ...person,
+        hubspotMatched: !!identity?.matched,
+        hubspotName: identity?.hubspotName || person.name,
+        hubspotEmail: identity?.hubspotEmail || 'Not Found',
+        hubspotUrl: identity?.hubspotUrl || '',
+        identityMappingSource: identity?.identityMappingSource || 'none',
+      };
     });
-    setSyncing(false);
+  }, [analytics, attendanceHubspotResolver]);
 
-    if (syncError) {
-      throw new Error(syncError.message || 'Zoom sync failed.');
+  const badNameQa = useMemo(() => {
+    const sessionActivityIds = new Set(
+      (analytics?.sessions || [])
+        .map((s) => String(s?.meetingId || ''))
+        .filter(Boolean),
+    );
+    const activityDateById = new Map(
+      (hubspotActivities || []).map((a) => [
+        String(a?.hubspot_activity_id || ''),
+        String(a?.hs_timestamp || a?.created_at_hubspot || ''),
+      ]),
+    );
+
+    const byContactId = new Map();
+    let suspiciousUnmatchedAssocCount = 0;
+
+    (hubspotContactAssocs || []).forEach((assoc) => {
+      const activityId = String(assoc?.hubspot_activity_id || '');
+      if (!activityId || !sessionActivityIds.has(activityId)) return;
+
+      const contactId = Number(assoc?.hubspot_contact_id);
+      const assocEmail = normalizeEmail(assoc?.contact_email || '');
+      const snapshotFirst = String(assoc?.contact_firstname || '').trim();
+      const snapshotLast = String(assoc?.contact_lastname || '').trim();
+      const snapshotName = [snapshotFirst, snapshotLast].filter(Boolean).join(' ').trim();
+
+      if (!Number.isFinite(contactId) || contactId <= 0) {
+        const unmatchedReasons = detectSuspiciousPersonName({
+          firstName: snapshotFirst,
+          lastName: snapshotLast,
+          fullName: snapshotName,
+          email: assocEmail,
+        });
+        if (unmatchedReasons.length > 0) suspiciousUnmatchedAssocCount += 1;
+        return;
+      }
+
+      const contact = hubspotContactMap.get(contactId) || {};
+      const currentFirst = String(contact?.firstname || '').trim();
+      const currentLast = String(contact?.lastname || '').trim();
+      const currentName = [currentFirst, currentLast].filter(Boolean).join(' ').trim();
+      const currentEmail = normalizeEmail(contact?.email || assocEmail || '');
+      const currentReasons = detectSuspiciousPersonName({
+        firstName: currentFirst,
+        lastName: currentLast,
+        fullName: currentName,
+        email: currentEmail,
+      });
+      const snapshotReasons = detectSuspiciousPersonName({
+        firstName: snapshotFirst,
+        lastName: snapshotLast,
+        fullName: snapshotName,
+        email: assocEmail || currentEmail,
+      });
+      const combinedReasons = uniqueStrings([
+        ...currentReasons.map((r) => `Current: ${r}`),
+        ...snapshotReasons.map((r) => `Call snapshot: ${r}`),
+      ]);
+
+      if (combinedReasons.length === 0) return;
+
+      const existing = byContactId.get(contactId) || {
+        hubspotContactId: contactId,
+        hubspotUrl: buildHubspotContactUrl(contactId),
+        currentName: currentName || `Contact ${contactId}`,
+        currentEmail: currentEmail || 'Not Found',
+        snapshotNames: new Set(),
+        reasons: new Set(),
+        associationRows: 0,
+        lastSeenIso: '',
+      };
+
+      if (snapshotName) existing.snapshotNames.add(snapshotName);
+      combinedReasons.forEach((reason) => existing.reasons.add(reason));
+      existing.associationRows += 1;
+      const seenIso = activityDateById.get(activityId) || '';
+      if (seenIso && (!existing.lastSeenIso || seenIso > existing.lastSeenIso)) {
+        existing.lastSeenIso = seenIso;
+      }
+
+      // Prefer freshest current HubSpot name/email while preserving contact id.
+      existing.currentName = currentName || existing.currentName;
+      existing.currentEmail = currentEmail || existing.currentEmail;
+      existing.hubspotUrl = buildHubspotContactUrl(contactId) || existing.hubspotUrl;
+
+      byContactId.set(contactId, existing);
+    });
+
+    const rows = Array.from(byContactId.values())
+      .map((row) => {
+        const lastSeenDate = safeDate(row.lastSeenIso);
+        return {
+          hubspotContactId: row.hubspotContactId,
+          hubspotUrl: row.hubspotUrl,
+          currentName: row.currentName,
+          currentEmail: row.currentEmail,
+          snapshotNames: Array.from(row.snapshotNames).sort((a, b) => a.localeCompare(b)),
+          reasons: Array.from(row.reasons),
+          associationRows: row.associationRows,
+          lastSeenIso: row.lastSeenIso,
+          lastSeenDateFormatted: lastSeenDate ? formatDateMMDDYY(lastSeenDate) : '',
+        };
+      })
+      .sort((a, b) =>
+        (b.lastSeenIso || '').localeCompare(a.lastSeenIso || '')
+        || b.associationRows - a.associationRows
+        || a.currentName.localeCompare(b.currentName)
+      );
+
+    return {
+      rows,
+      counts: {
+        suspiciousContacts: rows.length,
+        suspiciousUnmatchedAssocCount,
+      },
+    };
+  }, [analytics, hubspotActivities, hubspotContactAssocs, hubspotContactMap]);
+
+  const attendanceAiInsight = useMemo(() => {
+    const rows = selectedSessionDetail?.attendeeRows || [];
+    const returningRows = rows.filter((r) => !r.isNew);
+    const matchedRows = rows.filter((r) => r.hubspotMatched);
+    const unmatchedRows = rows.filter((r) => !r.hubspotMatched);
+    const medianOf = (nums = []) => {
+      const values = (nums || []).filter(Number.isFinite).sort((a, b) => a - b);
+      if (!values.length) return null;
+      const mid = Math.floor(values.length / 2);
+      if (values.length % 2 === 1) return values[mid];
+      return (values[mid - 1] + values[mid]) / 2;
+    };
+
+    const returningVisits = returningRows
+      .map((r) => Number(r.groupVisitsIncludingThisSession || 0))
+      .filter(Number.isFinite);
+    const avgReturningTenure = returningVisits.length
+      ? returningVisits.reduce((sum, n) => sum + n, 0) / returningVisits.length
+      : null;
+    const medianReturningTenure = medianOf(returningVisits);
+
+    const selectedGroupType = selectedSessionDetail?.session?.type || '';
+    const groupSessionRepeatCounts = (analytics?.sessions || [])
+      .filter((s) => s?.type === selectedGroupType)
+      .map((s) => Number(s?.repeatCount || 0))
+      .filter(Number.isFinite);
+    const recentGroupRepeatCounts = groupSessionRepeatCounts.slice(-8);
+    const repeatCountComparisonSet = recentGroupRepeatCounts.length > 0 ? recentGroupRepeatCounts : groupSessionRepeatCounts;
+    const avgRepeatShowups = repeatCountComparisonSet.length
+      ? repeatCountComparisonSet.reduce((sum, n) => sum + n, 0) / repeatCountComparisonSet.length
+      : null;
+    const medianRepeatShowups = medianOf(repeatCountComparisonSet);
+    const lowVisitReturning = returningRows.filter((r) => Number(r.groupVisitsIncludingThisSession || 0) <= 2);
+    const soonMilestones = rows.filter((r) => !!r.sobrietySoonLabel);
+    const missingRevenue = matchedRows.filter((r) => !Number.isFinite(r.revenue));
+    const missingSobriety = matchedRows.filter((r) => !r.sobrietyDate);
+    const highValueLowVisit = rows.filter((r) => Number.isFinite(r.revenue) && r.revenue >= 250000 && Number(r.groupVisitsIncludingThisSession || 0) <= 2);
+
+    const summaryBullets = [];
+    if (selectedSessionDetail?.session) {
+      summaryBullets.push(
+        `${selectedSessionDetail.session.type} ${selectedSessionDetail.session.dateFormatted}: ${rows.length} show-ups (${selectedSessionDetail.session.newCount} new, ${selectedSessionDetail.session.repeatCount} returning).`,
+      );
+    }
+    if (avgRepeatShowups !== null) {
+      summaryBullets.push(`Recent ${selectedGroupType || 'group'} sessions average ${avgRepeatShowups.toFixed(1)} returning show-ups (median ${medianRepeatShowups}).`);
+    }
+    if (avgReturningTenure !== null) {
+      summaryBullets.push(`In this session, returning attendees have attended this meeting type ${avgReturningTenure.toFixed(1)} times on average (median ${medianReturningTenure}).`);
+    }
+    if (lowVisitReturning.length > 0) {
+      summaryBullets.push(`${lowVisitReturning.length} returning attendee${lowVisitReturning.length === 1 ? '' : 's'} are still early-stage (2 or fewer visits) and are prime repeat-attendance growth targets.`);
     }
 
-    if (data?.ok === false) {
-      throw new Error(data?.error || 'Zoom sync failed.');
+    const opportunities = [];
+    if (lowVisitReturning.length > 0) {
+      opportunities.push(`Run a light-touch “good to see you again” follow-up for ${lowVisitReturning.length} early repeaters to increase next-week attendance.`);
+    }
+    if ((analytics.atRiskBreakdown?.oneAndDoneMissedNext || 0) > 0) {
+      opportunities.push(`Prioritize Rule A at-risk attendees (${analytics.atRiskBreakdown.oneAndDoneMissedNext}) for immediate win-back outreach within 48 hours.`);
+    }
+    if (soonMilestones.length > 0) {
+      opportunities.push(`${soonMilestones.length} attendee${soonMilestones.length === 1 ? '' : 's'} have sobriety anniversaries approaching; milestone callouts can drive stronger retention and referrals.`);
+    }
+    if (highValueLowVisit.length > 0) {
+      opportunities.push(`${highValueLowVisit.length} high-revenue attendee${highValueLowVisit.length === 1 ? '' : 's'} are still low-frequency in this group; white-glove retention outreach is likely worth it.`);
     }
 
-    const sessions = Number(data?.sessions_processed || 0);
-    const rows = Number(data?.rows_written || 0);
-    setSyncSummary(`Zoom sync completed: ${sessions} sessions processed, ${rows} metric rows written.`);
-  }
+    const blindSpots = [];
+    if (unmatchedRows.length > 0) blindSpots.push(`${unmatchedRows.length} attendee row${unmatchedRows.length === 1 ? '' : 's'} are not matched to HubSpot, limiting email/revenue-based retention actions.`);
+    if (missingRevenue.length > 0) blindSpots.push(`${missingRevenue.length} matched attendee${missingRevenue.length === 1 ? '' : 's'} are missing revenue in HubSpot.`);
+    if (missingSobriety.length > 0) blindSpots.push(`${missingSobriety.length} matched attendee${missingSobriety.length === 1 ? '' : 's'} are missing sobriety dates, reducing milestone retention targeting.`);
+    if ((badNameQa.counts?.suspiciousContacts || 0) > 0) blindSpots.push(`${badNameQa.counts.suspiciousContacts} HubSpot contacts used in Attendance still have suspicious name data.`);
+
+    const providerStatuses = [
+      { key: 'openai', label: 'OpenAI', configured: !!String(import.meta.env.VITE_OPENAI_API_KEY || '').trim(), note: 'Frontend placeholder only; prefer Supabase Edge Function secrets' },
+      { key: 'gemini', label: 'Gemini', configured: !!String(import.meta.env.VITE_GEMINI_API_KEY || '').trim(), note: 'Frontend placeholder only; prefer Supabase Edge Function secrets' },
+      { key: 'claude', label: 'Claude', configured: !!String(import.meta.env.VITE_CLAUDE_API_KEY || import.meta.env.VITE_ANTHROPIC_API_KEY || '').trim(), note: 'Frontend placeholder only; prefer Supabase Edge Function secrets' },
+    ];
+
+    const autonomousWorkflow = [
+      { id: 'winback-email', title: 'Win-back campaign email', delivery: 'Mailchimp API sync (planned)', actionLabel: 'Generate + Sync (Soon)' },
+      { id: 'outreach-csv', title: 'At-risk outreach list export', delivery: 'Download CSV / Notion sync (planned)', actionLabel: 'Build deliverable (Soon)' },
+      { id: 'tag-rules', title: 'Retention tagging rules', delivery: 'CRM / ESP automation rule sync (planned)', actionLabel: 'Create rule (Soon)' },
+    ];
+
+    return {
+      headline: rows.length
+        ? 'Focus on converting net new attendees into second-session repeaters and protecting early repeaters before they slip into the at-risk queue.'
+        : 'Select a session in Show-Up Drilldown to generate session-specific retention insights.',
+      summaryBullets,
+      opportunities,
+      blindSpots,
+      providerStatuses,
+      autonomousWorkflow,
+    };
+  }, [selectedSessionDetail, analytics, badNameQa]);
 
   async function readAliasesFromTable() {
     const { data, error } = await supabase
@@ -1574,7 +2088,7 @@ const AttendanceDashboard = () => {
       // HubSpot contact enrichment (revenue, source, email, etc.)
       supabase
         .from('raw_hubspot_contacts')
-        .select('hubspot_contact_id,createdate,email,hs_additional_emails,firstname,lastname,annual_revenue_in_dollars__official_,sobriety_date,hs_analytics_source,hs_analytics_source_data_1,hs_analytics_source_data_2')
+        .select('*')
         .order('createdate', { ascending: false })
         .limit(20000),
       // Lu.ma registrations (kept for fallback resolver)
@@ -1607,12 +2121,70 @@ const AttendanceDashboard = () => {
       setHubspotContactAssocs(hsAssocsResult.data || []);
     }
 
+    let hubspotContactsData = [];
     if (hubspotContactsResult.error) {
       identityWarnings.push(`HubSpot contacts cache unavailable: ${hubspotContactsResult.error.message || 'read failed'}`);
-      setRawHubspotContacts([]);
     } else {
-      setRawHubspotContacts(hubspotContactsResult.data || []);
+      hubspotContactsData = hubspotContactsResult.data || [];
     }
+
+    // Backfill any contact IDs referenced by the loaded HubSpot call sessions but missing from the
+    // capped base contact query (old contacts often fall outside the newest-N limit).
+    if (!hsActivitiesResult.error && !hsAssocsResult.error) {
+      const sessionActivityIds = new Set(
+        (hsActivitiesResult.data || [])
+          .map((row) => String(row?.hubspot_activity_id || ''))
+          .filter(Boolean),
+      );
+      const neededContactIds = Array.from(new Set(
+        (hsAssocsResult.data || [])
+          .filter((row) => sessionActivityIds.has(String(row?.hubspot_activity_id || '')))
+          .map((row) => Number(row?.hubspot_contact_id))
+          .filter((id) => Number.isFinite(id) && id > 0),
+      ));
+      const loadedContactIds = new Set(
+        hubspotContactsData
+          .map((row) => Number(row?.hubspot_contact_id))
+          .filter((id) => Number.isFinite(id) && id > 0),
+      );
+      const missingContactIds = neededContactIds.filter((id) => !loadedContactIds.has(id));
+
+      if (missingContactIds.length > 0) {
+        const backfillRows = [];
+        const backfillErrors = [];
+        for (const idChunk of chunkArray(missingContactIds, 200)) {
+          const backfillResult = await supabase
+            .from('raw_hubspot_contacts')
+            .select('*')
+            .in('hubspot_contact_id', idChunk);
+          if (backfillResult.error) {
+            backfillErrors.push(backfillResult.error.message || 'read failed');
+            continue;
+          }
+          backfillRows.push(...(backfillResult.data || []));
+        }
+
+        if (backfillRows.length > 0) {
+          hubspotContactsData = [...hubspotContactsData, ...backfillRows];
+        }
+
+        const finalContactIdSet = new Set(
+          hubspotContactsData
+            .map((row) => Number(row?.hubspot_contact_id))
+            .filter((id) => Number.isFinite(id) && id > 0),
+        );
+        const stillMissingCount = missingContactIds.filter((id) => !finalContactIdSet.has(id)).length;
+
+        if (backfillErrors.length > 0) {
+          identityWarnings.push(`HubSpot contacts enrichment backfill had ${backfillErrors.length} error(s); some revenue/sobriety fields may be missing.`);
+        }
+        if (stillMissingCount > 0) {
+          identityWarnings.push(`${stillMissingCount} HubSpot call-linked contact(s) were not found in raw_hubspot_contacts cache; refresh contact sync to fill enrichment fields.`);
+        }
+      }
+    }
+
+    setRawHubspotContacts(hubspotContactsData);
 
     if (lumaResult.error) {
       setRawLumaRegistrations([]);
@@ -1711,6 +2283,92 @@ const AttendanceDashboard = () => {
     } finally {
       setMergingAliasKey('');
     }
+  }
+
+  async function createNotionTodoFromPlanItem(item) {
+    const title = `[Attendance] ${item.title}`;
+    const statusNamesToTry = ['Pending', 'To Do'];
+    let lastErr = null;
+
+    for (const statusName of statusNamesToTry) {
+      const { data, error: createErr } = await supabase.functions.invoke('sync-metrics', {
+        method: 'POST',
+        headers: { 'x-pathname': '/tasks' },
+        body: {
+          properties: {
+            Name: { title: [{ text: { content: title } }] },
+            Status: { status: { name: statusName } },
+          },
+        },
+      });
+
+      if (!createErr) {
+        return { data, statusName };
+      }
+      lastErr = createErr;
+    }
+
+    throw lastErr || new Error('Failed to create Notion task');
+  }
+
+  async function handleAddHumanTaskToNotion(item) {
+    if (!item?.id) return;
+    setHumanTaskWorkflow((prev) => ({
+      ...prev,
+      [item.id]: {
+        ...(prev[item.id] || {}),
+        addToDo: true,
+        skipped: false,
+        syncStatus: 'saving',
+        error: '',
+      },
+    }));
+
+    try {
+      const { data, statusName } = await createNotionTodoFromPlanItem(item);
+      setHumanTaskWorkflow((prev) => ({
+        ...prev,
+        [item.id]: {
+          ...(prev[item.id] || {}),
+          addToDo: true,
+          skipped: false,
+          syncStatus: 'saved',
+          error: '',
+          notionTaskStatus: statusName,
+          notionPageId: data?.id || '',
+          notionUrl: data?.url || '',
+        },
+      }));
+      supabase.functions.invoke('sync-metrics', {
+        method: 'GET',
+        queryString: { trigger_refresh: 'true' },
+      }).catch(() => {});
+    } catch (todoErr) {
+      setHumanTaskWorkflow((prev) => ({
+        ...prev,
+        [item.id]: {
+          ...(prev[item.id] || {}),
+          addToDo: false,
+          skipped: false,
+          syncStatus: 'error',
+          error: todoErr?.message || 'Notion sync failed',
+        },
+      }));
+    }
+  }
+
+  function handleSkipHumanTask(item) {
+    if (!item?.id) return;
+    setHumanTaskWorkflow((prev) => ({
+      ...prev,
+      [item.id]: {
+        ...(prev[item.id] || {}),
+        skipped: true,
+        addToDo: false,
+        syncStatus: 'skipped',
+        error: '',
+      },
+    }));
   }
 
   const selectedCount = Object.values(planState).filter(Boolean).length;
@@ -1897,36 +2555,8 @@ const AttendanceDashboard = () => {
           <p style={{ marginTop: '6px', opacity: 0.85, fontSize: '12px' }}>
             Data source: {hubspotActivities.length} verified HubSpot group sessions · {hubspotContactAssocs.length} attendee associations · {rawHubspotContacts.length} HubSpot contacts enriched
           </p>
-          {syncSummary && <p style={{ marginTop: '8px', opacity: 0.9, fontSize: '13px' }}>{syncSummary}</p>}
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            onClick={async () => {
-              try {
-                await runZoomSync();
-                await loadAll(false);
-              } catch (syncErr) {
-                setError(`Attendance sync failed: ${syncErr.message}`);
-              }
-            }}
-            disabled={syncing}
-            style={{
-              display: 'flex',
-              gap: '8px',
-              alignItems: 'center',
-              backgroundColor: 'rgba(255,255,255,0.15)',
-              color: 'white',
-              borderRadius: '10px',
-              padding: '10px 14px',
-              border: '1px solid rgba(255,255,255,0.3)',
-              fontWeight: 600,
-              cursor: 'pointer',
-              opacity: syncing ? 0.75 : 1,
-            }}
-          >
-            <RefreshCcw size={16} />
-            {syncing ? 'Syncing Zoom...' : 'Sync Zoom'}
-          </button>
           <button
             onClick={() => exportAttendanceCSV(analytics.sessions)}
             style={{
@@ -2159,49 +2789,122 @@ const AttendanceDashboard = () => {
             </div>
 
             <div style={{ marginTop: '14px', border: '1px solid #e2e8f0', borderRadius: '12px', overflowX: 'auto' }}>
-              <table style={{ width: '100%', minWidth: '1240px', borderCollapse: 'collapse' }}>
+              <table style={{ width: '100%', minWidth: '1320px', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                    <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Attendee</th>
-                    <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>HubSpot Match</th>
-                    <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>HubSpot Email</th>
-                    <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>HubSpot Contact</th>
-                    <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Mapping Source</th>
-                    <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Status</th>
-                    <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>{selectedSessionDetail.session.type} Visits</th>
+                    <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Display Name</th>
+                    <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Revenue</th>
+                    <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Sobriety Date</th>
+                    <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Times Visited Meeting</th>
                     <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Total Visits</th>
-                    <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Potential Duplicates</th>
+                    <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Email Address</th>
+                    <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>HubSpot Contact</th>
                   </tr>
                 </thead>
                 <tbody>
                   {selectedSessionDetail.attendeeRows.map((row) => (
                     <tr key={row.name} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '10px', fontSize: '13px', fontWeight: 600, color: '#0f172a' }}>{row.name}</td>
                       <td style={{ padding: '10px' }}>
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            padding: '2px 8px',
-                            borderRadius: '999px',
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            backgroundColor: row.hubspotMatched ? '#dcfce7' : '#fee2e2',
-                            color: row.hubspotMatched ? '#166534' : '#991b1b',
-                            textTransform: 'uppercase',
-                          }}
-                        >
-                          {row.hubspotMatched ? 'Matched' : 'Missing'}
-                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>{row.displayName || row.name}</span>
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                padding: '2px 8px',
+                                borderRadius: '999px',
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                backgroundColor: row.isNew ? '#dcfce7' : '#e2e8f0',
+                                color: row.isNew ? '#166534' : '#334155',
+                                textTransform: 'uppercase',
+                              }}
+                            >
+                              {row.isNew ? 'Net New' : 'Returning'}
+                            </span>
+                          </div>
+                          {normalizeName(row.displayName || '') !== normalizeName(row.name || '') && (
+                            <span style={{ fontSize: '11px', color: '#64748b' }}>Attendance row name: {row.name}</span>
+                          )}
+                          {!row.hubspotMatched && row.missingIdentityReason ? (
+                            <span style={{ fontSize: '10px', color: '#b45309' }}>{row.missingIdentityReason}</span>
+                          ) : null}
+                          {row.duplicateActions.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '2px' }}>
+                              {row.duplicateActions.map((action) => {
+                                const mergeKey = `${normalizeName(action.source)}->${normalizeName(action.target)}`;
+                                const isBusy = mergingAliasKey === mergeKey;
+                                return (
+                                  <button
+                                    key={mergeKey}
+                                    onClick={() => handleMergeAlias(action.source, action.target)}
+                                    disabled={!!mergingAliasKey}
+                                    style={{
+                                      border: '1px solid #cbd5e1',
+                                      backgroundColor: '#f8fafc',
+                                      color: '#1e293b',
+                                      borderRadius: '999px',
+                                      fontSize: '10px',
+                                      fontWeight: 700,
+                                      padding: '3px 8px',
+                                      cursor: 'pointer',
+                                      opacity: !!mergingAliasKey && !isBusy ? 0.55 : 1,
+                                    }}
+                                  >
+                                    {isBusy ? 'Merging...' : action.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td style={{ padding: '10px', fontSize: '12px', textAlign: 'right', color: Number.isFinite(row.revenue) ? '#0f172a' : '#94a3b8', fontWeight: Number.isFinite(row.revenue) ? 700 : 500 }}>
+                        {formatCurrencyMaybe(row.revenue)}
+                      </td>
+                      <td style={{ padding: '10px' }}>
+                        {row.sobrietyDate ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            <span style={{ fontSize: '12px', color: '#0f172a', fontWeight: 600 }}>
+                              {formatDateMMDDYY(row.sobrietyDate)}{row.sobrietyDurationLabel ? ` (${row.sobrietyDurationLabel})` : ''}
+                            </span>
+                            {row.sobrietySoonLabel ? (
+                              <span style={{ fontSize: '10px', color: '#b45309', fontWeight: 700 }}>{row.sobrietySoonLabel}</span>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: '12px', color: '#94a3b8' }}>Not Found</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '10px', fontSize: '13px', color: '#334155', textAlign: 'right', fontWeight: 700 }}>
+                        {row.groupVisitsIncludingThisSession}
+                      </td>
+                      <td style={{ padding: '10px', fontSize: '13px', color: '#334155', textAlign: 'right', fontWeight: 700 }}>
+                        {row.totalVisitsIncludingThisSession}
                       </td>
                       <td style={{ padding: '10px', fontSize: '12px', color: row.hubspotEmail !== 'Not Found' ? '#0f172a' : '#94a3b8' }}>
                         {row.hubspotEmail || 'Not Found'}
                       </td>
                       <td style={{ padding: '10px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <span style={{ fontSize: '12px', color: '#334155', fontWeight: 600 }}>
-                            {row.hubspotName || 'Not Found'}
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              width: 'fit-content',
+                              padding: '2px 8px',
+                              borderRadius: '999px',
+                              fontSize: '10px',
+                              fontWeight: 700,
+                              backgroundColor: row.hubspotMatched ? '#dcfce7' : '#fee2e2',
+                              color: row.hubspotMatched ? '#166534' : '#991b1b',
+                              textTransform: 'uppercase',
+                            }}
+                          >
+                            {row.hubspotMatched ? 'Matched' : 'Missing'}
                           </span>
+                          <span style={{ fontSize: '12px', color: '#334155', fontWeight: 600 }}>{row.hubspotName || 'Not Found'}</span>
                           {row.hubspotUrl ? (
                             <a
                               href={row.hubspotUrl}
@@ -2217,93 +2920,21 @@ const AttendanceDashboard = () => {
                           {row.hubspotContactId ? (
                             <span style={{ fontSize: '10px', color: '#64748b' }}>ID: {row.hubspotContactId}</span>
                           ) : null}
-                        </div>
-                      </td>
-                      <td style={{ padding: '10px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          {row.identityMappingSource === 'hubspot_call_activity' ? (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: '999px', fontSize: '10px', fontWeight: 700, backgroundColor: '#ccfbf1', color: '#0f766e', textTransform: 'uppercase' }}>
-                              ✓ HubSpot Session
+                          <span style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase' }}>
+                            {row.identityMappingSource === 'hubspot_call_activity' ? 'HubSpot Session' : (row.identityMappingSource || 'none')}
+                          </span>
+                          {row.identityMappingSource !== 'hubspot_call_activity' && (
+                            <span style={{ fontSize: '10px', color: '#64748b' }}>
+                              Confidence: {row.identityMappingConfidence || 'Low'}
                             </span>
-                          ) : (
-                            <>
-                              <span style={{ fontSize: '11px', color: '#0f172a', fontWeight: 700 }}>
-                                {row.identityMappingSource || 'none'}
-                              </span>
-                              <span style={{ fontSize: '10px', color: '#64748b' }}>
-                                Confidence: {row.identityMappingConfidence || 'Low'}
-                              </span>
-                            </>
                           )}
-                          {row.identityMappingNote && row.identityMappingSource !== 'hubspot_call_activity' ? (
-                            <span style={{ fontSize: '10px', color: '#64748b' }}>{row.identityMappingNote}</span>
-                          ) : null}
-                          {!row.hubspotMatched && row.missingIdentityReason ? (
-                            <span style={{ fontSize: '10px', color: '#b45309' }}>{row.missingIdentityReason}</span>
-                          ) : null}
                         </div>
-                      </td>
-                      <td style={{ padding: '10px' }}>
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            padding: '2px 8px',
-                            borderRadius: '999px',
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            backgroundColor: row.isNew ? '#dcfce7' : '#e2e8f0',
-                            color: row.isNew ? '#166534' : '#334155',
-                            textTransform: 'uppercase',
-                          }}
-                        >
-                          {row.isNew ? 'Net New' : 'Returning'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '10px', fontSize: '13px', color: '#334155', textAlign: 'right', fontWeight: 700 }}>
-                        {row.groupVisitsIncludingThisSession}
-                      </td>
-                      <td style={{ padding: '10px', fontSize: '13px', color: '#334155', textAlign: 'right', fontWeight: 700 }}>
-                        {row.totalVisitsIncludingThisSession}
-                      </td>
-                      <td style={{ padding: '10px' }}>
-                        {row.duplicateActions.length === 0 && (
-                          <span style={{ fontSize: '12px', color: '#94a3b8' }}>None detected</span>
-                        )}
-                        {row.duplicateActions.length > 0 && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                            {row.duplicateActions.map((action) => {
-                              const mergeKey = `${normalizeName(action.source)}->${normalizeName(action.target)}`;
-                              const isBusy = mergingAliasKey === mergeKey;
-                              return (
-                                <button
-                                  key={mergeKey}
-                                  onClick={() => handleMergeAlias(action.source, action.target)}
-                                  disabled={!!mergingAliasKey}
-                                  style={{
-                                    border: '1px solid #cbd5e1',
-                                    backgroundColor: '#f8fafc',
-                                    color: '#1e293b',
-                                    borderRadius: '999px',
-                                    fontSize: '11px',
-                                    fontWeight: 700,
-                                    padding: '4px 10px',
-                                    cursor: 'pointer',
-                                    opacity: !!mergingAliasKey && !isBusy ? 0.55 : 1,
-                                  }}
-                                >
-                                  {isBusy ? 'Merging...' : action.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
                       </td>
                     </tr>
                   ))}
                   {selectedSessionDetail.attendeeRows.length === 0 && (
                     <tr>
-                      <td colSpan={9} style={{ padding: '14px', textAlign: 'center', fontSize: '13px', color: '#64748b' }}>
+                      <td colSpan={7} style={{ padding: '14px', textAlign: 'center', fontSize: '13px', color: '#64748b' }}>
                         No attendees found for this session.
                       </td>
                     </tr>
@@ -2432,6 +3063,9 @@ const AttendanceDashboard = () => {
               </div>
               <div style={{ marginTop: '6px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
                 <span style={{ fontSize: '11px', color: '#64748b' }}>
+                  HubSpot Name: <strong style={{ color: '#0f172a' }}>{selectedRepeaterDetail.personIdentity?.hubspotName || 'Not Found'}</strong>
+                </span>
+                <span style={{ fontSize: '11px', color: '#64748b' }}>
                   HubSpot Email: <strong style={{ color: '#0f172a' }}>{selectedRepeaterDetail.personIdentity?.hubspotEmail || 'Not Found'}</strong>
                 </span>
                 <span style={{ fontSize: '11px', color: '#64748b' }}>
@@ -2443,6 +3077,12 @@ const AttendanceDashboard = () => {
                   </a>
                 ) : null}
               </div>
+              {selectedRepeaterDetail.personIdentity?.hubspotName
+                && normalizeName(selectedRepeaterDetail.personIdentity.hubspotName) !== normalizeName(selectedRepeaterDetail.person.name) && (
+                  <p style={{ marginTop: '6px', fontSize: '11px', color: '#b45309', fontWeight: 600 }}>
+                    Dashboard attendee name differs from HubSpot contact name. Use the HubSpot name as source of truth for outreach.
+                  </p>
+                )}
 
               <div style={{ marginTop: '10px', display: 'grid', gridTemplateColumns: 'minmax(220px, 1fr) 1.5fr', gap: '10px' }}>
                 <div style={{ maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -2514,32 +3154,316 @@ const AttendanceDashboard = () => {
         </div>
 
         <div style={{ ...cardStyle, borderLeft: '5px solid #f59e0b' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <AlertTriangle size={18} color="#b45309" />
-            <h3 style={{ fontSize: '18px' }}>At-Risk Repeaters</h3>
-          </div>
-          <p style={{ fontSize: '12px', color: '#92400e', marginTop: '4px', marginBottom: '12px' }}>Missed 3+ sessions in their group</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '260px', overflowY: 'auto' }}>
-            {analytics.atRiskPeople.map((p) => (
-              <div key={p.name} style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                backgroundColor: '#fffbeb', border: '1px solid #fcd34d', padding: '8px 12px', borderRadius: '10px',
-              }}>
-                <div>
-                  <span style={{ fontWeight: 600, fontSize: '13px', color: '#92400e' }}>{p.name}</span>
-                  <span style={{ fontSize: '11px', color: '#b45309', marginLeft: '8px' }}>
-                    ({p.primaryGroup}) — {p.visits} visits
-                  </span>
-                </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertTriangle size={18} color="#b45309" />
+                <h3 style={{ fontSize: '18px' }}>At-Risk Outreach Queue</h3>
               </div>
-            ))}
-            {analytics.atRiskPeople.length === 0 && (
-              <span style={{ color: 'var(--color-text-secondary)', fontSize: '14px' }}>No at-risk repeaters detected.</span>
+              <p style={{ fontSize: '12px', color: '#92400e', marginTop: '4px' }}>
+                Rule A: attended once and missed the next session. Rule B: attended 2+ times and missed 2 in a row (within their primary Tuesday/Thursday group).
+              </p>
+              <p style={{ fontSize: '11px', color: '#b45309', marginTop: '4px' }}>
+                Open the HubSpot contact and send a missed-session check-in template asking for feedback and whether it was scheduling or they are not planning to return.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ padding: '6px 10px', borderRadius: '999px', backgroundColor: '#fff7ed', border: '1px solid #fdba74', color: '#9a3412', fontSize: '11px', fontWeight: 700 }}>
+                Rule A: {analytics.atRiskBreakdown?.oneAndDoneMissedNext || 0}
+              </span>
+              <span style={{ padding: '6px 10px', borderRadius: '999px', backgroundColor: '#fffbeb', border: '1px solid #fcd34d', color: '#92400e', fontSize: '11px', fontWeight: 700 }}>
+                Rule B: {analytics.atRiskBreakdown?.repeatMissedTwoInRow || 0}
+              </span>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '360px', overflowY: 'auto', marginTop: '10px' }}>
+            {atRiskOutreachRows.map((p) => {
+              const isRuleA = p.atRiskRule === 'one_and_done_missed_next';
+              const ruleLabel = isRuleA ? 'Rule A - Missed next session' : 'Rule B - Missed 2+ in a row';
+              const groupWord = p.primaryGroup === 'Tuesday' ? 'Tuesday' : 'Thursday';
+              return (
+                <div
+                  key={p.name}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr auto',
+                    gap: '10px',
+                    alignItems: 'start',
+                    backgroundColor: '#fffbeb',
+                    border: '1px solid #fcd34d',
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                  }}
+                >
+                  <div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontWeight: 700, fontSize: '13px', color: '#92400e' }}>{p.name}</span>
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          padding: '2px 8px',
+                          borderRadius: '999px',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          backgroundColor: isRuleA ? '#ffedd5' : '#fef3c7',
+                          color: isRuleA ? '#9a3412' : '#92400e',
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        {ruleLabel}
+                      </span>
+                      <span style={{ fontSize: '10px', color: '#78350f', fontWeight: 700, textTransform: 'uppercase' }}>
+                        {groupWord}
+                      </span>
+                    </div>
+                    <div style={{ marginTop: '4px', fontSize: '12px', color: '#92400e' }}>
+                      Attended {p.groupVisits} {groupWord.toLowerCase()} time{p.groupVisits === 1 ? '' : 's'} ({p.visits} total)
+                    </div>
+                    <div style={{ marginTop: '2px', fontSize: '12px', color: '#92400e' }}>
+                      Missed in a row: <strong>{p.missedInRow}</strong>
+                      {p.lastAttendedGroupDateFormatted ? ` | Last ${groupWord} attendance: ${p.lastAttendedGroupDateFormatted}` : ''}
+                    </div>
+                    <div style={{ marginTop: '4px', fontSize: '11px', color: '#b45309' }}>
+                      HubSpot Email: <strong style={{ color: '#92400e' }}>{p.hubspotEmail || 'Not Found'}</strong>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+                    {p.hubspotUrl ? (
+                      <a
+                        href={p.hubspotUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '6px 10px',
+                          borderRadius: '8px',
+                          border: '1px solid #93c5fd',
+                          backgroundColor: '#eff6ff',
+                          color: '#1d4ed8',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          textDecoration: 'none',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        Open in HubSpot
+                      </a>
+                    ) : (
+                      <span style={{ fontSize: '11px', color: '#92400e' }}>No HubSpot link</span>
+                    )}
+                    <span style={{ fontSize: '10px', color: '#b45309', textTransform: 'uppercase' }}>
+                      {p.hubspotMatched ? (p.identityMappingSource || 'matched') : 'unmatched'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+            {atRiskOutreachRows.length === 0 && (
+              <span style={{ color: 'var(--color-text-secondary)', fontSize: '14px' }}>
+                No at-risk attendees detected by the current outreach rules.
+              </span>
             )}
           </div>
         </div>
       </div>
+      <div style={{ ...cardStyle, borderLeft: '5px solid #ef4444' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+          <div>
+            <h3 style={{ fontSize: '18px', color: '#991b1b' }}>Bad Names QA (HubSpot Contacts)</h3>
+            <p style={{ marginTop: '4px', fontSize: '12px', color: '#7f1d1d' }}>
+              Flags suspicious HubSpot contact names attached to Tuesday/Thursday HubSpot call attendance (email text in name, device-like names, digits, or missing names).
+            </p>
+            <p style={{ marginTop: '4px', fontSize: '11px', color: '#991b1b' }}>
+              Rename in HubSpot, refresh data, and matched Attendance rows should backfill to the updated HubSpot contact name.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ padding: '6px 10px', borderRadius: '999px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', fontSize: '11px', fontWeight: 700 }}>
+              Suspicious HubSpot Contacts: {badNameQa.counts?.suspiciousContacts || 0}
+            </span>
+            <span style={{ padding: '6px 10px', borderRadius: '999px', backgroundColor: '#fff1f2', border: '1px solid #fda4af', color: '#9f1239', fontSize: '11px', fontWeight: 700 }}>
+              Suspicious Unmatched Call Rows: {badNameQa.counts?.suspiciousUnmatchedAssocCount || 0}
+            </span>
+          </div>
+        </div>
 
+        <div style={{ marginTop: '10px', border: '1px solid #fee2e2', borderRadius: '12px', overflowX: 'auto', maxHeight: '360px' }}>
+          <table style={{ width: '100%', minWidth: '1120px', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#fef2f2', borderBottom: '1px solid #fee2e2' }}>
+                <th style={{ textAlign: 'left', padding: '10px', fontSize: '11px', color: '#7f1d1d', textTransform: 'uppercase' }}>Current HubSpot Name</th>
+                <th style={{ textAlign: 'left', padding: '10px', fontSize: '11px', color: '#7f1d1d', textTransform: 'uppercase' }}>Call Snapshot Name(s)</th>
+                <th style={{ textAlign: 'left', padding: '10px', fontSize: '11px', color: '#7f1d1d', textTransform: 'uppercase' }}>Email</th>
+                <th style={{ textAlign: 'left', padding: '10px', fontSize: '11px', color: '#7f1d1d', textTransform: 'uppercase' }}>Reason(s)</th>
+                <th style={{ textAlign: 'right', padding: '10px', fontSize: '11px', color: '#7f1d1d', textTransform: 'uppercase' }}>Group Call Rows</th>
+                <th style={{ textAlign: 'left', padding: '10px', fontSize: '11px', color: '#7f1d1d', textTransform: 'uppercase' }}>Last Seen</th>
+                <th style={{ textAlign: 'left', padding: '10px', fontSize: '11px', color: '#7f1d1d', textTransform: 'uppercase' }}>HubSpot</th>
+              </tr>
+            </thead>
+            <tbody>
+              {badNameQa.rows.slice(0, 100).map((row) => (
+                <tr key={`bad-name-${row.hubspotContactId}`} style={{ borderBottom: '1px solid #fef2f2' }}>
+                  <td style={{ padding: '10px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', color: '#111827', fontWeight: 700 }}>{row.currentName || 'Not Found'}</span>
+                      <span style={{ fontSize: '10px', color: '#6b7280' }}>ID: {row.hubspotContactId}</span>
+                    </div>
+                  </td>
+                  <td style={{ padding: '10px', fontSize: '11px', color: '#374151' }}>
+                    {row.snapshotNames.length > 0 ? row.snapshotNames.join(' | ') : 'None'}
+                  </td>
+                  <td style={{ padding: '10px', fontSize: '11px', color: '#111827' }}>{row.currentEmail || 'Not Found'}</td>
+                  <td style={{ padding: '10px' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                      {row.reasons.map((reason) => (
+                        <span
+                          key={`${row.hubspotContactId}-${reason}`}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '2px 8px',
+                            borderRadius: '999px',
+                            backgroundColor: '#fff1f2',
+                            border: '1px solid #fecdd3',
+                            color: '#9f1239',
+                            fontSize: '10px',
+                            fontWeight: 700,
+                          }}
+                        >
+                          {reason}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td style={{ padding: '10px', textAlign: 'right', fontSize: '12px', fontWeight: 700, color: '#111827' }}>{row.associationRows}</td>
+                  <td style={{ padding: '10px', fontSize: '11px', color: '#374151' }}>{row.lastSeenDateFormatted || 'Unknown'}</td>
+                  <td style={{ padding: '10px' }}>
+                    {row.hubspotUrl ? (
+                      <a href={row.hubspotUrl} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 700, textDecoration: 'underline' }}>
+                        Open in HubSpot
+                      </a>
+                    ) : (
+                      <span style={{ fontSize: '11px', color: '#9ca3af' }}>No link</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {badNameQa.rows.length === 0 && (
+                <tr>
+                  <td colSpan={7} style={{ padding: '12px', fontSize: '12px', color: '#6b7280' }}>
+                    No suspicious HubSpot contact names detected in current Tuesday/Thursday HubSpot call attendance rows.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style={{ ...cardStyle, borderLeft: '5px solid #8b5cf6', background: 'linear-gradient(180deg, #faf5ff 0%, #ffffff 75%)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Sparkles size={18} color="#7c3aed" />
+            <h3 style={{ fontSize: '18px', margin: 0, color: '#5b21b6' }}>AI Insight (Retention Focus)</h3>
+          </div>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {attendanceAiInsight.providerStatuses.map((provider) => (
+              <span
+                key={provider.key}
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: '999px',
+                  border: `1px solid ${provider.configured ? '#86efac' : '#d8b4fe'}`,
+                  backgroundColor: provider.configured ? '#f0fdf4' : '#faf5ff',
+                  color: provider.configured ? '#166534' : '#6d28d9',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                }}
+                title={provider.note}
+              >
+                {provider.label}: {provider.configured ? 'Configured' : 'Placeholder'}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <p style={{ marginTop: '10px', marginBottom: 0, fontSize: '13px', color: '#4c1d95', lineHeight: 1.5 }}>
+          {attendanceAiInsight.headline}
+        </p>
+
+        <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '12px' }}>
+          <div style={{ border: '1px solid #e9d5ff', borderRadius: '12px', backgroundColor: 'white', padding: '12px' }}>
+            <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', color: '#7c3aed' }}>Session Summary</p>
+            <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {attendanceAiInsight.summaryBullets.map((bullet, idx) => (
+                <p key={`ai-summary-${idx}`} style={{ margin: 0, fontSize: '13px', color: '#334155' }}>{bullet}</p>
+              ))}
+              {attendanceAiInsight.summaryBullets.length === 0 && (
+                <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>Click a session bar to generate session-specific retention insights.</p>
+              )}
+            </div>
+          </div>
+
+          <div style={{ border: '1px solid #ede9fe', borderRadius: '12px', backgroundColor: '#faf5ff', padding: '12px' }}>
+            <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', color: '#6d28d9' }}>Blind Spots</p>
+            <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {attendanceAiInsight.blindSpots.map((item, idx) => (
+                <p key={`ai-blind-${idx}`} style={{ margin: 0, fontSize: '12px', color: '#5b21b6' }}>{item}</p>
+              ))}
+              {attendanceAiInsight.blindSpots.length === 0 && (
+                <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>No major blind spots detected in the currently selected session.</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: '12px', border: '1px solid #ddd6fe', borderRadius: '12px', backgroundColor: 'white', padding: '12px' }}>
+          <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', color: '#6d28d9' }}>Opportunities To Raise Repeat Attendance</p>
+          <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {attendanceAiInsight.opportunities.map((item, idx) => (
+              <p key={`ai-oppty-${idx}`} style={{ margin: 0, fontSize: '13px', color: '#334155' }}>{idx + 1}. {item}</p>
+            ))}
+            {attendanceAiInsight.opportunities.length === 0 && (
+              <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>Select a session to surface targeted retention opportunities.</p>
+            )}
+          </div>
+        </div>
+
+        <div style={{ marginTop: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', backgroundColor: '#f8fafc', padding: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <div>
+              <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', color: '#475569' }}>Autonomous Workflow (Planned)</p>
+              <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748b' }}>
+                Delivery modes can be file downloads or direct software syncs (Mailchimp/CRM/Notion) after provider + API actions are wired.
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled
+              style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#e2e8f0', color: '#64748b', fontSize: '12px', fontWeight: 700, cursor: 'not-allowed' }}
+              title="Hook this to Supabase AI orchestration + provider APIs"
+            >
+              Generate AI Insight + Tasks (Soon)
+            </button>
+          </div>
+          <div style={{ marginTop: '10px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
+            {attendanceAiInsight.autonomousWorkflow.map((task) => (
+              <div key={task.id} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', backgroundColor: 'white', padding: '10px' }}>
+                <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>{task.title}</p>
+                <p style={{ margin: '4px 0 0 0', fontSize: '11px', color: '#64748b' }}>{task.delivery}</p>
+                <button type="button" disabled style={{ marginTop: '8px', padding: '6px 10px', borderRadius: '8px', border: '1px solid #d1d5db', backgroundColor: '#f3f4f6', color: '#6b7280', fontSize: '11px', fontWeight: 700, cursor: 'not-allowed' }}>
+                  {task.actionLabel}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
       {/* ─── Action Plan ─── */}
       <div style={cardStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
@@ -2572,35 +3496,105 @@ const AttendanceDashboard = () => {
                     <h4 style={{ fontSize: '16px' }}>{group.title}</h4>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {group.items.map((item) => (
-                      <label
-                        key={item.id}
-                        style={{
-                          border: '1px solid #e2e8f0',
-                          backgroundColor: '#f8fafc',
-                          borderRadius: '10px',
-                          padding: '10px',
-                          display: 'grid',
-                          gridTemplateColumns: '1fr auto',
-                          alignItems: 'start',
-                          gap: '10px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <div>
-                          <p style={{ fontSize: '14px', fontWeight: 700 }}>{item.title}</p>
-                          <p style={{ marginTop: '4px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>{item.detail}</p>
+                    {group.items.map((item) => {
+                      const isHumanGroup = group.title === 'Human';
+                      const workflow = humanTaskWorkflow[item.id] || {};
+                      const addToDoChecked = !!workflow.addToDo;
+                      const isSavingTodo = workflow.syncStatus === 'saving';
+                      const isTodoSaved = workflow.syncStatus === 'saved';
+                      const isSkipped = workflow.syncStatus === 'skipped' || !!workflow.skipped;
+                      return (
+                        <div
+                          key={item.id}
+                          style={{
+                            border: '1px solid #e2e8f0',
+                            backgroundColor: isSkipped ? '#f8fafc' : ' #f8fafc',
+                            borderRadius: '10px',
+                            padding: '10px',
+                            display: 'grid',
+                            gridTemplateColumns: '1fr auto',
+                            alignItems: 'start',
+                            gap: '10px',
+                          }}
+                        >
+                          <div>
+                            <p style={{ fontSize: '14px', fontWeight: 700 }}>{item.title}</p>
+                            <p style={{ marginTop: '4px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>{item.detail}</p>
+
+                            {isHumanGroup && (
+                              <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
+                                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#334155', fontWeight: 600 }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={addToDoChecked}
+                                    disabled={isSavingTodo || isTodoSaved}
+                                    onChange={(e) => {
+                                      if (e.target.checked) handleAddHumanTaskToNotion(item);
+                                      else {
+                                        setHumanTaskWorkflow((prev) => ({
+                                          ...prev,
+                                          [item.id]: {
+                                            ...(prev[item.id] || {}),
+                                            addToDo: false,
+                                            skipped: false,
+                                            syncStatus: 'idle',
+                                            error: '',
+                                          },
+                                        }));
+                                      }
+                                    }}
+                                  />
+                                  <span>{isSavingTodo ? 'Adding To Do...' : 'Add To Do'}</span>
+                                </label>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleSkipHumanTask(item)}
+                                  disabled={isSavingTodo}
+                                  style={{
+                                    border: '1px solid #cbd5e1',
+                                    backgroundColor: isSkipped ? '#e2e8f0' : 'white',
+                                    color: '#334155',
+                                    borderRadius: '8px',
+                                    padding: '4px 8px',
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    cursor: isSavingTodo ? 'not-allowed' : 'pointer',
+                                    opacity: isSavingTodo ? 0.65 : 1,
+                                  }}
+                                >
+                                  {isSkipped ? 'Skipped' : 'Skip'}
+                                </button>
+
+                                {isTodoSaved && (
+                                  <span style={{ fontSize: '11px', color: '#166534', fontWeight: 700 }}>
+                                    Synced to Notion ({workflow.notionTaskStatus || 'Saved'})
+                                  </span>
+                                )}
+                                {workflow.error && (
+                                  <span style={{ fontSize: '11px', color: '#991b1b', fontWeight: 700 }}>
+                                    {workflow.error}
+                                  </span>
+                                )}
+                                {workflow.notionUrl ? (
+                                  <a href={workflow.notionUrl} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 700, textDecoration: 'underline' }}>
+                                    Open Notion Task
+                                  </a>
+                                ) : null}
+                              </div>
+                            )}
+                          </div>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={!!planState[item.id]}
+                              onChange={(e) => setPlanState((prev) => ({ ...prev, [item.id]: e.target.checked }))}
+                            />
+                            <span style={{ fontSize: '13px', fontWeight: 700 }}>Proceed</span>
+                          </label>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <input
-                            type="checkbox"
-                            checked={!!planState[item.id]}
-                            onChange={(e) => setPlanState((prev) => ({ ...prev, [item.id]: e.target.checked }))}
-                          />
-                          <span style={{ fontSize: '13px', fontWeight: 700 }}>Proceed</span>
-                        </div>
-                      </label>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               );

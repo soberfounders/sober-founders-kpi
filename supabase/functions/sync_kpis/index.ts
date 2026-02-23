@@ -36,6 +36,7 @@ async function hubspotSearchContactsCreatedBetween(
     "lastname",
 
     // Revenue + membership (your custom fields)
+    "annual_revenue_in_usd_official",
     "annual_revenue_in_dollars__official_",
     "annual_revenue_in_dollars",
     "sobriety_date",
@@ -126,6 +127,7 @@ async function pgRpcUpsertHubspotContacts(
     const p = r.properties ?? {};
 
     const annualRevenueOfficialRaw =
+      p.annual_revenue_in_usd_official ??
       p.annual_revenue_in_dollars__official_ ??
       null;
 

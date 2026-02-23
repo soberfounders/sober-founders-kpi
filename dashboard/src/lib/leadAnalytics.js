@@ -105,7 +105,9 @@ function leadTierFromRevenue(value) {
 }
 
 function resolveHubspotRevenue(row) {
-  const officialRaw = row?.annual_revenue_in_dollars__official_;
+  const officialRaw =
+    row?.annual_revenue_in_usd_official
+    ?? row?.annual_revenue_in_dollars__official_;
   if (officialRaw !== null && officialRaw !== undefined && officialRaw !== '') {
     const official = Number(officialRaw);
     if (Number.isFinite(official)) return official;

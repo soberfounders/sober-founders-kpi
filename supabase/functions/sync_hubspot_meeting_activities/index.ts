@@ -231,6 +231,16 @@ async function hubspotBatchReadContacts(
     "firstname",
     "lastname",
     "createdate",
+    "annual_revenue_in_usd_official",
+    "annual_revenue_in_dollars__official_",
+    "annual_revenue_in_dollars",
+    "sobriety_date",
+    "sobriety_date__official_",
+    "sober_date",
+    "clean_date",
+    "membership_s",
+    "membership_s_",
+    "hs_additional_emails",
     "hs_analytics_source",
     "hs_analytics_source_data_1",
     "hs_analytics_source_data_2",
@@ -262,6 +272,68 @@ async function hubspotBatchReadContacts(
   }
 
   return out;
+}
+
+function toNumberOrNull(value: any): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function firstPresent(props: Record<string, any>, keys: string[]): any {
+  for (const key of keys) {
+    const value = props?.[key];
+    if (value !== null && value !== undefined && value !== "") return value;
+  }
+  return null;
+}
+
+function toIsoMaybe(value: any): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
+function mapHubspotContactToRawContactRow(contact: any) {
+  const contactId = Number(contact?.id);
+  if (!Number.isFinite(contactId)) return null;
+  const props = contact?.properties || {};
+
+  const officialRevenueRaw = firstPresent(props, [
+    "annual_revenue_in_usd_official",
+    "annual_revenue_in_dollars__official_",
+  ]);
+  const fallbackRevenueRaw = firstPresent(props, ["annual_revenue_in_dollars"]);
+  const officialRevenue = toNumberOrNull(officialRevenueRaw);
+  const fallbackRevenue = toNumberOrNull(fallbackRevenueRaw);
+  const annualRevenue = officialRevenue ?? fallbackRevenue;
+  const sobrietyDate = firstPresent(props, [
+    "sobriety_date",
+    "sobriety_date__official_",
+    "sober_date",
+    "clean_date",
+  ]);
+  const membership = firstPresent(props, ["membership_s_", "membership_s"]);
+  const hsSource = firstPresent(props, ["hs_analytics_source"]);
+
+  return {
+    hubspot_contact_id: contactId,
+    ingested_at: new Date().toISOString(),
+    createdate: toIsoMaybe(props?.createdate),
+    email: typeof props?.email === "string" ? props.email : null,
+    firstname: typeof props?.firstname === "string" ? props.firstname : null,
+    lastname: typeof props?.lastname === "string" ? props.lastname : null,
+    annual_revenue_in_dollars: annualRevenue,
+    annual_revenue_in_dollars__official_: officialRevenue,
+    sobriety_date: typeof sobrietyDate === "string" ? sobrietyDate : null,
+    membership_s: typeof membership === "string" ? membership : null,
+    hs_additional_emails: typeof props?.hs_additional_emails === "string" ? props.hs_additional_emails : null,
+    original_traffic_source: typeof hsSource === "string" ? hsSource : null,
+    hs_analytics_source: typeof hsSource === "string" ? hsSource : null,
+    hs_analytics_source_data_1: typeof props?.hs_analytics_source_data_1 === "string" ? props.hs_analytics_source_data_1 : null,
+    hs_analytics_source_data_2: typeof props?.hs_analytics_source_data_2 === "string" ? props.hs_analytics_source_data_2 : null,
+  };
 }
 
 async function upsertRows(
@@ -355,6 +427,7 @@ serve(async (req: Request) => {
 
     const rawActivityRows: any[] = [];
     const assocRows: any[] = [];
+    const rawContactsById = new Map<number, any>();
 
     let searchedObjects = 0;
     let associatedContacts = 0;
@@ -375,6 +448,11 @@ serve(async (req: Request) => {
         });
       });
       const contactsById = await hubspotBatchReadContacts(HUBSPOT_TOKEN, [...allContactIds]);
+      contactsById.forEach((contact) => {
+        const mapped = mapHubspotContactToRawContactRow(contact);
+        if (!mapped) return;
+        rawContactsById.set(Number(mapped.hubspot_contact_id), mapped);
+      });
 
       for (const obj of objects) {
         const props = obj?.properties || {};
@@ -442,6 +520,14 @@ serve(async (req: Request) => {
       assocRows,
     );
 
+    const upsertedContacts = await upsertRows(
+      SUPABASE_URL,
+      SUPABASE_SERVICE_ROLE_KEY,
+      "raw_hubspot_contacts",
+      "hubspot_contact_id",
+      [...rawContactsById.values()],
+    );
+
     return new Response(JSON.stringify({
       ok: true,
       from: fromDate,
@@ -451,8 +537,9 @@ serve(async (req: Request) => {
       associations_found: associatedContacts,
       raw_hubspot_meeting_activities_upserted: upsertedActivities,
       hubspot_activity_contact_associations_upserted: upsertedAssociations,
+      raw_hubspot_contacts_upserted: upsertedContacts,
       notes,
-      note: "Additive sync only. Does not change existing Zoom/Lu.ma analytics until resolver consumes these tables.",
+      note: "Additive sync only. Call sync now also refreshes associated contact enrichment in raw_hubspot_contacts.",
     }), {
       headers: { ...corsHeaders, "content-type": "application/json" },
     });

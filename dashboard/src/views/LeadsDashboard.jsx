@@ -117,11 +117,47 @@ function hubspotContactCreatedTs(contact) {
   return Number.isFinite(ts) ? ts : 0;
 }
 
+const HUBSPOT_REVENUE_FIELDS = [
+  'annual_revenue_in_usd_official',
+  'annual_revenue_in_dollars__official_',
+  'annual_revenue_in_dollars',
+  'annual_revenue',
+];
+
+const HUBSPOT_SOBRIETY_FIELDS = [
+  'sobriety_date',
+  'sobriety_date__official_',
+  'sober_date',
+  'clean_date',
+  'sobrietydate',
+];
+
+function hubspotFirstPresentField(contact, fieldNames = []) {
+  for (const fieldName of fieldNames) {
+    const value = contact?.[fieldName];
+    if (value !== null && value !== undefined && value !== '') return value;
+  }
+  return null;
+}
+
+function hubspotSobrietyValue(contact) {
+  return hubspotFirstPresentField(contact, HUBSPOT_SOBRIETY_FIELDS);
+}
+
+function hubspotRevenueOfficialValue(contact) {
+  const officialRaw = hubspotFirstPresentField(contact, HUBSPOT_REVENUE_FIELDS.slice(0, 2));
+  if (officialRaw !== null && officialRaw !== undefined && officialRaw !== '') {
+    const official = Number(officialRaw);
+    if (Number.isFinite(official)) return official;
+  }
+  return null;
+}
+
 function hubspotContactQualityScore(contact) {
   let score = 0;
-  if (contact?.annual_revenue_in_dollars__official_ !== null && contact?.annual_revenue_in_dollars__official_ !== undefined && contact?.annual_revenue_in_dollars__official_ !== '') score += 4;
+  if (hubspotRevenueOfficialValue(contact) !== null) score += 4;
   else if (contact?.annual_revenue_in_dollars !== null && contact?.annual_revenue_in_dollars !== undefined && contact?.annual_revenue_in_dollars !== '') score += 2;
-  if (contact?.sobriety_date) score += 1;
+  if (hubspotSobrietyValue(contact)) score += 1;
   if (contact?.hs_analytics_source) score += 2;
   if (contact?.hs_analytics_source_data_1) score += 1;
   if (contact?.hs_analytics_source_data_2) score += 1;
@@ -173,7 +209,7 @@ function isPhoenixHubspot(row) {
 }
 
 function hubspotRevenueValue(contact) {
-  const official = Number(contact?.annual_revenue_in_dollars__official_);
+  const official = hubspotRevenueOfficialValue(contact);
   if (Number.isFinite(official)) return official;
   const fallback = Number(contact?.annual_revenue_in_dollars);
   if (Number.isFinite(fallback)) return fallback;
@@ -1021,9 +1057,9 @@ export default function LeadsDashboard() {
 
     const contactScore = (row) => {
       let score = 0;
-      if (row?.annual_revenue_in_dollars__official_ !== null && row?.annual_revenue_in_dollars__official_ !== undefined && row?.annual_revenue_in_dollars__official_ !== '') score += 4;
+      if (hubspotRevenueOfficialValue(row) !== null) score += 4;
       else if (row?.annual_revenue_in_dollars !== null && row?.annual_revenue_in_dollars !== undefined && row?.annual_revenue_in_dollars !== '') score += 2;
-      if (row?.sobriety_date) score += 1;
+      if (hubspotSobrietyValue(row)) score += 1;
       if (row?.hs_analytics_source) score += 1;
       if (row?.hs_analytics_source_data_1) score += 1;
       if (row?.hs_analytics_source_data_2) score += 1;
@@ -1249,7 +1285,7 @@ export default function LeadsDashboard() {
     };
 
     const resolveRevenue = (contact) => {
-      const official = Number(contact?.annual_revenue_in_dollars__official_);
+      const official = hubspotRevenueOfficialValue(contact);
       if (Number.isFinite(official)) return { revenue: official, revenueOfficial: official };
       const fallback = Number(contact?.annual_revenue_in_dollars);
       if (Number.isFinite(fallback)) return { revenue: fallback, revenueOfficial: null };
@@ -2201,6 +2237,24 @@ export default function LeadsDashboard() {
           reason: 'Manual override HubSpot contact ID',
           candidateHints: '',
         };
+      }
+
+      const rowDateKey = parseDateKeyLoose(row?.date);
+      const meetingId = String(row?.meetingId || '');
+      const attendeeKey = normalizePersonNameKey(row?.attendeeName || row?.rawName);
+      if (rowDateKey && attendeeKey) {
+        const materialized = callCoverageIndex.bySessionAttendee.get(`${rowDateKey}|${meetingId}|${attendeeKey}`);
+        const materializedId = Number(materialized?.hubspot_contact_id);
+        const materializedContact = Number.isFinite(materializedId) ? (hubspotIndex.byId.get(materializedId) || null) : null;
+        if (materializedContact) {
+          return {
+            contact: materializedContact,
+            confidence: 'full_name',
+            source: 'hubspot_call_materialized_mapping',
+            reason: 'Matched via materialized Zoom attendee -> HubSpot call association mapping',
+            candidateHints: '',
+          };
+        }
       }
 
       const email = normalizeEmailKey(row?.email);

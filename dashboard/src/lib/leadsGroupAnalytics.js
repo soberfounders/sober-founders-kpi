@@ -261,11 +261,11 @@ function contactCreatedTs(row) {
 }
 
 function contactDataScore(row) {
-    const official = row?.annual_revenue_in_dollars__official_;
+    const official = resolveHubspotOfficialRevenue(row);
     const fallback = row?.annual_revenue_in_dollars;
-    const sobriety = row?.sobriety_date;
+    const sobriety = extractHubspotSobrietyRaw(row);
     let score = 0;
-    if (official !== null && official !== undefined && official !== '') score += 4;
+    if (official !== null && official !== undefined) score += 4;
     else if (fallback !== null && fallback !== undefined && fallback !== '') score += 2;
     if (sobriety !== null && sobriety !== undefined && sobriety !== '') score += 1;
     return score;
@@ -293,12 +293,33 @@ function fullNameFromContact(contact) {
     return `${String(contact?.firstname || '').trim()} ${String(contact?.lastname || '').trim()}`.trim();
 }
 
-function resolveHubspotRevenue(contact) {
-    const officialRaw = contact?.annual_revenue_in_dollars__official_;
+const HUBSPOT_REVENUE_FIELDS = [
+    'annual_revenue_in_usd_official',
+    'annual_revenue_in_dollars__official_',
+    'annual_revenue_in_dollars',
+    'annual_revenue',
+];
+
+function extractHubspotRevenueRaw(contact, fieldNames = HUBSPOT_REVENUE_FIELDS) {
+    for (const key of fieldNames) {
+        const value = contact?.[key];
+        if (value !== null && value !== undefined && value !== '') return value;
+    }
+    return null;
+}
+
+function resolveHubspotOfficialRevenue(contact) {
+    const officialRaw = extractHubspotRevenueRaw(contact, HUBSPOT_REVENUE_FIELDS.slice(0, 2));
     if (officialRaw !== null && officialRaw !== undefined && officialRaw !== '') {
         const official = Number(officialRaw);
         if (Number.isFinite(official)) return official;
     }
+    return null;
+}
+
+function resolveHubspotRevenue(contact) {
+    const official = resolveHubspotOfficialRevenue(contact);
+    if (Number.isFinite(official)) return official;
 
     const fallbackRaw = contact?.annual_revenue_in_dollars;
     if (fallbackRaw !== null && fallbackRaw !== undefined && fallbackRaw !== '') {
@@ -699,11 +720,7 @@ function buildLumaRows(lumaRows, startKey, endKey, hubspotRows, adsAdsetIndex) {
     }).map((row) => {
         const email = normalizeEmail(row?.guest_email);
         const contact = pickMostRelevantContact(hubspotByEmail.get(email));
-        const officialRevenueRaw = contact?.annual_revenue_in_dollars__official_;
-        const officialRevenue =
-            officialRevenueRaw !== null && officialRevenueRaw !== undefined && officialRevenueRaw !== ''
-                ? Number(officialRevenueRaw)
-                : null;
+        const officialRevenue = resolveHubspotOfficialRevenue(contact);
         const matchedRevenueRaw = row?.matched_hubspot_revenue;
         const matchedRevenue =
             matchedRevenueRaw !== null && matchedRevenueRaw !== undefined && matchedRevenueRaw !== ''
