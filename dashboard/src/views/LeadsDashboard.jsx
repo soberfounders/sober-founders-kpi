@@ -282,7 +282,7 @@ function MetricCell({ label, value, changePct, onClick, invertColor, formatFn = 
 
 // ─── Category bar ─────────────────────────────────────────────────────────────
 const TIER_COLORS = { great: '#16a34a', qualified: '#2563eb', ok: '#d97706', bad: '#dc2626', unknown: '#94a3b8' };
-const TIER_LABELS = { great: 'Great ≥$1M', qualified: 'Qualified $250k–$1M', ok: 'OK $100k–$249k', bad: 'Bad <$100k', unknown: 'Unknown' };
+const TIER_LABELS = { great: 'Great ≥$1M', qualified: 'Qualified $250k–$999,999', ok: 'OK $100k–$249k', bad: 'Bad <$100k', unknown: 'Unknown' };
 
 function CategoryRow({ cat, total }) {
   if (!cat) return null;
@@ -386,36 +386,57 @@ function GroupPanel({ label, snap, prevSnap, onOpenModal }) {
 function AIInsightsPanel({ supabaseUrl, supabaseKey, groupedData }) {
   const [aiData, setAiData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loadingProvider, setLoadingProvider] = useState(null);
   const [adModal, setAdModal] = useState(null);
   const [error, setError] = useState(null);
 
-  const runAnalysis = useCallback(async () => {
+  const runProviderAnalysis = useCallback(async (provider) => {
     if (!groupedData) return;
+    const modeByProvider = {
+      openai: 'analyze_openai',
+      gemini: 'analyze_gemini',
+    };
+    const mode = modeByProvider[provider];
+    if (!mode) return;
     setLoading(true); setError(null);
+    setLoadingProvider(provider);
     try {
       const resp = await fetch(`${supabaseUrl}/functions/v1/analyze-leads-insights`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` },
         body: JSON.stringify({
-          mode: 'analyze',
+          mode,
           dateLabel: groupedData.dateRange?.current?.label || 'Selected Period',
           currentData: groupedData.current,
           previousData: groupedData.previous,
         }),
       });
       const json = await resp.json();
-      if (json.ok) setAiData(json);
+      if (json.ok) {
+        setAiData(prev => ({
+          ...(prev || {}),
+          provider: json.provider || provider,
+          ...(json.claude ? { claude: json.claude } : {}),
+          ...(json.openai ? { openai: json.openai } : {}),
+          ...(json.gemini ? { gemini: json.gemini } : {}),
+          ...(Array.isArray(json.consensus) && json.consensus.length ? { consensus: json.consensus } : {}),
+          ...(Array.isArray(json.autonomous_actions) ? { autonomous_actions: json.autonomous_actions } : {}),
+          ...(Array.isArray(json.human_actions) ? { human_actions: json.human_actions } : {}),
+        }));
+      }
       else setError(json.error || 'Unknown error');
     } catch (e) {
       setError(e.message);
     } finally {
       setLoading(false);
+      setLoadingProvider(null);
     }
   }, [groupedData, supabaseUrl, supabaseKey]);
 
   const generateAd = useCallback(async () => {
     if (!groupedData) return;
     setLoading(true);
+    setLoadingProvider('generate_ad');
     try {
       const resp = await fetch(`${supabaseUrl}/functions/v1/analyze-leads-insights`, {
         method: 'POST',
@@ -428,6 +449,7 @@ function AIInsightsPanel({ supabaseUrl, supabaseKey, groupedData }) {
       setError(e.message);
     } finally {
       setLoading(false);
+      setLoadingProvider(null);
     }
   }, [groupedData, supabaseUrl, supabaseKey]);
 
@@ -443,9 +465,10 @@ function AIInsightsPanel({ supabaseUrl, supabaseKey, groupedData }) {
             ))}
           </ul>
           {data.is_mock && <p style={{ margin: '8px 0 0', fontSize: '10px', color: '#94a3b8' }}>Mock response — real API pending</p>}
+          {data.provider_error && <p style={{ margin: '8px 0 0', fontSize: '10px', color: '#b91c1c' }}>Provider error: {data.provider_error}</p>}
         </>
       ) : (
-        <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>Click "Run AI Analysis" to generate insights.</p>
+        <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>Click an analyst button (OpenAI or Gemini) to run on-demand analysis.</p>
       )}
     </div>
   );
@@ -455,11 +478,18 @@ function AIInsightsPanel({ supabaseUrl, supabaseKey, groupedData }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
         <div>
           <h3 style={{ margin: 0, fontSize: '18px', color: '#0f172a' }}>🤖 AI Manager Insights</h3>
-          <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748b' }}>AI-powered analysis of your leads funnel. Mock responses until API keys are configured.</p>
+          <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748b' }}>On-demand leads analysis. OpenAI and Gemini run through the Supabase Edge Function using server-side secrets.</p>
+          <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#92400e', fontWeight: 600 }}>Recommended future: automatic weekly analysis (saved history). For now, run on demand only.</p>
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button onClick={runAnalysis} disabled={loading} style={{ padding: '8px 16px', backgroundColor: '#0f766e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 600, fontSize: '13px', cursor: 'pointer', opacity: loading ? 0.7 : 1 }}>
-            {loading ? '⏳ Running…' : '▶ Run AI Analysis'}
+          <button onClick={() => runProviderAnalysis('openai')} disabled={loading} style={{ padding: '8px 16px', backgroundColor: '#166534', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 600, fontSize: '13px', cursor: 'pointer', opacity: loading ? 0.7 : 1 }}>
+            {loadingProvider === 'openai' ? '⏳ Running OpenAI…' : '▶ Run OpenAI Analysis'}
+          </button>
+          <button onClick={() => runProviderAnalysis('gemini')} disabled={loading} style={{ padding: '8px 16px', backgroundColor: '#0f766e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 600, fontSize: '13px', cursor: 'pointer', opacity: loading ? 0.7 : 1 }}>
+            {loadingProvider === 'gemini' ? '⏳ Running Gemini…' : '▶ Run Gemini Analysis'}
+          </button>
+          <button disabled={true} title="Claude key not configured yet" style={{ padding: '8px 16px', backgroundColor: '#e2e8f0', color: '#64748b', border: 'none', borderRadius: '10px', fontWeight: 600, fontSize: '13px', cursor: 'not-allowed' }}>
+            Claude (Key Needed)
           </button>
           <button onClick={generateAd} disabled={loading} style={{ padding: '8px 16px', backgroundColor: '#7c3aed', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 600, fontSize: '13px', cursor: 'pointer', opacity: loading ? 0.7 : 1 }}>
             ✨ Generate Ad
@@ -3129,6 +3159,22 @@ export default function LeadsDashboard() {
         />
       </div>
 
+      <CohortUnitEconomicsPreviewPanel supabaseUrl={supabaseUrl} supabaseKey={supabaseKey} placement="top" />
+
+      <details style={{ ...card, padding: '16px' }}>
+        <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <div>
+            <span style={{ fontWeight: 700, fontSize: '15px', color: '#0f172a' }}>Legacy Comparison (Mixed / Zoom-era analytics)</span>
+            <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748b' }}>
+              Kept temporarily for validation only. Do not use this section as the primary source of truth for show-ups or member economics.
+            </p>
+          </div>
+          <span style={{ padding: '4px 8px', borderRadius: '999px', backgroundColor: '#fef3c7', color: '#92400e', fontSize: '10px', fontWeight: 700 }}>
+            Comparison Only
+          </span>
+        </summary>
+        <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+
       {/* ── TOP INSIGHTS: BEST MEMBERS (ZOOM-FIRST) ── */}
       <div style={card}>
         {/* Additive unified funnel module: HubSpot-first identity stitching */}
@@ -4462,8 +4508,8 @@ export default function LeadsDashboard() {
       {/* ── AI Insights Panel ── */}
       <AIInsightsPanel supabaseUrl={supabaseUrl} supabaseKey={supabaseKey} groupedData={groupedData} />
 
-      {/* ── Cohort Unit Economics Preview (new bottom comparison section) ── */}
-      <CohortUnitEconomicsPreviewPanel />
+        </div>
+      </details>
 
       {/* ── Drill-down Modal ── */}
       <DrillDownModal

@@ -692,6 +692,20 @@ function classifyHearAbout(value) {
     return 'Other';
 }
 
+const HUBSPOT_LUMA_HEAR_ABOUT_FIELDS = [
+    'luma_how_did_you_hear_about_sober_founders',
+    'luma_how_did_you_hear_about_sober_founders_',
+];
+
+function extractHubspotLumaHearAbout(contact) {
+    if (!contact || typeof contact !== 'object') return null;
+    for (const field of HUBSPOT_LUMA_HEAR_ABOUT_FIELDS) {
+        const value = String(contact?.[field] || '').trim();
+        if (value) return value;
+    }
+    return null;
+}
+
 function hubspotSourceFallback(contact) {
     const source = String(contact?.hs_analytics_source || '').trim();
     const sourceData1 = String(contact?.hs_analytics_source_data_1 || '').trim();
@@ -731,11 +745,18 @@ function buildLumaRows(lumaRows, startKey, endKey, hubspotRows, adsAdsetIndex) {
         const campaignSource = String(contact?.hs_analytics_source_data_2 || contact?.campaign || '').trim();
         const preferredDateKey = parseDateKey(contact?.createdate || row?.registered_at || row?.event_date || row?.event_start_at);
         const adGroup = inferAdGroupFromCampaign(campaignSource, preferredDateKey, adsAdsetIndex);
+        const hubspotCentralizedHearAbout = extractHubspotLumaHearAbout(contact);
         const lumaHearAbout = extractHearAboutAnswer(row?.registration_answers);
         const hubspotHearAbout = hubspotSourceFallback(contact);
-        const hearAbout = lumaHearAbout || hubspotHearAbout || null;
+        const hearAbout = hubspotCentralizedHearAbout || lumaHearAbout || hubspotHearAbout || null;
         const hearAboutCategory = classifyHearAbout(hearAbout);
-        const hearAboutSource = lumaHearAbout ? 'Luma Answer' : hubspotHearAbout ? 'HubSpot Fallback' : 'Not Found';
+        const hearAboutSource = hubspotCentralizedHearAbout
+            ? 'HubSpot Luma How Heard (Centralized)'
+            : lumaHearAbout
+                ? 'Luma Answer'
+                : hubspotHearAbout
+                    ? 'HubSpot Fallback'
+                    : 'Not Found';
 
         return {
             date: parseDateKey(row?.event_date || row?.event_start_at || row?.registered_at) || '',
@@ -754,6 +775,8 @@ function buildLumaRows(lumaRows, startKey, endKey, hubspotRows, adsAdsetIndex) {
             hearAboutCategory,
             hearAbout: hearAbout || 'Not Found',
             hearAboutSource,
+            hubspotLumaHowHeard: hubspotCentralizedHearAbout || 'Not Found',
+            lumaHowHeardRaw: lumaHearAbout || 'Not Found',
             originalTrafficSource: contact?.hs_analytics_source || 'Not Found',
             originalTrafficSourceDetail1: contact?.hs_analytics_source_data_1 || 'Not Found',
             originalTrafficSourceDetail2: contact?.hs_analytics_source_data_2 || 'Not Found',

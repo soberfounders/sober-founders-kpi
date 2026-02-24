@@ -658,8 +658,8 @@ function cdfFromLagsWithinHorizon(lags, horizonDays) {
     const show11 = attendance[10] || null;
     const revenueOfficial = officialRevenue(c);
     const sober1yAtLead = soberOverOneYearAtLead(c, leadAt);
-    const qualifiedLead = sober1yAtLead && revenueOfficial != null && revenueOfficial >= 250000 && revenueOfficial <= 1000000;
-    const greatLead = sober1yAtLead && revenueOfficial != null && revenueOfficial > 1000000;
+    const qualifiedLead = sober1yAtLead && revenueOfficial != null && revenueOfficial >= 250000 && revenueOfficial < 1000000;
+    const greatLead = sober1yAtLead && revenueOfficial != null && revenueOfficial >= 1000000;
     const idealLeadProfile = sober1yAtLead && revenueOfficial != null && revenueOfficial >= 250000;
 
     cohortRows.push({
@@ -679,6 +679,7 @@ function cdfFromLagsWithinHorizon(lags, horizonDays) {
       revenueAny: fallbackRevenue(c),
       sober1yAtLead,
       hasSobrietyDate: !!parseSobrietyDate(c),
+      sobrietyDate: dateKey(parseSobrietyDate(c)) || null,
       totalShowups: attendance.length,
       firstGroupShowupAt: engagement.firstShowAt || firstShow,
       lastGroupShowupAt: engagement.lastShowAt || (attendance[attendance.length - 1] || null),
@@ -885,8 +886,8 @@ function cdfFromLagsWithinHorizon(lags, horizonDays) {
   addMetric({ key: 'lead', label: 'Meta Free Lead', countField: 'leads', type: 'instant' });
   addMetric({ key: 'luma_signup', label: 'Luma Signup (first approved registration)', countField: 'luma_signup', type: 'behavior' });
   addMetric({ key: 'first_showup', label: 'First Show-Up (HubSpot Calls Tue/Thu)', countField: 'first_showup', type: 'behavior' });
-  addMetric({ key: 'qualified_lead', label: 'Qualified Lead ($250k-$1M official + >1y sober at lead date)', countField: 'qualifiedLead', type: 'quality' });
-  addMetric({ key: 'great_lead', label: 'Great Lead (>$1M official + >1y sober at lead date)', countField: 'greatLead', type: 'quality' });
+  addMetric({ key: 'qualified_lead', label: 'Qualified Lead ($250k-$999,999 official + >1y sober at lead date)', countField: 'qualifiedLead', type: 'quality' });
+  addMetric({ key: 'great_lead', label: 'Great Lead (>= $1M official + >1y sober at lead date)', countField: 'greatLead', type: 'quality' });
   addMetric({ key: 'great_member', label: 'Great Member (6+ show-ups)', countField: 'great_member', type: 'behavior' });
   addMetric({ key: 'ideal_member', label: 'Ideal Member (11+ show-ups + ICP profile)', countField: 'ideal_member', type: 'behavior' });
 
@@ -901,6 +902,12 @@ function cdfFromLagsWithinHorizon(lags, horizonDays) {
   }
   function trailingCohorts(n, list = cohortList) {
     return (list || []).slice(Math.max(0, (list || []).length - n));
+  }
+  function trailingCohortsOffset(n, offset = 0, list = cohortList) {
+    const arr = list || [];
+    const end = Math.max(0, arr.length - offset);
+    const start = Math.max(0, end - n);
+    return arr.slice(start, end);
   }
   function findMetricCard(key, fallbackLabel = key) {
     return metricResultByKey.get(key) || { key, label: fallbackLabel, finalized: {}, projected: null };
@@ -1231,6 +1238,7 @@ function cdfFromLagsWithinHorizon(lags, horizonDays) {
         topForms: new Map(),
         leadWeeks: new Set(),
         matchedWeekKeys: new Set(),
+        rows: [],
       };
       campaignAggMap.set(groupKey, agg);
     }
@@ -1245,6 +1253,7 @@ function cdfFromLagsWithinHorizon(lags, horizonDays) {
     if (row.idealMember) agg.idealMember += 1;
     if (row.leadWeek) agg.leadWeeks.add(row.leadWeek);
     if (row.firstConversionEventName) agg.topForms.set(row.firstConversionEventName, (agg.topForms.get(row.firstConversionEventName) || 0) + 1);
+    agg.rows.push(row);
 
     if (!isBlankOrGeneric && normCampaignLabel && row.leadWeek) {
       const exactKey = `${row.leadWeek}__${normCampaignLabel}`;
@@ -1313,6 +1322,7 @@ function cdfFromLagsWithinHorizon(lags, horizonDays) {
     (b.leads || 0) - (a.leads || 0)
   );
   const campaignRowsExactMatched = campaignRowsSorted.filter((r) => r.matched_campaign_weeks > 0 && r.exact_match_leads > 0);
+  const campaignAggByKey = new Map([...campaignAggMap.entries()]);
   const topCampaignByLeads = campaignRowsExactMatched
     .filter((r) => r.exact_match_leads >= 10)
     .slice()
@@ -1440,6 +1450,7 @@ function cdfFromLagsWithinHorizon(lags, horizonDays) {
     attribution_coverage: campaignCoverage,
     cards: campaignDiagCards,
     rows: campaignRowsSorted.slice(0, 40),
+    drilldowns_by_campaign: {},
     unmatched_campaign_labels_top: [...unmatchedCampaignLabelCounts.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, 12)
@@ -1580,6 +1591,7 @@ function cdfFromLagsWithinHorizon(lags, horizonDays) {
       recent_showups_30d: row.recentShowups30d || 0,
       recent_showups_60d: row.recentShowups60d || 0,
       revenue_official_cached: row.revenueOfficial,
+      sobriety_date: row.sobrietyDate || null,
       sobriety_date_present: !!row.hasSobrietyDate,
       sober_over_1y_at_lead: !!row.sober1yAtLead,
       qualified_lead: !!row.qualifiedLead,
@@ -1618,6 +1630,114 @@ function cdfFromLagsWithinHorizon(lags, horizonDays) {
       hubspot_url: toHubspotUrl(contactId),
     };
   }
+
+  function pctChange(current, prior) {
+    const c = Number(current);
+    const p = Number(prior);
+    if (!Number.isFinite(c) || !Number.isFinite(p) || p === 0) return null;
+    return (c - p) / p;
+  }
+
+  function cohortLeadType(row) {
+    if (row?.greatLead) return 'Great';
+    if (row?.qualifiedLead) return 'Qualified';
+    return 'Lead';
+  }
+
+  function summarizeFreeEventsDrilldownRow(row) {
+    return {
+      hubspot_contact_id: row.contactId,
+      name: row.contactName || '',
+      email: row.email || null,
+      annual_revenue_in_usd_official: row.revenueOfficial,
+      sobriety_date: row.sobrietyDate || null,
+      show_up: row.firstShowAt ? 'Yes' : 'No',
+      type: cohortLeadType(row),
+      hubspot_url: toHubspotUrl(row.contactId),
+    };
+  }
+
+  function sortFreeEventsRows(rows) {
+    return [...rows].sort((a, b) =>
+      Number(!!b.firstShowAt) - Number(!!a.firstShowAt) ||
+      ((Number.isFinite(b.revenueOfficial) ? b.revenueOfficial : -Infinity) - (Number.isFinite(a.revenueOfficial) ? a.revenueOfficial : -Infinity)) ||
+      String(a.contactName || '').localeCompare(String(b.contactName || ''))
+    );
+  }
+
+  const compactWindowWeeksCurrent = trailingCohortsOffset(4, 0, cohortList);
+  const compactWindowWeeksPrior = trailingCohortsOffset(4, 4, cohortList);
+  const compactCurrentWeekSet = new Set(compactWindowWeeksCurrent.map((c) => c.week));
+  const compactPriorWeekSet = new Set(compactWindowWeeksPrior.map((c) => c.week));
+
+  const compactMetricsByField = {
+    leads: {
+      current: calcCpaFromCohorts(compactWindowWeeksCurrent, 'leads'),
+      prior: calcCpaFromCohorts(compactWindowWeeksPrior, 'leads'),
+    },
+    qualifiedLead: {
+      current: calcCpaFromCohorts(compactWindowWeeksCurrent, 'qualifiedLead'),
+      prior: calcCpaFromCohorts(compactWindowWeeksPrior, 'qualifiedLead'),
+    },
+    greatLead: {
+      current: calcCpaFromCohorts(compactWindowWeeksCurrent, 'greatLead'),
+      prior: calcCpaFromCohorts(compactWindowWeeksPrior, 'greatLead'),
+    },
+    luma_signup: {
+      current: calcCpaFromCohorts(compactWindowWeeksCurrent, 'luma_signup'),
+      prior: calcCpaFromCohorts(compactWindowWeeksPrior, 'luma_signup'),
+    },
+    first_showup: {
+      current: calcCpaFromCohorts(compactWindowWeeksCurrent, 'first_showup'),
+      prior: calcCpaFromCohorts(compactWindowWeeksPrior, 'first_showup'),
+    },
+  };
+
+  const freeEventsDrilldownRows = {
+    free_events_meta_leads: sortFreeEventsRows(cohortRows.filter((r) => compactCurrentWeekSet.has(r.leadWeek))).map(summarizeFreeEventsDrilldownRow),
+    free_events_meta_qualified_leads: sortFreeEventsRows(cohortRows.filter((r) => compactCurrentWeekSet.has(r.leadWeek) && r.qualifiedLead)).map(summarizeFreeEventsDrilldownRow),
+    free_events_meta_great_leads: sortFreeEventsRows(cohortRows.filter((r) => compactCurrentWeekSet.has(r.leadWeek) && r.greatLead)).map(summarizeFreeEventsDrilldownRow),
+    free_events_luma_signups: sortFreeEventsRows(cohortRows.filter((r) => compactCurrentWeekSet.has(r.leadWeek) && r.lumaAt)).map(summarizeFreeEventsDrilldownRow),
+    free_events_net_new_showups: sortFreeEventsRows(cohortRows.filter((r) => compactCurrentWeekSet.has(r.leadWeek) && r.firstShowAt)).map(summarizeFreeEventsDrilldownRow),
+  };
+
+  function compactStageCard({ key, label, countFieldKey, drilldownKey }) {
+    const current = compactMetricsByField[countFieldKey]?.current || {};
+    const prior = compactMetricsByField[countFieldKey]?.prior || {};
+    return {
+      key,
+      label,
+      drilldown_key: drilldownKey,
+      current_count: current.conversions ?? null,
+      prior_count: prior.conversions ?? null,
+      count_change_pct: pctChange(current.conversions, prior.conversions),
+      current_cost: current.cpa ?? null,
+      prior_cost: prior.cpa ?? null,
+      cost_change_pct: pctChange(current.cpa, prior.cpa),
+      current_spend: current.spend ?? null,
+      prior_spend: prior.spend ?? null,
+      current_leads: current.leads ?? null,
+      prior_leads: prior.leads ?? null,
+    };
+  }
+
+  const freeEventsSummary = {
+    category: 'Free Events',
+    window_label_current: compactWindowWeeksCurrent.length
+      ? `${compactWindowWeeksCurrent[0].week} to ${compactWindowWeeksCurrent[compactWindowWeeksCurrent.length - 1].week}`
+      : null,
+    window_label_prior: compactWindowWeeksPrior.length
+      ? `${compactWindowWeeksPrior[0].week} to ${compactWindowWeeksPrior[compactWindowWeeksPrior.length - 1].week}`
+      : null,
+    window_type: 'Trailing 4 cohort weeks vs prior 4 cohort weeks',
+    cards: [
+      compactStageCard({ key: 'meta_leads', label: 'Meta Leads', countFieldKey: 'leads', drilldownKey: 'free_events_meta_leads' }),
+      compactStageCard({ key: 'meta_qualified_leads', label: 'Meta Qualified Leads', countFieldKey: 'qualifiedLead', drilldownKey: 'free_events_meta_qualified_leads' }),
+      compactStageCard({ key: 'meta_great_leads', label: 'Meta Great Leads', countFieldKey: 'greatLead', drilldownKey: 'free_events_meta_great_leads' }),
+      compactStageCard({ key: 'luma_signups_paid', label: 'Luma Sign Ups (Paid Ads)', countFieldKey: 'luma_signup', drilldownKey: 'free_events_luma_signups' }),
+      compactStageCard({ key: 'net_new_showups', label: 'Net New Show Ups', countFieldKey: 'first_showup', drilldownKey: 'free_events_net_new_showups' }),
+    ],
+  };
 
   const greatMemberRows = cohortRows
     .filter((r) => r.greatMember)
@@ -1695,6 +1815,93 @@ function cdfFromLagsWithinHorizon(lags, horizonDays) {
       (b.total_showups || 0) - (a.total_showups || 0)
     );
 
+  function greatLeadOutreachPriority(row) {
+    const noShow = !row.firstShowAt;
+    const total = row.totalShowups || 0;
+    const missedPrimary = row.missedPrimaryGroupSessionsSinceLastShowup || 0;
+    const daysSinceLast = row.daysSinceLastShowup;
+    if (noShow) {
+      return {
+        priority: 'High',
+        priorityScore: 100,
+        reason: 'Great lead has not shown up yet (manual invite may outperform automated funnel)',
+        destination: 'Tuesday Free Group + Phoenix Forum',
+      };
+    }
+    if (total <= 1 && (missedPrimary >= 1 || (Number.isFinite(daysSinceLast) && daysSinceLast >= 14))) {
+      return {
+        priority: 'High',
+        priorityScore: 85,
+        reason: 'Great lead attended once but has not built momentum yet',
+        destination: 'Tuesday Free Group + Phoenix Forum',
+      };
+    }
+    if (total < 6 && (missedPrimary >= 2 || (Number.isFinite(daysSinceLast) && daysSinceLast >= 21))) {
+      return {
+        priority: 'Medium',
+        priorityScore: 65,
+        reason: 'Great lead is qualified but attendance momentum is slipping',
+        destination: 'Tuesday Free Group + Phoenix Forum',
+      };
+    }
+    return {
+      priority: 'Low',
+      priorityScore: 35,
+      reason: 'Great lead is engaged; use light-touch relationship follow-up only',
+      destination: 'Phoenix Forum (light invite)',
+    };
+  }
+
+  function buildGreatLeadOutreachEmail(row, routing) {
+    const firstName = String(row.contactName || '').trim().split(/\s+/)[0] || 'there';
+    const intro = row.firstShowAt
+      ? 'Wanted to reach out because you are a strong fit for this community, and I noticed we have not seen you recently.'
+      : 'Wanted to reach out because you look like a great fit for our founder community, and I did not want you to get buried in the automated funnel.';
+    const inviteLine = String(routing.destination || '').includes('Phoenix')
+      ? 'You are welcome to join the Tuesday free group, and if it feels like a fit, Phoenix Forum may also be a strong next step for you.'
+      : 'I would love to invite you to check out the Tuesday free group.';
+    return [
+      `Hi ${firstName},`,
+      '',
+      intro,
+      '',
+      inviteLine,
+      'If it was just a scheduling conflict, no problem at all. If it is not a fit, that is also helpful to know.',
+      '',
+      'Quick reply is perfect:',
+      '- bad timing right now',
+      '- interested, send me the next link',
+      '- not a fit',
+      '',
+      'Tuesday Free Group link: [insert current link]',
+      'Phoenix Forum link: [insert current link]',
+    ].join('\n');
+  }
+
+  const greatLeadOutreachQueueRows = cohortRows
+    .filter((r) => r.greatLead)
+    .map((r) => {
+      const routing = greatLeadOutreachPriority(r);
+      return {
+        ...summarizeCohortPerson(r),
+        outreach_priority: routing.priority,
+        outreach_priority_score: routing.priorityScore,
+        outreach_reason: routing.reason,
+        recommended_destination: routing.destination,
+        outreach_recommended_now: routing.priority !== 'Low',
+        suggested_subject: !r.firstShowAt ? 'Quick invite to our Tuesday founder group' : 'Missed you in the founder room',
+        suggested_plain_text_email: buildGreatLeadOutreachEmail(r, routing),
+        phoenix_forum_eligible_by_profile: true,
+      };
+    })
+    .filter((r) => !r.great_member || r.outreach_recommended_now || (r.missed_primary_group_sessions_since_last_showup || 0) >= 2)
+    .sort((a, b) =>
+      (b.outreach_priority_score || 0) - (a.outreach_priority_score || 0) ||
+      (Number(b.outreach_recommended_now) - Number(a.outreach_recommended_now)) ||
+      (b.missed_primary_group_sessions_since_last_showup || 0) - (a.missed_primary_group_sessions_since_last_showup || 0) ||
+      (b.total_showups || 0) - (a.total_showups || 0)
+    );
+
   const exactMembership250kZeroRows = allContactsMembershipExact250k
     .filter((c) => {
       const rev = officialRevenue(c);
@@ -1706,6 +1913,59 @@ function cdfFromLagsWithinHorizon(lags, horizonDays) {
   const containsMembership250kZeroRows = allContactsMembership250kZeroRevenue
     .sort((a, b) => contactTs(a) - contactTs(b))
     .map(summarizeContactForQa);
+
+  // Campaign person-level drilldowns (limited to top visible rows to keep snapshot JSON manageable).
+  const campaignDrilldownRowsLimit = 200;
+  const campaignDrilldownsByKey = {};
+  for (const campaignRow of campaignRowsSorted.slice(0, 40)) {
+    const agg = campaignAggByKey.get(campaignRow.campaign_key);
+    const sourceRows = Array.isArray(agg?.rows) ? agg.rows : [];
+    const summarized = sourceRows
+      .map((r) => ({
+        ...summarizeCohortPerson(r),
+        campaign_bucket_label: campaignRow.campaign_label,
+        campaign_attribution_quality: campaignRow.attribution_quality,
+        exact_campaign_week_match: !!(r.leadWeek && adsCampaignSpendByWeekNorm.has(`${r.leadWeek}__${campaignRow.campaign_key}`)),
+        luma_signup: !!r.lumaAt,
+        first_showup: !!r.firstShowAt,
+        first_showup_at: r.firstShowAt ? r.firstShowAt.toISOString() : null,
+        great_lead_outreach_candidate: !!r.greatLead && (!r.greatMember || (r.missedPrimaryGroupSessionsSinceLastShowup || 0) >= 2),
+      }))
+      .sort((a, b) =>
+        Number(b.exact_campaign_week_match) - Number(a.exact_campaign_week_match) ||
+        Number(b.ideal_member) - Number(a.ideal_member) ||
+        Number(b.great_member) - Number(a.great_member) ||
+        Number(b.great_lead) - Number(a.great_lead) ||
+        (b.total_showups || 0) - (a.total_showups || 0) ||
+        String(a.display_name || '').localeCompare(String(b.display_name || ''))
+      );
+
+    campaignDrilldownsByKey[campaignRow.campaign_key] = {
+      campaign_key: campaignRow.campaign_key,
+      campaign_label: campaignRow.campaign_label,
+      attribution_quality: campaignRow.attribution_quality,
+      row_limit: campaignDrilldownRowsLimit,
+      stage_counts: {
+        all_leads: campaignRow.leads || 0,
+        luma_signups: campaignRow.luma_signups || 0,
+        first_showups: campaignRow.first_showups || 0,
+        qualified_leads: campaignRow.qualified_leads || 0,
+        great_leads: campaignRow.great_leads || 0,
+        great_members: campaignRow.great_members || 0,
+        ideal_members: campaignRow.ideal_members || 0,
+      },
+      rows: {
+        all_leads: summarized.slice(0, campaignDrilldownRowsLimit),
+        luma_signups: summarized.filter((r) => r.luma_signup).slice(0, campaignDrilldownRowsLimit),
+        first_showups: summarized.filter((r) => r.first_showup).slice(0, campaignDrilldownRowsLimit),
+        qualified_leads: summarized.filter((r) => r.qualified_lead).slice(0, campaignDrilldownRowsLimit),
+        great_leads: summarized.filter((r) => r.great_lead).slice(0, campaignDrilldownRowsLimit),
+        great_members: summarized.filter((r) => r.great_member).slice(0, campaignDrilldownRowsLimit),
+        ideal_members: summarized.filter((r) => r.ideal_member).slice(0, campaignDrilldownRowsLimit),
+      },
+    };
+  }
+  campaignDiagnostics.drilldowns_by_campaign = campaignDrilldownsByKey;
 
   const weeklyCheckin = {
     cadence: 'weekly',
@@ -1766,6 +2026,13 @@ function cdfFromLagsWithinHorizon(lags, horizonDays) {
         status: strongNonIcpMemberRows.length > 0 ? 'info' : 'pass',
         value: strongNonIcpMemberRows.length,
         drilldown_key: 'strong_non_icp_members',
+      },
+      {
+        key: 'great_lead_outreach_queue',
+        label: 'Great leads with manual outreach opportunity',
+        status: greatLeadOutreachQueueRows.some((r) => r.outreach_priority === 'High') ? 'warn' : (greatLeadOutreachQueueRows.length > 0 ? 'info' : 'pass'),
+        value: greatLeadOutreachQueueRows.length,
+        drilldown_key: 'great_lead_outreach_queue',
       },
     ],
   };
@@ -1933,14 +2200,17 @@ function cdfFromLagsWithinHorizon(lags, horizonDays) {
     lag_hypotheses: lagHypotheses,
     metrics: results,
     meta_specialist_diagnostics: metaSpecialistDiagnostics,
+    free_events_summary: freeEventsSummary,
     number_audit: numberAudit,
     weekly_signoff: weeklySignoff,
     weekly_checkin: weeklyCheckin,
     drilldowns: {
+      ...freeEventsDrilldownRows,
       great_members: greatMemberRows,
       ideal_members: idealMemberRows,
       high_value_nudge_candidates: highValueNudgeCandidateRows,
       strong_non_icp_members: strongNonIcpMemberRows,
+      great_lead_outreach_queue: greatLeadOutreachQueueRows,
       membership_250k_exact_zero_revenue: exactMembership250kZeroRows,
       membership_250k_contains_zero_revenue: containsMembership250kZeroRows,
     },

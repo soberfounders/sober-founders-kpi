@@ -99,8 +99,8 @@ function classifyLeadFunnel(row) {
 
 function leadTierFromRevenue(value) {
   const revenue = toNumber(value);
-  if (revenue > 1_000_000) return 'great';
-  if (revenue >= 250_000 && revenue <= 1_000_000) return 'qualified';
+  if (revenue >= 1_000_000) return 'great';
+  if (revenue >= 250_000 && revenue < 1_000_000) return 'qualified';
   return 'standard';
 }
 

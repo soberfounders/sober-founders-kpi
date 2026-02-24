@@ -1,0 +1,46 @@
+Meta Ads Influencer Strategy From Youtube in Gemini 2025-2026
+This analysis is based on a synthesis of the most authoritative Meta Ads content released between July 2025 and January 2026 by verified industry leaders, including Dara Denney, Ben Heath, Charlie T (Disrupter School), Andrew Faris, and Taylor Holiday (Common Thread Collective). These creators represent millions of dollars in managed spend and have high-sentiment, high-view counts (averaging 25k–150k+ views per strategy video).
+The 2026 Meta Ads landscape is dominated by the Andromeda AI Update, which has moved the platform from "Targeting" to "Signal Management."
+Part 1: The "Andromeda" Era Instruction Set
+How to think and act as a Meta Ads Architect for a $1M+ Sober Mastermind.
+1. The "Signal-First" Foundation
+Focus: Quality over quantity.
+Instruction: "Meta’s AI (Andromeda) learns from the signals you send it. For a $1M+ mastermind, a low-quality lead is a 'poison signal.' You must implement CAPI (Conversions API) and use a high-friction landing page. Do not optimize for 'Leads' (all clicks); optimize for 'Qualified Leads' (survey completions)."
+The Goal: Feed the AI data on what a seven-figure founder looks like, not just what a "sober person" looks like.
+2. Creative-Led Targeting (The "New" Broad)
+Focus: Abandoning manual interest/lookalike targeting.
+Instruction: "Stop trying to find entrepreneurs in the targeting box. Set targeting to Broad (Age 30–55, Country Only). The first 3 seconds of the video and the overlay text are your true targeting tools. If the ad says 'For $1M+ Sober Founders,' the algorithm will find them through OCR (Optical Character Recognition) and viewer behavior."
+3. Account Architecture: The "Power 5" Evolution
+Focus: Consolidation.
+Instruction: "Use a maximum of two campaigns:
+The Sandbox (DCT): A testing ground for new creative angles using the 3:2:2 method.
+The Scaling Engine (CBO/ASC): A single campaign where you move 'proven' winning post IDs. Do not fragment your budget across 10 ad sets."
+Part 2: Commonalities & "Must-Haves" (The Consensus)
+These are the points every high-authority expert (Dara Denney, Charlie T, etc.) agreed on in late 2025.
+The 3:2:2 Method: This is the gold standard for testing. (3 Creatives, 2 Headlines, 2 Primary Texts).
+UGC 2.0 (Lofi-Professional): High-production commercials are failing. The "Founder Rant" (iPhone-shot, direct-to-camera, unedited) is the highest-converting format for B2B/High-ticket.
+Static "Call-Out" Ads: Simple, high-contrast static images with bold text like "The Sober CEO's Hidden Problem" are essential for "Pattern Interrupt" in the feed.
+Signal Hygiene: Experts agree that if you use Meta Lead Forms for a high-ticket niche, you will "poison" your account with bot data and low-intent users, making future scaling impossible.
+Part 3: Specific Roadmap for the Sober Mastermind
+Leveraging the research for your $1M+ revenue niche.
+Strategic Pillar
+Execution Instruction
+The Hook
+Use "Revenue-First" hooks. Example: "Why seven-figure founders are quietly quitting alcohol."
+The Friction
+The LLM must suggest a 5-question survey that asks: "What was your revenue last year?" and "How long have you been sober?" This forces Meta to optimize for the survey-completer.
+The Format
+The 'Vistage' Comparison: Use a carousel ad comparing traditional drinking-heavy masterminds to your sober community.
+The Pacing
+Don't scale budget by more than 20% every 48 hours. The Andromeda AI is sensitive to "Data Shocks."
+Part 4: Conflicting Information (Opinions vs. Facts)
+The areas where the top 1% of experts disagree—treat these as variables to test.
+1. Advantage+ Shopping (ASC) for B2B
+Opinion A (Ben Heath/Dara Denney): ASC is the most powerful tool Meta has built; use it for everything, including lead gen.
+Opinion B (Charlie T): ASC is a "black box" that steals credit from organic and over-targets existing fans. Stick to Manual CBO for cold prospecting.
+2. The "Learning Phase" Myth
+Opinion A: You must stay out of the "Learning Phase" at all costs to stabilize CPMs.
+Opinion B (Andrew Faris): The "Learning Phase" is a UI distraction. If the ad is making money, ignore the warning. High-volume accounts can ignore the 50-conversion-per-week rule.
+3. Lead Forms vs. Landing Pages
+Opinion A: Use Meta Lead Forms but add "Conditional Logic" (disqualifying people mid-form).
+Opinion B: Never use Lead Forms for $1M+ niches. The quality drop is too high, and it prevents you from "owning" the pixel data on your own site.

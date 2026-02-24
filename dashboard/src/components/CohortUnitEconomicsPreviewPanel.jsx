@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import preview from '../data/metaCohortUnitEconPreview.json';
+import META_AD_TRAINING_INSTRUCTION_PACK from '../data/metaAdTrainingInstructionPack';
 
 const card = {
   backgroundColor: '#fff',
@@ -37,6 +38,43 @@ function formatDateTime(v) {
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return String(v || 'Unknown');
   return d.toLocaleString();
+}
+
+function formatShortDate(v) {
+  if (!v) return 'N/A';
+  const d = new Date(`${v}T00:00:00`);
+  if (Number.isNaN(d.getTime())) {
+    const alt = new Date(v);
+    if (Number.isNaN(alt.getTime())) return String(v);
+    return alt.toLocaleDateString(undefined, { month: '2-digit', day: '2-digit', year: '2-digit' });
+  }
+  return d.toLocaleDateString(undefined, { month: '2-digit', day: '2-digit', year: '2-digit' });
+}
+
+function sobrietyAgeParts(sobrietyDateValue, nowDate = new Date()) {
+  if (!sobrietyDateValue) return null;
+  const raw = String(sobrietyDateValue);
+  const d = raw.length <= 10 ? new Date(`${raw}T00:00:00`) : new Date(raw);
+  if (Number.isNaN(d.getTime())) return null;
+  const now = new Date(nowDate);
+  if (Number.isNaN(now.getTime())) return null;
+  if (d > now) return { years: 0, months: 0 };
+
+  let years = now.getFullYear() - d.getFullYear();
+  let months = now.getMonth() - d.getMonth();
+  if (now.getDate() < d.getDate()) months -= 1;
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+  if (!Number.isFinite(years) || !Number.isFinite(months)) return null;
+  return { years: Math.max(0, years), months: Math.max(0, months) };
+}
+
+function formatSobrietyAge(sobrietyDateValue) {
+  const parts = sobrietyAgeParts(sobrietyDateValue);
+  if (!parts) return 'N/A';
+  return `${parts.years}y ${parts.months}m`;
 }
 
 function statusBadge(status) {
@@ -82,6 +120,95 @@ function compareValues(a, b, type = 'number') {
   if (!Number.isFinite(na)) return -1;
   if (!Number.isFinite(nb)) return 1;
   return na - nb;
+}
+
+function deltaPctLabel(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 'N/A';
+  return `${n >= 0 ? '+' : ''}${(n * 100).toFixed(1)}%`;
+}
+
+function buildAiRequestPayload(data, { metaDiagnostics, metrics, weeklySignoff, nudgeCandidates, strongNonIcpMembers, greatLeadOutreachQueue }) {
+  const compactMetrics = (metrics || []).map((m) => ({
+    key: m.key,
+    label: m.label,
+    type: m.type,
+    finalized_horizon_days: m.finalized_horizon_days,
+    finalized: {
+      cpa: m?.finalized?.cpa ?? null,
+      conversions: m?.finalized?.conversions ?? null,
+      conversion_rate: m?.finalized?.conversion_rate ?? null,
+    },
+    projected: m?.projected ? {
+      projected_cpa: m.projected.projected_cpa ?? null,
+      projected_conversions: m.projected.projected_conversions ?? null,
+    } : null,
+  }));
+  const campaignRows = (metaDiagnostics?.campaign_diagnostics?.rows || []).slice(0, 12).map((r) => ({
+    campaign_label: r.campaign_label,
+    attribution_quality: r.attribution_quality,
+    leads: r.leads,
+    exact_match_leads: r.exact_match_leads,
+    cpl_exact_campaign_week: r.cpl_exact_campaign_week,
+    cpql_exact_campaign_week: r.cpql_exact_campaign_week,
+    cpgl_exact_campaign_week: r.cpgl_exact_campaign_week,
+    qualified_lead_rate: r.qualified_lead_rate,
+    great_lead_rate: r.great_lead_rate,
+    great_member_rate: r.great_member_rate,
+    ideal_member_rate: r.ideal_member_rate,
+    first_showup_rate: r.first_showup_rate,
+    top_first_conversion_forms: r.top_first_conversion_forms || [],
+  }));
+  const compactPeople = (rows = []) => rows.slice(0, 5).map((r) => ({
+    hubspot_contact_id: r.hubspot_contact_id,
+    display_name: r.display_name,
+    lead_date: r.lead_date,
+    total_showups: r.total_showups,
+    days_since_last_showup: r.days_since_last_showup,
+    missed_primary_group_sessions_since_last_showup: r.missed_primary_group_sessions_since_last_showup,
+    revenue_official_cached: r.revenue_official_cached,
+    first_conversion_event_name: r.first_conversion_event_name,
+    outreach_priority: r.outreach_priority,
+    outreach_reason: r.outreach_reason,
+    recommended_destination: r.recommended_destination,
+  }));
+  return {
+    source_of_truth: 'HubSpot Calls (Tue/Thu group sessions) for attendance/show-ups; no legacy Zoom name matching in this payload',
+    generated_at: data?.generated_at || null,
+    methodology: {
+      cohort_unit: data?.methodology?.cohort_unit || null,
+      spend_source: data?.methodology?.spend_source || null,
+      showup_source: data?.methodology?.showup_source || null,
+      great_member_definition: data?.methodology?.great_member_definition || null,
+      ideal_member_definition: data?.methodology?.ideal_member_definition || null,
+    },
+    weekly_signoff: weeklySignoff || null,
+    data_quality: {
+      counts: data?.data_quality?.counts || {},
+      completeness_meta_free_analyzed: data?.data_quality?.completeness_meta_free_analyzed || {},
+      date_range: data?.data_quality?.date_range || {},
+    },
+    meta_specialist_diagnostics: {
+      status: metaDiagnostics?.status || null,
+      cards: metaDiagnostics?.cards || [],
+      ai_analysis: metaDiagnostics?.ai_analysis || null,
+      cpl_trend_last_12_weeks: metaDiagnostics?.cpl_trend_last_12_weeks || [],
+      campaign_diagnostics: {
+        attribution_coverage: metaDiagnostics?.campaign_diagnostics?.attribution_coverage || null,
+        recommended_actions: metaDiagnostics?.campaign_diagnostics?.recommended_actions || [],
+        rows: campaignRows,
+      },
+    },
+    metrics: compactMetrics,
+    retention_outreach: {
+      high_value_nudge_candidates_count: (nudgeCandidates || []).length,
+      strong_non_icp_members_count: (strongNonIcpMembers || []).length,
+      great_lead_outreach_queue_count: (greatLeadOutreachQueue || []).length,
+      high_value_nudge_candidates_sample: compactPeople(nudgeCandidates || []),
+      strong_non_icp_members_sample: compactPeople(strongNonIcpMembers || []),
+      great_lead_outreach_queue_sample: compactPeople(greatLeadOutreachQueue || []),
+    },
+  };
 }
 
 function buildMetaExpertPlaybook({ key, metaDiagnostics, campaignDiagnostics, weeklySignoff }) {
@@ -339,15 +466,34 @@ function MetaDiagnosticCard({ cardData, onClick }) {
   );
 }
 
-export default function CohortUnitEconomicsPreviewPanel() {
+export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supabaseKey = '', placement = 'bottom' }) {
   const [activeDrilldownKey, setActiveDrilldownKey] = useState(null);
   const [activeDiagnosticCardKey, setActiveDiagnosticCardKey] = useState(null);
   const [showAuditChecks, setShowAuditChecks] = useState(false);
   const [campaignSort, setCampaignSort] = useState({ key: 'ideal_members', dir: 'desc' });
+  const [activeCampaignKey, setActiveCampaignKey] = useState(null);
+  const [activeCampaignStageKey, setActiveCampaignStageKey] = useState('all_leads');
   const [activePlaybookKey, setActivePlaybookKey] = useState('weekly_checklist');
   const [copyState, setCopyState] = useState('idle');
+  const [aiData, setAiData] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiLoadingProvider, setAiLoadingProvider] = useState(null);
+  const [aiError, setAiError] = useState(null);
+  const [metaAdGuide, setMetaAdGuide] = useState(null);
+  const [metaAdGuideLoading, setMetaAdGuideLoading] = useState(false);
+  const [metaAdGuideError, setMetaAdGuideError] = useState(null);
+  const [metaAdGuideCopyState, setMetaAdGuideCopyState] = useState('idle');
+  const [showMetaAdTrainingPack, setShowMetaAdTrainingPack] = useState(false);
+  const [sectionOpen, setSectionOpen] = useState({
+    signoff: true,
+    diagnostics: true,
+    outreach: false,
+    qa: false,
+    metrics: false,
+  });
   const data = preview || null;
   if (!data?.metrics?.length) return null;
+  const isPrimary = placement === 'top';
 
   const metrics = [...data.metrics].sort((a, b) => metricOrderKey(a.key) - metricOrderKey(b.key));
   const lagStats = data.lag_stats || {};
@@ -365,9 +511,11 @@ export default function CohortUnitEconomicsPreviewPanel() {
   const campaignRows = campaignDiagnostics?.rows || [];
   const metaAiAnalysis = metaDiagnostics?.ai_analysis || null;
   const cplTrend = metaDiagnostics?.cpl_trend_last_12_weeks || [];
+  const freeEventsSummary = data.free_events_summary || null;
   const weeklySignoff = data.weekly_signoff || null;
   const numberAudit = data.number_audit || { counts: {}, checks: [] };
   const diagnosticCards = [...metaCards, ...campaignCards];
+  const campaignDrilldowns = campaignDiagnostics?.drilldowns_by_campaign || {};
 
   const drilldownConfigs = useMemo(() => ({
     great_members: {
@@ -404,11 +552,13 @@ export default function CohortUnitEconomicsPreviewPanel() {
         { key: 'total_showups', label: 'Show-Ups', type: 'number' },
         { key: 'primary_attendance_group', label: 'Primary Group' },
         { key: 'days_since_last_showup', label: 'Days Since Last', type: 'number' },
-        { key: 'missed_primary_group_sessions_since_last_showup', label: 'Missed in Group', type: 'number' },
+        { key: 'missed_primary_group_sessions_since_last_showup', label: 'Missed in a Row', type: 'number' },
         { key: 'ideal_candidate_likelihood', label: 'Likelihood' },
         { key: 'nudge_recommended_now', label: 'Nudge Now?' },
         { key: 'nudge_reason', label: 'Nudge Reason' },
         { key: 'revenue_official_cached', label: 'Revenue (Cached)', type: 'currency' },
+        { key: 'sobriety_date', label: 'Sobriety Date' },
+        { key: 'sobriety_age_current', label: 'Sobriety (Current)' },
         { key: 'first_conversion_event_name', label: 'Meta Form / First Conversion' },
         { key: 'hubspot_url', label: 'HubSpot', type: 'link' },
       ],
@@ -420,13 +570,89 @@ export default function CohortUnitEconomicsPreviewPanel() {
         { key: 'total_showups', label: 'Show-Ups', type: 'number' },
         { key: 'primary_attendance_group', label: 'Primary Group' },
         { key: 'days_since_last_showup', label: 'Days Since Last', type: 'number' },
-        { key: 'missed_primary_group_sessions_since_last_showup', label: 'Missed in Group', type: 'number' },
+        { key: 'missed_primary_group_sessions_since_last_showup', label: 'Missed in a Row', type: 'number' },
         { key: 'icp_gap_reason', label: 'Why Not ICP (Current Model)' },
         { key: 'nudge_recommended_now', label: 'Nudge Now?' },
         { key: 'nudge_reason', label: 'Nudge Reason' },
         { key: 'revenue_official_cached', label: 'Revenue (Cached)', type: 'currency' },
+        { key: 'sobriety_date', label: 'Sobriety Date' },
+        { key: 'sobriety_age_current', label: 'Sobriety (Current)' },
         { key: 'first_conversion_event_name', label: 'Meta Form / First Conversion' },
         { key: 'hubspot_url', label: 'HubSpot', type: 'link' },
+      ],
+    },
+    great_lead_outreach_queue: {
+      title: 'Great Lead Outreach Queue (High-Touch Manual Follow-Up)',
+      columns: [
+        { key: 'display_name', label: 'Lead' },
+        { key: 'outreach_priority', label: 'Priority' },
+        { key: 'outreach_reason', label: 'Why Reach Out' },
+        { key: 'recommended_destination', label: 'Suggested Invite' },
+        { key: 'total_showups', label: 'Show-Ups', type: 'number' },
+        { key: 'days_since_last_showup', label: 'Days Since Last', type: 'number' },
+        { key: 'missed_primary_group_sessions_since_last_showup', label: 'Missed in a Row', type: 'number' },
+        { key: 'revenue_official_cached', label: 'Revenue (Cached)', type: 'currency' },
+        { key: 'sobriety_date', label: 'Sobriety Date' },
+        { key: 'sobriety_age_current', label: 'Sobriety (Current)' },
+        { key: 'first_conversion_event_name', label: 'Meta Form / First Conversion' },
+        { key: 'suggested_subject', label: 'Email Subject' },
+        { key: 'suggested_plain_text_email', label: 'Suggested Email', type: 'multiline' },
+        { key: 'hubspot_url', label: 'HubSpot', type: 'link' },
+      ],
+    },
+    free_events_meta_leads: {
+      title: 'Free Events — Meta Leads (Trailing 4 Cohort Weeks)',
+      columns: [
+        { key: 'name', label: 'Name' },
+        { key: 'email', label: 'Email' },
+        { key: 'annual_revenue_in_usd_official', label: 'Annual Revenue in USD Official', type: 'currency' },
+        { key: 'sobriety_date', label: 'Sobriety Date' },
+        { key: 'show_up', label: 'Show Up?' },
+        { key: 'type', label: 'Type' },
+      ],
+    },
+    free_events_meta_qualified_leads: {
+      title: 'Free Events — Meta Qualified Leads (Trailing 4 Cohort Weeks)',
+      columns: [
+        { key: 'name', label: 'Name' },
+        { key: 'email', label: 'Email' },
+        { key: 'annual_revenue_in_usd_official', label: 'Annual Revenue in USD Official', type: 'currency' },
+        { key: 'sobriety_date', label: 'Sobriety Date' },
+        { key: 'show_up', label: 'Show Up?' },
+        { key: 'type', label: 'Type' },
+      ],
+    },
+    free_events_meta_great_leads: {
+      title: 'Free Events — Meta Great Leads (Trailing 4 Cohort Weeks)',
+      columns: [
+        { key: 'name', label: 'Name' },
+        { key: 'email', label: 'Email' },
+        { key: 'annual_revenue_in_usd_official', label: 'Annual Revenue in USD Official', type: 'currency' },
+        { key: 'sobriety_date', label: 'Sobriety Date' },
+        { key: 'show_up', label: 'Show Up?' },
+        { key: 'type', label: 'Type' },
+      ],
+    },
+    free_events_luma_signups: {
+      title: 'Free Events — Paid Luma Sign Ups (Trailing 4 Cohort Weeks)',
+      columns: [
+        { key: 'name', label: 'Name' },
+        { key: 'email', label: 'Email' },
+        { key: 'annual_revenue_in_usd_official', label: 'Annual Revenue in USD Official', type: 'currency' },
+        { key: 'sobriety_date', label: 'Sobriety Date' },
+        { key: 'show_up', label: 'Show Up?' },
+        { key: 'type', label: 'Type' },
+      ],
+    },
+    free_events_net_new_showups: {
+      title: 'Free Events — Net New Show Ups (First Show-Ups, Trailing 4 Cohort Weeks)',
+      columns: [
+        { key: 'name', label: 'Name' },
+        { key: 'email', label: 'Email' },
+        { key: 'annual_revenue_in_usd_official', label: 'Annual Revenue in USD Official', type: 'currency' },
+        { key: 'sobriety_date', label: 'Sobriety Date' },
+        { key: 'show_up', label: 'Show Up?' },
+        { key: 'type', label: 'Type' },
       ],
     },
     membership_250k_exact_zero_revenue: {
@@ -469,6 +695,7 @@ export default function CohortUnitEconomicsPreviewPanel() {
     : null;
   const nudgeCandidates = drilldowns.high_value_nudge_candidates || [];
   const strongNonIcpMembers = drilldowns.strong_non_icp_members || [];
+  const greatLeadOutreachQueue = drilldowns.great_lead_outreach_queue || [];
   const signoff = weeklySignoff || { status: 'unknown', summary: 'No signoff available' };
   const signoffUi = signoffBadge(signoff.status);
 
@@ -482,6 +709,205 @@ export default function CohortUnitEconomicsPreviewPanel() {
     campaignDiagnostics,
     weeklySignoff,
   });
+  const aiRequestPayload = useMemo(() => buildAiRequestPayload(data, {
+    metaDiagnostics,
+    metrics,
+    weeklySignoff,
+    nudgeCandidates,
+    strongNonIcpMembers,
+    greatLeadOutreachQueue,
+  }), [data, metaDiagnostics, metrics, weeklySignoff, nudgeCandidates, strongNonIcpMembers, greatLeadOutreachQueue]);
+  const metaAdGuideRequestPayload = useMemo(() => {
+    const metricMap = new Map((metrics || []).map((m) => [m.key, m]));
+    const metricSlice = ['luma_signup', 'first_showup', 'qualified_lead', 'great_lead', 'great_member', 'ideal_member']
+      .map((key) => metricMap.get(key))
+      .filter(Boolean)
+      .map((m) => ({
+        key: m.key,
+        label: m.label,
+        finalized_cpa: m?.finalized?.cpa ?? null,
+        finalized_rate: m?.finalized?.conversion_rate ?? null,
+        projected_cpa: m?.projected?.projected_cpa ?? null,
+        projected_conversions: m?.projected?.projected_conversions ?? null,
+      }));
+    const diagCardMap = new Map((diagnosticCards || []).map((c) => [c.key, c]));
+    const importantCardKeys = [
+      'cpl_trailing_4w',
+      'cpl_trailing_12w',
+      'cpql_finalized',
+      'cpql_current_entry_forecast',
+      'cpgl_finalized',
+      'cpgl_current_entry_forecast',
+      'cpgm_finalized',
+      'cpgm_current_entry_forecast',
+      'cpim_finalized',
+      'cpim_current_entry_forecast',
+    ];
+    const diagnosticCardSlice = importantCardKeys
+      .map((key) => diagCardMap.get(key))
+      .filter(Boolean)
+      .map((c) => ({
+        key: c.key,
+        label: c.label,
+        value: c.value,
+        format: c.format,
+        status: c.status,
+        formula: c?.drilldown?.formula || null,
+      }));
+    const campaignRowsCompact = [...(campaignRows || [])]
+      .sort((a, b) => {
+        const aScore = Number.isFinite(Number(a?.cpql_exact_campaign_week)) ? Number(a.cpql_exact_campaign_week) : Number.POSITIVE_INFINITY;
+        const bScore = Number.isFinite(Number(b?.cpql_exact_campaign_week)) ? Number(b.cpql_exact_campaign_week) : Number.POSITIVE_INFINITY;
+        return aScore - bScore;
+      })
+      .slice(0, 8)
+      .map((r) => ({
+        campaign_label: r.campaign_label,
+        attribution_quality: r.attribution_quality,
+        leads: r.leads,
+        exact_match_leads: r.exact_match_leads,
+        cpl_exact_campaign_week: r.cpl_exact_campaign_week,
+        cpql_exact_campaign_week: r.cpql_exact_campaign_week,
+        cpgl_exact_campaign_week: r.cpgl_exact_campaign_week,
+        cpgm_exact_campaign_week: r.cpgm_exact_campaign_week ?? null,
+        cpim_exact_campaign_week: r.cpim_exact_campaign_week ?? null,
+        qualified_lead_rate: r.qualified_lead_rate,
+        great_lead_rate: r.great_lead_rate,
+        first_showup_rate: r.first_showup_rate,
+        great_member_rate: r.great_member_rate,
+        ideal_member_rate: r.ideal_member_rate,
+        top_first_conversion_forms: r.top_first_conversion_forms || [],
+      }));
+    const worstCampaignsCompact = [...(campaignRows || [])]
+      .filter((r) => Number.isFinite(Number(r?.cpql_exact_campaign_week)) && (r?.exact_match_leads || 0) >= 8)
+      .sort((a, b) => Number(b.cpql_exact_campaign_week) - Number(a.cpql_exact_campaign_week))
+      .slice(0, 5)
+      .map((r) => ({
+        campaign_label: r.campaign_label,
+        exact_match_leads: r.exact_match_leads,
+        cpql_exact_campaign_week: r.cpql_exact_campaign_week,
+        cpgl_exact_campaign_week: r.cpgl_exact_campaign_week,
+        qualified_lead_rate: r.qualified_lead_rate,
+        great_lead_rate: r.great_lead_rate,
+      }));
+    const samplePerson = (row) => ({
+      hubspot_contact_id: row?.hubspot_contact_id,
+      display_name: row?.display_name || row?.name,
+      email: row?.email || null,
+      lead_date: row?.lead_date || null,
+      total_showups: row?.total_showups || (row?.show_up ? 1 : 0),
+      revenue_official_cached: row?.revenue_official_cached ?? row?.annual_revenue_in_usd_official ?? null,
+      sobriety_date: row?.sobriety_date || null,
+      first_conversion_event_name: row?.first_conversion_event_name || null,
+      hubspot_url: row?.hubspot_url || null,
+    });
+    return {
+      source_of_truth: 'HubSpot Calls for attendance/show-ups (no legacy Zoom matching)',
+      generated_at: data?.generated_at || null,
+      weekly_signoff: weeklySignoff ? {
+        status: weeklySignoff.status,
+        summary: weeklySignoff.summary,
+        top_warnings: weeklySignoff.top_warnings || [],
+      } : null,
+      data_quality: {
+        counts: dq.counts || {},
+        completeness_meta_free_analyzed: dq.completeness_meta_free_analyzed || {},
+        campaign_attribution_coverage: campaignDiagnostics?.attribution_coverage || null,
+      },
+      key_metrics: metricSlice,
+      important_diagnostic_cards: diagnosticCardSlice,
+      free_events_summary: {
+        category: freeEventsSummary?.category || 'Free Events',
+        current_window: freeEventsSummary?.window_label_current || null,
+        prior_window: freeEventsSummary?.window_label_prior || null,
+        cards: (freeEventsSummary?.cards || []).map((c) => ({
+          key: c.key,
+          label: c.label,
+          current_count: c.current_count,
+          count_change_pct: c.count_change_pct,
+          current_cost: c.current_cost,
+          cost_change_pct: c.cost_change_pct,
+        })),
+      },
+      cpl_trend_last_8_weeks: [...(cplTrend || [])]
+        .sort((a, b) => String(b.week || '').localeCompare(String(a.week || '')))
+        .slice(0, 8)
+        .map((r, idx, arr) => {
+          const prior = arr[idx + 1] || null;
+          const curCpl = Number(r?.cpl);
+          const priorCpl = Number(prior?.cpl);
+          const wow = Number.isFinite(curCpl) && Number.isFinite(priorCpl) && priorCpl > 0 ? (curCpl - priorCpl) / priorCpl : null;
+          return {
+        week: r.week,
+        cpl: r.cpl,
+        leads: r.leads,
+        spend: r.spend,
+            wow_cpl_pct: wow,
+          };
+        }),
+      campaign_diagnostics: {
+        top_quality_candidates: campaignRowsCompact,
+        worst_cpql_watchlist: worstCampaignsCompact,
+      },
+      outcome_examples: {
+        ideal_members: (drilldowns.ideal_members || []).slice(0, 5).map(samplePerson),
+        great_members: (drilldowns.great_members || []).slice(0, 8).map(samplePerson),
+        high_value_nudge_candidates: (nudgeCandidates || []).slice(0, 8).map(samplePerson),
+        strong_non_icp_members: (strongNonIcpMembers || []).slice(0, 8).map(samplePerson),
+      },
+    };
+  }, [
+    metrics,
+    diagnosticCards,
+    campaignRows,
+    campaignDiagnostics,
+    data,
+    weeklySignoff,
+    dq,
+    freeEventsSummary,
+    cplTrend,
+    drilldowns,
+    nudgeCandidates,
+    strongNonIcpMembers,
+  ]);
+  const activeCampaignDrilldown = activeCampaignKey ? (campaignDrilldowns?.[activeCampaignKey] || null) : null;
+  const activeCampaignStageRows = activeCampaignDrilldown?.rows?.[activeCampaignStageKey] || [];
+  const cplTrendNewestFirst = useMemo(() => {
+    const rows = [...(cplTrend || [])].sort((a, b) => String(b.week || '').localeCompare(String(a.week || '')));
+    return rows.map((row, idx) => {
+      const priorWeek = rows[idx + 1] || null; // older row in display order
+      const curCpl = Number(row?.cpl);
+      const priorCpl = Number(priorWeek?.cpl);
+      const wowPct = Number.isFinite(curCpl) && Number.isFinite(priorCpl) && priorCpl > 0
+        ? (curCpl - priorCpl) / priorCpl
+        : null;
+      return { ...row, wow_cpl_pct: wowPct };
+    });
+  }, [cplTrend]);
+  const campaignStageTabs = [
+    ['all_leads', 'All Leads'],
+    ['luma_signups', 'Luma'],
+    ['first_showups', '1st Show-Up'],
+    ['qualified_leads', 'QL'],
+    ['great_leads', 'GL'],
+    ['great_members', 'GM'],
+    ['ideal_members', 'IM'],
+  ];
+  const campaignStageColumns = [
+    { key: 'display_name', label: 'Name' },
+    { key: 'lead_week', label: 'Lead Week' },
+    { key: 'lead_date', label: 'Lead Date' },
+    { key: 'exact_campaign_week_match', label: 'Exact Match?' },
+    { key: 'total_showups', label: 'Show-Ups', type: 'number' },
+    { key: 'qualified_lead', label: 'QL?' },
+    { key: 'great_lead', label: 'GL?' },
+    { key: 'great_member', label: 'GM?' },
+    { key: 'ideal_member', label: 'IM?' },
+    { key: 'revenue_official_cached', label: 'Revenue', type: 'currency' },
+    { key: 'first_conversion_event_name', label: 'Meta Form' },
+    { key: 'hs_analytics_source_data_2', label: 'HubSpot Campaign Detail' },
+    { key: 'hubspot_url', label: 'HubSpot', type: 'link' },
+  ];
 
   async function copyPlaybook() {
     try {
@@ -491,6 +917,123 @@ export default function CohortUnitEconomicsPreviewPanel() {
     } catch (_) {
       setCopyState('error');
       setTimeout(() => setCopyState('idle'), 1800);
+    }
+  }
+
+  function toggleSection(key) {
+    setSectionOpen((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  async function runProviderAnalysis(provider) {
+    const modeByProvider = {
+      openai: 'analyze_openai',
+      gemini: 'analyze_gemini',
+    };
+    const mode = modeByProvider[provider];
+    if (!mode) return;
+    if (!supabaseUrl || !supabaseKey) {
+      setAiError('Missing Supabase URL or anon key in frontend env.');
+      return;
+    }
+    setAiLoading(true);
+    setAiLoadingProvider(provider);
+    setAiError(null);
+    try {
+      const resp = await fetch(`${supabaseUrl}/functions/v1/analyze-leads-insights`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+        },
+        body: JSON.stringify({
+          mode,
+          dateLabel: 'Cohort Unit Economics Snapshot (HubSpot Calls only)',
+          currentData: provider === 'openai' ? metaAdGuideRequestPayload : aiRequestPayload,
+          previousData: null,
+          ...(provider === 'openai' ? { trainingPack: META_AD_TRAINING_INSTRUCTION_PACK } : {}),
+        }),
+      });
+      const json = await resp.json();
+      if (!json?.ok) {
+        setAiError(json?.error || 'Analysis request failed');
+        return;
+      }
+      setAiData((prev) => ({
+        ...(prev || {}),
+        provider: json.provider || provider,
+        ...(json.openai ? { openai: json.openai } : {}),
+        ...(json.gemini ? { gemini: json.gemini } : {}),
+        ...(json.claude ? { claude: json.claude } : {}),
+        ...(Array.isArray(json.consensus) ? { consensus: json.consensus } : {}),
+        ...(Array.isArray(json.autonomous_actions) ? { autonomous_actions: json.autonomous_actions } : {}),
+        ...(Array.isArray(json.human_actions) ? { human_actions: json.human_actions } : {}),
+      }));
+    } catch (err) {
+      setAiError(String(err?.message || err));
+    } finally {
+      setAiLoading(false);
+      setAiLoadingProvider(null);
+    }
+  }
+
+  async function copyText(text) {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(String(text));
+      setCopyState('copied');
+      setTimeout(() => setCopyState('idle'), 1200);
+    } catch (_) {
+      setCopyState('error');
+      setTimeout(() => setCopyState('idle'), 1800);
+    }
+  }
+
+  async function copyMetaAdGuideExport() {
+    if (!metaAdGuide?.export_text) return;
+    try {
+      await navigator.clipboard.writeText(String(metaAdGuide.export_text));
+      setMetaAdGuideCopyState('copied');
+      setTimeout(() => setMetaAdGuideCopyState('idle'), 1200);
+    } catch (_) {
+      setMetaAdGuideCopyState('error');
+      setTimeout(() => setMetaAdGuideCopyState('idle'), 1800);
+    }
+  }
+
+  async function runMetaAdGuideGenerator() {
+    if (!supabaseUrl || !supabaseKey) {
+      setMetaAdGuideError('Missing Supabase URL or anon key in frontend env.');
+      return;
+    }
+    setMetaAdGuideLoading(true);
+    setMetaAdGuideError(null);
+    try {
+      const resp = await fetch(`${supabaseUrl}/functions/v1/analyze-leads-insights`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+        },
+        body: JSON.stringify({
+          mode: 'generate_meta_ad_guide_openai',
+          dateLabel: 'Cohort Unit Economics Snapshot (HubSpot Calls only)',
+          currentData: metaAdGuideRequestPayload,
+          previousData: null,
+          trainingPack: META_AD_TRAINING_INSTRUCTION_PACK,
+        }),
+      });
+      const json = await resp.json();
+      if (!json?.ok) {
+        setMetaAdGuideError(json?.error || 'Meta Ad generator request failed');
+        return;
+      }
+      setMetaAdGuide(json.meta_ad_guide || null);
+    } catch (err) {
+      setMetaAdGuideError(String(err?.message || err));
+    } finally {
+      setMetaAdGuideLoading(false);
     }
   }
 
@@ -504,9 +1047,25 @@ export default function CohortUnitEconomicsPreviewPanel() {
 
   function renderCell(row, col) {
     const value = row?.[col.key];
+    if ((col.key === 'display_name' || col.key === 'name') && row?.hubspot_url && value) {
+      return (
+        <a href={row.hubspot_url} target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>
+          {String(value)}
+        </a>
+      );
+    }
+    if (col.key === 'sobriety_age_current') return formatSobrietyAge(row?.sobriety_date);
     if (col.type === 'currency') return currency(value);
     if (col.type === 'number') return int(value);
     if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+    if (col.type === 'multiline') {
+      if (!value) return '—';
+      return (
+        <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: '11px', lineHeight: 1.35, color: '#334155', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' }}>
+          {String(value)}
+        </pre>
+      );
+    }
     if (col.type === 'link') {
       if (!value) return '—';
       return (
@@ -515,17 +1074,57 @@ export default function CohortUnitEconomicsPreviewPanel() {
         </a>
       );
     }
-    if (col.key === 'createdate' && value) return formatDateTime(value);
+    if (col.key === 'sobriety_date' && value) return formatShortDate(value);
+    if ((col.key === 'createdate' || String(col.key || '').endsWith('_at')) && value) return formatDateTime(value);
     return String(value ?? '—');
   }
 
+  function ProviderPanel({ title, dataRow, color }) {
+    return (
+      <div style={{ backgroundColor: '#fff', border: `1px solid ${color}33`, borderRadius: '12px', padding: '12px', minWidth: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+          <p style={{ margin: 0, fontSize: '11px', color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{title}</p>
+          {dataRow?.model && <span style={{ fontSize: '10px', color: '#64748b' }}>{String(dataRow.model).replace(' (LIVE)', '')}</span>}
+        </div>
+        {dataRow ? (
+          <>
+            <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#334155', lineHeight: 1.45 }}>{dataRow.summary || 'No summary returned.'}</p>
+            {!!dataRow?.insights?.length && (
+              <ul style={{ margin: '8px 0 0', paddingLeft: '16px', fontSize: '11px', color: '#475569', lineHeight: 1.4 }}>
+                {dataRow.insights.slice(0, 5).map((item, idx) => <li key={`${title}-${idx}`}>{item}</li>)}
+              </ul>
+            )}
+            {dataRow.is_mock && <p style={{ margin: '8px 0 0', fontSize: '10px', color: '#94a3b8' }}>Fallback response (provider unavailable or quota issue)</p>}
+            {dataRow.provider_error && <p style={{ margin: '8px 0 0', fontSize: '10px', color: '#b91c1c' }}>Provider error: {dataRow.provider_error}</p>}
+          </>
+        ) : (
+          <p style={{ margin: '8px 0 0', fontSize: '11px', color: '#94a3b8' }}>Run on-demand analysis for this HubSpot-call cohort snapshot.</p>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div style={card}>
+    <div style={{
+      ...card,
+      background: isPrimary ? 'linear-gradient(180deg, #fff, #f8fbff 36%, #ffffff 100%)' : card.backgroundColor,
+      border: isPrimary ? '1px solid #bfdbfe' : card.border,
+      boxShadow: isPrimary ? '0 10px 28px rgba(15, 23, 42, 0.06)' : 'none',
+    }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap', marginBottom: '14px' }}>
         <div>
-          <h3 style={{ margin: 0, fontSize: '18px', color: '#0f172a' }}>Cohort Unit Economics Preview (Bottom Test Section)</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <h3 style={{ margin: 0, fontSize: isPrimary ? '20px' : '18px', color: '#0f172a' }}>
+              {isPrimary ? 'Leads Decision Layer (Meta Cohorts + HubSpot Calls)' : 'Cohort Unit Economics Preview (Bottom Test Section)'}
+            </h3>
+            <span style={{ padding: '4px 8px', borderRadius: '999px', fontSize: '10px', fontWeight: 700, backgroundColor: '#eff6ff', color: '#1d4ed8' }}>
+              HubSpot Calls only for show-ups
+            </span>
+          </div>
           <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748b' }}>
-            Snapshot from the cohort analysis script with manual weekly Meta spend backfill. Existing Leads module above is unchanged for comparison.
+            {isPrimary
+              ? 'Action-first cohort analytics for Meta -> Luma -> member outcomes. Use this for spend decisions and outreach prioritization. Legacy/mixed Zoom matching sections are available below for comparison only.'
+              : 'Snapshot from the cohort analysis script with manual weekly Meta spend backfill. Existing Leads module above is unchanged for comparison.'}
           </p>
         </div>
         <div style={{ textAlign: 'right' }}>
@@ -585,7 +1184,452 @@ export default function CohortUnitEconomicsPreviewPanel() {
         </div>
       </div>
 
-      {weeklySignoff && (
+      <div style={{ ...subCard, marginBottom: '14px', backgroundColor: '#fff', borderColor: '#dbeafe' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: '10px' }}>
+          <div style={{ ...subCard, backgroundColor: '#f8fbff' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', flexWrap: 'wrap' }}>
+              <div>
+                <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Action Summary + Analyst Reviews</p>
+                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
+                  On-demand AI analysis for the audited cohort snapshot (HubSpot Calls only for attendance/show-up truth).
+                </p>
+                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#92400e', fontWeight: 600 }}>
+                  Recommended future: automatic weekly analysis (saved history). For now, run on demand only.
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => runProviderAnalysis('openai')}
+                  disabled={aiLoading}
+                  style={{ border: 'none', backgroundColor: '#166534', color: '#fff', borderRadius: '10px', padding: '8px 12px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', opacity: aiLoading ? 0.7 : 1 }}
+                >
+                  {aiLoadingProvider === 'openai' ? 'Running OpenAI...' : 'Run OpenAI'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => runProviderAnalysis('gemini')}
+                  disabled={aiLoading}
+                  style={{ border: 'none', backgroundColor: '#0f766e', color: '#fff', borderRadius: '10px', padding: '8px 12px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', opacity: aiLoading ? 0.7 : 1 }}
+                >
+                  {aiLoadingProvider === 'gemini' ? 'Running Gemini...' : 'Run Gemini'}
+                </button>
+                <button
+                  type="button"
+                  disabled
+                  title="Claude key not configured yet"
+                  style={{ border: 'none', backgroundColor: '#e2e8f0', color: '#64748b', borderRadius: '10px', padding: '8px 12px', fontSize: '11px', fontWeight: 700, cursor: 'not-allowed' }}
+                >
+                  Claude (Key Needed)
+                </button>
+              </div>
+            </div>
+            {aiError && (
+              <div style={{ marginTop: '8px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '8px 10px', fontSize: '11px', color: '#991b1b' }}>
+                {aiError}
+              </div>
+            )}
+            <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '8px' }}>
+              <ProviderPanel title="OpenAI" dataRow={aiData?.openai} color="#166534" />
+              <ProviderPanel title="Gemini" dataRow={aiData?.gemini} color="#0f766e" />
+              <ProviderPanel title="Claude" dataRow={aiData?.claude} color="#b45309" />
+            </div>
+            {(Array.isArray(aiData?.human_actions) && aiData.human_actions.length > 0) && (
+              <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div style={{ ...subCard, backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }}>
+                  <p style={{ margin: 0, fontSize: '11px', fontWeight: 700, color: '#1d4ed8' }}>AI Can Do (Future Workflow Targets)</p>
+                  <ul style={{ margin: '6px 0 0', paddingLeft: '16px', fontSize: '11px', color: '#1e3a8a', lineHeight: 1.4 }}>
+                    {(aiData.autonomous_actions || []).slice(0, 6).map((item, idx) => <li key={`auto-${idx}`}>{item}</li>)}
+                  </ul>
+                </div>
+                <div style={{ ...subCard, backgroundColor: '#fffbeb', borderColor: '#fde68a' }}>
+                  <p style={{ margin: 0, fontSize: '11px', fontWeight: 700, color: '#92400e' }}>Human Needed Next Steps</p>
+                  <ul style={{ margin: '6px 0 0', paddingLeft: '16px', fontSize: '11px', color: '#78350f', lineHeight: 1.4 }}>
+                    {(aiData.human_actions || []).slice(0, 6).map((item, idx) => <li key={`human-${idx}`}>{item}</li>)}
+                  </ul>
+                </div>
+              </div>
+            )}
+            <div style={{ ...subCard, marginTop: '8px', backgroundColor: '#ffffff', borderColor: '#dbeafe' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', flexWrap: 'wrap' }}>
+                <div>
+                  <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>
+                    Meta Ad Generator (Expert AI, On Demand)
+                  </p>
+                  <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
+                    Generates the next ads and test variants using your Meta training docs + the current audited cohort/campaign snapshot.
+                  </p>
+                  <div style={{ marginTop: '5px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {(META_AD_TRAINING_INSTRUCTION_PACK.sourceDocuments || []).map((doc) => (
+                      <span
+                        key={`meta-train-doc-${doc}`}
+                        style={{ padding: '3px 7px', borderRadius: '999px', backgroundColor: '#eef2ff', color: '#3730a3', fontSize: '10px', fontWeight: 700 }}
+                      >
+                        {doc}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={runMetaAdGuideGenerator}
+                    disabled={metaAdGuideLoading}
+                    style={{ border: 'none', backgroundColor: '#1d4ed8', color: '#fff', borderRadius: '10px', padding: '8px 12px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', opacity: metaAdGuideLoading ? 0.7 : 1 }}
+                  >
+                    {metaAdGuideLoading ? 'Generating...' : 'Generate Next Ads'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowMetaAdTrainingPack((v) => !v)}
+                    style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#334155', borderRadius: '10px', padding: '8px 12px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    {showMetaAdTrainingPack ? 'Hide Training Pack' : 'View Training Pack'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={copyMetaAdGuideExport}
+                    disabled={!metaAdGuide?.export_text}
+                    style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#334155', borderRadius: '10px', padding: '8px 12px', fontSize: '11px', fontWeight: 700, cursor: metaAdGuide?.export_text ? 'pointer' : 'not-allowed', opacity: metaAdGuide?.export_text ? 1 : 0.55 }}
+                  >
+                    {metaAdGuideCopyState === 'copied' ? 'Copied' : metaAdGuideCopyState === 'error' ? 'Copy Failed' : 'Copy Full Guide'}
+                  </button>
+                </div>
+              </div>
+              <p style={{ margin: '6px 0 0', fontSize: '10px', color: '#92400e', fontWeight: 600 }}>
+                Recommended future: automatic weekly ad-generation suggestions with snapshot history. Currently runs on demand only.
+              </p>
+              {metaAdGuideError && (
+                <div style={{ marginTop: '8px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '8px 10px', fontSize: '11px', color: '#991b1b' }}>
+                  {metaAdGuideError}
+                </div>
+              )}
+              {showMetaAdTrainingPack && (
+                <div style={{ marginTop: '8px' }}>
+                  <p style={{ margin: 0, fontSize: '11px', color: '#334155', fontWeight: 700 }}>Training Pack Summary</p>
+                  <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569', lineHeight: 1.4 }}>
+                    {META_AD_TRAINING_INSTRUCTION_PACK.summary}
+                  </p>
+                  <textarea
+                    readOnly
+                    value={META_AD_TRAINING_INSTRUCTION_PACK.instructionPack}
+                    style={{
+                      marginTop: '6px',
+                      width: '100%',
+                      minHeight: '180px',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '10px',
+                      padding: '10px',
+                      fontSize: '11px',
+                      lineHeight: 1.4,
+                      color: '#0f172a',
+                      backgroundColor: '#fff',
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                    }}
+                  />
+                </div>
+              )}
+              {metaAdGuide && (
+                <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                  <div style={{ ...subCard, backgroundColor: '#f8fbff', borderColor: '#dbeafe' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span style={{ padding: '3px 7px', borderRadius: '999px', backgroundColor: signalBadge(metaAdGuide.status).bg, color: signalBadge(metaAdGuide.status).color, fontSize: '10px', fontWeight: 700 }}>
+                          {signalBadge(metaAdGuide.status).label}
+                        </span>
+                        {metaAdGuide.model && <span style={{ fontSize: '10px', color: '#64748b' }}>{String(metaAdGuide.model).replace(' (LIVE)', '')}</span>}
+                        {metaAdGuide.timestamp && <span style={{ fontSize: '10px', color: '#94a3b8' }}>{formatDateTime(metaAdGuide.timestamp)}</span>}
+                      </div>
+                      {metaAdGuide.is_mock && (
+                        <span style={{ fontSize: '10px', color: '#92400e', fontWeight: 700 }}>
+                          Fallback response
+                        </span>
+                      )}
+                    </div>
+                    <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#334155', lineHeight: 1.45 }}>
+                      {metaAdGuide.summary || 'No guide summary returned.'}
+                    </p>
+                    {!!metaAdGuide.provider_error && (
+                      <p style={{ margin: '6px 0 0', fontSize: '10px', color: '#b91c1c' }}>
+                        Provider error: {metaAdGuide.provider_error}
+                      </p>
+                    )}
+                  </div>
+
+                  {!!metaAdGuide.performance_read?.length && (
+                    <details style={{ ...subCard, backgroundColor: '#fff' }}>
+                      <summary style={{ cursor: 'pointer', fontSize: '11px', fontWeight: 700, color: '#0f172a' }}>
+                        What the Data Says ({metaAdGuide.performance_read.length})
+                      </summary>
+                      <ul style={{ margin: '8px 0 0', paddingLeft: '16px', fontSize: '11px', color: '#334155', lineHeight: 1.45 }}>
+                        {metaAdGuide.performance_read.map((item, idx) => <li key={`metaad-read-${idx}`}>{item}</li>)}
+                      </ul>
+                    </details>
+                  )}
+
+                  {!!metaAdGuide.strategic_direction?.length && (
+                    <details open style={{ ...subCard, backgroundColor: '#fff' }}>
+                      <summary style={{ cursor: 'pointer', fontSize: '11px', fontWeight: 700, color: '#0f172a' }}>
+                        Strategic Direction ({metaAdGuide.strategic_direction.length})
+                      </summary>
+                      <ul style={{ margin: '8px 0 0', paddingLeft: '16px', fontSize: '11px', color: '#334155', lineHeight: 1.45 }}>
+                        {metaAdGuide.strategic_direction.map((item, idx) => <li key={`metaad-dir-${idx}`}>{item}</li>)}
+                      </ul>
+                    </details>
+                  )}
+
+                  {!!metaAdGuide.ads_to_launch?.length && (
+                    <div style={{ ...subCard, backgroundColor: '#fff' }}>
+                      <p style={{ margin: 0, fontSize: '11px', fontWeight: 700, color: '#0f172a' }}>
+                        Next Ads To Run ({metaAdGuide.ads_to_launch.length})
+                      </p>
+                      <div style={{ marginTop: '6px', display: 'grid', gap: '6px' }}>
+                        {metaAdGuide.ads_to_launch.map((ad, idx) => (
+                          <details key={`metaad-${ad.id || idx}`} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '8px', backgroundColor: '#f8fafc' }} open={idx === 0}>
+                            <summary style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '11px', fontWeight: 700, color: '#0f172a' }}>{ad.name || `Ad ${idx + 1}`}</span>
+                              {ad.format && <span style={{ fontSize: '10px', color: '#475569' }}>{ad.format}</span>}
+                              {ad.angle && <span style={{ fontSize: '10px', color: '#1d4ed8' }}>{ad.angle}</span>}
+                            </summary>
+                            <div style={{ marginTop: '6px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                              <div>
+                                <p style={{ margin: 0, fontSize: '10px', color: '#64748b', fontWeight: 700 }}>Hook</p>
+                                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#334155' }}>{ad.hook || '—'}</p>
+                                <p style={{ margin: '6px 0 0', fontSize: '10px', color: '#64748b', fontWeight: 700 }}>Overlay Text</p>
+                                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#334155' }}>{ad.overlay_text || '—'}</p>
+                                <p style={{ margin: '6px 0 0', fontSize: '10px', color: '#64748b', fontWeight: 700 }}>Audience Strategy</p>
+                                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#334155' }}>{ad.audience_strategy || '—'}</p>
+                                <p style={{ margin: '6px 0 0', fontSize: '10px', color: '#64748b', fontWeight: 700 }}>CTA</p>
+                                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#334155' }}>{ad.cta || '—'}</p>
+                              </div>
+                              <div>
+                                <p style={{ margin: 0, fontSize: '10px', color: '#64748b', fontWeight: 700 }}>Headlines</p>
+                                <ul style={{ margin: '4px 0 0', paddingLeft: '14px', fontSize: '11px', color: '#334155', lineHeight: 1.35 }}>
+                                  {(ad.headlines || []).map((h, i) => <li key={`ad-h-${idx}-${i}`}>{h}</li>)}
+                                </ul>
+                                <p style={{ margin: '6px 0 0', fontSize: '10px', color: '#64748b', fontWeight: 700 }}>Primary Text Variants</p>
+                                <ul style={{ margin: '4px 0 0', paddingLeft: '14px', fontSize: '11px', color: '#334155', lineHeight: 1.35 }}>
+                                  {(ad.primary_texts || []).map((t, i) => <li key={`ad-p-${idx}-${i}`}>{t}</li>)}
+                                </ul>
+                              </div>
+                            </div>
+                            <div style={{ marginTop: '6px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                              <div>
+                                <p style={{ margin: 0, fontSize: '10px', color: '#64748b', fontWeight: 700 }}>Qualification Notes</p>
+                                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#334155' }}>{ad.qualification_notes || '—'}</p>
+                              </div>
+                              <div>
+                                <p style={{ margin: 0, fontSize: '10px', color: '#64748b', fontWeight: 700 }}>Hypothesis</p>
+                                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#334155' }}>{ad.test_hypothesis || '—'}</p>
+                              </div>
+                            </div>
+                          </details>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    {!!metaAdGuide.tests_to_run?.length && (
+                      <details style={{ ...subCard, backgroundColor: '#fff' }}>
+                        <summary style={{ cursor: 'pointer', fontSize: '11px', fontWeight: 700, color: '#0f172a' }}>
+                          Tests To Run ({metaAdGuide.tests_to_run.length})
+                        </summary>
+                        <ul style={{ margin: '8px 0 0', paddingLeft: '16px', fontSize: '11px', color: '#334155', lineHeight: 1.4 }}>
+                          {metaAdGuide.tests_to_run.map((t, idx) => (
+                            <li key={`metaad-test-${idx}`}>
+                              <strong>{t.name}</strong>: {t.hypothesis}
+                              {t.success_metric ? ` (Success metric: ${t.success_metric})` : ''}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                    {!!metaAdGuide.next_7_day_execution_plan?.length && (
+                      <details style={{ ...subCard, backgroundColor: '#fff' }} open>
+                        <summary style={{ cursor: 'pointer', fontSize: '11px', fontWeight: 700, color: '#0f172a' }}>
+                          Next 7 Days ({metaAdGuide.next_7_day_execution_plan.length})
+                        </summary>
+                        <ol style={{ margin: '8px 0 0', paddingLeft: '18px', fontSize: '11px', color: '#334155', lineHeight: 1.4 }}>
+                          {metaAdGuide.next_7_day_execution_plan.map((step, idx) => (
+                            <li key={`metaad-step-${idx}`}>{step}</li>
+                          ))}
+                        </ol>
+                      </details>
+                    )}
+                  </div>
+
+                  {metaAdGuide.export_text && (
+                    <details style={{ ...subCard, backgroundColor: '#fff' }}>
+                      <summary style={{ cursor: 'pointer', fontSize: '11px', fontWeight: 700, color: '#0f172a' }}>
+                        Copy/Paste Full Guide
+                      </summary>
+                      <textarea
+                        readOnly
+                        value={metaAdGuide.export_text}
+                        style={{
+                          marginTop: '8px',
+                          width: '100%',
+                          minHeight: '220px',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '10px',
+                          padding: '10px',
+                          fontSize: '11px',
+                          lineHeight: 1.4,
+                          color: '#0f172a',
+                          backgroundColor: '#fff',
+                          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                        }}
+                      />
+                    </details>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ ...subCard, backgroundColor: '#f8fafc' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>What To Do This Week (Snapshot)</p>
+              {metaAiAnalysis && (
+                <span style={{ padding: '4px 8px', borderRadius: '999px', backgroundColor: signalBadge(metaAiAnalysis.status).bg, color: signalBadge(metaAiAnalysis.status).color, fontSize: '10px', fontWeight: 700 }}>
+                  {signalBadge(metaAiAnalysis.status).label}
+                </span>
+              )}
+            </div>
+            <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#334155', lineHeight: 1.45 }}>
+              {metaAiAnalysis?.summary || 'Run an AI analyst or use the Meta Specialist Diagnosis cards below for the audited trend explainer.'}
+            </p>
+            {!!metaAiAnalysis?.action_steps?.length && (
+              <ol style={{ margin: '8px 0 0', paddingLeft: '18px', color: '#334155', fontSize: '11px', lineHeight: 1.45 }}>
+                {metaAiAnalysis.action_steps.slice(0, 5).map((step, idx) => <li key={`meta-action-${idx}`}>{step}</li>)}
+              </ol>
+            )}
+            <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setActiveDrilldownKey('great_lead_outreach_queue')}
+                style={{ textAlign: 'left', border: '1px solid #dbeafe', backgroundColor: '#eff6ff', borderRadius: '10px', padding: '8px', cursor: 'pointer' }}
+              >
+                <p style={{ margin: 0, fontSize: '10px', color: '#1d4ed8', fontWeight: 700 }}>Great Lead Outreach Queue</p>
+                <p style={{ margin: '4px 0 0', fontSize: '15px', color: '#0f172a', fontWeight: 800 }}>{int(greatLeadOutreachQueue.length)}</p>
+                <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#475569' }}>Manual touch for great leads before they stall</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveDrilldownKey('high_value_nudge_candidates')}
+                style={{ textAlign: 'left', border: '1px solid #e2e8f0', backgroundColor: '#fff', borderRadius: '10px', padding: '8px', cursor: 'pointer' }}
+              >
+                <p style={{ margin: 0, fontSize: '10px', color: '#334155', fontWeight: 700 }}>Near-Ideal Nudge Candidates</p>
+                <p style={{ margin: '4px 0 0', fontSize: '15px', color: '#0f172a', fontWeight: 800 }}>{int(nudgeCandidates.length)}</p>
+                <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#64748b' }}>ICP + strong attendance, not yet 11 show-ups</p>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {freeEventsSummary && (
+        <div style={{ ...subCard, marginBottom: '14px', backgroundColor: '#fff' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', flexWrap: 'wrap', marginBottom: '8px' }}>
+            <div>
+              <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>
+                Category — {freeEventsSummary.category || 'Free Events'}
+              </p>
+              <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
+                {freeEventsSummary.window_type || 'Current vs prior period'} · Current: {freeEventsSummary.window_label_current || 'N/A'} · Prior: {freeEventsSummary.window_label_prior || 'N/A'}
+              </p>
+            </div>
+            <span style={{ padding: '4px 8px', borderRadius: '999px', backgroundColor: '#eef2ff', color: '#3730a3', fontSize: '10px', fontWeight: 700 }}>
+              Click any box for drilldown
+            </span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '8px' }}>
+            {(freeEventsSummary.cards || []).map((item) => {
+              const countUp = Number(item.count_change_pct) >= 0;
+              const costUp = Number(item.cost_change_pct) >= 0;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => item.drilldown_key && setActiveDrilldownKey(item.drilldown_key)}
+                  style={{
+                    textAlign: 'left',
+                    border: '1px solid #dbeafe',
+                    backgroundColor: '#f8fbff',
+                    borderRadius: '12px',
+                    padding: '10px',
+                    cursor: item.drilldown_key ? 'pointer' : 'default',
+                  }}
+                >
+                  <p style={{ margin: 0, fontSize: '11px', color: '#1e3a8a', fontWeight: 700 }}>{item.label}</p>
+                  <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'baseline' }}>
+                    <span style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>{int(item.current_count)}</span>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: Number.isFinite(Number(item.count_change_pct)) ? (countUp ? '#166534' : '#991b1b') : '#64748b' }}>
+                      {deltaPctLabel(item.count_change_pct)} vs prior
+                    </span>
+                  </div>
+                  <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #dbeafe' }}>
+                    <p style={{ margin: 0, fontSize: '10px', color: '#64748b', fontWeight: 700 }}>
+                      {item.key === 'meta_leads' ? 'Meta Leads CPL' :
+                        item.key === 'meta_qualified_leads' ? 'Meta Qualified Leads CPL' :
+                        item.key === 'meta_great_leads' ? 'Meta Great Leads CPL' :
+                        item.key === 'luma_signups_paid' ? 'Luma Cost Per Sign Up' :
+                        'Net New Show Up Cost'}
+                    </p>
+                    <div style={{ marginTop: '4px', display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'baseline' }}>
+                      <span style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a' }}>{currency(item.current_cost)}</span>
+                      <span style={{ fontSize: '10px', fontWeight: 700, color: Number.isFinite(Number(item.cost_change_pct)) ? (costUp ? '#991b1b' : '#166534') : '#64748b' }}>
+                        {deltaPctLabel(item.cost_change_pct)} vs prior
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div style={{ ...subCard, marginBottom: '14px', backgroundColor: '#fff' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <div>
+            <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Section Visibility</p>
+            <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
+              Keep the page glanceable: open only the sections you need right now.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {[
+              ['signoff', 'Signoff'],
+              ['diagnostics', 'Meta Diagnostics'],
+              ['outreach', 'Outreach'],
+              ['qa', 'QA'],
+              ['metrics', 'Deep Metrics'],
+            ].map(([key, label]) => (
+              <button
+                key={`section-${key}`}
+                type="button"
+                onClick={() => toggleSection(key)}
+                style={{
+                  border: '1px solid #cbd5e1',
+                  backgroundColor: sectionOpen[key] ? '#e0f2fe' : '#fff',
+                  color: sectionOpen[key] ? '#075985' : '#334155',
+                  borderRadius: '999px',
+                  padding: '5px 9px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                {sectionOpen[key] ? 'Hide' : 'Show'} {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {sectionOpen.signoff && weeklySignoff && (
         <div style={{ ...subCard, marginBottom: '14px', backgroundColor: '#fff' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
             <div>
@@ -664,7 +1708,7 @@ export default function CohortUnitEconomicsPreviewPanel() {
         </div>
       )}
 
-      {metaDiagnostics && (
+      {sectionOpen.diagnostics && metaDiagnostics && (
         <div style={{ ...subCard, marginBottom: '14px', backgroundColor: '#fff' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap', marginBottom: '10px' }}>
             <div>
@@ -736,25 +1780,30 @@ export default function CohortUnitEconomicsPreviewPanel() {
                   <table style={{ width: '100%', minWidth: '420px', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ backgroundColor: '#f8fafc' }}>
-                        {['Week', 'Spend', 'Leads', 'CPL', 'Q Leads', 'Great Leads'].map((h) => (
+                        {['Date', 'Spend', 'Leads', 'CPL', 'WoW % (CPL)', 'Qualified Leads', 'Great Leads'].map((h) => (
                           <th key={h} style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #e2e8f0', fontSize: '10px', color: '#475569', textTransform: 'uppercase' }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {cplTrend.map((row) => (
+                      {cplTrendNewestFirst.map((row) => (
                         <tr key={`cpltrend-${row.week}`}>
-                          <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155' }}>{row.week}</td>
+                          <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155', whiteSpace: 'nowrap' }}>{formatShortDate(row.week)}</td>
                           <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155' }}>{currency(row.spend)}</td>
                           <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155' }}>{int(row.leads)}</td>
                           <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#0f172a', fontWeight: 700 }}>{currency(row.cpl)}</td>
+                          <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', fontWeight: 700, color: Number.isFinite(Number(row.wow_cpl_pct)) ? (Number(row.wow_cpl_pct) <= 0 ? '#166534' : '#991b1b') : '#64748b' }}>
+                            {Number.isFinite(Number(row.wow_cpl_pct))
+                              ? `${Number(row.wow_cpl_pct) <= 0 ? '▲ ' : '▼ '}${deltaPctLabel(row.wow_cpl_pct)}`
+                              : 'N/A'}
+                          </td>
                           <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155' }}>{int(row.qualified_leads)}</td>
                           <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155' }}>{int(row.great_leads)}</td>
                         </tr>
                       ))}
-                      {cplTrend.length === 0 && (
+                      {cplTrendNewestFirst.length === 0 && (
                         <tr>
-                          <td colSpan={6} style={{ padding: '8px', fontSize: '11px', color: '#64748b' }}>No CPL trend rows in this snapshot.</td>
+                          <td colSpan={7} style={{ padding: '8px', fontSize: '11px', color: '#64748b' }}>No CPL trend rows in this snapshot.</td>
                         </tr>
                       )}
                     </tbody>
@@ -816,8 +1865,11 @@ export default function CohortUnitEconomicsPreviewPanel() {
                           ['cpl_exact_campaign_week', 'CPL (Exact)'],
                           ['cpql_exact_campaign_week', 'CPQL (Exact)'],
                           ['cpgl_exact_campaign_week', 'CPGL (Exact)'],
+                          ['cost_per_great_member_exact_campaign_week', 'CPGM (Exact)'],
+                          ['cost_per_ideal_member_exact_campaign_week', 'CPIM (Exact)'],
                           ['qualified_lead_rate', 'Q Lead Rate'],
                           ['great_member_rate', 'Great Member Rate'],
+                          ['ideal_member_rate', 'Ideal Rate'],
                           ['ideal_members', 'Ideal'],
                           ['matched_campaign_weeks', 'Matched Weeks'],
                         ].map(([key, label]) => (
@@ -835,23 +1887,36 @@ export default function CohortUnitEconomicsPreviewPanel() {
                       {sortedCampaignRows.map((row) => (
                         <tr key={`camp-${row.campaign_key}`}>
                           <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155', maxWidth: '280px' }}>
-                            <div style={{ fontWeight: 700, color: '#0f172a' }}>{row.campaign_label}</div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveCampaignKey(row.campaign_key);
+                                setActiveCampaignStageKey('all_leads');
+                              }}
+                              style={{ border: 'none', background: 'transparent', padding: 0, margin: 0, cursor: 'pointer', textAlign: 'left', fontWeight: 700, color: '#0f172a' }}
+                            >
+                              {row.campaign_label}
+                            </button>
                             <div style={{ color: '#64748b', marginTop: '2px' }}>{row.attribution_quality}</div>
+                            <div style={{ color: '#2563eb', marginTop: '2px', fontWeight: 700, fontSize: '10px' }}>Open campaign drilldown</div>
                           </td>
                           <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px' }}>{int(row.exact_match_leads)}</td>
                           <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px' }}>{int(row.leads)}</td>
                           <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px' }}>{currency(row.cpl_exact_campaign_week)}</td>
                           <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px' }}>{currency(row.cpql_exact_campaign_week)}</td>
                           <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px' }}>{currency(row.cpgl_exact_campaign_week)}</td>
+                          <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px' }}>{currency(row.cost_per_great_member_exact_campaign_week)}</td>
+                          <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px' }}>{currency(row.cost_per_ideal_member_exact_campaign_week)}</td>
                           <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px' }}>{pct(row.qualified_lead_rate)}</td>
                           <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px' }}>{pct(row.great_member_rate)}</td>
+                          <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px' }}>{pct(row.ideal_member_rate)}</td>
                           <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px' }}>{int(row.ideal_members)}</td>
                           <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px' }}>{int(row.matched_campaign_weeks)}</td>
                         </tr>
                       ))}
                       {sortedCampaignRows.length === 0 && (
                         <tr>
-                          <td colSpan={10} style={{ padding: '8px', fontSize: '11px', color: '#64748b' }}>No campaign rows in this snapshot.</td>
+                          <td colSpan={13} style={{ padding: '8px', fontSize: '11px', color: '#64748b' }}>No campaign rows in this snapshot.</td>
                         </tr>
                       )}
                     </tbody>
@@ -905,6 +1970,90 @@ export default function CohortUnitEconomicsPreviewPanel() {
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {activeCampaignDrilldown && (
+            <div style={{ marginTop: '10px', ...subCard, backgroundColor: '#fff' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', flexWrap: 'wrap' }}>
+                <div>
+                  <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>
+                    Campaign Drilldown: {activeCampaignDrilldown.campaign_label}
+                  </p>
+                  <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
+                    Click stage tabs to inspect names (Luma, QL, GL, GM, IM) for this campaign bucket in the current cohort snapshot.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '10px', color: '#64748b' }}>Attribution: {activeCampaignDrilldown.attribution_quality}</span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveCampaignKey(null)}
+                    style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#334155', borderRadius: '10px', padding: '6px 10px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    Close Campaign Drilldown
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ marginTop: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {campaignStageTabs.map(([stageKey, label]) => (
+                  <button
+                    key={`stage-${stageKey}`}
+                    type="button"
+                    onClick={() => setActiveCampaignStageKey(stageKey)}
+                    style={{
+                      border: '1px solid #cbd5e1',
+                      backgroundColor: activeCampaignStageKey === stageKey ? '#e0f2fe' : '#fff',
+                      color: activeCampaignStageKey === stageKey ? '#075985' : '#334155',
+                      borderRadius: '999px',
+                      padding: '5px 9px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {label} ({int(activeCampaignDrilldown.stage_counts?.[stageKey] || 0)})
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ marginTop: '8px', border: '1px solid #e2e8f0', borderRadius: '10px', overflowX: 'auto', backgroundColor: '#fff' }}>
+                <table style={{ width: '100%', minWidth: '1200px', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f8fafc' }}>
+                      {campaignStageColumns.map((col) => (
+                        <th key={`camp-stage-col-${col.key}`} style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '10px', color: '#475569', textTransform: 'uppercase' }}>
+                          {col.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeCampaignStageRows.map((row, idx) => (
+                      <tr key={`camp-stage-row-${row.hubspot_contact_id || idx}`}>
+                        {campaignStageColumns.map((col) => (
+                          <td key={`camp-stage-cell-${idx}-${col.key}`} style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155', verticalAlign: 'top' }}>
+                            {renderCell(row, col)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                    {activeCampaignStageRows.length === 0 && (
+                      <tr>
+                        <td colSpan={campaignStageColumns.length} style={{ padding: '10px', fontSize: '11px', color: '#64748b' }}>
+                          No rows in this campaign stage for the current snapshot.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              {(activeCampaignDrilldown.row_limit && (activeCampaignDrilldown.stage_counts?.[activeCampaignStageKey] || 0) > activeCampaignDrilldown.row_limit) && (
+                <p style={{ margin: '8px 0 0', fontSize: '11px', color: '#92400e' }}>
+                  Showing first {int(activeCampaignDrilldown.row_limit)} rows for performance. Full stage count: {int(activeCampaignDrilldown.stage_counts?.[activeCampaignStageKey] || 0)}.
+                </p>
+              )}
             </div>
           )}
 
@@ -1098,7 +2247,8 @@ export default function CohortUnitEconomicsPreviewPanel() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+      {sectionOpen.outreach && (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '10px', marginBottom: '14px' }}>
         <div style={subCard}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <div>
@@ -1117,14 +2267,14 @@ export default function CohortUnitEconomicsPreviewPanel() {
           </div>
           <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {nudgeCandidates.slice(0, 4).map((row) => (
-              <button
+              <div
                 key={`nudge-${row.hubspot_contact_id}`}
-                type="button"
-                onClick={() => setActiveDrilldownKey('high_value_nudge_candidates')}
-                style={{ textAlign: 'left', border: '1px solid #e2e8f0', backgroundColor: '#fff', borderRadius: '10px', padding: '8px', cursor: 'pointer' }}
+                style={{ textAlign: 'left', border: '1px solid #e2e8f0', backgroundColor: '#fff', borderRadius: '10px', padding: '8px' }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>{row.display_name}</span>
+                  <a href={row.hubspot_url} target="_blank" rel="noreferrer" style={{ fontSize: '12px', fontWeight: 700, color: '#2563eb', textDecoration: 'none' }}>
+                    {row.display_name}
+                  </a>
                   <span style={{ fontSize: '10px', fontWeight: 700, color: '#1d4ed8', backgroundColor: '#eff6ff', borderRadius: '999px', padding: '3px 7px' }}>
                     {row.ideal_candidate_likelihood || 'N/A'}
                   </span>
@@ -1132,12 +2282,98 @@ export default function CohortUnitEconomicsPreviewPanel() {
                 <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>
                   {int(row.total_showups)} show-ups · {int(row.shows_remaining_to_ideal)} to ideal · {int(row.missed_primary_group_sessions_since_last_showup)} missed in {row.primary_attendance_group || 'group'}
                 </p>
+                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#334155' }}>
+                  Revenue {currency(row.revenue_official_cached)} · Sobriety {formatSobrietyAge(row.sobriety_date)}
+                </p>
                 <p style={{ margin: '4px 0 0', fontSize: '11px', color: row.nudge_recommended_now ? '#b45309' : '#64748b', fontWeight: row.nudge_recommended_now ? 700 : 500 }}>
                   {row.nudge_reason || 'No nudge signal yet'}
                 </p>
-              </button>
+                <div style={{ marginTop: '6px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <a href={row.hubspot_url} target="_blank" rel="noreferrer" style={{ fontSize: '10px', color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>
+                    Open HubSpot
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setActiveDrilldownKey('high_value_nudge_candidates')}
+                    style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#334155', borderRadius: '999px', padding: '3px 8px', fontSize: '10px', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    View Drilldown
+                  </button>
+                </div>
+              </div>
             ))}
             {nudgeCandidates.length === 0 && <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#94a3b8' }}>No current candidates in this snapshot.</p>}
+          </div>
+        </div>
+
+        <div style={subCard}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <div>
+              <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Great Lead Outreach Queue</p>
+              <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
+                Extra manual outreach for great leads before they stall in the automatic funnel
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveDrilldownKey('great_lead_outreach_queue')}
+              style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#0f172a', borderRadius: '999px', padding: '5px 9px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+            >
+              {int(greatLeadOutreachQueue.length)} rows
+            </button>
+          </div>
+          <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {greatLeadOutreachQueue.slice(0, 4).map((row) => (
+              <div key={`outreach-${row.hubspot_contact_id}`} style={{ border: '1px solid #e2e8f0', backgroundColor: '#fff', borderRadius: '10px', padding: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <a
+                    href={row.hubspot_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontSize: '12px', fontWeight: 700, color: '#2563eb', textAlign: 'left', textDecoration: 'none' }}
+                  >
+                    {row.display_name}
+                  </a>
+                  <span style={{
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    color: row.outreach_priority === 'High' ? '#991b1b' : row.outreach_priority === 'Medium' ? '#92400e' : '#334155',
+                    backgroundColor: row.outreach_priority === 'High' ? '#fee2e2' : row.outreach_priority === 'Medium' ? '#fef3c7' : '#f1f5f9',
+                    borderRadius: '999px',
+                    padding: '3px 7px',
+                  }}>
+                    {row.outreach_priority}
+                  </span>
+                </div>
+                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>
+                  {row.outreach_reason}
+                </p>
+                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#334155' }}>
+                  Revenue {currency(row.revenue_official_cached)} · Sobriety {formatSobrietyAge(row.sobriety_date)}
+                </p>
+                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#334155' }}>
+                  Invite: <strong>{row.recommended_destination}</strong>
+                </p>
+                <div style={{ marginTop: '6px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <a href={row.hubspot_url} target="_blank" rel="noreferrer" style={{ fontSize: '10px', color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>Open HubSpot</a>
+                  <button
+                    type="button"
+                    onClick={() => setActiveDrilldownKey('great_lead_outreach_queue')}
+                    style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#334155', borderRadius: '999px', padding: '3px 8px', fontSize: '10px', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    View Drilldown
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => copyText(row.suggested_plain_text_email)}
+                    style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#334155', borderRadius: '999px', padding: '3px 8px', fontSize: '10px', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Copy Email
+                  </button>
+                </div>
+              </div>
+            ))}
+            {greatLeadOutreachQueue.length === 0 && <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#94a3b8' }}>No great-lead outreach rows in this snapshot.</p>}
           </div>
         </div>
 
@@ -1159,14 +2395,14 @@ export default function CohortUnitEconomicsPreviewPanel() {
           </div>
           <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {strongNonIcpMembers.slice(0, 5).map((row) => (
-              <button
+              <div
                 key={`nonicp-${row.hubspot_contact_id}`}
-                type="button"
-                onClick={() => setActiveDrilldownKey('strong_non_icp_members')}
-                style={{ textAlign: 'left', border: '1px solid #e2e8f0', backgroundColor: '#fff', borderRadius: '10px', padding: '8px', cursor: 'pointer' }}
+                style={{ textAlign: 'left', border: '1px solid #e2e8f0', backgroundColor: '#fff', borderRadius: '10px', padding: '8px' }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>{row.display_name}</span>
+                  <a href={row.hubspot_url} target="_blank" rel="noreferrer" style={{ fontSize: '12px', fontWeight: 700, color: '#2563eb', textDecoration: 'none' }}>
+                    {row.display_name}
+                  </a>
                   <span style={{ fontSize: '10px', fontWeight: 700, color: '#334155', backgroundColor: '#f8fafc', borderRadius: '999px', padding: '3px 7px' }}>
                     {int(row.total_showups)} shows
                   </span>
@@ -1174,16 +2410,34 @@ export default function CohortUnitEconomicsPreviewPanel() {
                 <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>
                   {row.icp_gap_reason || 'Outside ICP (current model)'}{row.primary_attendance_group ? ` · ${row.primary_attendance_group}` : ''}
                 </p>
+                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#334155' }}>
+                  Missed in a row: <strong>{int(row.missed_primary_group_sessions_since_last_showup)}</strong>
+                  {row.primary_attendance_group ? ` (${row.primary_attendance_group})` : ''}
+                </p>
                 <p style={{ margin: '4px 0 0', fontSize: '11px', color: row.nudge_recommended_now ? '#b45309' : '#64748b', fontWeight: row.nudge_recommended_now ? 700 : 500 }}>
                   {row.nudge_reason || 'No nudge signal yet'}
                 </p>
-              </button>
+                <div style={{ marginTop: '6px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <a href={row.hubspot_url} target="_blank" rel="noreferrer" style={{ fontSize: '10px', color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>
+                    Open HubSpot
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setActiveDrilldownKey('strong_non_icp_members')}
+                    style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#334155', borderRadius: '999px', padding: '3px 8px', fontSize: '10px', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    View Drilldown
+                  </button>
+                </div>
+              </div>
             ))}
             {strongNonIcpMembers.length === 0 && <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#94a3b8' }}>No rows in this snapshot.</p>}
           </div>
         </div>
       </div>
+      )}
 
+      {sectionOpen.qa && (
       <div style={{ ...subCard, marginBottom: '14px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
           <div>
@@ -1225,7 +2479,10 @@ export default function CohortUnitEconomicsPreviewPanel() {
           })}
         </div>
       </div>
+      )}
 
+      {sectionOpen.metrics && (
+      <>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '10px', marginBottom: '14px' }}>
         {metrics.map((metric) => (
           <MetricPreviewCard key={metric.key} metric={metric} lagStat={lagStats[metric.key]} />
@@ -1301,6 +2558,8 @@ export default function CohortUnitEconomicsPreviewPanel() {
           )}
         </div>
       </div>
+      </>
+      )}
 
       {activeDrilldown && (
         <div style={{ ...subCard, marginTop: '2px' }}>
