@@ -1,0 +1,3151 @@
+{
+  "generated_at": "2026-02-24T01:57:22.338Z",
+  "methodology": {
+    "cohort_unit": "weekly (Monday UTC) based on HubSpot contact createdate for Meta-paid, non-Phoenix contacts",
+    "spend_source": "raw_fb_ads_insights_daily filtered funnel_key=free + additive manual weekly free-funnel spend backfill (week-end labels allocated across intervals; blanks ignored as unknown)",
+    "showup_source": "HubSpot call activities + contact associations (Tuesday/Thursday group sessions only)",
+    "luma_source": "raw_luma_registrations approved rows (matched_hubspot_contact_id with email fallback)",
+    "preexisting_exclusion": "Exclude contacts with first group show-up or Luma signup more than 14 days before lead createdate",
+    "quality_definition": "official revenue field + sobriety >1y at lead date (current cached contact snapshot; no property history yet)",
+    "great_member_definition": "6+ group show-ups",
+    "ideal_member_definition": "11+ group show-ups + revenue >=250k official + >1y sober at lead date",
+    "quality_buffer_days": 28,
+    "manual_backfill_used": true
+  },
+  "data_quality": {
+    "counts": {
+      "ads_rows": 707,
+      "ads_free_rows": 611,
+      "spend_blended_daily_rows": 358,
+      "hubspot_contacts_raw_rows": 3037,
+      "hubspot_contacts_deduped": 3037,
+      "luma_rows": 593,
+      "luma_contact_matches": 345,
+      "luma_email_fallback_matches": 176,
+      "hubspot_call_activities": 130,
+      "hubspot_call_associations": 766,
+      "classified_group_sessions": 66,
+      "contacts_with_any_group_showup": 218,
+      "meta_paid_free_contacts_total": 2602,
+      "cohort_contacts_in_range_pre_exclusion": 2368,
+      "cohort_contacts_analyzed": 2365,
+      "excluded_preexisting_attendance": 3,
+      "excluded_preexisting_luma": 0,
+      "excluded_out_of_range_leads": 234,
+      "excluded_phoenix_meta_contacts": 28
+    },
+    "date_range": {
+      "ads_live_min": "2025-09-01",
+      "ads_live_max": "2026-02-21",
+      "spend_blended_min": "2025-02-17",
+      "spend_blended_max": "2026-02-21",
+      "last_complete_ad_week_start": "2026-02-09",
+      "luma_as_of": "2026-02-21",
+      "attendance_as_of": "2026-02-19"
+    },
+    "spend_backfill_manual_week_end": {
+      "csv_path": "C:\\Users\\rusht\\Downloads\\KPI Sober Founders - Before I ran my own meta ads, manual import.csv",
+      "assumption": "Labels are week-end dates; each value allocated evenly across interval since prior label (first label assumed 7-day interval). Blank cells treated as unknown and not allocated. Manual spend is additive to live Meta free-funnel spend, including overlap during transition.",
+      "week_end_columns": 30,
+      "known_spend_rows": 28,
+      "unknown_spend_rows": 2,
+      "known_spend_total": 4950.279999999999,
+      "allocated_spend_total": 4950.280000000006,
+      "first_week_end": "2025-02-23",
+      "last_week_end": "2025-09-14",
+      "first_allocated_day": "2025-02-17",
+      "last_allocated_day": "2025-09-14",
+      "lump_before_first_week_end_spend": 800,
+      "overlap_week_end_rows_with_live_ads_window": [
+        {
+          "week_end": "2025-09-01",
+          "spend": 150
+        },
+        {
+          "week_end": "2025-09-07",
+          "spend": 164.9
+        },
+        {
+          "week_end": "2025-09-14",
+          "spend": 150
+        }
+      ]
+    },
+    "completeness_meta_free_analyzed": {
+      "official_revenue_present": 2365,
+      "official_revenue_rate": 1,
+      "sobriety_present": 2337,
+      "sobriety_rate": 0.9881606765327695,
+      "both_for_icp": 2337,
+      "both_for_icp_rate": 0.9881606765327695
+    }
+  },
+  "lag_stats": {
+    "luma_signup": {
+      "achievers": 189,
+      "cdfBaseAchievers": 95,
+      "p50_days": 2,
+      "p75_days": 24,
+      "p90_days": 175,
+      "p95_days": 205,
+      "horizon_days": 175
+    },
+    "first_showup": {
+      "achievers": 118,
+      "cdfBaseAchievers": 79,
+      "p50_days": 14,
+      "p75_days": 37,
+      "p90_days": 124,
+      "p95_days": 156,
+      "horizon_days": 126
+    },
+    "great_member": {
+      "achievers": 11,
+      "cdfBaseAchievers": 11,
+      "p50_days": 92,
+      "p75_days": 107,
+      "p90_days": 181,
+      "p95_days": 186,
+      "horizon_days": 182
+    },
+    "ideal_member": {
+      "achievers": 2,
+      "cdfBaseAchievers": 2,
+      "p50_days": 176,
+      "p75_days": 195,
+      "p90_days": 207,
+      "p95_days": 211,
+      "horizon_days": 210
+    }
+  },
+  "lag_hypotheses": {
+    "luma_within_14_days_share": 0.6772486772486772,
+    "first_showup_within_21_days_share": 0.652542372881356
+  },
+  "metrics": [
+    {
+      "key": "lead",
+      "label": "Meta Free Lead",
+      "type": "instant",
+      "finalized_horizon_days": null,
+      "finalized": {
+        "cohorts_included": 52,
+        "spend": 14571.27,
+        "conversions": 2365,
+        "leads": 2365,
+        "conversion_rate": 1,
+        "cpa": 6.161213530655392
+      },
+      "projected": null
+    },
+    {
+      "key": "luma_signup",
+      "label": "Luma Signup (first approved registration)",
+      "type": "behavior",
+      "finalized_horizon_days": 175,
+      "finalized": {
+        "cohorts_included": 27,
+        "spend": 4465.428571428571,
+        "conversions": 41,
+        "leads": 995,
+        "conversion_rate": 0.04120603015075377,
+        "cpa": 108.9128919860627
+      },
+      "projected": {
+        "observability_horizon_days": 175,
+        "cdf_sample_achievers_within_horizon": 31,
+        "cohorts_included": 52,
+        "min_observed_age_days_included": 6,
+        "spend": 14571.27,
+        "observed_conversions": 189,
+        "projected_conversions": 323.4494861141413,
+        "projected_cpa": 45.049600093839636
+      }
+    },
+    {
+      "key": "first_showup",
+      "label": "First Show-Up (HubSpot Calls Tue/Thu)",
+      "type": "behavior",
+      "finalized_horizon_days": 126,
+      "finalized": {
+        "cohorts_included": 34,
+        "spend": 6838.049999999999,
+        "conversions": 66,
+        "leads": 1392,
+        "conversion_rate": 0.04741379310344827,
+        "cpa": 103.60681818181817
+      },
+      "projected": {
+        "observability_horizon_days": 126,
+        "cdf_sample_achievers_within_horizon": 58,
+        "cohorts_included": 52,
+        "min_observed_age_days_included": 4,
+        "spend": 14571.27,
+        "observed_conversions": 118,
+        "projected_conversions": 139.11969323825792,
+        "projected_cpa": 104.73908949069549
+      }
+    },
+    {
+      "key": "qualified_lead",
+      "label": "Qualified Lead ($250k-$1M official + >1y sober at lead date)",
+      "type": "quality",
+      "finalized_horizon_days": 28,
+      "finalized": {
+        "cohorts_included": 47,
+        "spend": 12235.41,
+        "conversions": 370,
+        "leads": 2132,
+        "conversion_rate": 0.17354596622889307,
+        "cpa": 33.06867567567568
+      },
+      "projected": null
+    },
+    {
+      "key": "great_lead",
+      "label": "Great Lead (>$1M official + >1y sober at lead date)",
+      "type": "quality",
+      "finalized_horizon_days": 28,
+      "finalized": {
+        "cohorts_included": 47,
+        "spend": 12235.41,
+        "conversions": 234,
+        "leads": 2132,
+        "conversion_rate": 0.10975609756097561,
+        "cpa": 52.28807692307692
+      },
+      "projected": null
+    },
+    {
+      "key": "great_member",
+      "label": "Great Member (6+ show-ups)",
+      "type": "behavior",
+      "finalized_horizon_days": 182,
+      "finalized": {
+        "cohorts_included": 26,
+        "spend": 4322.162857142856,
+        "conversions": 5,
+        "leads": 956,
+        "conversion_rate": 0.005230125523012552,
+        "cpa": 864.4325714285712
+      },
+      "projected": {
+        "observability_horizon_days": 182,
+        "cdf_sample_achievers_within_horizon": 10,
+        "cohorts_included": 45,
+        "min_observed_age_days_included": 53,
+        "spend": 11219.91,
+        "observed_conversions": 11,
+        "projected_conversions": 13.055555555555555,
+        "projected_cpa": 859.3973617021277
+      }
+    },
+    {
+      "key": "ideal_member",
+      "label": "Ideal Member (11+ show-ups + ICP profile)",
+      "type": "behavior",
+      "finalized_horizon_days": 210,
+      "finalized": {
+        "cohorts_included": 22,
+        "spend": 3819.527142857142,
+        "conversions": 1,
+        "leads": 896,
+        "conversion_rate": 0.0011160714285714285,
+        "cpa": 3819.527142857142
+      },
+      "projected": {
+        "observability_horizon_days": 210,
+        "cdf_sample_achievers_within_horizon": 1,
+        "cohorts_included": 33,
+        "min_observed_age_days_included": 137,
+        "spend": 6523.749999999999,
+        "observed_conversions": 1,
+        "projected_conversions": 1,
+        "projected_cpa": 6523.749999999999
+      }
+    }
+  ],
+  "meta_specialist_diagnostics": {
+    "generated_at": "2026-02-24T01:57:22.332Z",
+    "status": "warning",
+    "cards": [
+      {
+        "key": "blended_cpl_all_cohorts",
+        "label": "Blended CPL (All Cohorts)",
+        "category": "cpl",
+        "value": 6.161213530655392,
+        "format": "currency",
+        "status": "info",
+        "drilldown": {
+          "formula": "Total blended spend across all cohort weeks / total paid-social leads across all cohort weeks",
+          "numerator": {
+            "label": "Spend (all cohort weeks)",
+            "value": 14571.27,
+            "format": "currency"
+          },
+          "denominator": {
+            "label": "Paid-social leads (all cohort weeks)",
+            "value": 2365,
+            "format": "number"
+          },
+          "notes": [
+            "Historical benchmark only. Useful for context, not for current Meta decisions."
+          ],
+          "window_weeks": [
+            "2025-02-17",
+            "2025-02-24",
+            "2025-03-03",
+            "2025-03-10",
+            "2025-03-17",
+            "2025-03-24",
+            "2025-03-31",
+            "2025-04-07",
+            "2025-04-14",
+            "2025-04-21",
+            "2025-04-28",
+            "2025-05-05",
+            "2025-05-12",
+            "2025-05-19",
+            "2025-05-26",
+            "2025-06-02",
+            "2025-06-09",
+            "2025-06-16",
+            "2025-06-23",
+            "2025-06-30",
+            "2025-07-07",
+            "2025-07-14",
+            "2025-07-21",
+            "2025-07-28",
+            "2025-08-04",
+            "2025-08-11",
+            "2025-08-18",
+            "2025-08-25",
+            "2025-09-01",
+            "2025-09-08",
+            "2025-09-15",
+            "2025-09-22",
+            "2025-09-29",
+            "2025-10-06",
+            "2025-10-13",
+            "2025-10-20",
+            "2025-10-27",
+            "2025-11-03",
+            "2025-11-10",
+            "2025-11-17",
+            "2025-11-24",
+            "2025-12-01",
+            "2025-12-08",
+            "2025-12-15",
+            "2025-12-22",
+            "2025-12-29",
+            "2026-01-05",
+            "2026-01-12",
+            "2026-01-19",
+            "2026-01-26",
+            "2026-02-02",
+            "2026-02-09"
+          ],
+          "trend_comparison": null,
+          "reference_values": {}
+        }
+      },
+      {
+        "key": "cpl_trailing_4w",
+        "label": "Current CPL (Trailing 4 Cohort Weeks)",
+        "category": "cpl",
+        "value": 10.574219653179192,
+        "format": "currency",
+        "status": "warn",
+        "drilldown": {
+          "formula": "Blended spend in last 4 cohort weeks / paid-social leads created in those same 4 cohort weeks",
+          "numerator": {
+            "label": "Spend (last 4 cohort weeks)",
+            "value": 1829.3400000000001,
+            "format": "currency"
+          },
+          "denominator": {
+            "label": "Leads (last 4 cohort weeks)",
+            "value": 173,
+            "format": "number"
+          },
+          "notes": [
+            "This is the most useful near-term entry-cost number for budget decisions."
+          ],
+          "window_weeks": [
+            "2026-01-19",
+            "2026-01-26",
+            "2026-02-02",
+            "2026-02-09"
+          ],
+          "trend_comparison": {
+            "label": "vs blended all-cohort CPL",
+            "ratio": 1.7162559941425
+          },
+          "reference_values": {}
+        }
+      },
+      {
+        "key": "cpl_trailing_12w",
+        "label": "CPL (Trailing 12 Cohort Weeks)",
+        "category": "cpl",
+        "value": 8.056919504643963,
+        "format": "currency",
+        "status": "info",
+        "drilldown": {
+          "formula": "Blended spend in last 12 cohort weeks / paid-social leads created in those same 12 cohort weeks",
+          "numerator": {
+            "label": "Spend (last 12 cohort weeks)",
+            "value": 5204.7699999999995,
+            "format": "currency"
+          },
+          "denominator": {
+            "label": "Leads (last 12 cohort weeks)",
+            "value": 646,
+            "format": "number"
+          },
+          "notes": [
+            "Use this to separate short-term spikes from a genuine pricing regime shift."
+          ],
+          "window_weeks": [
+            "2025-11-24",
+            "2025-12-01",
+            "2025-12-08",
+            "2025-12-15",
+            "2025-12-22",
+            "2025-12-29",
+            "2026-01-05",
+            "2026-01-12",
+            "2026-01-19",
+            "2026-01-26",
+            "2026-02-02",
+            "2026-02-09"
+          ],
+          "trend_comparison": {
+            "label": "4-week CPL vs 12-week CPL",
+            "ratio": 1.3124395306524126
+          },
+          "reference_values": {}
+        }
+      },
+      {
+        "key": "cpql_finalized",
+        "label": "Finalized CPQL (Qualified Lead)",
+        "category": "quality",
+        "value": 33.06867567567568,
+        "format": "currency",
+        "status": "ok",
+        "drilldown": {
+          "formula": "Spend across matured quality cohorts / qualified lead conversions in those cohorts",
+          "numerator": {
+            "label": "Spend (matured quality cohorts)",
+            "value": 12235.41,
+            "format": "currency"
+          },
+          "denominator": {
+            "label": "Qualified leads (matured quality cohorts)",
+            "value": 370,
+            "format": "number"
+          },
+          "notes": [
+            "Quality cohorts use a 28 day stabilization buffer."
+          ],
+          "window_weeks": [
+            "2025-02-17",
+            "2025-02-24",
+            "2025-03-03",
+            "2025-03-10",
+            "2025-03-17",
+            "2025-03-24",
+            "2025-03-31",
+            "2025-04-07",
+            "2025-04-14",
+            "2025-04-21",
+            "2025-04-28",
+            "2025-05-05",
+            "2025-05-12",
+            "2025-05-19",
+            "2025-05-26",
+            "2025-06-02",
+            "2025-06-09",
+            "2025-06-16",
+            "2025-06-23",
+            "2025-06-30",
+            "2025-07-07",
+            "2025-07-14",
+            "2025-07-21",
+            "2025-07-28",
+            "2025-08-04",
+            "2025-08-11",
+            "2025-08-18",
+            "2025-08-25",
+            "2025-09-01",
+            "2025-09-08",
+            "2025-09-15",
+            "2025-09-22",
+            "2025-09-29",
+            "2025-10-06",
+            "2025-10-13",
+            "2025-10-20",
+            "2025-10-27",
+            "2025-11-03",
+            "2025-11-10",
+            "2025-11-17",
+            "2025-11-24",
+            "2025-12-01",
+            "2025-12-08",
+            "2025-12-15",
+            "2025-12-22",
+            "2025-12-29",
+            "2026-01-05"
+          ],
+          "trend_comparison": null,
+          "reference_values": {}
+        }
+      },
+      {
+        "key": "cpql_current_entry_forecast",
+        "label": "Current-Entry Forecast CPQL",
+        "category": "quality",
+        "value": 60.93036837994064,
+        "format": "currency",
+        "status": "alert",
+        "drilldown": {
+          "formula": "Trailing 4-week CPL / finalized qualified-lead conversion rate",
+          "numerator": {
+            "label": "Trailing 4-week CPL",
+            "value": 10.574219653179192,
+            "format": "currency"
+          },
+          "denominator": {
+            "label": "Finalized qualified-lead conversion rate",
+            "value": 0.17354596622889307,
+            "format": "percent"
+          },
+          "notes": [
+            "This estimates what today’s lead cost implies for qualified leads if conversion quality remains similar."
+          ],
+          "window_weeks": [
+            "2026-01-19",
+            "2026-01-26",
+            "2026-02-02",
+            "2026-02-09"
+          ],
+          "trend_comparison": {
+            "label": "Forecast CPQL vs finalized CPQL",
+            "ratio": 1.8425403235836015
+          },
+          "reference_values": {
+            "finalized_cpql": 33.06867567567568,
+            "finalized_qualified_lead_rate": 0.17354596622889307
+          }
+        }
+      },
+      {
+        "key": "cpgl_current_entry_forecast",
+        "label": "Current-Entry Forecast Cost / Great Lead",
+        "category": "quality",
+        "value": 96.34289017341041,
+        "format": "currency",
+        "status": "warn",
+        "drilldown": {
+          "formula": "Trailing 4-week CPL / finalized great-lead conversion rate",
+          "numerator": {
+            "label": "Trailing 4-week CPL",
+            "value": 10.574219653179192,
+            "format": "currency"
+          },
+          "denominator": {
+            "label": "Finalized great-lead conversion rate",
+            "value": 0.10975609756097561,
+            "format": "percent"
+          },
+          "notes": [],
+          "window_weeks": [
+            "2026-01-19",
+            "2026-01-26",
+            "2026-02-02",
+            "2026-02-09"
+          ],
+          "trend_comparison": {
+            "label": "Forecast cost / great lead vs finalized",
+            "ratio": 1.8425403235836018
+          },
+          "reference_values": {
+            "finalized_cost_per_great_lead": 52.28807692307692
+          }
+        }
+      },
+      {
+        "key": "first_showup_current_entry_forecast",
+        "label": "Current-Entry Forecast Cost / First Show-Up",
+        "category": "showup",
+        "value": 223.0199054125066,
+        "format": "currency",
+        "status": "info",
+        "drilldown": {
+          "formula": "Trailing 4-week CPL / finalized first-show-up conversion rate",
+          "numerator": {
+            "label": "Trailing 4-week CPL",
+            "value": 10.574219653179192,
+            "format": "currency"
+          },
+          "denominator": {
+            "label": "Finalized first-show-up conversion rate",
+            "value": 0.04741379310344827,
+            "format": "percent"
+          },
+          "notes": [],
+          "window_weeks": [
+            "2026-01-19",
+            "2026-01-26",
+            "2026-02-02",
+            "2026-02-09"
+          ],
+          "trend_comparison": null,
+          "reference_values": {
+            "finalized_cost_per_first_showup": 103.60681818181817
+          }
+        }
+      },
+      {
+        "key": "great_member_current_entry_forecast",
+        "label": "Current-Entry Forecast Cost / Great Member (6+)",
+        "category": "member",
+        "value": 2021.7907976878616,
+        "format": "currency",
+        "status": "info",
+        "drilldown": {
+          "formula": "Trailing 4-week CPL / finalized great-member conversion rate",
+          "numerator": {
+            "label": "Trailing 4-week CPL",
+            "value": 10.574219653179192,
+            "format": "currency"
+          },
+          "denominator": {
+            "label": "Finalized great-member conversion rate",
+            "value": 0.005230125523012552,
+            "format": "percent"
+          },
+          "notes": [
+            "Low sample size. Directional until more great-member outcomes accrue."
+          ],
+          "window_weeks": [
+            "2026-01-19",
+            "2026-01-26",
+            "2026-02-02",
+            "2026-02-09"
+          ],
+          "trend_comparison": null,
+          "reference_values": {
+            "finalized_cost_per_great_member": 864.4325714285712
+          }
+        }
+      },
+      {
+        "key": "ideal_member_current_entry_forecast",
+        "label": "Current-Entry Forecast Cost / Ideal Member",
+        "category": "member",
+        "value": 9474.500809248557,
+        "format": "currency",
+        "status": "warn",
+        "drilldown": {
+          "formula": "Trailing 4-week CPL / finalized ideal-member conversion rate",
+          "numerator": {
+            "label": "Trailing 4-week CPL",
+            "value": 10.574219653179192,
+            "format": "currency"
+          },
+          "denominator": {
+            "label": "Finalized ideal-member conversion rate",
+            "value": 0.0011160714285714285,
+            "format": "percent"
+          },
+          "notes": [
+            "Very sparse sample. Treat as directional / planning-only."
+          ],
+          "window_weeks": [
+            "2026-01-19",
+            "2026-01-26",
+            "2026-02-02",
+            "2026-02-09"
+          ],
+          "trend_comparison": null,
+          "reference_values": {
+            "finalized_cost_per_ideal_member": 3819.527142857142
+          }
+        }
+      }
+    ],
+    "campaign_diagnostics": {
+      "attribution_coverage": {
+        "lead_rows_total": 2365,
+        "leads_with_any_campaign_detail": 2365,
+        "leads_with_non_generic_campaign_detail": 1264,
+        "generic_or_blank_campaign_detail_leads": 1101,
+        "exact_campaign_week_match_leads": 635,
+        "exact_campaign_week_match_rate_all_leads": 0.26849894291754756,
+        "exact_campaign_week_match_rate_non_generic_details": 0.502373417721519,
+        "distinct_campaign_buckets_in_hubspot": 16,
+        "distinct_campaigns_with_exact_match_and_spend": 6,
+        "live_meta_free_spend_in_cohort_range": 9620.990000000002,
+        "exact_matched_campaign_spend_total": 5682.370000000001,
+        "exact_matched_campaign_spend_share_of_live_meta_free_spend": 0.5906221708992525,
+        "adset_support_status": "not_available_in_current_attribution_fields"
+      },
+      "cards": [
+        {
+          "key": "campaign_exact_match_coverage",
+          "label": "Campaign Attribution Coverage (Exact Campaign+Week Match)",
+          "category": "campaign",
+          "value": 0.26849894291754756,
+          "format": "percent",
+          "status": "warn",
+          "drilldown": {
+            "formula": "Paid-social cohort leads with non-generic HubSpot campaign detail that exactly normalized-match a Meta campaign_name in the same lead cohort week / all paid-social cohort leads",
+            "numerator": {
+              "label": "Exact campaign+week matched leads",
+              "value": 635,
+              "format": "number"
+            },
+            "denominator": {
+              "label": "All paid-social cohort leads",
+              "value": 2365,
+              "format": "number"
+            },
+            "notes": [
+              "Campaign CPA rows are decision-grade only for the exact-match subset. Ad set diagnostics are not yet supported with current attribution fields."
+            ],
+            "window_weeks": [
+              "2025-02-17",
+              "2025-02-24",
+              "2025-03-03",
+              "2025-03-10",
+              "2025-03-17",
+              "2025-03-24",
+              "2025-03-31",
+              "2025-04-07",
+              "2025-04-14",
+              "2025-04-21",
+              "2025-04-28",
+              "2025-05-05",
+              "2025-05-12",
+              "2025-05-19",
+              "2025-05-26",
+              "2025-06-02",
+              "2025-06-09",
+              "2025-06-16",
+              "2025-06-23",
+              "2025-06-30",
+              "2025-07-07",
+              "2025-07-14",
+              "2025-07-21",
+              "2025-07-28",
+              "2025-08-04",
+              "2025-08-11",
+              "2025-08-18",
+              "2025-08-25",
+              "2025-09-01",
+              "2025-09-08",
+              "2025-09-15",
+              "2025-09-22",
+              "2025-09-29",
+              "2025-10-06",
+              "2025-10-13",
+              "2025-10-20",
+              "2025-10-27",
+              "2025-11-03",
+              "2025-11-10",
+              "2025-11-17",
+              "2025-11-24",
+              "2025-12-01",
+              "2025-12-08",
+              "2025-12-15",
+              "2025-12-22",
+              "2025-12-29",
+              "2026-01-05",
+              "2026-01-12",
+              "2026-01-19",
+              "2026-01-26",
+              "2026-02-02",
+              "2026-02-09"
+            ],
+            "trend_comparison": null,
+            "reference_values": {
+              "exact_match_rate_non_generic_details": 0.502373417721519,
+              "exact_matched_campaign_spend_share_of_live_meta_free_spend": 0.5906221708992525
+            }
+          }
+        },
+        {
+          "key": "campaign_top_by_matched_leads",
+          "label": "Top Campaign by Exact-Matched Leads: ai raised budget 6.93. turn off 1-1 to not cannibalize",
+          "category": "campaign",
+          "value": 539,
+          "format": "number",
+          "status": "info",
+          "drilldown": {
+            "formula": "Exact-matched leads attributed to this campaign across matched campaign-week rows",
+            "numerator": {
+              "label": "Exact-matched leads for campaign",
+              "value": 539,
+              "format": "number"
+            },
+            "denominator": {
+              "label": "Total exact-matched leads (all campaigns)",
+              "value": 635,
+              "format": "number"
+            },
+            "notes": [
+              "CPL (exact campaign-week): $8.36",
+              "Qualified lead rate: 23.4%"
+            ],
+            "window_weeks": [],
+            "trend_comparison": null,
+            "reference_values": {}
+          }
+        },
+        {
+          "key": "campaign_best_cpql",
+          "label": "Best Campaign CPQL (Exact Subset): ai raised budget 6.93. turn off 1-1 to not cannibalize",
+          "category": "campaign",
+          "value": 35.7584126984127,
+          "format": "currency",
+          "status": "ok",
+          "drilldown": {
+            "formula": "Matched campaign-week spend for this campaign / qualified leads from this campaign (exact-match subset)",
+            "numerator": {
+              "label": "Matched campaign-week spend",
+              "value": 4505.56,
+              "format": "currency"
+            },
+            "denominator": {
+              "label": "Qualified leads",
+              "value": 126,
+              "format": "number"
+            },
+            "notes": [
+              "Use this to protect efficient winners even if raw CPL is not the lowest."
+            ],
+            "window_weeks": [],
+            "trend_comparison": {
+              "label": "Campaign CPQL vs finalized CPQL",
+              "ratio": 1.0813379117179316
+            },
+            "reference_values": {}
+          }
+        },
+        {
+          "key": "campaign_high_cpl_strong_quality",
+          "label": "High CPL but Strong Quality: (1-3) test 11/3 raised budget (1-1)",
+          "category": "campaign",
+          "value": 18.05461538461538,
+          "format": "currency",
+          "status": "warn",
+          "drilldown": {
+            "formula": "Matched campaign-week spend / exact-matched leads for this campaign",
+            "numerator": {
+              "label": "Matched campaign-week spend",
+              "value": 234.70999999999995,
+              "format": "currency"
+            },
+            "denominator": {
+              "label": "Exact-matched leads",
+              "value": 13,
+              "format": "number"
+            },
+            "notes": [
+              "Qualified lead rate 30.8% is at/above finalized benchmark 17.4%. Consider protecting this campaign while testing cheaper variants."
+            ],
+            "window_weeks": [],
+            "trend_comparison": null,
+            "reference_values": {}
+          }
+        },
+        {
+          "key": "campaign_underperformer_watch",
+          "label": "Campaign Watch / Triage: test 10-29 (1-1) optimized higher intent and donation funnels - 3.04 when changed forms - copy",
+          "category": "campaign",
+          "value": 68.0075,
+          "format": "currency",
+          "status": "alert",
+          "drilldown": {
+            "formula": "Matched campaign-week spend / qualified leads for this campaign (exact-match subset)",
+            "numerator": {
+              "label": "Matched campaign-week spend",
+              "value": 272.03,
+              "format": "currency"
+            },
+            "denominator": {
+              "label": "Qualified leads",
+              "value": 4,
+              "format": "number"
+            },
+            "notes": [
+              "CPL $11.33 with below-benchmark qualified lead rate 16.7%. Candidate for creative refresh / tighter targeting."
+            ],
+            "window_weeks": [],
+            "trend_comparison": null,
+            "reference_values": {}
+          }
+        }
+      ],
+      "rows": [
+        {
+          "campaign_key": "organic facebook lead",
+          "campaign_label": "organic facebook lead",
+          "campaign_label_variants": [
+            {
+              "label": "organic facebook lead",
+              "count": 1101
+            }
+          ],
+          "leads": 1101,
+          "qualified_leads": 115,
+          "great_leads": 52,
+          "luma_signups": 48,
+          "first_showups": 48,
+          "great_members": 5,
+          "ideal_members": 1,
+          "qualified_lead_rate": 0.1044504995458674,
+          "great_lead_rate": 0.047229791099000905,
+          "first_showup_rate": 0.043596730245231606,
+          "great_member_rate": 0.004541326067211626,
+          "ideal_member_rate": 0.0009082652134423251,
+          "exact_match_leads": 0,
+          "exact_match_lead_rate": 0,
+          "non_generic_campaign_detail_leads": 0,
+          "matched_spend_exact_campaign_week": 0,
+          "matched_spend_share_of_live_free_spend": 0,
+          "cpl_exact_campaign_week": null,
+          "cpql_exact_campaign_week": null,
+          "cpgl_exact_campaign_week": null,
+          "cost_per_first_showup_exact_campaign_week": null,
+          "cost_per_great_member_exact_campaign_week": null,
+          "cost_per_ideal_member_exact_campaign_week": null,
+          "matched_campaign_weeks": 0,
+          "lead_weeks_count": 40,
+          "latest_lead_week": "2026-02-09",
+          "top_first_conversion_forms": [
+            {
+              "form": "Facebook Lead Ads: Ann - Sober Business Founders- Revenue/Sobriety date-copy",
+              "count": 856
+            },
+            {
+              "form": "Facebook Lead Ads: Ann - Sober Business Founders- Revenue/Sobriety date-250k - copy",
+              "count": 189
+            },
+            {
+              "form": "Facebook Lead Ads: MDA-Sobriety Date/Revenue",
+              "count": 32
+            }
+          ],
+          "attribution_quality": "generic_or_unattributed"
+        },
+        {
+          "campaign_key": "higher intent and donation funnels 3 04 when changed forms",
+          "campaign_label": "higher intent and donation funnels - 3.04 when changed forms",
+          "campaign_label_variants": [
+            {
+              "label": "higher intent and donation funnels - 3.04 when changed forms",
+              "count": 197
+            }
+          ],
+          "leads": 197,
+          "qualified_leads": 60,
+          "great_leads": 42,
+          "luma_signups": 30,
+          "first_showups": 15,
+          "great_members": 4,
+          "ideal_members": 1,
+          "qualified_lead_rate": 0.30456852791878175,
+          "great_lead_rate": 0.2131979695431472,
+          "first_showup_rate": 0.07614213197969544,
+          "great_member_rate": 0.02030456852791878,
+          "ideal_member_rate": 0.005076142131979695,
+          "exact_match_leads": 0,
+          "exact_match_lead_rate": 0,
+          "non_generic_campaign_detail_leads": 197,
+          "matched_spend_exact_campaign_week": 0,
+          "matched_spend_share_of_live_free_spend": 0,
+          "cpl_exact_campaign_week": null,
+          "cpql_exact_campaign_week": null,
+          "cpgl_exact_campaign_week": null,
+          "cost_per_first_showup_exact_campaign_week": null,
+          "cost_per_great_member_exact_campaign_week": null,
+          "cost_per_ideal_member_exact_campaign_week": null,
+          "matched_campaign_weeks": 0,
+          "lead_weeks_count": 8,
+          "latest_lead_week": "2025-10-27",
+          "top_first_conversion_forms": [
+            {
+              "form": "Facebook Lead Ads: Andrew Leads 250k minimum rephrase conditional donation",
+              "count": 119
+            },
+            {
+              "form": "Facebook Lead Ads: Andrew Leads 9-7-25 with 100k minimum",
+              "count": 74
+            },
+            {
+              "form": "Facebook Lead Ads: Andrew Leads 100k minimum rephrase conditional with donation",
+              "count": 4
+            }
+          ],
+          "attribution_quality": "non_generic_label_no_exact_meta_campaign_match"
+        },
+        {
+          "campaign_key": "ai was at 2 50",
+          "campaign_label": "ai was at 2.50",
+          "campaign_label_variants": [
+            {
+              "label": "ai was at 2.50",
+              "count": 183
+            }
+          ],
+          "leads": 183,
+          "qualified_leads": 41,
+          "great_leads": 25,
+          "luma_signups": 14,
+          "first_showups": 6,
+          "great_members": 1,
+          "ideal_members": 0,
+          "qualified_lead_rate": 0.22404371584699453,
+          "great_lead_rate": 0.1366120218579235,
+          "first_showup_rate": 0.03278688524590164,
+          "great_member_rate": 0.00546448087431694,
+          "ideal_member_rate": 0,
+          "exact_match_leads": 0,
+          "exact_match_lead_rate": 0,
+          "non_generic_campaign_detail_leads": 183,
+          "matched_spend_exact_campaign_week": 0,
+          "matched_spend_share_of_live_free_spend": 0,
+          "cpl_exact_campaign_week": null,
+          "cpql_exact_campaign_week": null,
+          "cpgl_exact_campaign_week": null,
+          "cost_per_first_showup_exact_campaign_week": null,
+          "cost_per_great_member_exact_campaign_week": null,
+          "cost_per_ideal_member_exact_campaign_week": null,
+          "matched_campaign_weeks": 0,
+          "lead_weeks_count": 8,
+          "latest_lead_week": "2025-10-27",
+          "top_first_conversion_forms": [
+            {
+              "form": "Facebook Lead Ads: Andrew Leads 9-7-25 with 100k minimum",
+              "count": 183
+            }
+          ],
+          "attribution_quality": "non_generic_label_no_exact_meta_campaign_match"
+        },
+        {
+          "campaign_key": "1 2 2 5 ai raised budget 6 93 turn off 1 1 to not cannibalize",
+          "campaign_label": "(1-2) 2.5 ai raised budget 6.93. turn off 1-1 to not cannibalize",
+          "campaign_label_variants": [
+            {
+              "label": "(1-2) 2.5 ai raised budget 6.93. turn off 1-1 to not cannibalize",
+              "count": 156
+            }
+          ],
+          "leads": 156,
+          "qualified_leads": 36,
+          "great_leads": 21,
+          "luma_signups": 17,
+          "first_showups": 11,
+          "great_members": 1,
+          "ideal_members": 0,
+          "qualified_lead_rate": 0.23076923076923078,
+          "great_lead_rate": 0.1346153846153846,
+          "first_showup_rate": 0.07051282051282051,
+          "great_member_rate": 0.00641025641025641,
+          "ideal_member_rate": 0,
+          "exact_match_leads": 0,
+          "exact_match_lead_rate": 0,
+          "non_generic_campaign_detail_leads": 156,
+          "matched_spend_exact_campaign_week": 0,
+          "matched_spend_share_of_live_free_spend": 0,
+          "cpl_exact_campaign_week": null,
+          "cpql_exact_campaign_week": null,
+          "cpgl_exact_campaign_week": null,
+          "cost_per_first_showup_exact_campaign_week": null,
+          "cost_per_great_member_exact_campaign_week": null,
+          "cost_per_ideal_member_exact_campaign_week": null,
+          "matched_campaign_weeks": 0,
+          "lead_weeks_count": 5,
+          "latest_lead_week": "2025-12-08",
+          "top_first_conversion_forms": [
+            {
+              "form": "Facebook Lead Ads: Andrew Leads 9-7-25 with 100k minimum",
+              "count": 156
+            }
+          ],
+          "attribution_quality": "non_generic_label_no_exact_meta_campaign_match"
+        },
+        {
+          "campaign_key": "ai raised budget 6 93 turn off 1 1 to not cannibalize",
+          "campaign_label": "ai raised budget 6.93. turn off 1-1 to not cannibalize",
+          "campaign_label_variants": [
+            {
+              "label": "ai raised budget 6.93. turn off 1-1 to not cannibalize",
+              "count": 539
+            }
+          ],
+          "leads": 539,
+          "qualified_leads": 126,
+          "great_leads": 127,
+          "luma_signups": 61,
+          "first_showups": 29,
+          "great_members": 0,
+          "ideal_members": 0,
+          "qualified_lead_rate": 0.23376623376623376,
+          "great_lead_rate": 0.23562152133580705,
+          "first_showup_rate": 0.05380333951762523,
+          "great_member_rate": 0,
+          "ideal_member_rate": 0,
+          "exact_match_leads": 539,
+          "exact_match_lead_rate": 1,
+          "non_generic_campaign_detail_leads": 539,
+          "matched_spend_exact_campaign_week": 4505.56,
+          "matched_spend_share_of_live_free_spend": 0.4683052367791672,
+          "cpl_exact_campaign_week": 8.359109461966606,
+          "cpql_exact_campaign_week": 35.7584126984127,
+          "cpgl_exact_campaign_week": 35.47685039370079,
+          "cost_per_first_showup_exact_campaign_week": 155.3641379310345,
+          "cost_per_great_member_exact_campaign_week": null,
+          "cost_per_ideal_member_exact_campaign_week": null,
+          "matched_campaign_weeks": 10,
+          "lead_weeks_count": 10,
+          "latest_lead_week": "2026-02-09",
+          "top_first_conversion_forms": [
+            {
+              "form": "Facebook Lead Ads: Andrew Leads 9-7-25 with 100k minimum",
+              "count": 345
+            },
+            {
+              "form": "Facebook Lead Ads: Andrew Leads 250k minimum rephrase conditional donation",
+              "count": 194
+            }
+          ],
+          "attribution_quality": "exact_campaign_week_match_available"
+        },
+        {
+          "campaign_key": "1 2 ai was at 2 50",
+          "campaign_label": "(1-2) ai was at 2.50",
+          "campaign_label_variants": [
+            {
+              "label": "(1-2) ai was at 2.50",
+              "count": 43
+            }
+          ],
+          "leads": 43,
+          "qualified_leads": 15,
+          "great_leads": 9,
+          "luma_signups": 5,
+          "first_showups": 3,
+          "great_members": 0,
+          "ideal_members": 0,
+          "qualified_lead_rate": 0.3488372093023256,
+          "great_lead_rate": 0.20930232558139536,
+          "first_showup_rate": 0.06976744186046512,
+          "great_member_rate": 0,
+          "ideal_member_rate": 0,
+          "exact_match_leads": 0,
+          "exact_match_lead_rate": 0,
+          "non_generic_campaign_detail_leads": 43,
+          "matched_spend_exact_campaign_week": 0,
+          "matched_spend_share_of_live_free_spend": 0,
+          "cpl_exact_campaign_week": null,
+          "cpql_exact_campaign_week": null,
+          "cpgl_exact_campaign_week": null,
+          "cost_per_first_showup_exact_campaign_week": null,
+          "cost_per_great_member_exact_campaign_week": null,
+          "cost_per_ideal_member_exact_campaign_week": null,
+          "matched_campaign_weeks": 0,
+          "lead_weeks_count": 3,
+          "latest_lead_week": "2025-11-10",
+          "top_first_conversion_forms": [
+            {
+              "form": "Facebook Lead Ads: Andrew Leads 9-7-25 with 100k minimum",
+              "count": 43
+            }
+          ],
+          "attribution_quality": "non_generic_label_no_exact_meta_campaign_match"
+        },
+        {
+          "campaign_key": "1 1 higher intent and donation funnels 3 04 when changed forms",
+          "campaign_label": "(1-1) higher intent and donation funnels - 3.04 when changed forms",
+          "campaign_label_variants": [
+            {
+              "label": "(1-1) higher intent and donation funnels - 3.04 when changed forms",
+              "count": 48
+            }
+          ],
+          "leads": 48,
+          "qualified_leads": 4,
+          "great_leads": 8,
+          "luma_signups": 5,
+          "first_showups": 2,
+          "great_members": 0,
+          "ideal_members": 0,
+          "qualified_lead_rate": 0.08333333333333333,
+          "great_lead_rate": 0.16666666666666666,
+          "first_showup_rate": 0.041666666666666664,
+          "great_member_rate": 0,
+          "ideal_member_rate": 0,
+          "exact_match_leads": 48,
+          "exact_match_lead_rate": 1,
+          "non_generic_campaign_detail_leads": 48,
+          "matched_spend_exact_campaign_week": 459.18,
+          "matched_spend_share_of_live_free_spend": 0.04772689712805023,
+          "cpl_exact_campaign_week": 9.56625,
+          "cpql_exact_campaign_week": 114.795,
+          "cpgl_exact_campaign_week": 57.3975,
+          "cost_per_first_showup_exact_campaign_week": 229.59,
+          "cost_per_great_member_exact_campaign_week": null,
+          "cost_per_ideal_member_exact_campaign_week": null,
+          "matched_campaign_weeks": 3,
+          "lead_weeks_count": 3,
+          "latest_lead_week": "2025-11-10",
+          "top_first_conversion_forms": [
+            {
+              "form": "Facebook Lead Ads: Andrew Leads 9-7-25 with 100k minimum",
+              "count": 44
+            },
+            {
+              "form": "Facebook Lead Ads: Andrew Leads 250k minimum rephrase conditional donation",
+              "count": 4
+            }
+          ],
+          "attribution_quality": "exact_campaign_week_match_available"
+        },
+        {
+          "campaign_key": "test 10 29 1 1 optimized higher intent and donation funnels 3 04 when changed forms copy",
+          "campaign_label": "test 10-29 (1-1) optimized higher intent and donation funnels - 3.04 when changed forms - copy",
+          "campaign_label_variants": [
+            {
+              "label": "test 10-29 (1-1) optimized higher intent and donation funnels - 3.04 when changed forms - copy",
+              "count": 24
+            }
+          ],
+          "leads": 24,
+          "qualified_leads": 4,
+          "great_leads": 0,
+          "luma_signups": 0,
+          "first_showups": 0,
+          "great_members": 0,
+          "ideal_members": 0,
+          "qualified_lead_rate": 0.16666666666666666,
+          "great_lead_rate": 0,
+          "first_showup_rate": 0,
+          "great_member_rate": 0,
+          "ideal_member_rate": 0,
+          "exact_match_leads": 24,
+          "exact_match_lead_rate": 1,
+          "non_generic_campaign_detail_leads": 24,
+          "matched_spend_exact_campaign_week": 272.03,
+          "matched_spend_share_of_live_free_spend": 0.02827463701760421,
+          "cpl_exact_campaign_week": 11.334583333333333,
+          "cpql_exact_campaign_week": 68.0075,
+          "cpgl_exact_campaign_week": null,
+          "cost_per_first_showup_exact_campaign_week": null,
+          "cost_per_great_member_exact_campaign_week": null,
+          "cost_per_ideal_member_exact_campaign_week": null,
+          "matched_campaign_weeks": 2,
+          "lead_weeks_count": 2,
+          "latest_lead_week": "2025-11-03",
+          "top_first_conversion_forms": [
+            {
+              "form": "Facebook Lead Ads: Andrew Leads 9-7-25 with 100k minimum",
+              "count": 21
+            },
+            {
+              "form": "Facebook Lead Ads: Andrew Leads 250k minimum rephrase conditional donation",
+              "count": 3
+            }
+          ],
+          "attribution_quality": "exact_campaign_week_match_available"
+        },
+        {
+          "campaign_key": "1 3 test 11 3 raised budget 1 1",
+          "campaign_label": "(1-3) test 11/3 raised budget (1-1)",
+          "campaign_label_variants": [
+            {
+              "label": "(1-3) test 11/3 raised budget (1-1)",
+              "count": 13
+            }
+          ],
+          "leads": 13,
+          "qualified_leads": 4,
+          "great_leads": 5,
+          "luma_signups": 1,
+          "first_showups": 2,
+          "great_members": 0,
+          "ideal_members": 0,
+          "qualified_lead_rate": 0.3076923076923077,
+          "great_lead_rate": 0.38461538461538464,
+          "first_showup_rate": 0.15384615384615385,
+          "great_member_rate": 0,
+          "ideal_member_rate": 0,
+          "exact_match_leads": 13,
+          "exact_match_lead_rate": 1,
+          "non_generic_campaign_detail_leads": 13,
+          "matched_spend_exact_campaign_week": 234.70999999999995,
+          "matched_spend_share_of_live_free_spend": 0.024395618330338136,
+          "cpl_exact_campaign_week": 18.05461538461538,
+          "cpql_exact_campaign_week": 58.67749999999999,
+          "cpgl_exact_campaign_week": 46.94199999999999,
+          "cost_per_first_showup_exact_campaign_week": 117.35499999999998,
+          "cost_per_great_member_exact_campaign_week": null,
+          "cost_per_ideal_member_exact_campaign_week": null,
+          "matched_campaign_weeks": 1,
+          "lead_weeks_count": 1,
+          "latest_lead_week": "2025-11-03",
+          "top_first_conversion_forms": [
+            {
+              "form": "Facebook Lead Ads: Andrew Leads 250k minimum rephrase conditional donation",
+              "count": 12
+            },
+            {
+              "form": "Facebook Lead Ads: Andrew Leads 9-7-25 with 100k minimum",
+              "count": 1
+            }
+          ],
+          "attribution_quality": "exact_campaign_week_match_available"
+        },
+        {
+          "campaign_key": "9 6 new creation from scratch",
+          "campaign_label": "9-6 new creation from scratch",
+          "campaign_label_variants": [
+            {
+              "label": "9-6 new creation from scratch",
+              "count": 20
+            }
+          ],
+          "leads": 20,
+          "qualified_leads": 1,
+          "great_leads": 2,
+          "luma_signups": 3,
+          "first_showups": 1,
+          "great_members": 0,
+          "ideal_members": 0,
+          "qualified_lead_rate": 0.05,
+          "great_lead_rate": 0.1,
+          "first_showup_rate": 0.05,
+          "great_member_rate": 0,
+          "ideal_member_rate": 0,
+          "exact_match_leads": 0,
+          "exact_match_lead_rate": 0,
+          "non_generic_campaign_detail_leads": 20,
+          "matched_spend_exact_campaign_week": 0,
+          "matched_spend_share_of_live_free_spend": 0,
+          "cpl_exact_campaign_week": null,
+          "cpql_exact_campaign_week": null,
+          "cpgl_exact_campaign_week": null,
+          "cost_per_first_showup_exact_campaign_week": null,
+          "cost_per_great_member_exact_campaign_week": null,
+          "cost_per_ideal_member_exact_campaign_week": null,
+          "matched_campaign_weeks": 0,
+          "lead_weeks_count": 2,
+          "latest_lead_week": "2025-09-08",
+          "top_first_conversion_forms": [
+            {
+              "form": "Facebook Lead Ads: Andrew Leads 9-1-25-copy",
+              "count": 15
+            },
+            {
+              "form": "Facebook Lead Ads: Andrew Leads 9-7-25 with 100k minimum",
+              "count": 5
+            }
+          ],
+          "attribution_quality": "non_generic_label_no_exact_meta_campaign_match"
+        },
+        {
+          "campaign_key": "test 9 6 new creation from scratch",
+          "campaign_label": "test - 9-6 new creation from scratch",
+          "campaign_label_variants": [
+            {
+              "label": "test - 9-6 new creation from scratch",
+              "count": 17
+            }
+          ],
+          "leads": 17,
+          "qualified_leads": 1,
+          "great_leads": 0,
+          "luma_signups": 2,
+          "first_showups": 0,
+          "great_members": 0,
+          "ideal_members": 0,
+          "qualified_lead_rate": 0.058823529411764705,
+          "great_lead_rate": 0,
+          "first_showup_rate": 0,
+          "great_member_rate": 0,
+          "ideal_member_rate": 0,
+          "exact_match_leads": 0,
+          "exact_match_lead_rate": 0,
+          "non_generic_campaign_detail_leads": 17,
+          "matched_spend_exact_campaign_week": 0,
+          "matched_spend_share_of_live_free_spend": 0,
+          "cpl_exact_campaign_week": null,
+          "cpql_exact_campaign_week": null,
+          "cpgl_exact_campaign_week": null,
+          "cost_per_first_showup_exact_campaign_week": null,
+          "cost_per_great_member_exact_campaign_week": null,
+          "cost_per_ideal_member_exact_campaign_week": null,
+          "matched_campaign_weeks": 0,
+          "lead_weeks_count": 2,
+          "latest_lead_week": "2025-09-08",
+          "top_first_conversion_forms": [
+            {
+              "form": "Facebook Lead Ads: Andrew Leads 9-1-25-copy",
+              "count": 9
+            },
+            {
+              "form": "Facebook Lead Ads: Andrew Leads 9-7-25 with 100k minimum",
+              "count": 8
+            }
+          ],
+          "attribution_quality": "non_generic_label_no_exact_meta_campaign_match"
+        },
+        {
+          "campaign_key": "08 29 2025 promoting ann sober business founders revenue sobriety date 250k copy",
+          "campaign_label": "[08/29/2025] promoting ann - sober business founders- revenue/sobriety date-250k - copy",
+          "campaign_label_variants": [
+            {
+              "label": "[08/29/2025] promoting ann - sober business founders- revenue/sobriety date-250k - copy",
+              "count": 11
+            }
+          ],
+          "leads": 11,
+          "qualified_leads": 1,
+          "great_leads": 0,
+          "luma_signups": 2,
+          "first_showups": 1,
+          "great_members": 0,
+          "ideal_members": 0,
+          "qualified_lead_rate": 0.09090909090909091,
+          "great_lead_rate": 0,
+          "first_showup_rate": 0.09090909090909091,
+          "great_member_rate": 0,
+          "ideal_member_rate": 0,
+          "exact_match_leads": 0,
+          "exact_match_lead_rate": 0,
+          "non_generic_campaign_detail_leads": 11,
+          "matched_spend_exact_campaign_week": 0,
+          "matched_spend_share_of_live_free_spend": 0,
+          "cpl_exact_campaign_week": null,
+          "cpql_exact_campaign_week": null,
+          "cpgl_exact_campaign_week": null,
+          "cost_per_first_showup_exact_campaign_week": null,
+          "cost_per_great_member_exact_campaign_week": null,
+          "cost_per_ideal_member_exact_campaign_week": null,
+          "matched_campaign_weeks": 0,
+          "lead_weeks_count": 2,
+          "latest_lead_week": "2025-09-01",
+          "top_first_conversion_forms": [
+            {
+              "form": "Facebook Lead Ads: Andrew Leads 9-1-25-copy",
+              "count": 9
+            },
+            {
+              "form": "Facebook Lead Ads: Ann - Sober Business Founders- Revenue/Sobriety date-250k - copy",
+              "count": 2
+            }
+          ],
+          "attribution_quality": "non_generic_label_no_exact_meta_campaign_match"
+        },
+        {
+          "campaign_key": "test higher intent and donation funnels 3 04 when changed forms copy",
+          "campaign_label": "test higher intent and donation funnels - 3.04 when changed forms - copy",
+          "campaign_label_variants": [
+            {
+              "label": "test higher intent and donation funnels - 3.04 when changed forms - copy",
+              "count": 6
+            }
+          ],
+          "leads": 6,
+          "qualified_leads": 1,
+          "great_leads": 1,
+          "luma_signups": 0,
+          "first_showups": 0,
+          "great_members": 0,
+          "ideal_members": 0,
+          "qualified_lead_rate": 0.16666666666666666,
+          "great_lead_rate": 0.16666666666666666,
+          "first_showup_rate": 0,
+          "great_member_rate": 0,
+          "ideal_member_rate": 0,
+          "exact_match_leads": 6,
+          "exact_match_lead_rate": 1,
+          "non_generic_campaign_detail_leads": 6,
+          "matched_spend_exact_campaign_week": 90.93,
+          "matched_spend_share_of_live_free_spend": 0.009451210322430435,
+          "cpl_exact_campaign_week": 15.155000000000001,
+          "cpql_exact_campaign_week": 90.93,
+          "cpgl_exact_campaign_week": 90.93,
+          "cost_per_first_showup_exact_campaign_week": null,
+          "cost_per_great_member_exact_campaign_week": null,
+          "cost_per_ideal_member_exact_campaign_week": null,
+          "matched_campaign_weeks": 2,
+          "lead_weeks_count": 2,
+          "latest_lead_week": "2025-10-27",
+          "top_first_conversion_forms": [
+            {
+              "form": "Facebook Lead Ads: Andrew Leads 9-7-25 with 100k minimum",
+              "count": 4
+            },
+            {
+              "form": "Facebook Lead Ads: Andrew Leads 250k minimum rephrase conditional donation",
+              "count": 2
+            }
+          ],
+          "attribution_quality": "exact_campaign_week_match_available"
+        },
+        {
+          "campaign_key": "120215735159660724",
+          "campaign_label": "120215735159660724",
+          "campaign_label_variants": [
+            {
+              "label": "120215735159660724",
+              "count": 1
+            }
+          ],
+          "leads": 1,
+          "qualified_leads": 1,
+          "great_leads": 0,
+          "luma_signups": 0,
+          "first_showups": 0,
+          "great_members": 0,
+          "ideal_members": 0,
+          "qualified_lead_rate": 1,
+          "great_lead_rate": 0,
+          "first_showup_rate": 0,
+          "great_member_rate": 0,
+          "ideal_member_rate": 0,
+          "exact_match_leads": 0,
+          "exact_match_lead_rate": 0,
+          "non_generic_campaign_detail_leads": 1,
+          "matched_spend_exact_campaign_week": 0,
+          "matched_spend_share_of_live_free_spend": 0,
+          "cpl_exact_campaign_week": null,
+          "cpql_exact_campaign_week": null,
+          "cpgl_exact_campaign_week": null,
+          "cost_per_first_showup_exact_campaign_week": null,
+          "cost_per_great_member_exact_campaign_week": null,
+          "cost_per_ideal_member_exact_campaign_week": null,
+          "matched_campaign_weeks": 0,
+          "lead_weeks_count": 1,
+          "latest_lead_week": "2025-04-07",
+          "top_first_conversion_forms": [
+            {
+              "form": "Apply for Membership - Sober Founders: New Member Application Workflow",
+              "count": 1
+            }
+          ],
+          "attribution_quality": "non_generic_label_no_exact_meta_campaign_match"
+        },
+        {
+          "campaign_key": "since 9 6 custom audience i choose",
+          "campaign_label": "since 9-6 custom audience i choose",
+          "campaign_label_variants": [
+            {
+              "label": "since 9-6 custom audience i choose",
+              "count": 5
+            }
+          ],
+          "leads": 5,
+          "qualified_leads": 0,
+          "great_leads": 0,
+          "luma_signups": 1,
+          "first_showups": 0,
+          "great_members": 0,
+          "ideal_members": 0,
+          "qualified_lead_rate": 0,
+          "great_lead_rate": 0,
+          "first_showup_rate": 0,
+          "great_member_rate": 0,
+          "ideal_member_rate": 0,
+          "exact_match_leads": 5,
+          "exact_match_lead_rate": 1,
+          "non_generic_campaign_detail_leads": 5,
+          "matched_spend_exact_campaign_week": 119.96,
+          "matched_spend_share_of_live_free_spend": 0.012468571321662321,
+          "cpl_exact_campaign_week": 23.991999999999997,
+          "cpql_exact_campaign_week": null,
+          "cpgl_exact_campaign_week": null,
+          "cost_per_first_showup_exact_campaign_week": null,
+          "cost_per_great_member_exact_campaign_week": null,
+          "cost_per_ideal_member_exact_campaign_week": null,
+          "matched_campaign_weeks": 1,
+          "lead_weeks_count": 1,
+          "latest_lead_week": "2025-09-01",
+          "top_first_conversion_forms": [
+            {
+              "form": "Facebook Lead Ads: Andrew Leads 9-1-25-copy",
+              "count": 5
+            }
+          ],
+          "attribution_quality": "exact_campaign_week_match_available"
+        },
+        {
+          "campaign_key": "120214926830210724",
+          "campaign_label": "120214926830210724",
+          "campaign_label_variants": [
+            {
+              "label": "120214926830210724",
+              "count": 1
+            }
+          ],
+          "leads": 1,
+          "qualified_leads": 0,
+          "great_leads": 0,
+          "luma_signups": 0,
+          "first_showups": 0,
+          "great_members": 0,
+          "ideal_members": 0,
+          "qualified_lead_rate": 0,
+          "great_lead_rate": 0,
+          "first_showup_rate": 0,
+          "great_member_rate": 0,
+          "ideal_member_rate": 0,
+          "exact_match_leads": 0,
+          "exact_match_lead_rate": 0,
+          "non_generic_campaign_detail_leads": 1,
+          "matched_spend_exact_campaign_week": 0,
+          "matched_spend_share_of_live_free_spend": 0,
+          "cpl_exact_campaign_week": null,
+          "cpql_exact_campaign_week": null,
+          "cpgl_exact_campaign_week": null,
+          "cost_per_first_showup_exact_campaign_week": null,
+          "cost_per_great_member_exact_campaign_week": null,
+          "cost_per_ideal_member_exact_campaign_week": null,
+          "matched_campaign_weeks": 0,
+          "lead_weeks_count": 1,
+          "latest_lead_week": "2025-06-16",
+          "top_first_conversion_forms": [],
+          "attribution_quality": "non_generic_label_no_exact_meta_campaign_match"
+        }
+      ],
+      "unmatched_campaign_labels_top": [
+        {
+          "label": "higher intent and donation funnels - 3.04 when changed forms",
+          "leads": 197
+        },
+        {
+          "label": "ai was at 2.50",
+          "leads": 183
+        },
+        {
+          "label": "(1-2) 2.5 ai raised budget 6.93. turn off 1-1 to not cannibalize",
+          "leads": 156
+        },
+        {
+          "label": "(1-2) ai was at 2.50",
+          "leads": 43
+        },
+        {
+          "label": "9-6 new creation from scratch",
+          "leads": 20
+        },
+        {
+          "label": "test - 9-6 new creation from scratch",
+          "leads": 17
+        },
+        {
+          "label": "[08/29/2025] promoting ann - sober business founders- revenue/sobriety date-250k - copy",
+          "leads": 11
+        },
+        {
+          "label": "120215735159660724",
+          "leads": 1
+        },
+        {
+          "label": "120214926830210724",
+          "leads": 1
+        }
+      ],
+      "notes": [
+        "Campaign metrics use exact normalized HubSpot campaign detail -> Meta campaign_name matches in the same lead cohort week when available.",
+        "Rows without exact campaign+week match stay visible for outcome rates, but spend-based campaign CPA fields remain null for those rows.",
+        "Ad set diagnostics require persistent first-touch ad set IDs/names on contacts and are not yet decision-grade."
+      ],
+      "recommended_actions": [
+        "Protect and scale-test \"ai raised budget 6.93. turn off 1-1 to not cannibalize\" as a quality benchmark (best exact-subset CPQL in current snapshot).",
+        "Triage \"test 10-29 (1-1) optimized higher intent and donation funnels - 3.04 when changed forms - copy\" first: refresh creative and inspect audience/form quality before increasing spend.",
+        "Do not cut \"(1-3) test 11/3 raised budget (1-1)\" solely because CPL is high; compare CPQL/CPGL and member outcomes before pausing."
+      ]
+    },
+    "cpl_trend_last_12_weeks": [
+      {
+        "week": "2025-11-24",
+        "spend": 351.53,
+        "leads": 41,
+        "cpl": 8.57,
+        "qualified_leads": 5,
+        "great_leads": 7
+      },
+      {
+        "week": "2025-12-01",
+        "spend": 347.68,
+        "leads": 47,
+        "cpl": 7.4,
+        "qualified_leads": 17,
+        "great_leads": 3
+      },
+      {
+        "week": "2025-12-08",
+        "spend": 582.17,
+        "leads": 67,
+        "cpl": 8.69,
+        "qualified_leads": 16,
+        "great_leads": 14
+      },
+      {
+        "week": "2025-12-15",
+        "spend": 494.95,
+        "leads": 83,
+        "cpl": 5.96,
+        "qualified_leads": 27,
+        "great_leads": 16
+      },
+      {
+        "week": "2025-12-22",
+        "spend": 77.08,
+        "leads": 48,
+        "cpl": 1.61,
+        "qualified_leads": 13,
+        "great_leads": 17
+      },
+      {
+        "week": "2025-12-29",
+        "spend": 509.28,
+        "leads": 68,
+        "cpl": 7.49,
+        "qualified_leads": 12,
+        "great_leads": 18
+      },
+      {
+        "week": "2026-01-05",
+        "spend": 506.22,
+        "leads": 59,
+        "cpl": 8.58,
+        "qualified_leads": 19,
+        "great_leads": 10
+      },
+      {
+        "week": "2026-01-12",
+        "spend": 506.52,
+        "leads": 60,
+        "cpl": 8.44,
+        "qualified_leads": 8,
+        "great_leads": 17
+      },
+      {
+        "week": "2026-01-19",
+        "spend": 387.2,
+        "leads": 50,
+        "cpl": 7.74,
+        "qualified_leads": 8,
+        "great_leads": 12
+      },
+      {
+        "week": "2026-01-26",
+        "spend": 216.61,
+        "leads": 32,
+        "cpl": 6.77,
+        "qualified_leads": 10,
+        "great_leads": 8
+      },
+      {
+        "week": "2026-02-02",
+        "spend": 533.13,
+        "leads": 50,
+        "cpl": 10.66,
+        "qualified_leads": 8,
+        "great_leads": 10
+      },
+      {
+        "week": "2026-02-09",
+        "spend": 692.4,
+        "leads": 41,
+        "cpl": 16.89,
+        "qualified_leads": 6,
+        "great_leads": 11
+      }
+    ],
+    "ai_analysis": {
+      "status": "warning",
+      "summary": "CPL is materially above the historical benchmark and the downstream forecast costs (especially qualified leads / great leads) are also rising, so this needs active optimization, not passive monitoring.",
+      "observations": [
+        "Trailing 4-week CPL is 10.57 vs blended cohort CPL 6.16 (72% higher).",
+        "Trailing 12-week CPL is 8.06; compare this to the 4-week CPL to determine whether the recent rise is a spike or a sustained regime shift.",
+        "Current-entry forecast CPQL is 60.93 vs finalized CPQL 33.07 (84% higher).",
+        "Current-entry forecast cost per great lead is 96.34 vs finalized 52.29."
+      ],
+      "action_steps": [
+        "Launch a fresh creative batch this week (new hooks/angles + updated visual treatments) and run a clean A/B test against the current winners rather than tweaking small details only.",
+        "Evaluate results using CPL and CPQL/CPGL together: if CPL rises but CPQL stays stable, optimize but do not panic; if both rise, rework targeting/creative more aggressively.",
+        "Review form quality signals on the top-spend campaigns (especially malformed revenue answers / weird submissions) and confirm qualification copy is clear enough to filter low-fit leads without killing volume.",
+        "Use the campaign/ad-set view (as attribution coverage improves) to protect higher-CPQL winners even if their raw CPL is above average."
+      ],
+      "watch_items": [
+        "Trailing 4-week CPL vs trailing 12-week CPL gap",
+        "Forecast CPQL vs finalized CPQL ratio",
+        "Forecast cost / great lead vs finalized cost / great lead ratio",
+        "Great-member and ideal-member sample size (still limited, directional only)"
+      ],
+      "guidance": {
+        "cpl_elevated_but_quality_stable": false,
+        "cpl_and_quality_costs_up": true
+      }
+    }
+  },
+  "number_audit": {
+    "generated_at": "2026-02-24T01:57:22.338Z",
+    "counts": {
+      "pass": 21,
+      "warn": 1,
+      "fail": 0
+    },
+    "checks": [
+      {
+        "key": "cohort_lead_count_matches_rows",
+        "label": "Cohort lead count matches analyzed cohort row count",
+        "status": "pass",
+        "actual": 2365,
+        "expected": 2365,
+        "tolerance": null,
+        "notes": []
+      },
+      {
+        "key": "sum_cohort_leads_matches_rows",
+        "label": "Sum of cohort-week leads equals analyzed cohort row count",
+        "status": "pass",
+        "actual": 2365,
+        "expected": 2365,
+        "tolerance": null,
+        "notes": []
+      },
+      {
+        "key": "metric_lead_finalized_formula",
+        "label": "Meta Free Lead finalized CPA formula check",
+        "status": "pass",
+        "actual": 6.161213530655392,
+        "expected": 6.161213530655392,
+        "tolerance": 1e-7,
+        "notes": []
+      },
+      {
+        "key": "metric_luma_signup_finalized_formula",
+        "label": "Luma Signup (first approved registration) finalized CPA formula check",
+        "status": "pass",
+        "actual": 108.9128919860627,
+        "expected": 108.9128919860627,
+        "tolerance": 1e-7,
+        "notes": []
+      },
+      {
+        "key": "metric_luma_signup_projected_formula",
+        "label": "Luma Signup (first approved registration) projected CPA formula check",
+        "status": "pass",
+        "actual": 45.049600093839636,
+        "expected": 45.049600093839636,
+        "tolerance": 1e-7,
+        "notes": []
+      },
+      {
+        "key": "metric_first_showup_finalized_formula",
+        "label": "First Show-Up (HubSpot Calls Tue/Thu) finalized CPA formula check",
+        "status": "pass",
+        "actual": 103.60681818181817,
+        "expected": 103.60681818181817,
+        "tolerance": 1e-7,
+        "notes": []
+      },
+      {
+        "key": "metric_first_showup_projected_formula",
+        "label": "First Show-Up (HubSpot Calls Tue/Thu) projected CPA formula check",
+        "status": "pass",
+        "actual": 104.73908949069549,
+        "expected": 104.73908949069549,
+        "tolerance": 1e-7,
+        "notes": []
+      },
+      {
+        "key": "metric_qualified_lead_finalized_formula",
+        "label": "Qualified Lead ($250k-$1M official + >1y sober at lead date) finalized CPA formula check",
+        "status": "pass",
+        "actual": 33.06867567567568,
+        "expected": 33.06867567567568,
+        "tolerance": 1e-7,
+        "notes": []
+      },
+      {
+        "key": "metric_great_lead_finalized_formula",
+        "label": "Great Lead (>$1M official + >1y sober at lead date) finalized CPA formula check",
+        "status": "pass",
+        "actual": 52.28807692307692,
+        "expected": 52.28807692307692,
+        "tolerance": 1e-7,
+        "notes": []
+      },
+      {
+        "key": "metric_great_member_finalized_formula",
+        "label": "Great Member (6+ show-ups) finalized CPA formula check",
+        "status": "pass",
+        "actual": 864.4325714285712,
+        "expected": 864.4325714285712,
+        "tolerance": 1e-7,
+        "notes": []
+      },
+      {
+        "key": "metric_great_member_projected_formula",
+        "label": "Great Member (6+ show-ups) projected CPA formula check",
+        "status": "pass",
+        "actual": 859.3973617021277,
+        "expected": 859.3973617021277,
+        "tolerance": 1e-7,
+        "notes": []
+      },
+      {
+        "key": "metric_ideal_member_finalized_formula",
+        "label": "Ideal Member (11+ show-ups + ICP profile) finalized CPA formula check",
+        "status": "pass",
+        "actual": 3819.527142857142,
+        "expected": 3819.527142857142,
+        "tolerance": 1e-7,
+        "notes": []
+      },
+      {
+        "key": "metric_ideal_member_projected_formula",
+        "label": "Ideal Member (11+ show-ups + ICP profile) projected CPA formula check",
+        "status": "pass",
+        "actual": 6523.749999999999,
+        "expected": 6523.749999999999,
+        "tolerance": 1e-7,
+        "notes": []
+      },
+      {
+        "key": "diag_cpl_trailing_4w_formula",
+        "label": "Current CPL (Trailing 4 Cohort Weeks) drilldown math check",
+        "status": "pass",
+        "actual": 10.574219653179192,
+        "expected": 10.574219653179192,
+        "tolerance": 1e-7,
+        "notes": []
+      },
+      {
+        "key": "diag_cpl_trailing_12w_formula",
+        "label": "CPL (Trailing 12 Cohort Weeks) drilldown math check",
+        "status": "pass",
+        "actual": 8.056919504643963,
+        "expected": 8.056919504643963,
+        "tolerance": 1e-7,
+        "notes": []
+      },
+      {
+        "key": "diag_cpql_current_entry_forecast_formula",
+        "label": "Current-Entry Forecast CPQL drilldown math check",
+        "status": "pass",
+        "actual": 60.93036837994064,
+        "expected": 60.93036837994064,
+        "tolerance": 1e-7,
+        "notes": []
+      },
+      {
+        "key": "diag_cpgl_current_entry_forecast_formula",
+        "label": "Current-Entry Forecast Cost / Great Lead drilldown math check",
+        "status": "pass",
+        "actual": 96.34289017341041,
+        "expected": 96.34289017341041,
+        "tolerance": 1e-7,
+        "notes": []
+      },
+      {
+        "key": "diag_first_showup_current_entry_forecast_formula",
+        "label": "Current-Entry Forecast Cost / First Show-Up drilldown math check",
+        "status": "pass",
+        "actual": 223.0199054125066,
+        "expected": 223.0199054125066,
+        "tolerance": 1e-7,
+        "notes": []
+      },
+      {
+        "key": "ideal_leq_great_achievers",
+        "label": "Observed ideal-member achievers do not exceed great-member achievers",
+        "status": "pass",
+        "actual": 2,
+        "expected": "<= 11",
+        "tolerance": null,
+        "notes": []
+      },
+      {
+        "key": "official_revenue_coverage_threshold",
+        "label": "Official revenue coverage in cohort analyzed contacts",
+        "status": "pass",
+        "actual": 1,
+        "expected": ">= 98%",
+        "tolerance": null,
+        "notes": [
+          "Lower coverage can bias qualified/great/ideal classifications."
+        ]
+      },
+      {
+        "key": "campaign_exact_match_coverage_threshold",
+        "label": "Campaign exact-match attribution coverage is sufficient for campaign-level CPA decisions",
+        "status": "pass",
+        "actual": 0.26849894291754756,
+        "expected": ">= 25%",
+        "tolerance": null,
+        "notes": [
+          "Below threshold means campaign tables are still directional for a subset only."
+        ]
+      },
+      {
+        "key": "ideal_member_sample_size",
+        "label": "Ideal-member sample size is decision-grade",
+        "status": "warn",
+        "actual": 2,
+        "expected": ">= 5 observed ideal members",
+        "tolerance": null,
+        "notes": [
+          "Below threshold: use ideal-member metrics as directional/planning only."
+        ]
+      }
+    ]
+  },
+  "weekly_signoff": {
+    "status": "provisional",
+    "summary": "Provisional signoff: core math checks passed, but warnings remain (sample size / coverage / trend pressure). Use for decisions with explicit caveats.",
+    "counts": {
+      "pass": 21,
+      "warn": 1,
+      "fail": 0
+    },
+    "top_warnings": [
+      "Ideal-member sample size is decision-grade"
+    ],
+    "blocked_reasons": [],
+    "decision_use": {
+      "safe_for_decisions": true,
+      "finalized_metrics": true,
+      "campaign_cpa_subset_only": true,
+      "ideal_member_directional_only": true
+    },
+    "recommended_review_day": "Monday"
+  },
+  "weekly_checkin": {
+    "cadence": "weekly",
+    "recommended_day": "Monday",
+    "checks": [
+      {
+        "key": "membership_250k_exact_zero_revenue",
+        "label": "Exact membership tag \"Main Free $250k+ Group\" with cached official revenue 0/null",
+        "status": "warn",
+        "value": 4,
+        "drilldown_key": "membership_250k_exact_zero_revenue"
+      },
+      {
+        "key": "membership_250k_contains_zero_revenue",
+        "label": "Any membership string containing \"Main Free $250k+ Group\" with cached official revenue 0/null",
+        "status": "warn",
+        "value": 9,
+        "drilldown_key": "membership_250k_contains_zero_revenue"
+      },
+      {
+        "key": "official_revenue_coverage",
+        "label": "Cohort analyzed contacts with cached official revenue",
+        "status": "pass",
+        "value": 1,
+        "format": "percent"
+      },
+      {
+        "key": "sobriety_coverage",
+        "label": "Cohort analyzed contacts with sobriety date present",
+        "status": "pass",
+        "value": 0.9881606765327695,
+        "format": "percent"
+      },
+      {
+        "key": "great_member_observed",
+        "label": "Observed great members (6+ show-ups) in current cohort range",
+        "status": "pass",
+        "value": 11,
+        "drilldown_key": "great_members"
+      },
+      {
+        "key": "ideal_member_observed",
+        "label": "Observed ideal members (11+ show-ups + ICP) in current cohort range",
+        "status": "warn",
+        "value": 2,
+        "drilldown_key": "ideal_members"
+      },
+      {
+        "key": "high_value_nudge_candidates",
+        "label": "High-value nudge candidates (ICP profile, strong member, not yet ideal)",
+        "status": "warn",
+        "value": 4,
+        "drilldown_key": "high_value_nudge_candidates"
+      },
+      {
+        "key": "strong_non_icp_members",
+        "label": "Strong non-ICP members (great attendance but currently fail ICP)",
+        "status": "info",
+        "value": 5,
+        "drilldown_key": "strong_non_icp_members"
+      }
+    ]
+  },
+  "drilldowns": {
+    "great_members": [
+      {
+        "hubspot_contact_id": 118059304456,
+        "display_name": "Chris Lipper",
+        "email": "chris@onthebus.biz",
+        "original_traffic_source": "PAID_SOCIAL",
+        "lead_date": "2025-04-29",
+        "lead_week": "2025-04-28",
+        "total_showups": 28,
+        "first_group_showup_at": "2025-06-05T14:58:37.328Z",
+        "last_group_showup_at": "2026-02-12T16:08:26.368Z",
+        "days_since_last_showup": 7,
+        "primary_attendance_group": "Thursday",
+        "primary_attendance_group_showups": 28,
+        "missed_primary_group_sessions_since_last_showup": 1,
+        "missed_all_group_sessions_since_last_showup": 2,
+        "recent_showups_30d": 3,
+        "recent_showups_60d": 5,
+        "revenue_official_cached": 150000,
+        "sobriety_date_present": true,
+        "sober_over_1y_at_lead": true,
+        "qualified_lead": false,
+        "great_lead": false,
+        "great_member": true,
+        "ideal_member": false,
+        "membership_s": "Have Registered on Luma;Under $250k Group",
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "organic facebook lead",
+        "first_conversion_event_name": "Facebook Lead Ads: Ann - Sober Business Founders- Revenue/Sobriety date-copy",
+        "recent_conversion_event_name": "Facebook Lead Ads: Ann - Sober Business Founders- Revenue/Sobriety date-copy",
+        "campaign": null,
+        "campaign_source": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/118059304456"
+      },
+      {
+        "hubspot_contact_id": 105675386662,
+        "display_name": "Allen Godard",
+        "email": "allen@redsummitmachineworks.com",
+        "original_traffic_source": "PAID_SOCIAL",
+        "lead_date": "2025-03-12",
+        "lead_week": "2025-03-10",
+        "total_showups": 26,
+        "first_group_showup_at": "2025-04-08T16:03:49.110Z",
+        "last_group_showup_at": "2026-02-03T17:59:26.476Z",
+        "days_since_last_showup": 15,
+        "primary_attendance_group": "Tuesday",
+        "primary_attendance_group_showups": 24,
+        "missed_primary_group_sessions_since_last_showup": 2,
+        "missed_all_group_sessions_since_last_showup": 5,
+        "recent_showups_30d": 3,
+        "recent_showups_60d": 7,
+        "revenue_official_cached": 500000,
+        "sobriety_date_present": true,
+        "sober_over_1y_at_lead": true,
+        "qualified_lead": true,
+        "great_lead": false,
+        "great_member": true,
+        "ideal_member": true,
+        "membership_s": "Under $250k Group;Main Free $250k+ Group",
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "organic facebook lead",
+        "first_conversion_event_name": "Facebook Lead Ads: Ann - Sober Business Founders- Revenue/Sobriety date-copy",
+        "recent_conversion_event_name": "Meetings Link: andrew-lassise/interview",
+        "campaign": null,
+        "campaign_source": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/105675386662"
+      },
+      {
+        "hubspot_contact_id": 158301566872,
+        "display_name": "Rafael Requena",
+        "email": "rafael@brokerintrust.com",
+        "original_traffic_source": "PAID_SOCIAL",
+        "lead_date": "2025-09-25",
+        "lead_week": "2025-09-22",
+        "total_showups": 14,
+        "first_group_showup_at": "2025-10-09T15:19:28.664Z",
+        "last_group_showup_at": "2026-02-19T16:13:39.481Z",
+        "days_since_last_showup": 0,
+        "primary_attendance_group": "Thursday",
+        "primary_attendance_group_showups": 14,
+        "missed_primary_group_sessions_since_last_showup": 0,
+        "missed_all_group_sessions_since_last_showup": 0,
+        "recent_showups_30d": 4,
+        "recent_showups_60d": 6,
+        "revenue_official_cached": 100000.01,
+        "sobriety_date_present": true,
+        "sober_over_1y_at_lead": true,
+        "qualified_lead": false,
+        "great_lead": false,
+        "great_member": true,
+        "ideal_member": false,
+        "membership_s": "Under $250k Group;Have Registered on Luma;Have made a donation",
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "higher intent and donation funnels - 3.04 when changed forms",
+        "first_conversion_event_name": "Facebook Lead Ads: Andrew Leads 250k minimum rephrase conditional donation",
+        "recent_conversion_event_name": "Facebook Lead Ads: Andrew Leads 250k minimum rephrase conditional donation",
+        "campaign": null,
+        "campaign_source": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/158301566872"
+      },
+      {
+        "hubspot_contact_id": 161392970279,
+        "display_name": "Peter Moulton",
+        "email": "peter@1691inc.com",
+        "original_traffic_source": "PAID_SOCIAL",
+        "lead_date": "2025-10-06",
+        "lead_week": "2025-10-06",
+        "total_showups": 11,
+        "first_group_showup_at": "2025-10-30T15:24:46.414Z",
+        "last_group_showup_at": "2026-02-19T16:13:39.481Z",
+        "days_since_last_showup": 0,
+        "primary_attendance_group": "Thursday",
+        "primary_attendance_group_showups": 11,
+        "missed_primary_group_sessions_since_last_showup": 0,
+        "missed_all_group_sessions_since_last_showup": 0,
+        "recent_showups_30d": 4,
+        "recent_showups_60d": 6,
+        "revenue_official_cached": 250000,
+        "sobriety_date_present": true,
+        "sober_over_1y_at_lead": true,
+        "qualified_lead": true,
+        "great_lead": false,
+        "great_member": true,
+        "ideal_member": true,
+        "membership_s": "Have Registered on Luma",
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "higher intent and donation funnels - 3.04 when changed forms",
+        "first_conversion_event_name": "Facebook Lead Ads: Andrew Leads 9-7-25 with 100k minimum",
+        "recent_conversion_event_name": "Facebook Lead Ads: Andrew Leads 9-7-25 with 100k minimum",
+        "campaign": null,
+        "campaign_source": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/161392970279"
+      },
+      {
+        "hubspot_contact_id": 154597722128,
+        "display_name": "Jessica Dehn",
+        "email": "jessicamariedehn@gmail.com",
+        "original_traffic_source": "PAID_SOCIAL",
+        "lead_date": "2025-04-12",
+        "lead_week": "2025-04-07",
+        "total_showups": 10,
+        "first_group_showup_at": "2025-04-15T15:56:17.799Z",
+        "last_group_showup_at": "2026-02-19T16:13:39.481Z",
+        "days_since_last_showup": 0,
+        "primary_attendance_group": "Thursday",
+        "primary_attendance_group_showups": 9,
+        "missed_primary_group_sessions_since_last_showup": 0,
+        "missed_all_group_sessions_since_last_showup": 0,
+        "recent_showups_30d": 1,
+        "recent_showups_60d": 1,
+        "revenue_official_cached": 1335000,
+        "sobriety_date_present": true,
+        "sober_over_1y_at_lead": true,
+        "qualified_lead": false,
+        "great_lead": true,
+        "great_member": true,
+        "ideal_member": false,
+        "membership_s": "Have Registered on Luma",
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "organic facebook lead",
+        "first_conversion_event_name": "Facebook Lead Ads: Ann - Sober Business Founders- Revenue/Sobriety date-copy",
+        "recent_conversion_event_name": "Meetings Link: andrew-lassise",
+        "campaign": null,
+        "campaign_source": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/154597722128"
+      },
+      {
+        "hubspot_contact_id": 204143782496,
+        "display_name": "Tia Rexford",
+        "email": "tia.rex07@gmail.com",
+        "original_traffic_source": "PAID_SOCIAL",
+        "lead_date": "2025-06-09",
+        "lead_week": "2025-06-09",
+        "total_showups": 10,
+        "first_group_showup_at": "2025-10-30T15:24:46.414Z",
+        "last_group_showup_at": "2026-02-05T15:50:22.599Z",
+        "days_since_last_showup": 14,
+        "primary_attendance_group": "Thursday",
+        "primary_attendance_group_showups": 10,
+        "missed_primary_group_sessions_since_last_showup": 2,
+        "missed_all_group_sessions_since_last_showup": 4,
+        "recent_showups_30d": 3,
+        "recent_showups_60d": 4,
+        "revenue_official_cached": 75000,
+        "sobriety_date_present": true,
+        "sober_over_1y_at_lead": true,
+        "qualified_lead": false,
+        "great_lead": false,
+        "great_member": true,
+        "ideal_member": false,
+        "membership_s": "Facebook Group;Under $250k Group;Have Registered on Luma",
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "organic facebook lead",
+        "first_conversion_event_name": "Facebook Lead Ads: Ann - Sober Business Founders- Revenue/Sobriety date-copy",
+        "recent_conversion_event_name": "Facebook Lead Ads: Ann - Sober Business Founders- Revenue/Sobriety date-copy",
+        "campaign": null,
+        "campaign_source": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/204143782496"
+      },
+      {
+        "hubspot_contact_id": 159119247131,
+        "display_name": "Renee Sabina Keisman",
+        "email": "renee@love2learnconsulting.com",
+        "original_traffic_source": "PAID_SOCIAL",
+        "lead_date": "2025-09-28",
+        "lead_week": "2025-09-22",
+        "total_showups": 9,
+        "first_group_showup_at": "2025-10-30T15:24:46.414Z",
+        "last_group_showup_at": "2026-02-17T17:20:17.019Z",
+        "days_since_last_showup": 1,
+        "primary_attendance_group": "Tuesday",
+        "primary_attendance_group_showups": 8,
+        "missed_primary_group_sessions_since_last_showup": 0,
+        "missed_all_group_sessions_since_last_showup": 1,
+        "recent_showups_30d": 2,
+        "recent_showups_60d": 3,
+        "revenue_official_cached": 3000000,
+        "sobriety_date_present": true,
+        "sober_over_1y_at_lead": true,
+        "qualified_lead": false,
+        "great_lead": true,
+        "great_member": true,
+        "ideal_member": false,
+        "membership_s": "Have Registered on Luma;Under $250k Group;Main Free $250k+ Group;Have made a donation",
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "ai was at 2.50",
+        "first_conversion_event_name": "Facebook Lead Ads: Andrew Leads 9-7-25 with 100k minimum",
+        "recent_conversion_event_name": "Meetings Link: andrew-lassise/interview",
+        "campaign": null,
+        "campaign_source": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/159119247131"
+      },
+      {
+        "hubspot_contact_id": 167406672929,
+        "display_name": "Robert Davidman",
+        "email": "robert@davidman.com",
+        "original_traffic_source": "PAID_SOCIAL",
+        "lead_date": "2025-10-24",
+        "lead_week": "2025-10-20",
+        "total_showups": 9,
+        "first_group_showup_at": "2025-10-28T16:49:52.273Z",
+        "last_group_showup_at": "2026-02-17T17:20:17.019Z",
+        "days_since_last_showup": 1,
+        "primary_attendance_group": "Tuesday",
+        "primary_attendance_group_showups": 9,
+        "missed_primary_group_sessions_since_last_showup": 0,
+        "missed_all_group_sessions_since_last_showup": 1,
+        "recent_showups_30d": 3,
+        "recent_showups_60d": 4,
+        "revenue_official_cached": 1500000,
+        "sobriety_date_present": true,
+        "sober_over_1y_at_lead": true,
+        "qualified_lead": false,
+        "great_lead": true,
+        "great_member": true,
+        "ideal_member": false,
+        "membership_s": null,
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "higher intent and donation funnels - 3.04 when changed forms",
+        "first_conversion_event_name": "Facebook Lead Ads: Andrew Leads 9-7-25 with 100k minimum",
+        "recent_conversion_event_name": "Meetings Link: andrew-lassise/interview",
+        "campaign": null,
+        "campaign_source": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/167406672929"
+      },
+      {
+        "hubspot_contact_id": 106015276125,
+        "display_name": "Billy Millington",
+        "email": "billy@themillingtongroup.com",
+        "original_traffic_source": "PAID_SOCIAL",
+        "lead_date": "2025-03-14",
+        "lead_week": "2025-03-10",
+        "total_showups": 7,
+        "first_group_showup_at": "2025-06-12T15:18:46.684Z",
+        "last_group_showup_at": "2025-09-18T15:29:50.309Z",
+        "days_since_last_showup": 154,
+        "primary_attendance_group": "Thursday",
+        "primary_attendance_group_showups": 7,
+        "missed_primary_group_sessions_since_last_showup": 22,
+        "missed_all_group_sessions_since_last_showup": 41,
+        "recent_showups_30d": 0,
+        "recent_showups_60d": 0,
+        "revenue_official_cached": 300000,
+        "sobriety_date_present": true,
+        "sober_over_1y_at_lead": true,
+        "qualified_lead": true,
+        "great_lead": false,
+        "great_member": true,
+        "ideal_member": false,
+        "membership_s": "Under $250k Group;Have Registered on Luma",
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "organic facebook lead",
+        "first_conversion_event_name": "Facebook Lead Ads: Ann - Sober Business Founders- Revenue/Sobriety date-copy",
+        "recent_conversion_event_name": "Facebook Lead Ads: Ann - Sober Business Founders- Revenue/Sobriety date-copy",
+        "campaign": null,
+        "campaign_source": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/106015276125"
+      },
+      {
+        "hubspot_contact_id": 185151246153,
+        "display_name": "Mark V Howley",
+        "email": "themarkhowleyshow@gmail.com",
+        "original_traffic_source": "PAID_SOCIAL",
+        "lead_date": "2025-12-02",
+        "lead_week": "2025-12-01",
+        "total_showups": 7,
+        "first_group_showup_at": "2025-12-16T17:13:06.004Z",
+        "last_group_showup_at": "2026-02-10T18:00:00.000Z",
+        "days_since_last_showup": 8,
+        "primary_attendance_group": "Tuesday",
+        "primary_attendance_group_showups": 7,
+        "missed_primary_group_sessions_since_last_showup": 1,
+        "missed_all_group_sessions_since_last_showup": 3,
+        "recent_showups_30d": 3,
+        "recent_showups_60d": 6,
+        "revenue_official_cached": 0,
+        "sobriety_date_present": true,
+        "sober_over_1y_at_lead": true,
+        "qualified_lead": false,
+        "great_lead": false,
+        "great_member": true,
+        "ideal_member": false,
+        "membership_s": "Main Free $250k+ Group",
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "(1-2) 2.5 ai raised budget 6.93. turn off 1-1 to not cannibalize",
+        "first_conversion_event_name": "Facebook Lead Ads: Andrew Leads 9-7-25 with 100k minimum",
+        "recent_conversion_event_name": "Meetings Link: andrew-lassise",
+        "campaign": null,
+        "campaign_source": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/185151246153"
+      },
+      {
+        "hubspot_contact_id": 167949195024,
+        "display_name": "Shelly Lloyd",
+        "email": "shellymlloyd@gmail.com",
+        "original_traffic_source": "PAID_SOCIAL",
+        "lead_date": "2025-10-13",
+        "lead_week": "2025-10-13",
+        "total_showups": 6,
+        "first_group_showup_at": "2025-10-23T15:25:31.839Z",
+        "last_group_showup_at": "2026-01-08T16:07:35.883Z",
+        "days_since_last_showup": 42,
+        "primary_attendance_group": "Thursday",
+        "primary_attendance_group_showups": 6,
+        "missed_primary_group_sessions_since_last_showup": 6,
+        "missed_all_group_sessions_since_last_showup": 12,
+        "recent_showups_30d": 0,
+        "recent_showups_60d": 1,
+        "revenue_official_cached": 250000.01,
+        "sobriety_date_present": true,
+        "sober_over_1y_at_lead": false,
+        "qualified_lead": false,
+        "great_lead": false,
+        "great_member": true,
+        "ideal_member": false,
+        "membership_s": "Have Registered on Luma",
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "higher intent and donation funnels - 3.04 when changed forms",
+        "first_conversion_event_name": "Facebook Lead Ads: Andrew Leads 250k minimum rephrase conditional donation",
+        "recent_conversion_event_name": "Facebook Lead Ads: Andrew Leads 250k minimum rephrase conditional donation",
+        "campaign": null,
+        "campaign_source": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/167949195024"
+      }
+    ],
+    "ideal_members": [
+      {
+        "hubspot_contact_id": 105675386662,
+        "display_name": "Allen Godard",
+        "email": "allen@redsummitmachineworks.com",
+        "original_traffic_source": "PAID_SOCIAL",
+        "lead_date": "2025-03-12",
+        "lead_week": "2025-03-10",
+        "total_showups": 26,
+        "first_group_showup_at": "2025-04-08T16:03:49.110Z",
+        "last_group_showup_at": "2026-02-03T17:59:26.476Z",
+        "days_since_last_showup": 15,
+        "primary_attendance_group": "Tuesday",
+        "primary_attendance_group_showups": 24,
+        "missed_primary_group_sessions_since_last_showup": 2,
+        "missed_all_group_sessions_since_last_showup": 5,
+        "recent_showups_30d": 3,
+        "recent_showups_60d": 7,
+        "revenue_official_cached": 500000,
+        "sobriety_date_present": true,
+        "sober_over_1y_at_lead": true,
+        "qualified_lead": true,
+        "great_lead": false,
+        "great_member": true,
+        "ideal_member": true,
+        "membership_s": "Under $250k Group;Main Free $250k+ Group",
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "organic facebook lead",
+        "first_conversion_event_name": "Facebook Lead Ads: Ann - Sober Business Founders- Revenue/Sobriety date-copy",
+        "recent_conversion_event_name": "Meetings Link: andrew-lassise/interview",
+        "campaign": null,
+        "campaign_source": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/105675386662"
+      },
+      {
+        "hubspot_contact_id": 161392970279,
+        "display_name": "Peter Moulton",
+        "email": "peter@1691inc.com",
+        "original_traffic_source": "PAID_SOCIAL",
+        "lead_date": "2025-10-06",
+        "lead_week": "2025-10-06",
+        "total_showups": 11,
+        "first_group_showup_at": "2025-10-30T15:24:46.414Z",
+        "last_group_showup_at": "2026-02-19T16:13:39.481Z",
+        "days_since_last_showup": 0,
+        "primary_attendance_group": "Thursday",
+        "primary_attendance_group_showups": 11,
+        "missed_primary_group_sessions_since_last_showup": 0,
+        "missed_all_group_sessions_since_last_showup": 0,
+        "recent_showups_30d": 4,
+        "recent_showups_60d": 6,
+        "revenue_official_cached": 250000,
+        "sobriety_date_present": true,
+        "sober_over_1y_at_lead": true,
+        "qualified_lead": true,
+        "great_lead": false,
+        "great_member": true,
+        "ideal_member": true,
+        "membership_s": "Have Registered on Luma",
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "higher intent and donation funnels - 3.04 when changed forms",
+        "first_conversion_event_name": "Facebook Lead Ads: Andrew Leads 9-7-25 with 100k minimum",
+        "recent_conversion_event_name": "Facebook Lead Ads: Andrew Leads 9-7-25 with 100k minimum",
+        "campaign": null,
+        "campaign_source": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/161392970279"
+      }
+    ],
+    "high_value_nudge_candidates": [
+      {
+        "hubspot_contact_id": 154597722128,
+        "display_name": "Jessica Dehn",
+        "email": "jessicamariedehn@gmail.com",
+        "original_traffic_source": "PAID_SOCIAL",
+        "lead_date": "2025-04-12",
+        "lead_week": "2025-04-07",
+        "total_showups": 10,
+        "first_group_showup_at": "2025-04-15T15:56:17.799Z",
+        "last_group_showup_at": "2026-02-19T16:13:39.481Z",
+        "days_since_last_showup": 0,
+        "primary_attendance_group": "Thursday",
+        "primary_attendance_group_showups": 9,
+        "missed_primary_group_sessions_since_last_showup": 0,
+        "missed_all_group_sessions_since_last_showup": 0,
+        "recent_showups_30d": 1,
+        "recent_showups_60d": 1,
+        "revenue_official_cached": 1335000,
+        "sobriety_date_present": true,
+        "sober_over_1y_at_lead": true,
+        "qualified_lead": false,
+        "great_lead": true,
+        "great_member": true,
+        "ideal_member": false,
+        "membership_s": "Have Registered on Luma",
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "organic facebook lead",
+        "first_conversion_event_name": "Facebook Lead Ads: Ann - Sober Business Founders- Revenue/Sobriety date-copy",
+        "recent_conversion_event_name": "Meetings Link: andrew-lassise",
+        "campaign": null,
+        "campaign_source": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/154597722128",
+        "shows_remaining_to_ideal": 1,
+        "ideal_candidate_likelihood": "High",
+        "nudge_recommended_now": false,
+        "nudge_reason": "1 more show-up to reach ideal threshold"
+      },
+      {
+        "hubspot_contact_id": 159119247131,
+        "display_name": "Renee Sabina Keisman",
+        "email": "renee@love2learnconsulting.com",
+        "original_traffic_source": "PAID_SOCIAL",
+        "lead_date": "2025-09-28",
+        "lead_week": "2025-09-22",
+        "total_showups": 9,
+        "first_group_showup_at": "2025-10-30T15:24:46.414Z",
+        "last_group_showup_at": "2026-02-17T17:20:17.019Z",
+        "days_since_last_showup": 1,
+        "primary_attendance_group": "Tuesday",
+        "primary_attendance_group_showups": 8,
+        "missed_primary_group_sessions_since_last_showup": 0,
+        "missed_all_group_sessions_since_last_showup": 1,
+        "recent_showups_30d": 2,
+        "recent_showups_60d": 3,
+        "revenue_official_cached": 3000000,
+        "sobriety_date_present": true,
+        "sober_over_1y_at_lead": true,
+        "qualified_lead": false,
+        "great_lead": true,
+        "great_member": true,
+        "ideal_member": false,
+        "membership_s": "Have Registered on Luma;Under $250k Group;Main Free $250k+ Group;Have made a donation",
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "ai was at 2.50",
+        "first_conversion_event_name": "Facebook Lead Ads: Andrew Leads 9-7-25 with 100k minimum",
+        "recent_conversion_event_name": "Meetings Link: andrew-lassise/interview",
+        "campaign": null,
+        "campaign_source": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/159119247131",
+        "shows_remaining_to_ideal": 2,
+        "ideal_candidate_likelihood": "Medium",
+        "nudge_recommended_now": false,
+        "nudge_reason": "2 more show-ups to reach ideal threshold"
+      },
+      {
+        "hubspot_contact_id": 167406672929,
+        "display_name": "Robert Davidman",
+        "email": "robert@davidman.com",
+        "original_traffic_source": "PAID_SOCIAL",
+        "lead_date": "2025-10-24",
+        "lead_week": "2025-10-20",
+        "total_showups": 9,
+        "first_group_showup_at": "2025-10-28T16:49:52.273Z",
+        "last_group_showup_at": "2026-02-17T17:20:17.019Z",
+        "days_since_last_showup": 1,
+        "primary_attendance_group": "Tuesday",
+        "primary_attendance_group_showups": 9,
+        "missed_primary_group_sessions_since_last_showup": 0,
+        "missed_all_group_sessions_since_last_showup": 1,
+        "recent_showups_30d": 3,
+        "recent_showups_60d": 4,
+        "revenue_official_cached": 1500000,
+        "sobriety_date_present": true,
+        "sober_over_1y_at_lead": true,
+        "qualified_lead": false,
+        "great_lead": true,
+        "great_member": true,
+        "ideal_member": false,
+        "membership_s": null,
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "higher intent and donation funnels - 3.04 when changed forms",
+        "first_conversion_event_name": "Facebook Lead Ads: Andrew Leads 9-7-25 with 100k minimum",
+        "recent_conversion_event_name": "Meetings Link: andrew-lassise/interview",
+        "campaign": null,
+        "campaign_source": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/167406672929",
+        "shows_remaining_to_ideal": 2,
+        "ideal_candidate_likelihood": "Medium",
+        "nudge_recommended_now": false,
+        "nudge_reason": "2 more show-ups to reach ideal threshold"
+      },
+      {
+        "hubspot_contact_id": 106015276125,
+        "display_name": "Billy Millington",
+        "email": "billy@themillingtongroup.com",
+        "original_traffic_source": "PAID_SOCIAL",
+        "lead_date": "2025-03-14",
+        "lead_week": "2025-03-10",
+        "total_showups": 7,
+        "first_group_showup_at": "2025-06-12T15:18:46.684Z",
+        "last_group_showup_at": "2025-09-18T15:29:50.309Z",
+        "days_since_last_showup": 154,
+        "primary_attendance_group": "Thursday",
+        "primary_attendance_group_showups": 7,
+        "missed_primary_group_sessions_since_last_showup": 22,
+        "missed_all_group_sessions_since_last_showup": 41,
+        "recent_showups_30d": 0,
+        "recent_showups_60d": 0,
+        "revenue_official_cached": 300000,
+        "sobriety_date_present": true,
+        "sober_over_1y_at_lead": true,
+        "qualified_lead": true,
+        "great_lead": false,
+        "great_member": true,
+        "ideal_member": false,
+        "membership_s": "Under $250k Group;Have Registered on Luma",
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "organic facebook lead",
+        "first_conversion_event_name": "Facebook Lead Ads: Ann - Sober Business Founders- Revenue/Sobriety date-copy",
+        "recent_conversion_event_name": "Facebook Lead Ads: Ann - Sober Business Founders- Revenue/Sobriety date-copy",
+        "campaign": null,
+        "campaign_source": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/106015276125",
+        "shows_remaining_to_ideal": 4,
+        "ideal_candidate_likelihood": "Low",
+        "nudge_recommended_now": true,
+        "nudge_reason": "Good nudge candidate (missed recent sessions)"
+      }
+    ],
+    "strong_non_icp_members": [
+      {
+        "hubspot_contact_id": 167949195024,
+        "display_name": "Shelly Lloyd",
+        "email": "shellymlloyd@gmail.com",
+        "original_traffic_source": "PAID_SOCIAL",
+        "lead_date": "2025-10-13",
+        "lead_week": "2025-10-13",
+        "total_showups": 6,
+        "first_group_showup_at": "2025-10-23T15:25:31.839Z",
+        "last_group_showup_at": "2026-01-08T16:07:35.883Z",
+        "days_since_last_showup": 42,
+        "primary_attendance_group": "Thursday",
+        "primary_attendance_group_showups": 6,
+        "missed_primary_group_sessions_since_last_showup": 6,
+        "missed_all_group_sessions_since_last_showup": 12,
+        "recent_showups_30d": 0,
+        "recent_showups_60d": 1,
+        "revenue_official_cached": 250000.01,
+        "sobriety_date_present": true,
+        "sober_over_1y_at_lead": false,
+        "qualified_lead": false,
+        "great_lead": false,
+        "great_member": true,
+        "ideal_member": false,
+        "membership_s": "Have Registered on Luma",
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "higher intent and donation funnels - 3.04 when changed forms",
+        "first_conversion_event_name": "Facebook Lead Ads: Andrew Leads 250k minimum rephrase conditional donation",
+        "recent_conversion_event_name": "Facebook Lead Ads: Andrew Leads 250k minimum rephrase conditional donation",
+        "campaign": null,
+        "campaign_source": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/167949195024",
+        "icp_gap_reason": "Sobriety under 1 year at lead date",
+        "shows_remaining_to_ideal_threshold": 5,
+        "nudge_recommended_now": true,
+        "nudge_reason": "Good nudge candidate (missed recent sessions)"
+      },
+      {
+        "hubspot_contact_id": 204143782496,
+        "display_name": "Tia Rexford",
+        "email": "tia.rex07@gmail.com",
+        "original_traffic_source": "PAID_SOCIAL",
+        "lead_date": "2025-06-09",
+        "lead_week": "2025-06-09",
+        "total_showups": 10,
+        "first_group_showup_at": "2025-10-30T15:24:46.414Z",
+        "last_group_showup_at": "2026-02-05T15:50:22.599Z",
+        "days_since_last_showup": 14,
+        "primary_attendance_group": "Thursday",
+        "primary_attendance_group_showups": 10,
+        "missed_primary_group_sessions_since_last_showup": 2,
+        "missed_all_group_sessions_since_last_showup": 4,
+        "recent_showups_30d": 3,
+        "recent_showups_60d": 4,
+        "revenue_official_cached": 75000,
+        "sobriety_date_present": true,
+        "sober_over_1y_at_lead": true,
+        "qualified_lead": false,
+        "great_lead": false,
+        "great_member": true,
+        "ideal_member": false,
+        "membership_s": "Facebook Group;Under $250k Group;Have Registered on Luma",
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "organic facebook lead",
+        "first_conversion_event_name": "Facebook Lead Ads: Ann - Sober Business Founders- Revenue/Sobriety date-copy",
+        "recent_conversion_event_name": "Facebook Lead Ads: Ann - Sober Business Founders- Revenue/Sobriety date-copy",
+        "campaign": null,
+        "campaign_source": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/204143782496",
+        "icp_gap_reason": "Official revenue under $250k",
+        "shows_remaining_to_ideal_threshold": 1,
+        "nudge_recommended_now": true,
+        "nudge_reason": "1 more show-up to reach ideal threshold · Good nudge candidate (missed recent sessions)"
+      },
+      {
+        "hubspot_contact_id": 118059304456,
+        "display_name": "Chris Lipper",
+        "email": "chris@onthebus.biz",
+        "original_traffic_source": "PAID_SOCIAL",
+        "lead_date": "2025-04-29",
+        "lead_week": "2025-04-28",
+        "total_showups": 28,
+        "first_group_showup_at": "2025-06-05T14:58:37.328Z",
+        "last_group_showup_at": "2026-02-12T16:08:26.368Z",
+        "days_since_last_showup": 7,
+        "primary_attendance_group": "Thursday",
+        "primary_attendance_group_showups": 28,
+        "missed_primary_group_sessions_since_last_showup": 1,
+        "missed_all_group_sessions_since_last_showup": 2,
+        "recent_showups_30d": 3,
+        "recent_showups_60d": 5,
+        "revenue_official_cached": 150000,
+        "sobriety_date_present": true,
+        "sober_over_1y_at_lead": true,
+        "qualified_lead": false,
+        "great_lead": false,
+        "great_member": true,
+        "ideal_member": false,
+        "membership_s": "Have Registered on Luma;Under $250k Group",
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "organic facebook lead",
+        "first_conversion_event_name": "Facebook Lead Ads: Ann - Sober Business Founders- Revenue/Sobriety date-copy",
+        "recent_conversion_event_name": "Facebook Lead Ads: Ann - Sober Business Founders- Revenue/Sobriety date-copy",
+        "campaign": null,
+        "campaign_source": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/118059304456",
+        "icp_gap_reason": "Official revenue under $250k",
+        "shows_remaining_to_ideal_threshold": 0,
+        "nudge_recommended_now": false,
+        "nudge_reason": "0 more show-ups to reach ideal threshold"
+      },
+      {
+        "hubspot_contact_id": 185151246153,
+        "display_name": "Mark V Howley",
+        "email": "themarkhowleyshow@gmail.com",
+        "original_traffic_source": "PAID_SOCIAL",
+        "lead_date": "2025-12-02",
+        "lead_week": "2025-12-01",
+        "total_showups": 7,
+        "first_group_showup_at": "2025-12-16T17:13:06.004Z",
+        "last_group_showup_at": "2026-02-10T18:00:00.000Z",
+        "days_since_last_showup": 8,
+        "primary_attendance_group": "Tuesday",
+        "primary_attendance_group_showups": 7,
+        "missed_primary_group_sessions_since_last_showup": 1,
+        "missed_all_group_sessions_since_last_showup": 3,
+        "recent_showups_30d": 3,
+        "recent_showups_60d": 6,
+        "revenue_official_cached": 0,
+        "sobriety_date_present": true,
+        "sober_over_1y_at_lead": true,
+        "qualified_lead": false,
+        "great_lead": false,
+        "great_member": true,
+        "ideal_member": false,
+        "membership_s": "Main Free $250k+ Group",
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "(1-2) 2.5 ai raised budget 6.93. turn off 1-1 to not cannibalize",
+        "first_conversion_event_name": "Facebook Lead Ads: Andrew Leads 9-7-25 with 100k minimum",
+        "recent_conversion_event_name": "Meetings Link: andrew-lassise",
+        "campaign": null,
+        "campaign_source": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/185151246153",
+        "icp_gap_reason": "Official revenue under $250k",
+        "shows_remaining_to_ideal_threshold": 4,
+        "nudge_recommended_now": false,
+        "nudge_reason": null
+      },
+      {
+        "hubspot_contact_id": 158301566872,
+        "display_name": "Rafael Requena",
+        "email": "rafael@brokerintrust.com",
+        "original_traffic_source": "PAID_SOCIAL",
+        "lead_date": "2025-09-25",
+        "lead_week": "2025-09-22",
+        "total_showups": 14,
+        "first_group_showup_at": "2025-10-09T15:19:28.664Z",
+        "last_group_showup_at": "2026-02-19T16:13:39.481Z",
+        "days_since_last_showup": 0,
+        "primary_attendance_group": "Thursday",
+        "primary_attendance_group_showups": 14,
+        "missed_primary_group_sessions_since_last_showup": 0,
+        "missed_all_group_sessions_since_last_showup": 0,
+        "recent_showups_30d": 4,
+        "recent_showups_60d": 6,
+        "revenue_official_cached": 100000.01,
+        "sobriety_date_present": true,
+        "sober_over_1y_at_lead": true,
+        "qualified_lead": false,
+        "great_lead": false,
+        "great_member": true,
+        "ideal_member": false,
+        "membership_s": "Under $250k Group;Have Registered on Luma;Have made a donation",
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "higher intent and donation funnels - 3.04 when changed forms",
+        "first_conversion_event_name": "Facebook Lead Ads: Andrew Leads 250k minimum rephrase conditional donation",
+        "recent_conversion_event_name": "Facebook Lead Ads: Andrew Leads 250k minimum rephrase conditional donation",
+        "campaign": null,
+        "campaign_source": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/158301566872",
+        "icp_gap_reason": "Official revenue under $250k",
+        "shows_remaining_to_ideal_threshold": 0,
+        "nudge_recommended_now": false,
+        "nudge_reason": "0 more show-ups to reach ideal threshold"
+      }
+    ],
+    "membership_250k_exact_zero_revenue": [
+      {
+        "hubspot_contact_id": 185151246153,
+        "display_name": "Mark V Howley",
+        "email": "themarkhowleyshow@gmail.com",
+        "hs_additional_emails": [
+          "markhowley47@gmail.com"
+        ],
+        "createdate": "2025-12-02T07:30:04+00:00",
+        "membership_s": "Main Free $250k+ Group",
+        "revenue_official_cached": 0,
+        "revenue_fallback_cached": 0,
+        "sobriety_date": "1986-02-19",
+        "original_traffic_source": "PAID_SOCIAL",
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "(1-2) 2.5 ai raised budget 6.93. turn off 1-1 to not cannibalize",
+        "campaign": null,
+        "campaign_source": null,
+        "first_conversion_event_name": "Facebook Lead Ads: Andrew Leads 9-7-25 with 100k minimum",
+        "recent_conversion_event_name": "Meetings Link: andrew-lassise",
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/185151246153"
+      },
+      {
+        "hubspot_contact_id": 97162320964,
+        "display_name": "Will McKenzie",
+        "email": "finaddict1@icloud.com",
+        "hs_additional_emails": [],
+        "createdate": "2025-02-05T18:55:21.508+00:00",
+        "membership_s": "Main Free $250k+ Group",
+        "revenue_official_cached": 0,
+        "revenue_fallback_cached": 0,
+        "sobriety_date": null,
+        "original_traffic_source": "OFFLINE",
+        "hs_analytics_source_data_1": "IMPORT",
+        "hs_analytics_source_data_2": "57088915",
+        "campaign": null,
+        "campaign_source": "Referral",
+        "first_conversion_event_name": null,
+        "recent_conversion_event_name": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/97162320964"
+      },
+      {
+        "hubspot_contact_id": 97169573191,
+        "display_name": "Ian Bembenek",
+        "email": "irbsalons@gmail.com",
+        "hs_additional_emails": [],
+        "createdate": "2025-02-05T18:55:21.53+00:00",
+        "membership_s": "Main Free $250k+ Group",
+        "revenue_official_cached": 0,
+        "revenue_fallback_cached": 0,
+        "sobriety_date": null,
+        "original_traffic_source": "OFFLINE",
+        "hs_analytics_source_data_1": "IMPORT",
+        "hs_analytics_source_data_2": "57088915",
+        "campaign": null,
+        "campaign_source": null,
+        "first_conversion_event_name": null,
+        "recent_conversion_event_name": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/97169573191"
+      },
+      {
+        "hubspot_contact_id": 114042250808,
+        "display_name": "Zach Bridges",
+        "email": "zbridges@whymonster.com",
+        "hs_additional_emails": [],
+        "createdate": "2025-04-15T01:04:37.886+00:00",
+        "membership_s": "Main Free $250k+ Group",
+        "revenue_official_cached": 0,
+        "revenue_fallback_cached": 0,
+        "sobriety_date": "2023-08-16",
+        "original_traffic_source": "OFFLINE",
+        "hs_analytics_source_data_1": "CRM_UI",
+        "hs_analytics_source_data_2": "userId:63468493",
+        "campaign": null,
+        "campaign_source": null,
+        "first_conversion_event_name": null,
+        "recent_conversion_event_name": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/114042250808"
+      }
+    ],
+    "membership_250k_contains_zero_revenue": [
+      {
+        "hubspot_contact_id": 162144926844,
+        "display_name": "Alex Shohet",
+        "email": "alexs@evergreenfund.life",
+        "hs_additional_emails": [
+          "alexs@reddoor.life"
+        ],
+        "createdate": "2025-10-08T03:19:13.159+00:00",
+        "membership_s": "Under $250k Group;Have Registered on Luma;Main Free $250k+ Group",
+        "revenue_official_cached": 0,
+        "revenue_fallback_cached": 0,
+        "sobriety_date": null,
+        "original_traffic_source": "OFFLINE",
+        "hs_analytics_source_data_1": "INTEGRATION",
+        "hs_analytics_source_data_2": "25200",
+        "campaign": null,
+        "campaign_source": null,
+        "first_conversion_event_name": "Meetings Link: andrew-lassise",
+        "recent_conversion_event_name": "Meetings Link: andrew-lassise",
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/162144926844"
+      },
+      {
+        "hubspot_contact_id": 185151246153,
+        "display_name": "Mark V Howley",
+        "email": "themarkhowleyshow@gmail.com",
+        "hs_additional_emails": [
+          "markhowley47@gmail.com"
+        ],
+        "createdate": "2025-12-02T07:30:04+00:00",
+        "membership_s": "Main Free $250k+ Group",
+        "revenue_official_cached": 0,
+        "revenue_fallback_cached": 0,
+        "sobriety_date": "1986-02-19",
+        "original_traffic_source": "PAID_SOCIAL",
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": "(1-2) 2.5 ai raised budget 6.93. turn off 1-1 to not cannibalize",
+        "campaign": null,
+        "campaign_source": null,
+        "first_conversion_event_name": "Facebook Lead Ads: Andrew Leads 9-7-25 with 100k minimum",
+        "recent_conversion_event_name": "Meetings Link: andrew-lassise",
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/185151246153"
+      },
+      {
+        "hubspot_contact_id": 199571392134,
+        "display_name": "Diane Prince",
+        "email": "diane@dianeprince.co",
+        "hs_additional_emails": [
+          "whatswithdiane@gmail.com"
+        ],
+        "createdate": "2025-12-16T14:11:03.762+00:00",
+        "membership_s": "Have made a donation;Under $250k Group;Have Registered on Luma;Main Free $250k+ Group",
+        "revenue_official_cached": 0,
+        "revenue_fallback_cached": 0,
+        "sobriety_date": null,
+        "original_traffic_source": "OFFLINE",
+        "hs_analytics_source_data_1": "CRM_UI",
+        "hs_analytics_source_data_2": "userId:76923646",
+        "campaign": null,
+        "campaign_source": null,
+        "first_conversion_event_name": "Meetings Link: andrew-lassise",
+        "recent_conversion_event_name": "Meetings Link: andrew-lassise",
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/199571392134"
+      },
+      {
+        "hubspot_contact_id": 99531756656,
+        "display_name": "Johni Sheer Nielsen",
+        "email": "hangmanaudiovideo@gmail.com",
+        "hs_additional_emails": [
+          "johniryan2@bellsouth.net"
+        ],
+        "createdate": "2025-02-05T15:14:42.792+00:00",
+        "membership_s": "Main Free $250k+ Group;Facebook Group",
+        "revenue_official_cached": 0,
+        "revenue_fallback_cached": 0,
+        "sobriety_date": "2015-09-22",
+        "original_traffic_source": "SOCIAL_MEDIA",
+        "hs_analytics_source_data_1": "Facebook",
+        "hs_analytics_source_data_2": null,
+        "campaign": null,
+        "campaign_source": null,
+        "first_conversion_event_name": "Meetings Link: andrew-lassise",
+        "recent_conversion_event_name": "Meetings Link: andrew-lassise",
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/99531756656"
+      },
+      {
+        "hubspot_contact_id": 97162320964,
+        "display_name": "Will McKenzie",
+        "email": "finaddict1@icloud.com",
+        "hs_additional_emails": [],
+        "createdate": "2025-02-05T18:55:21.508+00:00",
+        "membership_s": "Main Free $250k+ Group",
+        "revenue_official_cached": 0,
+        "revenue_fallback_cached": 0,
+        "sobriety_date": null,
+        "original_traffic_source": "OFFLINE",
+        "hs_analytics_source_data_1": "IMPORT",
+        "hs_analytics_source_data_2": "57088915",
+        "campaign": null,
+        "campaign_source": "Referral",
+        "first_conversion_event_name": null,
+        "recent_conversion_event_name": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/97162320964"
+      },
+      {
+        "hubspot_contact_id": 97169573191,
+        "display_name": "Ian Bembenek",
+        "email": "irbsalons@gmail.com",
+        "hs_additional_emails": [],
+        "createdate": "2025-02-05T18:55:21.53+00:00",
+        "membership_s": "Main Free $250k+ Group",
+        "revenue_official_cached": 0,
+        "revenue_fallback_cached": 0,
+        "sobriety_date": null,
+        "original_traffic_source": "OFFLINE",
+        "hs_analytics_source_data_1": "IMPORT",
+        "hs_analytics_source_data_2": "57088915",
+        "campaign": null,
+        "campaign_source": null,
+        "first_conversion_event_name": null,
+        "recent_conversion_event_name": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/97169573191"
+      },
+      {
+        "hubspot_contact_id": 97161375912,
+        "display_name": "Clint Hedin",
+        "email": "clintrhedin@gmail.com",
+        "hs_additional_emails": [],
+        "createdate": "2025-02-05T18:55:21.577+00:00",
+        "membership_s": "Facebook Group;Main Free $250k+ Group",
+        "revenue_official_cached": 0,
+        "revenue_fallback_cached": 0,
+        "sobriety_date": null,
+        "original_traffic_source": "OFFLINE",
+        "hs_analytics_source_data_1": "IMPORT",
+        "hs_analytics_source_data_2": "57088915",
+        "campaign": null,
+        "campaign_source": null,
+        "first_conversion_event_name": null,
+        "recent_conversion_event_name": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/97161375912"
+      },
+      {
+        "hubspot_contact_id": 97181718819,
+        "display_name": "Tristan Dankert",
+        "email": "hhandyman123@yahoo.com",
+        "hs_additional_emails": [],
+        "createdate": "2025-02-05T18:55:21.667+00:00",
+        "membership_s": "Main Free $250k+ Group;Facebook Group",
+        "revenue_official_cached": 0,
+        "revenue_fallback_cached": 0,
+        "sobriety_date": null,
+        "original_traffic_source": "OFFLINE",
+        "hs_analytics_source_data_1": "IMPORT",
+        "hs_analytics_source_data_2": "57088915",
+        "campaign": null,
+        "campaign_source": null,
+        "first_conversion_event_name": null,
+        "recent_conversion_event_name": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/97181718819"
+      },
+      {
+        "hubspot_contact_id": 114042250808,
+        "display_name": "Zach Bridges",
+        "email": "zbridges@whymonster.com",
+        "hs_additional_emails": [],
+        "createdate": "2025-04-15T01:04:37.886+00:00",
+        "membership_s": "Main Free $250k+ Group",
+        "revenue_official_cached": 0,
+        "revenue_fallback_cached": 0,
+        "sobriety_date": "2023-08-16",
+        "original_traffic_source": "OFFLINE",
+        "hs_analytics_source_data_1": "CRM_UI",
+        "hs_analytics_source_data_2": "userId:63468493",
+        "campaign": null,
+        "campaign_source": null,
+        "first_conversion_event_name": null,
+        "recent_conversion_event_name": null,
+        "hubspot_url": "https://app.hubspot.com/contacts/45070276/record/0-1/114042250808"
+      }
+    ]
+  },
+  "naive_90d_period_cpa": {
+    "window_start": "2025-11-12",
+    "window_end": "2026-02-09",
+    "spend": 5148.969999999997,
+    "counts": {
+      "leads": 678,
+      "luma_signup": 88,
+      "first_showup": 39,
+      "qualified_lead": 161,
+      "great_lead": 142,
+      "great_member": 7,
+      "ideal_member": 0
+    },
+    "cpa": {
+      "leads": 7.5943510324483725,
+      "luma_signup": 58.51102272727269,
+      "first_showup": 132.0248717948717,
+      "qualified_lead": 31.98118012422358,
+      "great_lead": 36.26035211267603,
+      "great_member": 735.5671428571424,
+      "ideal_member": null
+    }
+  }
+}

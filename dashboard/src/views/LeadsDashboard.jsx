@@ -7,6 +7,7 @@ import { applyZoomAttributionOverride, getZoomAttributionOverride } from '../lib
 import DrillDownModal from '../components/DrillDownModal';
 import AIAnalysisCard from '../components/AIAnalysisCard';
 import KPICard from '../components/KPICard';
+import CohortUnitEconomicsPreviewPanel from '../components/CohortUnitEconomicsPreviewPanel';
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell,
@@ -4460,6 +4461,9 @@ export default function LeadsDashboard() {
 
       {/* ── AI Insights Panel ── */}
       <AIInsightsPanel supabaseUrl={supabaseUrl} supabaseKey={supabaseKey} groupedData={groupedData} />
+
+      {/* ── Cohort Unit Economics Preview (new bottom comparison section) ── */}
+      <CohortUnitEconomicsPreviewPanel />
 
       {/* ── Drill-down Modal ── */}
       <DrillDownModal
