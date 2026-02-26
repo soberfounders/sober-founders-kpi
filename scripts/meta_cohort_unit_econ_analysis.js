@@ -1644,6 +1644,18 @@ function cdfFromLagsWithinHorizon(lags, horizonDays) {
     return 'Lead';
   }
 
+  function freeEventsHowFoundUs(row) {
+    return (
+      row?.firstConversionEventName ||
+      row?.hsAnalyticsSourceData1 ||
+      row?.hsAnalyticsSourceData2 ||
+      row?.campaign ||
+      row?.campaignSource ||
+      row?.originalTrafficSource ||
+      null
+    );
+  }
+
   function summarizeFreeEventsDrilldownRow(row) {
     return {
       hubspot_contact_id: row.contactId,
@@ -1651,6 +1663,7 @@ function cdfFromLagsWithinHorizon(lags, horizonDays) {
       email: row.email || null,
       annual_revenue_in_usd_official: row.revenueOfficial,
       sobriety_date: row.sobrietyDate || null,
+      how_they_found_us: freeEventsHowFoundUs(row),
       show_up: row.firstShowAt ? 'Yes' : 'No',
       type: cohortLeadType(row),
       hubspot_url: toHubspotUrl(row.contactId),
@@ -2061,6 +2074,32 @@ function cdfFromLagsWithinHorizon(lags, horizonDays) {
     actual: cohortList.reduce((s, c) => s + (c.leads || 0), 0),
     expected: cohortRows.length,
   });
+
+  const freeEventsCardToDrilldown = {
+    meta_leads: 'free_events_meta_leads',
+    meta_qualified_leads: 'free_events_meta_qualified_leads',
+    meta_great_leads: 'free_events_meta_great_leads',
+    luma_signups_paid: 'free_events_luma_signups',
+    net_new_showups: 'free_events_net_new_showups',
+  };
+  for (const card of (freeEventsSummary?.cards || [])) {
+    const drilldownKey = freeEventsCardToDrilldown[card?.key];
+    if (!drilldownKey) continue;
+    const rowCount = (freeEventsDrilldownRows?.[drilldownKey] || []).length;
+    const expectedCount = Number(card?.current_count);
+    const ok = Number.isFinite(expectedCount) ? rowCount === expectedCount : rowCount === 0;
+    addAuditCheck({
+      key: `free_events_${card.key}_count_matches_drilldown_rows`,
+      label: `Free Events "${card.label}" current count matches drilldown row count`,
+      status: ok ? 'pass' : 'fail',
+      actual: rowCount,
+      expected: Number.isFinite(expectedCount) ? expectedCount : null,
+      notes: [
+        `Drilldown key: ${drilldownKey}`,
+        'Protects against card math and row-scope drifting apart for the same cohort window.',
+      ],
+    });
+  }
 
   for (const m of results) {
     const f = m?.finalized || {};

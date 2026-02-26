@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import preview from '../data/metaCohortUnitEconPreview.json';
 import META_AD_TRAINING_INSTRUCTION_PACK from '../data/metaAdTrainingInstructionPack';
+import SendToNotionModal from './SendToNotionModal';
 
 const card = {
   backgroundColor: '#fff',
@@ -49,6 +50,48 @@ function formatShortDate(v) {
     return alt.toLocaleDateString(undefined, { month: '2-digit', day: '2-digit', year: '2-digit' });
   }
   return d.toLocaleDateString(undefined, { month: '2-digit', day: '2-digit', year: '2-digit' });
+}
+
+function parseDateOnlyUtc(v) {
+  if (!v) return null;
+  const d = new Date(`${String(v).slice(0, 10)}T00:00:00.000Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function addDaysDate(date, days) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+  const d = new Date(date.getTime());
+  d.setUTCDate(d.getUTCDate() + days);
+  return d;
+}
+
+function dateKeyUtc(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
+}
+
+function floorDaysBetween(a, b) {
+  if (!(a instanceof Date) || !(b instanceof Date)) return null;
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return null;
+  return Math.floor((a.getTime() - b.getTime()) / 86400000);
+}
+
+function parseWeekWindowLabel(label) {
+  const txt = String(label || '');
+  const m = txt.match(/(\d{4}-\d{2}-\d{2})\s+to\s+(\d{4}-\d{2}-\d{2})/);
+  if (!m) return null;
+  const firstWeekStart = parseDateOnlyUtc(m[1]);
+  const lastWeekStart = parseDateOnlyUtc(m[2]);
+  if (!firstWeekStart || !lastWeekStart) return null;
+  const inclusiveEnd = addDaysDate(lastWeekStart, 6);
+  return {
+    firstWeekStart,
+    lastWeekStart,
+    firstWeekStartKey: dateKeyUtc(firstWeekStart),
+    lastWeekStartKey: dateKeyUtc(lastWeekStart),
+    inclusiveEnd,
+    inclusiveEndKey: dateKeyUtc(inclusiveEnd),
+  };
 }
 
 function sobrietyAgeParts(sobrietyDateValue, nowDate = new Date()) {
@@ -484,9 +527,12 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
   const [metaAdGuideError, setMetaAdGuideError] = useState(null);
   const [metaAdGuideCopyState, setMetaAdGuideCopyState] = useState('idle');
   const [showMetaAdTrainingPack, setShowMetaAdTrainingPack] = useState(false);
+  const [notionModal, setNotionModal] = useState({ open: false, taskName: '' });
+  const drilldownRef = useRef(null);
+  const [viewMode, setViewMode] = useState('glance');
   const [sectionOpen, setSectionOpen] = useState({
     signoff: true,
-    diagnostics: true,
+    diagnostics: false,
     outreach: false,
     qa: false,
     metrics: false,
@@ -494,6 +540,7 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
   const data = preview || null;
   if (!data?.metrics?.length) return null;
   const isPrimary = placement === 'top';
+  const isGlanceMode = isPrimary && viewMode === 'glance';
 
   const metrics = [...data.metrics].sort((a, b) => metricOrderKey(a.key) - metricOrderKey(b.key));
   const lagStats = data.lag_stats || {};
@@ -515,7 +562,45 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
   const weeklySignoff = data.weekly_signoff || null;
   const numberAudit = data.number_audit || { counts: {}, checks: [] };
   const diagnosticCards = [...metaCards, ...campaignCards];
+  const glanceDiagnosticCardKeys = new Set([
+    'cpl_trailing_4w',
+    'cpl_trailing_12w',
+    'cpql_current_entry_forecast',
+    'cpgl_current_entry_forecast',
+    'great_member_current_entry_forecast',
+    'ideal_member_current_entry_forecast',
+  ]);
+  const metaCardsForDisplay = isGlanceMode
+    ? metaCards.filter((c) => glanceDiagnosticCardKeys.has(c.key))
+    : metaCards;
   const campaignDrilldowns = campaignDiagnostics?.drilldowns_by_campaign || {};
+  const snapshotGeneratedAt = data?.generated_at ? new Date(data.generated_at) : null;
+  const snapshotAgeHours = snapshotGeneratedAt && !Number.isNaN(snapshotGeneratedAt.getTime())
+    ? (Date.now() - snapshotGeneratedAt.getTime()) / 3600000
+    : null;
+  const freeEventsWindowCurrentParsed = parseWeekWindowLabel(freeEventsSummary?.window_label_current);
+  const attendanceAsOfDate = parseDateOnlyUtc(dates?.attendance_as_of);
+  const latestCompleteAdWeekStartDate = parseDateOnlyUtc(dates?.last_complete_ad_week_start);
+  const attendanceVsCohortWindowLagDays = (attendanceAsOfDate && freeEventsWindowCurrentParsed?.inclusiveEnd)
+    ? floorDaysBetween(attendanceAsOfDate, freeEventsWindowCurrentParsed.inclusiveEnd)
+    : null;
+  const cohortScopeWarnings = [];
+  if (Number.isFinite(snapshotAgeHours) && snapshotAgeHours > 24) {
+    cohortScopeWarnings.push(`Snapshot is ${Math.floor(snapshotAgeHours)}h old (generated ${formatDateTime(data.generated_at)}).`);
+  }
+  if (Number.isFinite(attendanceVsCohortWindowLagDays) && attendanceVsCohortWindowLagDays > 3) {
+    cohortScopeWarnings.push(
+      `Attendance bars are newer than this cohort window by ${Math.round(attendanceVsCohortWindowLagDays)} day(s) because cohort cards are anchored to complete ad-spend cohort weeks.`,
+    );
+  }
+  if (freeEventsWindowCurrentParsed?.lastWeekStartKey && latestCompleteAdWeekStartDate) {
+    const latestCompleteAdWeekStartKey = dateKeyUtc(latestCompleteAdWeekStartDate);
+    if (latestCompleteAdWeekStartKey && freeEventsWindowCurrentParsed.lastWeekStartKey !== latestCompleteAdWeekStartKey) {
+      cohortScopeWarnings.push(
+        `Current cohort window ends at week start ${freeEventsWindowCurrentParsed.lastWeekStartKey} while latest complete ad week start is ${latestCompleteAdWeekStartKey}.`,
+      );
+    }
+  }
 
   const drilldownConfigs = useMemo(() => ({
     great_members: {
@@ -607,8 +692,10 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
         { key: 'email', label: 'Email' },
         { key: 'annual_revenue_in_usd_official', label: 'Annual Revenue in USD Official', type: 'currency' },
         { key: 'sobriety_date', label: 'Sobriety Date' },
+        { key: 'how_they_found_us', label: 'How They Found Us' },
         { key: 'show_up', label: 'Show Up?' },
         { key: 'type', label: 'Type' },
+        { key: 'hubspot_url', label: 'HubSpot', type: 'link' },
       ],
     },
     free_events_meta_qualified_leads: {
@@ -618,8 +705,10 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
         { key: 'email', label: 'Email' },
         { key: 'annual_revenue_in_usd_official', label: 'Annual Revenue in USD Official', type: 'currency' },
         { key: 'sobriety_date', label: 'Sobriety Date' },
+        { key: 'how_they_found_us', label: 'How They Found Us' },
         { key: 'show_up', label: 'Show Up?' },
         { key: 'type', label: 'Type' },
+        { key: 'hubspot_url', label: 'HubSpot', type: 'link' },
       ],
     },
     free_events_meta_great_leads: {
@@ -629,8 +718,10 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
         { key: 'email', label: 'Email' },
         { key: 'annual_revenue_in_usd_official', label: 'Annual Revenue in USD Official', type: 'currency' },
         { key: 'sobriety_date', label: 'Sobriety Date' },
+        { key: 'how_they_found_us', label: 'How They Found Us' },
         { key: 'show_up', label: 'Show Up?' },
         { key: 'type', label: 'Type' },
+        { key: 'hubspot_url', label: 'HubSpot', type: 'link' },
       ],
     },
     free_events_luma_signups: {
@@ -640,19 +731,23 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
         { key: 'email', label: 'Email' },
         { key: 'annual_revenue_in_usd_official', label: 'Annual Revenue in USD Official', type: 'currency' },
         { key: 'sobriety_date', label: 'Sobriety Date' },
+        { key: 'how_they_found_us', label: 'How They Found Us' },
         { key: 'show_up', label: 'Show Up?' },
         { key: 'type', label: 'Type' },
+        { key: 'hubspot_url', label: 'HubSpot', type: 'link' },
       ],
     },
     free_events_net_new_showups: {
-      title: 'Free Events — Net New Show Ups (First Show-Ups, Trailing 4 Cohort Weeks)',
+      title: 'Free Events — Paid Meta Cohort First Show-Ups (Converter-Only, Trailing 4 Cohort Weeks)',
       columns: [
         { key: 'name', label: 'Name' },
         { key: 'email', label: 'Email' },
         { key: 'annual_revenue_in_usd_official', label: 'Annual Revenue in USD Official', type: 'currency' },
         { key: 'sobriety_date', label: 'Sobriety Date' },
+        { key: 'how_they_found_us', label: 'How They Found Us' },
         { key: 'show_up', label: 'Show Up?' },
         { key: 'type', label: 'Type' },
+        { key: 'hubspot_url', label: 'HubSpot', type: 'link' },
       ],
     },
     membership_250k_exact_zero_revenue: {
@@ -685,10 +780,10 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
 
   const activeDrilldown = activeDrilldownKey
     ? {
-        key: activeDrilldownKey,
-        ...(drilldownConfigs[activeDrilldownKey] || { title: activeDrilldownKey, columns: [] }),
-        rows: drilldowns[activeDrilldownKey] || [],
-      }
+      key: activeDrilldownKey,
+      ...(drilldownConfigs[activeDrilldownKey] || { title: activeDrilldownKey, columns: [] }),
+      rows: drilldowns[activeDrilldownKey] || [],
+    }
     : null;
   const activeDiagnosticCard = activeDiagnosticCardKey
     ? diagnosticCards.find((c) => c.key === activeDiagnosticCardKey) || null
@@ -838,10 +933,10 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
           const priorCpl = Number(prior?.cpl);
           const wow = Number.isFinite(curCpl) && Number.isFinite(priorCpl) && priorCpl > 0 ? (curCpl - priorCpl) / priorCpl : null;
           return {
-        week: r.week,
-        cpl: r.cpl,
-        leads: r.leads,
-        spend: r.spend,
+            week: r.week,
+            cpl: r.cpl,
+            leads: r.leads,
+            spend: r.spend,
             wow_cpl_pct: wow,
           };
         }),
@@ -922,6 +1017,18 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
 
   function toggleSection(key) {
     setSectionOpen((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  function openDrilldown(key) {
+    if (!key) return;
+    setActiveDrilldownKey(key);
+    setTimeout(() => {
+      try {
+        drilldownRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (_) {
+        drilldownRef.current?.scrollIntoView?.();
+      }
+    }, 0);
   }
 
   async function runProviderAnalysis(provider) {
@@ -1123,66 +1230,109 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
           </div>
           <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748b' }}>
             {isPrimary
-              ? 'Action-first cohort analytics for Meta -> Luma -> member outcomes. Use this for spend decisions and outreach prioritization. Legacy/mixed Zoom matching sections are available below for comparison only.'
+              ? (isGlanceMode
+                ? 'Glance view: action summary, Free Events KPIs, and click drilldowns first. Switch to Analyst view for full campaign workbench and QA.'
+                : 'Analyst view: full cohort diagnostics, campaign workbench, QA, and AI playbooks. HubSpot Calls only for show-up truth.')
               : 'Snapshot from the cohort analysis script with manual weekly Meta spend backfill. Existing Leads module above is unchanged for comparison.'}
           </p>
         </div>
-        <div style={{ textAlign: 'right' }}>
+        <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
+          {isPrimary && (
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setViewMode('glance')}
+                style={{
+                  border: '1px solid #cbd5e1',
+                  backgroundColor: viewMode === 'glance' ? '#e0f2fe' : '#fff',
+                  color: viewMode === 'glance' ? '#075985' : '#334155',
+                  borderRadius: '999px',
+                  padding: '4px 10px',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Glance
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('analyst')}
+                style={{
+                  border: '1px solid #cbd5e1',
+                  backgroundColor: viewMode === 'analyst' ? '#e0f2fe' : '#fff',
+                  color: viewMode === 'analyst' ? '#075985' : '#334155',
+                  borderRadius: '999px',
+                  padding: '4px 10px',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Analyst
+              </button>
+            </div>
+          )}
           <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>Snapshot Generated</p>
           <p style={{ margin: '3px 0 0', fontSize: '12px', color: '#0f172a', fontWeight: 700 }}>{formatDateTime(data.generated_at)}</p>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px', marginBottom: '14px' }}>
-        <div style={subCard}>
-          <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 700 }}>Cohort Range</p>
-          <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>
-            {dates.spend_blended_min || dates.ads_live_min} to {dates.last_complete_ad_week_start}
-          </p>
-          <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
-            Blended spend window ends {dates.spend_blended_max || dates.ads_live_max}
-          </p>
-        </div>
-        <div style={subCard}>
-          <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 700 }}>Analyzed Paid-Social Leads</p>
-          <p style={{ margin: '4px 0 0', fontSize: '18px', color: '#0f172a', fontWeight: 800 }}>{int(counts.cohort_contacts_analyzed)}</p>
-          <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
-            Excluded out-of-range: {int(counts.excluded_out_of_range_leads)} · Phoenix: {int(counts.excluded_phoenix_meta_contacts)}
-          </p>
-        </div>
-        <div style={subCard}>
-          <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 700 }}>Great / Ideal Members (Observed)</p>
-          <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              onClick={() => setActiveDrilldownKey('great_members')}
-              style={{ border: '1px solid #bfdbfe', backgroundColor: '#eff6ff', color: '#1d4ed8', borderRadius: '999px', padding: '4px 8px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
-            >
-              {int(lagStats.great_member?.achievers)} great
-            </button>
-            <span style={{ color: '#94a3b8', fontSize: '12px' }}>·</span>
-            <button
-              type="button"
-              onClick={() => setActiveDrilldownKey('ideal_members')}
-              style={{ border: '1px solid #fde68a', backgroundColor: '#fefce8', color: '#92400e', borderRadius: '999px', padding: '4px 8px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
-            >
-              {int(lagStats.ideal_member?.achievers)} ideal
-            </button>
+      <details style={{ ...subCard, marginBottom: '14px', backgroundColor: '#fff' }} open={!isGlanceMode}>
+        <summary style={{ cursor: 'pointer', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>
+          Data Context ({isGlanceMode ? 'tap to expand' : 'snapshot scope and coverage'})
+        </summary>
+        <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+          <div style={subCard}>
+            <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 700 }}>Cohort Range</p>
+            <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>
+              {dates.spend_blended_min || dates.ads_live_min} to {dates.last_complete_ad_week_start}
+            </p>
+            <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
+              Blended spend window ends {dates.spend_blended_max || dates.ads_live_max}
+            </p>
           </div>
-          <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
-            6+ show-ups · 11+ show-ups + ICP
-          </p>
+          <div style={subCard}>
+            <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 700 }}>Analyzed Paid-Social Leads</p>
+            <p style={{ margin: '4px 0 0', fontSize: '18px', color: '#0f172a', fontWeight: 800 }}>{int(counts.cohort_contacts_analyzed)}</p>
+            <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
+              Excluded out-of-range: {int(counts.excluded_out_of_range_leads)} · Phoenix: {int(counts.excluded_phoenix_meta_contacts)}
+            </p>
+          </div>
+          <div style={subCard}>
+            <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 700 }}>Great / Ideal Members (Observed)</p>
+            <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setActiveDrilldownKey('great_members')}
+                style={{ border: '1px solid #bfdbfe', backgroundColor: '#eff6ff', color: '#1d4ed8', borderRadius: '999px', padding: '4px 8px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+              >
+                {int(lagStats.great_member?.achievers)} great
+              </button>
+              <span style={{ color: '#94a3b8', fontSize: '12px' }}>·</span>
+              <button
+                type="button"
+                onClick={() => setActiveDrilldownKey('ideal_members')}
+                style={{ border: '1px solid #fde68a', backgroundColor: '#fefce8', color: '#92400e', borderRadius: '999px', padding: '4px 8px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+              >
+                {int(lagStats.ideal_member?.achievers)} ideal
+              </button>
+            </div>
+            <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
+              6+ show-ups · 11+ show-ups + ICP
+            </p>
+          </div>
+          <div style={subCard}>
+            <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 700 }}>Revenue + Sobriety Coverage</p>
+            <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>
+              Official rev {pct(dq.completeness_meta_free_analyzed?.official_revenue_rate)} · Sobriety {pct(dq.completeness_meta_free_analyzed?.sobriety_rate)}
+            </p>
+            <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
+              Cached `annual_revenue_in_dollars__official_` + sobriety date coverage
+            </p>
+          </div>
         </div>
-        <div style={subCard}>
-          <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 700 }}>Revenue + Sobriety Coverage</p>
-          <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>
-            Official rev {pct(dq.completeness_meta_free_analyzed?.official_revenue_rate)} · Sobriety {pct(dq.completeness_meta_free_analyzed?.sobriety_rate)}
-          </p>
-          <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
-            Cached `annual_revenue_in_dollars__official_` + sobriety date coverage
-          </p>
-        </div>
-      </div>
+      </details>
 
       <div style={{ ...subCard, marginBottom: '14px', backgroundColor: '#fff', borderColor: '#dbeafe' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: '10px' }}>
@@ -1191,7 +1341,9 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
               <div>
                 <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Action Summary + Analyst Reviews</p>
                 <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
-                  On-demand AI analysis for the audited cohort snapshot (HubSpot Calls only for attendance/show-up truth).
+                  {isGlanceMode
+                    ? 'Run AI on demand for a concise read + next steps. Expand analyst outputs only when needed.'
+                    : 'On-demand AI analysis for the audited cohort snapshot (HubSpot Calls only for attendance/show-up truth).'}
                 </p>
                 <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#92400e', fontWeight: 600 }}>
                   Recommended future: automatic weekly analysis (saved history). For now, run on demand only.
@@ -1229,27 +1381,56 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
                 {aiError}
               </div>
             )}
-            <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '8px' }}>
-              <ProviderPanel title="OpenAI" dataRow={aiData?.openai} color="#166534" />
-              <ProviderPanel title="Gemini" dataRow={aiData?.gemini} color="#0f766e" />
-              <ProviderPanel title="Claude" dataRow={aiData?.claude} color="#b45309" />
-            </div>
-            {(Array.isArray(aiData?.human_actions) && aiData.human_actions.length > 0) && (
-              <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <div style={{ ...subCard, backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }}>
-                  <p style={{ margin: 0, fontSize: '11px', fontWeight: 700, color: '#1d4ed8' }}>AI Can Do (Future Workflow Targets)</p>
-                  <ul style={{ margin: '6px 0 0', paddingLeft: '16px', fontSize: '11px', color: '#1e3a8a', lineHeight: 1.4 }}>
-                    {(aiData.autonomous_actions || []).slice(0, 6).map((item, idx) => <li key={`auto-${idx}`}>{item}</li>)}
-                  </ul>
-                </div>
-                <div style={{ ...subCard, backgroundColor: '#fffbeb', borderColor: '#fde68a' }}>
-                  <p style={{ margin: 0, fontSize: '11px', fontWeight: 700, color: '#92400e' }}>Human Needed Next Steps</p>
-                  <ul style={{ margin: '6px 0 0', paddingLeft: '16px', fontSize: '11px', color: '#78350f', lineHeight: 1.4 }}>
-                    {(aiData.human_actions || []).slice(0, 6).map((item, idx) => <li key={`human-${idx}`}>{item}</li>)}
-                  </ul>
-                </div>
+            <details style={{ marginTop: '8px' }} open={!isGlanceMode}>
+              <summary style={{ cursor: 'pointer', fontSize: '11px', fontWeight: 700, color: '#334155' }}>
+                AI Analyst Outputs {aiData ? '(loaded)' : '(collapsed)'}
+              </summary>
+              <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '8px' }}>
+                <ProviderPanel title="OpenAI" dataRow={aiData?.openai} color="#166534" />
+                <ProviderPanel title="Gemini" dataRow={aiData?.gemini} color="#0f766e" />
+                <ProviderPanel title="Claude" dataRow={aiData?.claude} color="#b45309" />
               </div>
-            )}
+              {(Array.isArray(aiData?.human_actions) && aiData.human_actions.length > 0) && (
+                <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div style={{ ...subCard, backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }}>
+                    <p style={{ margin: 0, fontSize: '11px', fontWeight: 700, color: '#1d4ed8' }}>AI Can Do (Future Workflow Targets)</p>
+                    <ul style={{ margin: '6px 0 0', paddingLeft: '16px', fontSize: '11px', color: '#1e3a8a', lineHeight: 1.4 }}>
+                      {(aiData.autonomous_actions || []).slice(0, 6).map((item, idx) => <li key={`auto-${idx}`}>{item}</li>)}
+                    </ul>
+                  </div>
+                  <div style={{ ...subCard, backgroundColor: '#fffbeb', borderColor: '#fde68a' }}>
+                    <p style={{ margin: 0, fontSize: '11px', fontWeight: 700, color: '#92400e' }}>Human Needed Next Steps</p>
+                    <ul style={{ margin: '6px 0 0', paddingLeft: '16px', fontSize: '11px', color: '#78350f', lineHeight: 1.4, listStyle: 'none' }}>
+                      {(aiData.human_actions || []).slice(0, 6).map((item, idx) => (
+                        <li key={`human-${idx}`} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '4px' }}>
+                          <span style={{ flex: 1 }}>• {item}</span>
+                          <button
+                            onClick={() => setNotionModal({ open: true, taskName: item })}
+                            title="Send to Notion To-Do"
+                            style={{
+                              flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: '4px',
+                              padding: '2px 7px', borderRadius: '6px', border: '1px solid #d4d4d4',
+                              backgroundColor: '#fff', color: '#0f172a', cursor: 'pointer',
+                              fontSize: '10px', fontWeight: 700, whiteSpace: 'nowrap',
+                              transition: 'all 0.15s',
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f1f5f9'; }}
+                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#fff'; }}
+                          >
+                            <span style={{ fontWeight: 800, fontSize: '11px' }}>N</span> → Notion
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <SendToNotionModal
+                    isOpen={notionModal.open}
+                    onClose={() => setNotionModal({ open: false, taskName: '' })}
+                    defaultTaskName={notionModal.taskName}
+                  />
+                </div>
+              )}
+            </details>
             <div style={{ ...subCard, marginTop: '8px', backgroundColor: '#ffffff', borderColor: '#dbeafe' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', flexWrap: 'wrap' }}>
                 <div>
@@ -1544,15 +1725,35 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
               Click any box for drilldown
             </span>
           </div>
+          <div style={{ marginBottom: '8px', border: '1px solid #dbeafe', backgroundColor: '#f8fbff', color: '#1e3a8a', borderRadius: '10px', padding: '8px 10px' }}>
+            <p style={{ margin: 0, fontSize: '11px', lineHeight: 1.35 }}>
+              These are cohort metrics for paid Meta free-funnel HubSpot contacts (non-Phoenix). "Net New Show Ups" here means first group show-ups in the cohort window, not the attendance bar chart's all-source new attendees.
+            </p>
+            {freeEventsWindowCurrentParsed?.inclusiveEndKey && (
+              <p style={{ margin: '4px 0 0', fontSize: '11px', lineHeight: 1.35 }}>
+                Cohort week labels are week starts. Current window runs through {freeEventsWindowCurrentParsed.inclusiveEndKey} (inclusive).
+              </p>
+            )}
+            {cohortScopeWarnings.length > 0 && (
+              <div style={{ marginTop: '6px', borderTop: '1px solid #bfdbfe', paddingTop: '6px' }}>
+                {cohortScopeWarnings.map((msg, idx) => (
+                  <p key={`cohort-scope-warning-${idx}`} style={{ margin: idx === 0 ? 0 : '4px 0 0', fontSize: '11px', lineHeight: 1.35, color: '#92400e' }}>
+                    {msg}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '8px' }}>
             {(freeEventsSummary.cards || []).map((item) => {
               const countUp = Number(item.count_change_pct) >= 0;
               const costUp = Number(item.cost_change_pct) >= 0;
+              const displayLabel = item.key === 'net_new_showups' ? 'Paid Meta Cohort First Show-Ups' : item.label;
               return (
                 <button
                   key={item.key}
                   type="button"
-                  onClick={() => item.drilldown_key && setActiveDrilldownKey(item.drilldown_key)}
+                  onClick={() => item.drilldown_key && openDrilldown(item.drilldown_key)}
                   style={{
                     textAlign: 'left',
                     border: '1px solid #dbeafe',
@@ -1562,7 +1763,12 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
                     cursor: item.drilldown_key ? 'pointer' : 'default',
                   }}
                 >
-                  <p style={{ margin: 0, fontSize: '11px', color: '#1e3a8a', fontWeight: 700 }}>{item.label}</p>
+                  <p style={{ margin: 0, fontSize: '11px', color: '#1e3a8a', fontWeight: 700 }}>{displayLabel}</p>
+                  {item.key === 'net_new_showups' && (
+                    <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#64748b' }}>
+                      Cohort conversion count only (paid Meta lead cohorts in window)
+                    </p>
+                  )}
                   <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'baseline' }}>
                     <span style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>{int(item.current_count)}</span>
                     <span style={{ fontSize: '11px', fontWeight: 700, color: Number.isFinite(Number(item.count_change_pct)) ? (countUp ? '#166534' : '#991b1b') : '#64748b' }}>
@@ -1573,9 +1779,9 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
                     <p style={{ margin: 0, fontSize: '10px', color: '#64748b', fontWeight: 700 }}>
                       {item.key === 'meta_leads' ? 'Meta Leads CPL' :
                         item.key === 'meta_qualified_leads' ? 'Meta Qualified Leads CPL' :
-                        item.key === 'meta_great_leads' ? 'Meta Great Leads CPL' :
-                        item.key === 'luma_signups_paid' ? 'Luma Cost Per Sign Up' :
-                        'Net New Show Up Cost'}
+                          item.key === 'meta_great_leads' ? 'Meta Great Leads CPL' :
+                            item.key === 'luma_signups_paid' ? 'Luma Cost Per Sign Up' :
+                              'Net New Show Up Cost'}
                     </p>
                     <div style={{ marginTop: '4px', display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'baseline' }}>
                       <span style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a' }}>{currency(item.current_cost)}</span>
@@ -1591,43 +1797,48 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
         </div>
       )}
 
-      <div style={{ ...subCard, marginBottom: '14px', backgroundColor: '#fff' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <div>
-            <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Section Visibility</p>
-            <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
-              Keep the page glanceable: open only the sections you need right now.
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            {[
-              ['signoff', 'Signoff'],
-              ['diagnostics', 'Meta Diagnostics'],
-              ['outreach', 'Outreach'],
-              ['qa', 'QA'],
-              ['metrics', 'Deep Metrics'],
-            ].map(([key, label]) => (
-              <button
-                key={`section-${key}`}
-                type="button"
-                onClick={() => toggleSection(key)}
-                style={{
-                  border: '1px solid #cbd5e1',
-                  backgroundColor: sectionOpen[key] ? '#e0f2fe' : '#fff',
-                  color: sectionOpen[key] ? '#075985' : '#334155',
-                  borderRadius: '999px',
-                  padding: '5px 9px',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-              >
-                {sectionOpen[key] ? 'Hide' : 'Show'} {label}
-              </button>
-            ))}
+      <details style={{ ...subCard, marginBottom: '14px', backgroundColor: '#fff' }} open={!isGlanceMode}>
+        <summary style={{ cursor: 'pointer', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>
+          Customize Layout ({isGlanceMode ? 'collapsed by default' : 'section visibility'})
+        </summary>
+        <div style={{ marginTop: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <div>
+              <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Section Visibility</p>
+              <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
+                Keep the page glanceable: open only the sections you need right now.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {[
+                ['signoff', 'Signoff'],
+                ['diagnostics', 'Meta Diagnostics'],
+                ['outreach', 'Outreach'],
+                ['qa', 'QA'],
+                ['metrics', 'Deep Metrics'],
+              ].map(([key, label]) => (
+                <button
+                  key={`section-${key}`}
+                  type="button"
+                  onClick={() => toggleSection(key)}
+                  style={{
+                    border: '1px solid #cbd5e1',
+                    backgroundColor: sectionOpen[key] ? '#e0f2fe' : '#fff',
+                    color: sectionOpen[key] ? '#075985' : '#334155',
+                    borderRadius: '999px',
+                    padding: '5px 9px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {sectionOpen[key] ? 'Hide' : 'Show'} {label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      </details>
 
       {sectionOpen.signoff && weeklySignoff && (
         <div style={{ ...subCard, marginBottom: '14px', backgroundColor: '#fff' }}>
@@ -1713,9 +1924,11 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap', marginBottom: '10px' }}>
             <div>
               <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Meta Specialist Diagnosis (CPL + Quality Trend Explainer)</p>
-              <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
-                Click any box for the drilldown math (formula, numerator, denominator, windows, and comparison baselines).
-              </p>
+              {!isGlanceMode && (
+                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
+                  Click any box for the drilldown math (formula, numerator, denominator, windows, and comparison baselines).
+                </p>
+              )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ padding: '4px 8px', borderRadius: '999px', backgroundColor: signalBadge(metaDiagnostics.status).bg, color: signalBadge(metaDiagnostics.status).color, fontSize: '10px', fontWeight: 700 }}>
@@ -1728,7 +1941,7 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '10px', marginBottom: '10px' }}>
-            {metaCards.map((diagCard) => (
+            {metaCardsForDisplay.map((diagCard) => (
               <MetaDiagnosticCard
                 key={diagCard.key}
                 cardData={diagCard}
@@ -1737,7 +1950,7 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
             ))}
           </div>
 
-          {metaAiAnalysis && (
+          {metaAiAnalysis && !isGlanceMode && (
             <div style={{ display: 'grid', gridTemplateColumns: '1.25fr 1fr', gap: '10px' }}>
               <div style={{ ...subCard, backgroundColor: '#f8fafc' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1823,7 +2036,7 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
             </div>
           )}
 
-          {campaignDiagnostics && (
+          {campaignDiagnostics && !isGlanceMode && (
             <div style={{ marginTop: '10px', display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: '10px' }}>
               <div style={{ ...subCard, backgroundColor: '#f8fafc' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', flexWrap: 'wrap' }}>
@@ -2248,321 +2461,321 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
       )}
 
       {sectionOpen.outreach && (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '10px', marginBottom: '14px' }}>
-        <div style={subCard}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <div>
-              <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>High-Value Nudge Candidates</p>
-              <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
-                ICP profile + strong attendance, not yet at 11 show-ups
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setActiveDrilldownKey('high_value_nudge_candidates')}
-              style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#0f172a', borderRadius: '999px', padding: '5px 9px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
-            >
-              {int(nudgeCandidates.length)} rows
-            </button>
-          </div>
-          <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {nudgeCandidates.slice(0, 4).map((row) => (
-              <div
-                key={`nudge-${row.hubspot_contact_id}`}
-                style={{ textAlign: 'left', border: '1px solid #e2e8f0', backgroundColor: '#fff', borderRadius: '10px', padding: '8px' }}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '10px', marginBottom: '14px' }}>
+          <div style={subCard}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <div>
+                <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>High-Value Nudge Candidates</p>
+                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
+                  ICP profile + strong attendance, not yet at 11 show-ups
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveDrilldownKey('high_value_nudge_candidates')}
+                style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#0f172a', borderRadius: '999px', padding: '5px 9px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
-                  <a href={row.hubspot_url} target="_blank" rel="noreferrer" style={{ fontSize: '12px', fontWeight: 700, color: '#2563eb', textDecoration: 'none' }}>
-                    {row.display_name}
-                  </a>
-                  <span style={{ fontSize: '10px', fontWeight: 700, color: '#1d4ed8', backgroundColor: '#eff6ff', borderRadius: '999px', padding: '3px 7px' }}>
-                    {row.ideal_candidate_likelihood || 'N/A'}
-                  </span>
-                </div>
-                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>
-                  {int(row.total_showups)} show-ups · {int(row.shows_remaining_to_ideal)} to ideal · {int(row.missed_primary_group_sessions_since_last_showup)} missed in {row.primary_attendance_group || 'group'}
-                </p>
-                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#334155' }}>
-                  Revenue {currency(row.revenue_official_cached)} · Sobriety {formatSobrietyAge(row.sobriety_date)}
-                </p>
-                <p style={{ margin: '4px 0 0', fontSize: '11px', color: row.nudge_recommended_now ? '#b45309' : '#64748b', fontWeight: row.nudge_recommended_now ? 700 : 500 }}>
-                  {row.nudge_reason || 'No nudge signal yet'}
-                </p>
-                <div style={{ marginTop: '6px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  <a href={row.hubspot_url} target="_blank" rel="noreferrer" style={{ fontSize: '10px', color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>
-                    Open HubSpot
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => setActiveDrilldownKey('high_value_nudge_candidates')}
-                    style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#334155', borderRadius: '999px', padding: '3px 8px', fontSize: '10px', fontWeight: 700, cursor: 'pointer' }}
-                  >
-                    View Drilldown
-                  </button>
-                </div>
-              </div>
-            ))}
-            {nudgeCandidates.length === 0 && <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#94a3b8' }}>No current candidates in this snapshot.</p>}
-          </div>
-        </div>
-
-        <div style={subCard}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <div>
-              <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Great Lead Outreach Queue</p>
-              <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
-                Extra manual outreach for great leads before they stall in the automatic funnel
-              </p>
+                {int(nudgeCandidates.length)} rows
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setActiveDrilldownKey('great_lead_outreach_queue')}
-              style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#0f172a', borderRadius: '999px', padding: '5px 9px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
-            >
-              {int(greatLeadOutreachQueue.length)} rows
-            </button>
-          </div>
-          <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {greatLeadOutreachQueue.slice(0, 4).map((row) => (
-              <div key={`outreach-${row.hubspot_contact_id}`} style={{ border: '1px solid #e2e8f0', backgroundColor: '#fff', borderRadius: '10px', padding: '8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <a
-                    href={row.hubspot_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontSize: '12px', fontWeight: 700, color: '#2563eb', textAlign: 'left', textDecoration: 'none' }}
-                  >
-                    {row.display_name}
-                  </a>
-                  <span style={{
-                    fontSize: '10px',
-                    fontWeight: 700,
-                    color: row.outreach_priority === 'High' ? '#991b1b' : row.outreach_priority === 'Medium' ? '#92400e' : '#334155',
-                    backgroundColor: row.outreach_priority === 'High' ? '#fee2e2' : row.outreach_priority === 'Medium' ? '#fef3c7' : '#f1f5f9',
-                    borderRadius: '999px',
-                    padding: '3px 7px',
-                  }}>
-                    {row.outreach_priority}
-                  </span>
+            <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {nudgeCandidates.slice(0, 4).map((row) => (
+                <div
+                  key={`nudge-${row.hubspot_contact_id}`}
+                  style={{ textAlign: 'left', border: '1px solid #e2e8f0', backgroundColor: '#fff', borderRadius: '10px', padding: '8px' }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+                    <a href={row.hubspot_url} target="_blank" rel="noreferrer" style={{ fontSize: '12px', fontWeight: 700, color: '#2563eb', textDecoration: 'none' }}>
+                      {row.display_name}
+                    </a>
+                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#1d4ed8', backgroundColor: '#eff6ff', borderRadius: '999px', padding: '3px 7px' }}>
+                      {row.ideal_candidate_likelihood || 'N/A'}
+                    </span>
+                  </div>
+                  <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>
+                    {int(row.total_showups)} show-ups · {int(row.shows_remaining_to_ideal)} to ideal · {int(row.missed_primary_group_sessions_since_last_showup)} missed in {row.primary_attendance_group || 'group'}
+                  </p>
+                  <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#334155' }}>
+                    Revenue {currency(row.revenue_official_cached)} · Sobriety {formatSobrietyAge(row.sobriety_date)}
+                  </p>
+                  <p style={{ margin: '4px 0 0', fontSize: '11px', color: row.nudge_recommended_now ? '#b45309' : '#64748b', fontWeight: row.nudge_recommended_now ? 700 : 500 }}>
+                    {row.nudge_reason || 'No nudge signal yet'}
+                  </p>
+                  <div style={{ marginTop: '6px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    <a href={row.hubspot_url} target="_blank" rel="noreferrer" style={{ fontSize: '10px', color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>
+                      Open HubSpot
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => setActiveDrilldownKey('high_value_nudge_candidates')}
+                      style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#334155', borderRadius: '999px', padding: '3px 8px', fontSize: '10px', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      View Drilldown
+                    </button>
+                  </div>
                 </div>
-                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>
-                  {row.outreach_reason}
-                </p>
-                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#334155' }}>
-                  Revenue {currency(row.revenue_official_cached)} · Sobriety {formatSobrietyAge(row.sobriety_date)}
-                </p>
-                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#334155' }}>
-                  Invite: <strong>{row.recommended_destination}</strong>
-                </p>
-                <div style={{ marginTop: '6px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  <a href={row.hubspot_url} target="_blank" rel="noreferrer" style={{ fontSize: '10px', color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>Open HubSpot</a>
-                  <button
-                    type="button"
-                    onClick={() => setActiveDrilldownKey('great_lead_outreach_queue')}
-                    style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#334155', borderRadius: '999px', padding: '3px 8px', fontSize: '10px', fontWeight: 700, cursor: 'pointer' }}
-                  >
-                    View Drilldown
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => copyText(row.suggested_plain_text_email)}
-                    style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#334155', borderRadius: '999px', padding: '3px 8px', fontSize: '10px', fontWeight: 700, cursor: 'pointer' }}
-                  >
-                    Copy Email
-                  </button>
-                </div>
-              </div>
-            ))}
-            {greatLeadOutreachQueue.length === 0 && <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#94a3b8' }}>No great-lead outreach rows in this snapshot.</p>}
-          </div>
-        </div>
-
-        <div style={subCard}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <div>
-              <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Strong Members Outside ICP</p>
-              <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
-                Great members worth retention even if they fail current ICP math
-              </p>
+              ))}
+              {nudgeCandidates.length === 0 && <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#94a3b8' }}>No current candidates in this snapshot.</p>}
             </div>
-            <button
-              type="button"
-              onClick={() => setActiveDrilldownKey('strong_non_icp_members')}
-              style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#0f172a', borderRadius: '999px', padding: '5px 9px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
-            >
-              {int(strongNonIcpMembers.length)} rows
-            </button>
           </div>
-          <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {strongNonIcpMembers.slice(0, 5).map((row) => (
-              <div
-                key={`nonicp-${row.hubspot_contact_id}`}
-                style={{ textAlign: 'left', border: '1px solid #e2e8f0', backgroundColor: '#fff', borderRadius: '10px', padding: '8px' }}
+
+          <div style={subCard}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <div>
+                <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Great Lead Outreach Queue</p>
+                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
+                  Extra manual outreach for great leads before they stall in the automatic funnel
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveDrilldownKey('great_lead_outreach_queue')}
+                style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#0f172a', borderRadius: '999px', padding: '5px 9px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
-                  <a href={row.hubspot_url} target="_blank" rel="noreferrer" style={{ fontSize: '12px', fontWeight: 700, color: '#2563eb', textDecoration: 'none' }}>
-                    {row.display_name}
-                  </a>
-                  <span style={{ fontSize: '10px', fontWeight: 700, color: '#334155', backgroundColor: '#f8fafc', borderRadius: '999px', padding: '3px 7px' }}>
-                    {int(row.total_showups)} shows
-                  </span>
+                {int(greatLeadOutreachQueue.length)} rows
+              </button>
+            </div>
+            <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {greatLeadOutreachQueue.slice(0, 4).map((row) => (
+                <div key={`outreach-${row.hubspot_contact_id}`} style={{ border: '1px solid #e2e8f0', backgroundColor: '#fff', borderRadius: '10px', padding: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <a
+                      href={row.hubspot_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontSize: '12px', fontWeight: 700, color: '#2563eb', textAlign: 'left', textDecoration: 'none' }}
+                    >
+                      {row.display_name}
+                    </a>
+                    <span style={{
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      color: row.outreach_priority === 'High' ? '#991b1b' : row.outreach_priority === 'Medium' ? '#92400e' : '#334155',
+                      backgroundColor: row.outreach_priority === 'High' ? '#fee2e2' : row.outreach_priority === 'Medium' ? '#fef3c7' : '#f1f5f9',
+                      borderRadius: '999px',
+                      padding: '3px 7px',
+                    }}>
+                      {row.outreach_priority}
+                    </span>
+                  </div>
+                  <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>
+                    {row.outreach_reason}
+                  </p>
+                  <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#334155' }}>
+                    Revenue {currency(row.revenue_official_cached)} · Sobriety {formatSobrietyAge(row.sobriety_date)}
+                  </p>
+                  <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#334155' }}>
+                    Invite: <strong>{row.recommended_destination}</strong>
+                  </p>
+                  <div style={{ marginTop: '6px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    <a href={row.hubspot_url} target="_blank" rel="noreferrer" style={{ fontSize: '10px', color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>Open HubSpot</a>
+                    <button
+                      type="button"
+                      onClick={() => setActiveDrilldownKey('great_lead_outreach_queue')}
+                      style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#334155', borderRadius: '999px', padding: '3px 8px', fontSize: '10px', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      View Drilldown
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => copyText(row.suggested_plain_text_email)}
+                      style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#334155', borderRadius: '999px', padding: '3px 8px', fontSize: '10px', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      Copy Email
+                    </button>
+                  </div>
                 </div>
-                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>
-                  {row.icp_gap_reason || 'Outside ICP (current model)'}{row.primary_attendance_group ? ` · ${row.primary_attendance_group}` : ''}
+              ))}
+              {greatLeadOutreachQueue.length === 0 && <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#94a3b8' }}>No great-lead outreach rows in this snapshot.</p>}
+            </div>
+          </div>
+
+          <div style={subCard}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <div>
+                <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Strong Members Outside ICP</p>
+                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
+                  Great members worth retention even if they fail current ICP math
                 </p>
-                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#334155' }}>
-                  Missed in a row: <strong>{int(row.missed_primary_group_sessions_since_last_showup)}</strong>
-                  {row.primary_attendance_group ? ` (${row.primary_attendance_group})` : ''}
-                </p>
-                <p style={{ margin: '4px 0 0', fontSize: '11px', color: row.nudge_recommended_now ? '#b45309' : '#64748b', fontWeight: row.nudge_recommended_now ? 700 : 500 }}>
-                  {row.nudge_reason || 'No nudge signal yet'}
-                </p>
-                <div style={{ marginTop: '6px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  <a href={row.hubspot_url} target="_blank" rel="noreferrer" style={{ fontSize: '10px', color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>
-                    Open HubSpot
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => setActiveDrilldownKey('strong_non_icp_members')}
-                    style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#334155', borderRadius: '999px', padding: '3px 8px', fontSize: '10px', fontWeight: 700, cursor: 'pointer' }}
-                  >
-                    View Drilldown
-                  </button>
-                </div>
               </div>
-            ))}
-            {strongNonIcpMembers.length === 0 && <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#94a3b8' }}>No rows in this snapshot.</p>}
+              <button
+                type="button"
+                onClick={() => setActiveDrilldownKey('strong_non_icp_members')}
+                style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#0f172a', borderRadius: '999px', padding: '5px 9px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+              >
+                {int(strongNonIcpMembers.length)} rows
+              </button>
+            </div>
+            <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {strongNonIcpMembers.slice(0, 5).map((row) => (
+                <div
+                  key={`nonicp-${row.hubspot_contact_id}`}
+                  style={{ textAlign: 'left', border: '1px solid #e2e8f0', backgroundColor: '#fff', borderRadius: '10px', padding: '8px' }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+                    <a href={row.hubspot_url} target="_blank" rel="noreferrer" style={{ fontSize: '12px', fontWeight: 700, color: '#2563eb', textDecoration: 'none' }}>
+                      {row.display_name}
+                    </a>
+                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#334155', backgroundColor: '#f8fafc', borderRadius: '999px', padding: '3px 7px' }}>
+                      {int(row.total_showups)} shows
+                    </span>
+                  </div>
+                  <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>
+                    {row.icp_gap_reason || 'Outside ICP (current model)'}{row.primary_attendance_group ? ` · ${row.primary_attendance_group}` : ''}
+                  </p>
+                  <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#334155' }}>
+                    Missed in a row: <strong>{int(row.missed_primary_group_sessions_since_last_showup)}</strong>
+                    {row.primary_attendance_group ? ` (${row.primary_attendance_group})` : ''}
+                  </p>
+                  <p style={{ margin: '4px 0 0', fontSize: '11px', color: row.nudge_recommended_now ? '#b45309' : '#64748b', fontWeight: row.nudge_recommended_now ? 700 : 500 }}>
+                    {row.nudge_reason || 'No nudge signal yet'}
+                  </p>
+                  <div style={{ marginTop: '6px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    <a href={row.hubspot_url} target="_blank" rel="noreferrer" style={{ fontSize: '10px', color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>
+                      Open HubSpot
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => setActiveDrilldownKey('strong_non_icp_members')}
+                      style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#334155', borderRadius: '999px', padding: '3px 8px', fontSize: '10px', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      View Drilldown
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {strongNonIcpMembers.length === 0 && <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#94a3b8' }}>No rows in this snapshot.</p>}
+            </div>
           </div>
         </div>
-      </div>
       )}
 
       {sectionOpen.qa && (
-      <div style={{ ...subCard, marginBottom: '14px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
-          <div>
-            <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Weekly Accuracy Check-In</p>
-            <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
-              Run this review weekly ({weeklyCheckin.recommended_day || 'Monday'}) before making spend decisions or removing legacy metrics.
-            </p>
+        <div style={{ ...subCard, marginBottom: '14px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+            <div>
+              <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Weekly Accuracy Check-In</p>
+              <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
+                Run this review weekly ({weeklyCheckin.recommended_day || 'Monday'}) before making spend decisions or removing legacy metrics.
+              </p>
+            </div>
+            <span style={{ padding: '4px 8px', borderRadius: '999px', backgroundColor: '#eef2ff', color: '#3730a3', fontSize: '10px', fontWeight: 700 }}>
+              Snapshot QA
+            </span>
           </div>
-          <span style={{ padding: '4px 8px', borderRadius: '999px', backgroundColor: '#eef2ff', color: '#3730a3', fontSize: '10px', fontWeight: 700 }}>
-            Snapshot QA
-          </span>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '8px' }}>
-          {(weeklyCheckin.checks || []).map((check) => {
-            const badge = statusBadge(check.status);
-            const valueLabel = check.format === 'percent' ? pct(check.value) : int(check.value);
-            const canDrill = !!check.drilldown_key && (drilldowns?.[check.drilldown_key] || []).length > 0;
-            return (
-              <div key={check.key} style={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
-                <div style={{ minWidth: 0 }}>
-                  <p style={{ margin: 0, fontSize: '11px', color: '#334155', lineHeight: 1.35 }}>{check.label}</p>
-                  <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                    <span style={{ padding: '3px 7px', borderRadius: '999px', backgroundColor: badge.bg, color: badge.color, fontSize: '10px', fontWeight: 700 }}>{badge.label}</span>
-                    {canDrill ? (
-                      <button
-                        type="button"
-                        onClick={() => setActiveDrilldownKey(check.drilldown_key)}
-                        style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#0f172a', borderRadius: '999px', padding: '3px 8px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
-                      >
-                        {valueLabel} (view rows)
-                      </button>
-                    ) : (
-                      <span style={{ padding: '3px 8px', borderRadius: '999px', backgroundColor: '#f8fafc', color: '#334155', fontSize: '11px', fontWeight: 700 }}>{valueLabel}</span>
-                    )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '8px' }}>
+            {(weeklyCheckin.checks || []).map((check) => {
+              const badge = statusBadge(check.status);
+              const valueLabel = check.format === 'percent' ? pct(check.value) : int(check.value);
+              const canDrill = !!check.drilldown_key && (drilldowns?.[check.drilldown_key] || []).length > 0;
+              return (
+                <div key={check.key} style={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ margin: 0, fontSize: '11px', color: '#334155', lineHeight: 1.35 }}>{check.label}</p>
+                    <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      <span style={{ padding: '3px 7px', borderRadius: '999px', backgroundColor: badge.bg, color: badge.color, fontSize: '10px', fontWeight: 700 }}>{badge.label}</span>
+                      {canDrill ? (
+                        <button
+                          type="button"
+                          onClick={() => setActiveDrilldownKey(check.drilldown_key)}
+                          style={{ border: '1px solid #cbd5e1', backgroundColor: '#fff', color: '#0f172a', borderRadius: '999px', padding: '3px 8px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                        >
+                          {valueLabel} (view rows)
+                        </button>
+                      ) : (
+                        <span style={{ padding: '3px 8px', borderRadius: '999px', backgroundColor: '#f8fafc', color: '#334155', fontSize: '11px', fontWeight: 700 }}>{valueLabel}</span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      </div>
       )}
 
       {sectionOpen.metrics && (
-      <>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '10px', marginBottom: '14px' }}>
-        {metrics.map((metric) => (
-          <MetricPreviewCard key={metric.key} metric={metric} lagStat={lagStats[metric.key]} />
-        ))}
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '12px', marginBottom: '14px' }}>
-        <div style={{ ...subCard, overflowX: 'auto' }}>
-          <p style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Metric Detail Table (Preview Snapshot)</p>
-          <table style={{ width: '100%', minWidth: '760px', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#fff' }}>
-                {['Metric', 'Finalized CPA', 'Projected CPA', 'Finalized Conv', 'Finalized Spend', 'Finalized Rate', 'Horizon'].map((h) => (
-                  <th key={h} style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#475569', textTransform: 'uppercase' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {metrics.map((m) => (
-                <tr key={m.key}>
-                  <td style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#0f172a', fontWeight: 600 }}>{m.label}</td>
-                  <td style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px' }}>{currency(m?.finalized?.cpa)}</td>
-                  <td style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px' }}>{currency(m?.projected?.projected_cpa)}</td>
-                  <td style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px' }}>{int(m?.finalized?.conversions)}</td>
-                  <td style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px' }}>{currency(m?.finalized?.spend)}</td>
-                  <td style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px' }}>{pct(m?.finalized?.conversion_rate)}</td>
-                  <td style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px' }}>
-                    {Number.isFinite(Number(m?.finalized_horizon_days)) ? `${int(m.finalized_horizon_days)}d` : '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <div style={subCard}>
-            <p style={{ margin: '0 0 6px', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Methodology Notes</p>
-            <p style={{ margin: 0, fontSize: '11px', color: '#475569', lineHeight: 1.5 }}>{data.methodology?.cohort_unit}</p>
-            <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#475569', lineHeight: 1.5 }}>{data.methodology?.spend_source}</p>
-            <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#475569', lineHeight: 1.5 }}>{data.methodology?.quality_definition}</p>
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '10px', marginBottom: '14px' }}>
+            {metrics.map((metric) => (
+              <MetricPreviewCard key={metric.key} metric={metric} lagStat={lagStats[metric.key]} />
+            ))}
           </div>
 
-          {backfill && (
-            <div style={subCard}>
-              <p style={{ margin: '0 0 6px', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Manual Spend Backfill Used</p>
-              <p style={{ margin: 0, fontSize: '11px', color: '#475569' }}>
-                Week-end rows: {int(backfill.week_end_columns)} · Known: {int(backfill.known_spend_rows)} · Unknown blanks: {int(backfill.unknown_spend_rows)}
-              </p>
-              <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#475569' }}>
-                Added spend: {currency(backfill.allocated_spend_total)} (including transition overlap)
-              </p>
-              <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#64748b', lineHeight: 1.5 }}>
-                {backfill.assumption}
-              </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '12px', marginBottom: '14px' }}>
+            <div style={{ ...subCard, overflowX: 'auto' }}>
+              <p style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Metric Detail Table (Preview Snapshot)</p>
+              <table style={{ width: '100%', minWidth: '760px', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#fff' }}>
+                    {['Metric', 'Finalized CPA', 'Projected CPA', 'Finalized Conv', 'Finalized Spend', 'Finalized Rate', 'Horizon'].map((h) => (
+                      <th key={h} style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#475569', textTransform: 'uppercase' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {metrics.map((m) => (
+                    <tr key={m.key}>
+                      <td style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#0f172a', fontWeight: 600 }}>{m.label}</td>
+                      <td style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px' }}>{currency(m?.finalized?.cpa)}</td>
+                      <td style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px' }}>{currency(m?.projected?.projected_cpa)}</td>
+                      <td style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px' }}>{int(m?.finalized?.conversions)}</td>
+                      <td style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px' }}>{currency(m?.finalized?.spend)}</td>
+                      <td style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px' }}>{pct(m?.finalized?.conversion_rate)}</td>
+                      <td style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px' }}>
+                        {Number.isFinite(Number(m?.finalized_horizon_days)) ? `${int(m.finalized_horizon_days)}d` : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          )}
 
-          {naive && (
-            <div style={subCard}>
-              <p style={{ margin: '0 0 6px', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Naive 90-Day Period Math (Reference)</p>
-              <p style={{ margin: 0, fontSize: '11px', color: '#475569' }}>
-                Window {naive.window_start} to {naive.window_end}
-              </p>
-              <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>Spend: {currency(naive.spend)}</p>
-              <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>
-                First Show-Up CPA: {currency(naive?.cpa?.first_showup)} · Great Member CPA: {currency(naive?.cpa?.great_member)}
-              </p>
-              <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#64748b' }}>
-                Included for comparison only. Cohort lag-aware metrics above are the decision path.
-              </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={subCard}>
+                <p style={{ margin: '0 0 6px', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Methodology Notes</p>
+                <p style={{ margin: 0, fontSize: '11px', color: '#475569', lineHeight: 1.5 }}>{data.methodology?.cohort_unit}</p>
+                <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#475569', lineHeight: 1.5 }}>{data.methodology?.spend_source}</p>
+                <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#475569', lineHeight: 1.5 }}>{data.methodology?.quality_definition}</p>
+              </div>
+
+              {backfill && (
+                <div style={subCard}>
+                  <p style={{ margin: '0 0 6px', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Manual Spend Backfill Used</p>
+                  <p style={{ margin: 0, fontSize: '11px', color: '#475569' }}>
+                    Week-end rows: {int(backfill.week_end_columns)} · Known: {int(backfill.known_spend_rows)} · Unknown blanks: {int(backfill.unknown_spend_rows)}
+                  </p>
+                  <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#475569' }}>
+                    Added spend: {currency(backfill.allocated_spend_total)} (including transition overlap)
+                  </p>
+                  <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#64748b', lineHeight: 1.5 }}>
+                    {backfill.assumption}
+                  </p>
+                </div>
+              )}
+
+              {naive && (
+                <div style={subCard}>
+                  <p style={{ margin: '0 0 6px', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Naive 90-Day Period Math (Reference)</p>
+                  <p style={{ margin: 0, fontSize: '11px', color: '#475569' }}>
+                    Window {naive.window_start} to {naive.window_end}
+                  </p>
+                  <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>Spend: {currency(naive.spend)}</p>
+                  <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>
+                    First Show-Up CPA: {currency(naive?.cpa?.first_showup)} · Great Member CPA: {currency(naive?.cpa?.great_member)}
+                  </p>
+                  <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#64748b' }}>
+                    Included for comparison only. Cohort lag-aware metrics above are the decision path.
+                  </p>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </div>
-      </>
+          </div>
+        </>
       )}
 
       {activeDrilldown && (
-        <div style={{ ...subCard, marginTop: '2px' }}>
+        <div ref={drilldownRef} style={{ ...subCard, marginTop: '2px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '8px' }}>
             <div>
               <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>{activeDrilldown.title}</p>
@@ -2576,6 +2789,18 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
               Close Drilldown
             </button>
           </div>
+          {activeDrilldown.key === 'free_events_net_new_showups' && (
+            <div style={{ marginBottom: '8px', border: '1px solid #fde68a', backgroundColor: '#fffbeb', borderRadius: '10px', padding: '8px 10px' }}>
+              <p style={{ margin: 0, fontSize: '11px', color: '#92400e', lineHeight: 1.35 }}>
+                This drilldown is converter-only and cohort-scoped: it lists paid Meta free-funnel contacts whose first group show-up occurred for the displayed trailing cohort-week window. It will not match the attendance bar chart&apos;s all-source "new attendee" totals.
+              </p>
+              {freeEventsWindowCurrentParsed?.inclusiveEndKey && (
+                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#92400e', lineHeight: 1.35 }}>
+                  Displayed cohort window runs through {freeEventsWindowCurrentParsed.inclusiveEndKey} (inclusive).
+                </p>
+              )}
+            </div>
+          )}
           <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', overflowX: 'auto', backgroundColor: '#fff' }}>
             <table style={{ width: '100%', minWidth: '960px', borderCollapse: 'collapse' }}>
               <thead>

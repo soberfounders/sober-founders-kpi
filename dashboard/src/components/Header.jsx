@@ -48,53 +48,29 @@ const Header = ({ activeTab }) => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button 
             onClick={async () => {
-              const [genericSync, zoomSync, lumaSync, gaSync, gscSync] = await Promise.allSettled([
-                supabase.functions.invoke('sync-metrics', {
-                  method: 'GET',
-                  queryString: { trigger_refresh: 'true' }
-                }),
-                supabase.functions.invoke('sync_zoom_attendance', { method: 'POST' }),
-                supabase.functions.invoke('sync_luma_registrations', { method: 'POST' }),
-                supabase.functions.invoke('sync_google_analytics', { method: 'POST' }),
-                supabase.functions.invoke('sync_search_console', { method: 'POST' })
-              ]);
+              const { data, error } = await supabase.functions.invoke('master-sync', {
+                method: 'GET',
+                queryString: { trigger_refresh: 'true' }
+              });
 
-              const errors = [];
-
-              if (genericSync.status === 'fulfilled' && genericSync.value.error) {
-                errors.push(`General sync: ${genericSync.value.error.message}`);
-              } else if (genericSync.status === 'rejected') {
-                errors.push(`General sync: ${genericSync.reason?.message || 'failed'}`);
+              if (error) {
+                alert(`Data refresh failed: ${error.message || 'Unknown error'}`);
+                return;
               }
 
-              if (zoomSync.status === 'fulfilled' && zoomSync.value.error) {
-                errors.push(`Zoom attendance: ${zoomSync.value.error.message}`);
-              } else if (zoomSync.status === 'rejected') {
-                errors.push(`Zoom attendance: ${zoomSync.reason?.message || 'failed'}`);
-              }
+              const failures = Array.isArray(data?.results)
+                ? data.results.filter((row) => row?.status !== 'success')
+                : [];
 
-              if (lumaSync.status === 'fulfilled' && lumaSync.value.error) {
-                errors.push(`Lu.ma registrations: ${lumaSync.value.error.message}`);
-              } else if (lumaSync.status === 'rejected') {
-                errors.push(`Lu.ma registrations: ${lumaSync.reason?.message || 'failed'}`);
-              }
-
-              if (gaSync.status === 'fulfilled' && gaSync.value.error) {
-                errors.push(`Google Analytics: ${gaSync.value.error.message}`);
-              } else if (gaSync.status === 'rejected') {
-                errors.push(`Google Analytics: ${gaSync.reason?.message || 'failed'}`);
-              }
-
-              if (gscSync.status === 'fulfilled' && gscSync.value.error) {
-                errors.push(`Search Console: ${gscSync.value.error.message}`);
-              } else if (gscSync.status === 'rejected') {
-                errors.push(`Search Console: ${gscSync.reason?.message || 'failed'}`);
-              }
-
-              if (errors.length > 0) {
-                alert('Refresh completed with issues:\n' + errors.join('\n'));
+              if (failures.length > 0) {
+                alert(
+                  'Refresh completed with issues:\n' +
+                  failures
+                    .map((row) => `${row.source || row.function || 'sync'}: ${row.error || 'failed'}`)
+                    .join('\n')
+                );
               } else {
-                alert('Data refresh completed, including Zoom, Lu.ma registrations, Google Analytics, and Search Console.');
+                alert('Data refresh completed, including HubSpot call attendance sync, leads, Lu.ma, Meta, Google Analytics, and Search Console.');
               }
             }}
             style={{
