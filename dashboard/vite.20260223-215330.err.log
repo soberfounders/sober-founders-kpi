@@ -59,3 +59,4 @@
       at JSXParserMixin.parseFunctionBodyAndFinish (C:\Dev\KPI Dashboard\dashboard\node_modules\@babel\parser\lib\index.js:12086:10)
       at C:\Dev\KPI Dashboard\dashboard\node_modules\@babel\parser\lib\index.js:13445:12
       at JSXParserMixin.withSmartMixTopicForbiddingContext (C:\Dev\KPI Dashboard\dashboard\node_modules\@babel\parser\lib\index.js:12403:14)
+^C

@@ -29,6 +29,7 @@ async function hubspotSearchContactsCreatedBetween(
   const url = "https://api.hubapi.com/crm/v3/objects/contacts/search";
 
   // IMPORTANT: these are the properties we will store into raw_hubspot_contacts
+  // Official revenue field in this HubSpot portal is `annual_revenue_in_dollars__official_`.
   const properties = [
     "createdate",
     "email",
@@ -36,7 +37,6 @@ async function hubspotSearchContactsCreatedBetween(
     "lastname",
 
     // Revenue + membership (your custom fields)
-    "annual_revenue_in_usd_official",
     "annual_revenue_in_dollars__official_",
     "annual_revenue_in_dollars",
     "sobriety_date",
@@ -127,8 +127,9 @@ async function pgRpcUpsertHubspotContacts(
     const p = r.properties ?? {};
 
     const annualRevenueOfficialRaw =
-      p.annual_revenue_in_usd_official ??
       p.annual_revenue_in_dollars__official_ ??
+      // Legacy alias fallback if older cached exports used a different key.
+      p.annual_revenue_in_usd_official ??
       null;
 
     const annualRevenueRaw =

@@ -83,6 +83,13 @@ serve(async (req: Request) => {
   try {
     const supabaseUrl = mustGetEnv("SUPABASE_URL");
     const serviceRoleKey = mustGetEnv("SUPABASE_SERVICE_ROLE_KEY");
+    // Child edge sync functions can be invoked with the dashboard anon key or a custom override.
+    // In this project runtime, built-in SUPABASE_* keys may be stale for edge-gateway auth (401),
+    // so allow a custom secret override that can be rotated independently.
+    const edgeInvokeKey =
+      Deno.env.get("MASTER_SYNC_EDGE_INVOKE_KEY") ||
+      Deno.env.get("SUPABASE_ANON_KEY") ||
+      serviceRoleKey;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     const url = new URL(req.url);
@@ -142,9 +149,9 @@ serve(async (req: Request) => {
       source: string,
       fnName: string,
       options: Parameters<typeof invokeEdgeFunction>[3] = {},
-    ) => {
+      ) => {
       try {
-        const data = await invokeEdgeFunction(supabaseUrl, serviceRoleKey, fnName, options);
+        const data = await invokeEdgeFunction(supabaseUrl, edgeInvokeKey, fnName, options);
         results.push({ source, function: fnName, status: 'success', data });
         return { ok: true, data };
       } catch (e: any) {

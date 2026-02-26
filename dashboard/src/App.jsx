@@ -10,6 +10,8 @@ import AttendanceDashboard from './views/AttendanceDashboard'; // Added import
 import EmailMarketingDashboard from './views/EmailMarketingDashboard';
 import WebsiteTrafficDashboard from './views/WebsiteTrafficDashboard';
 import SEODashboard from './views/SEODashboard';
+import AIBriefingDashboard from './views/AIBriefingDashboard';
+import DonationsDashboard from './views/DonationsDashboard';
 
 function App() {
   const [activeTab, setActiveTab] = useState('Dashboard');
@@ -26,8 +28,12 @@ function App() {
         return <WebsiteTrafficDashboard />;
       case 'SEO':
         return <SEODashboard />;
+      case 'Donations':
+        return <DonationsDashboard />;
       case "To-Do's":
         return <TodosDashboard />;
+      case 'AI Manager':
+        return <AIBriefingDashboard />;
       case 'Data Integrity':
         return <DataCleaning />;
       case 'Attendance': // Added case for AttendanceDashboard

@@ -5,6 +5,7 @@ import { buildGroupedLeadsSnapshot, buildDateRangeWindows, computeChangePct } fr
 import { buildAliasMap, resolveCanonicalAttendeeName } from '../lib/attendeeCanonicalization';
 import { applyZoomAttributionOverride, getZoomAttributionOverride } from '../lib/zoomAttributionOverrides';
 import DrillDownModal from '../components/DrillDownModal';
+import SendToNotionModal from '../components/SendToNotionModal';
 import AIAnalysisCard from '../components/AIAnalysisCard';
 import KPICard from '../components/KPICard';
 import CohortUnitEconomicsPreviewPanel from '../components/CohortUnitEconomicsPreviewPanel';
@@ -389,6 +390,7 @@ function AIInsightsPanel({ supabaseUrl, supabaseKey, groupedData }) {
   const [loadingProvider, setLoadingProvider] = useState(null);
   const [adModal, setAdModal] = useState(null);
   const [error, setError] = useState(null);
+  const [notionModal, setNotionModal] = useState({ open: false, taskName: '' });
 
   const runProviderAnalysis = useCallback(async (provider) => {
     if (!groupedData) return;
@@ -518,16 +520,42 @@ function AIInsightsPanel({ supabaseUrl, supabaseKey, groupedData }) {
 
       {/* Recommended Actions */}
       {aiData && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-          <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '12px', padding: '12px' }}>
-            <p style={{ margin: '0 0 8px', fontWeight: 700, fontSize: '12px', color: '#1e40af' }}>✅ AI Can Do Autonomously</p>
-            {(aiData.autonomous_actions || []).map((a, i) => <p key={i} style={{ margin: '3px 0', fontSize: '11px', color: '#1e40af' }}>• {a}</p>)}
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '12px', padding: '12px' }}>
+              <p style={{ margin: '0 0 8px', fontWeight: 700, fontSize: '12px', color: '#1e40af' }}>✅ AI Can Do Autonomously</p>
+              {(aiData.autonomous_actions || []).map((a, i) => <p key={i} style={{ margin: '3px 0', fontSize: '11px', color: '#1e40af' }}>• {a}</p>)}
+            </div>
+            <div style={{ backgroundColor: '#fef9c3', border: '1px solid #fde047', borderRadius: '12px', padding: '12px' }}>
+              <p style={{ margin: '0 0 8px', fontWeight: 700, fontSize: '12px', color: '#854d0e' }}>👤 Requires Human</p>
+              {(aiData.human_actions || []).map((a, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', margin: '3px 0' }}>
+                  <p style={{ margin: 0, fontSize: '11px', color: '#854d0e', flex: 1 }}>• {a}</p>
+                  <button
+                    onClick={() => setNotionModal({ open: true, taskName: a })}
+                    title="Send to Notion To-Do"
+                    style={{
+                      flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: '4px',
+                      padding: '3px 8px', borderRadius: '6px', border: '1px solid #d4d4d4',
+                      backgroundColor: '#fff', color: '#0f172a', cursor: 'pointer',
+                      fontSize: '10px', fontWeight: 700, whiteSpace: 'nowrap',
+                      transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f1f5f9'; }}
+                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#fff'; }}
+                  >
+                    <span style={{ fontWeight: 800, fontSize: '11px' }}>N</span> → Notion
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
-          <div style={{ backgroundColor: '#fef9c3', border: '1px solid #fde047', borderRadius: '12px', padding: '12px' }}>
-            <p style={{ margin: '0 0 8px', fontWeight: 700, fontSize: '12px', color: '#854d0e' }}>👤 Requires Human</p>
-            {(aiData.human_actions || []).map((a, i) => <p key={i} style={{ margin: '3px 0', fontSize: '11px', color: '#854d0e' }}>• {a}</p>)}
-          </div>
-        </div>
+          <SendToNotionModal
+            isOpen={notionModal.open}
+            onClose={() => setNotionModal({ open: false, taskName: '' })}
+            defaultTaskName={notionModal.taskName}
+          />
+        </>
       )}
 
       {/* Ad copy modal */}
@@ -1377,11 +1405,11 @@ export default function LeadsDashboard() {
       const heard = String(row?.hearAboutCategory || '').trim();
       const heardBucket =
         heard === 'Meta (Facebook/Instagram)' ? { bucket: 'Paid Social (Meta)', method: 'Luma How Heard' } :
-        heard === 'Google' ? { bucket: 'Organic Search', method: 'Luma How Heard' } :
-        heard === 'Referral' ? { bucket: 'Referral', method: 'Luma How Heard' } :
-        heard === 'ChatGPT / AI' ? { bucket: 'ChatGPT / AI', method: 'Luma How Heard' } :
-        heard === 'Other' ? { bucket: 'Other', method: 'Luma How Heard' } :
-        { bucket: 'Unknown', method: 'No Luma Attribution' };
+          heard === 'Google' ? { bucket: 'Organic Search', method: 'Luma How Heard' } :
+            heard === 'Referral' ? { bucket: 'Referral', method: 'Luma How Heard' } :
+              heard === 'ChatGPT / AI' ? { bucket: 'ChatGPT / AI', method: 'Luma How Heard' } :
+                heard === 'Other' ? { bucket: 'Other', method: 'Luma How Heard' } :
+                  { bucket: 'Unknown', method: 'No Luma Attribution' };
 
       // OFFLINE on the Lu.ma-linked HubSpot contact is often just integration/record-creation path.
       // If self-reported "How heard" has a stronger signal, prefer it.
@@ -3175,128 +3203,201 @@ export default function LeadsDashboard() {
         </summary>
         <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
 
-      {/* ── TOP INSIGHTS: BEST MEMBERS (ZOOM-FIRST) ── */}
-      <div style={card}>
-        {/* Additive unified funnel module: HubSpot-first identity stitching */}
-          <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Unified Funnel (Meta to Lu.ma to Zoom)</h3>
-          <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b' }}>
-            Uses HubSpot as source of truth for contacts and attribution. Matching priority is primary email, then <code>hs_additional_emails</code>, then full name, then fuzzy name. HubSpot Call coverage is tracked separately for Zoom reliability monitoring.
-          </p>
+          {/* ── TOP INSIGHTS: BEST MEMBERS (ZOOM-FIRST) ── */}
+          <div style={card}>
+            {/* Additive unified funnel module: HubSpot-first identity stitching */}
+            <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Unified Funnel (Meta to Lu.ma to Zoom)</h3>
+            <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b' }}>
+              Uses HubSpot as source of truth for contacts and attribution. Matching priority is primary email, then <code>hs_additional_emails</code>, then full name, then fuzzy name. HubSpot Call coverage is tracked separately for Zoom reliability monitoring.
+            </p>
 
-          {!unifiedCurrent ? (
-            <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>No unified funnel data available in this window.</p>
-          ) : (
-            <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: '10px' }}>
-                {[
-                  { label: 'Meta Leads (Base)', value: fmt.int(unifiedCurrent.funnel.metaLeadCount || 0), changePct: unifiedPrevious ? computeChangePct(unifiedCurrent.funnel.metaLeadCount || 0, unifiedPrevious?.funnel?.metaLeadCount || 0).pct : null, rows: unifiedCurrent.unifiedLeadRecords },
-                  { label: 'Luma Registered', value: fmt.int(unifiedCurrent.funnel.lumaRegisteredCount || 0), changePct: unifiedPrevious ? computeChangePct(unifiedCurrent.funnel.lumaRegisteredCount || 0, unifiedPrevious?.funnel?.lumaRegisteredCount || 0).pct : null, rows: (unifiedCurrent.unifiedLeadRecords || []).filter((r) => r.luma_registered) },
-                  { label: 'Zoom Attended', value: fmt.int(unifiedCurrent.funnel.zoomAttendedCount || 0), changePct: unifiedPrevious ? computeChangePct(unifiedCurrent.funnel.zoomAttendedCount || 0, unifiedPrevious?.funnel?.zoomAttendedCount || 0).pct : null, rows: (unifiedCurrent.unifiedLeadRecords || []).filter((r) => r.zoom_attended) },
-                  { label: 'Meta -> Luma Rate', value: fmtMaybePct(unifiedCurrent.funnel.metaToLumaRate), changePct: unifiedPrevious ? computeChangePct(unifiedCurrent.funnel.metaToLumaRate || 0, unifiedPrevious?.funnel?.metaToLumaRate || 0).pct : null },
-                  { label: 'Luma -> Zoom Rate', value: fmtMaybePct(unifiedCurrent.funnel.lumaToZoomRate), changePct: unifiedPrevious ? computeChangePct(unifiedCurrent.funnel.lumaToZoomRate || 0, unifiedPrevious?.funnel?.lumaToZoomRate || 0).pct : null },
-                  { label: 'Meta -> Zoom Rate', value: fmtMaybePct(unifiedCurrent.funnel.metaToZoomRate), changePct: unifiedPrevious ? computeChangePct(unifiedCurrent.funnel.metaToZoomRate || 0, unifiedPrevious?.funnel?.metaToZoomRate || 0).pct : null },
-                  { label: 'HubSpot Call Coverage (Zoom)', value: fmtMaybePct(unifiedCurrent.hubspotCallCoverage?.rate), changePct: unifiedPrevious ? computeChangePct(unifiedCurrent.hubspotCallCoverage?.rate || 0, unifiedPrevious?.hubspotCallCoverage?.rate || 0).pct : null, rows: unifiedCurrent.stageRows.zoomRowsDetailed },
-                  { label: 'Review Queue', value: fmt.int(unifiedCurrent.stageRows.reviewQueueRows?.length || 0), rows: unifiedCurrent.stageRows.reviewQueueRows },
-                ].map((item) => (
-                  <div
-                    key={item.label}
-                    onClick={() => {
-                      if (!item.rows) return;
-                      const isBase = item.label === 'Meta Leads (Base)';
-                      const isLuma = item.label === 'Luma Registered';
-                      const isZoom = item.label === 'Zoom Attended';
-                      const isCoverage = item.label.includes('HubSpot Call Coverage');
-                      const columns = isBase ? [
-                        { key: 'hubspotContactId', label: 'HubSpot Contact ID', type: 'number' },
-                        { key: 'hubspotName', label: 'Name' },
-                        { key: 'hubspotPrimaryEmail', label: 'Primary Email' },
-                        { key: 'hubspotSecondaryEmailsText', label: 'Secondary Emails' },
-                        { key: 'hubspotCreatedDate', label: 'Meta Lead Date' },
-                        { key: 'luma_registered_label', label: 'Luma Registered?' },
-                        { key: 'zoom_attended_label', label: 'Zoom Attended?' },
-                        { key: 'lumaMatchConfidence', label: 'Luma Match Confidence' },
-                        { key: 'zoomMatchConfidence', label: 'Zoom Match Confidence' },
-                        { key: 'hubspotCallLinkedLabel', label: 'HubSpot Call Linked?' },
-                        { key: 'sourceBucket', label: 'Source Bucket' },
-                        { key: 'revenue', label: 'Revenue', type: 'currency' },
-                      ] : isLuma ? [
-                        { key: 'hubspotName', label: 'Name' },
-                        { key: 'hubspotPrimaryEmail', label: 'Primary Email' },
-                        { key: 'lumaRegistrationCount', label: 'Luma Registrations', type: 'number' },
-                        { key: 'lumaMatchConfidence', label: 'Luma Match Confidence' },
-                        { key: 'lumaMatchSource', label: 'Luma Match Source' },
-                        { key: 'lumaMatchReason', label: 'Luma Match Reason' },
-                        { key: 'zoom_attended_label', label: 'Zoom Attended?' },
-                      ] : (isZoom || isCoverage) ? [
-                        { key: isZoom ? 'hubspotName' : 'attendeeName', label: isZoom ? 'Name' : 'Zoom Attendee' },
-                        { key: isZoom ? 'hubspotPrimaryEmail' : 'matchedHubspotEmail', label: 'Email' },
-                        { key: isZoom ? 'zoomAttendanceCount' : 'date', label: isZoom ? 'Zoom Attendances' : 'Date', type: isZoom ? 'number' : undefined },
-                        { key: isZoom ? 'zoomMatchConfidence' : 'matchConfidence', label: 'Match Confidence' },
-                        { key: isZoom ? 'zoomMatchSource' : 'matchSource', label: 'Match Source' },
-                        { key: isZoom ? 'hubspotCallLinkedLabel' : 'hubspotCallLinked', label: 'HubSpot Call Linked?' },
-                        { key: isZoom ? 'hubspotCallMatchCount' : 'hubspotCallCoverageSource', label: isZoom ? 'HubSpot Call Matches' : 'Call Coverage Source', type: isZoom ? 'number' : undefined },
-                        { key: isZoom ? 'sourceBucket' : 'matchReason', label: isZoom ? 'Source Bucket' : 'Reason' },
-                        { key: isZoom ? 'revenue' : 'candidateHints', label: isZoom ? 'Revenue' : 'Candidate Hints', type: isZoom ? 'currency' : undefined },
-                      ] : [
-                        { key: 'reviewArea', label: 'Review Area' },
-                        { key: 'date', label: 'Date' },
-                        { key: 'dayType', label: 'Day' },
-                        { key: 'name', label: 'Luma Name' },
-                        { key: 'email', label: 'Email' },
-                        { key: 'attendeeName', label: 'Zoom Attendee' },
-                        { key: 'matchConfidence', label: 'Match Confidence' },
-                        { key: 'matchSource', label: 'Match Source' },
-                        { key: 'missingReason', label: 'Missing Reason' },
-                        { key: 'candidateHints', label: 'Candidate Hints' },
-                      ];
-                      openUnifiedDrilldown(`Unified Funnel - ${item.label}`, columns, item.rows, { highlightKey: isCoverage ? 'hubspotCallLinked' : undefined });
-                    }}
-                    style={{ ...subCard, cursor: item.rows ? 'pointer' : 'default', borderLeft: item.label.includes('Coverage') ? '4px solid #2563eb' : item.label.includes('Rate') ? '4px solid #16a34a' : '4px solid #0f766e' }}
-                  >
-                    <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>{item.label}</p>
-                    <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
-                      {item.value}
-                      {(item.changePct !== null && item.changePct !== undefined) && <ChangeBadge changePct={item.changePct} />}
-                    </p>
-                  </div>
-                ))}
-              </div>
+            {!unifiedCurrent ? (
+              <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>No unified funnel data available in this window.</p>
+            ) : (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: '10px' }}>
+                  {[
+                    { label: 'Meta Leads (Base)', value: fmt.int(unifiedCurrent.funnel.metaLeadCount || 0), changePct: unifiedPrevious ? computeChangePct(unifiedCurrent.funnel.metaLeadCount || 0, unifiedPrevious?.funnel?.metaLeadCount || 0).pct : null, rows: unifiedCurrent.unifiedLeadRecords },
+                    { label: 'Luma Registered', value: fmt.int(unifiedCurrent.funnel.lumaRegisteredCount || 0), changePct: unifiedPrevious ? computeChangePct(unifiedCurrent.funnel.lumaRegisteredCount || 0, unifiedPrevious?.funnel?.lumaRegisteredCount || 0).pct : null, rows: (unifiedCurrent.unifiedLeadRecords || []).filter((r) => r.luma_registered) },
+                    { label: 'Zoom Attended', value: fmt.int(unifiedCurrent.funnel.zoomAttendedCount || 0), changePct: unifiedPrevious ? computeChangePct(unifiedCurrent.funnel.zoomAttendedCount || 0, unifiedPrevious?.funnel?.zoomAttendedCount || 0).pct : null, rows: (unifiedCurrent.unifiedLeadRecords || []).filter((r) => r.zoom_attended) },
+                    { label: 'Meta -> Luma Rate', value: fmtMaybePct(unifiedCurrent.funnel.metaToLumaRate), changePct: unifiedPrevious ? computeChangePct(unifiedCurrent.funnel.metaToLumaRate || 0, unifiedPrevious?.funnel?.metaToLumaRate || 0).pct : null },
+                    { label: 'Luma -> Zoom Rate', value: fmtMaybePct(unifiedCurrent.funnel.lumaToZoomRate), changePct: unifiedPrevious ? computeChangePct(unifiedCurrent.funnel.lumaToZoomRate || 0, unifiedPrevious?.funnel?.lumaToZoomRate || 0).pct : null },
+                    { label: 'Meta -> Zoom Rate', value: fmtMaybePct(unifiedCurrent.funnel.metaToZoomRate), changePct: unifiedPrevious ? computeChangePct(unifiedCurrent.funnel.metaToZoomRate || 0, unifiedPrevious?.funnel?.metaToZoomRate || 0).pct : null },
+                    { label: 'HubSpot Call Coverage (Zoom)', value: fmtMaybePct(unifiedCurrent.hubspotCallCoverage?.rate), changePct: unifiedPrevious ? computeChangePct(unifiedCurrent.hubspotCallCoverage?.rate || 0, unifiedPrevious?.hubspotCallCoverage?.rate || 0).pct : null, rows: unifiedCurrent.stageRows.zoomRowsDetailed },
+                    { label: 'Review Queue', value: fmt.int(unifiedCurrent.stageRows.reviewQueueRows?.length || 0), rows: unifiedCurrent.stageRows.reviewQueueRows },
+                  ].map((item) => (
+                    <div
+                      key={item.label}
+                      onClick={() => {
+                        if (!item.rows) return;
+                        const isBase = item.label === 'Meta Leads (Base)';
+                        const isLuma = item.label === 'Luma Registered';
+                        const isZoom = item.label === 'Zoom Attended';
+                        const isCoverage = item.label.includes('HubSpot Call Coverage');
+                        const columns = isBase ? [
+                          { key: 'hubspotContactId', label: 'HubSpot Contact ID', type: 'number' },
+                          { key: 'hubspotName', label: 'Name' },
+                          { key: 'hubspotPrimaryEmail', label: 'Primary Email' },
+                          { key: 'hubspotSecondaryEmailsText', label: 'Secondary Emails' },
+                          { key: 'hubspotCreatedDate', label: 'Meta Lead Date' },
+                          { key: 'luma_registered_label', label: 'Luma Registered?' },
+                          { key: 'zoom_attended_label', label: 'Zoom Attended?' },
+                          { key: 'lumaMatchConfidence', label: 'Luma Match Confidence' },
+                          { key: 'zoomMatchConfidence', label: 'Zoom Match Confidence' },
+                          { key: 'hubspotCallLinkedLabel', label: 'HubSpot Call Linked?' },
+                          { key: 'sourceBucket', label: 'Source Bucket' },
+                          { key: 'revenue', label: 'Revenue', type: 'currency' },
+                        ] : isLuma ? [
+                          { key: 'hubspotName', label: 'Name' },
+                          { key: 'hubspotPrimaryEmail', label: 'Primary Email' },
+                          { key: 'lumaRegistrationCount', label: 'Luma Registrations', type: 'number' },
+                          { key: 'lumaMatchConfidence', label: 'Luma Match Confidence' },
+                          { key: 'lumaMatchSource', label: 'Luma Match Source' },
+                          { key: 'lumaMatchReason', label: 'Luma Match Reason' },
+                          { key: 'zoom_attended_label', label: 'Zoom Attended?' },
+                        ] : (isZoom || isCoverage) ? [
+                          { key: isZoom ? 'hubspotName' : 'attendeeName', label: isZoom ? 'Name' : 'Zoom Attendee' },
+                          { key: isZoom ? 'hubspotPrimaryEmail' : 'matchedHubspotEmail', label: 'Email' },
+                          { key: isZoom ? 'zoomAttendanceCount' : 'date', label: isZoom ? 'Zoom Attendances' : 'Date', type: isZoom ? 'number' : undefined },
+                          { key: isZoom ? 'zoomMatchConfidence' : 'matchConfidence', label: 'Match Confidence' },
+                          { key: isZoom ? 'zoomMatchSource' : 'matchSource', label: 'Match Source' },
+                          { key: isZoom ? 'hubspotCallLinkedLabel' : 'hubspotCallLinked', label: 'HubSpot Call Linked?' },
+                          { key: isZoom ? 'hubspotCallMatchCount' : 'hubspotCallCoverageSource', label: isZoom ? 'HubSpot Call Matches' : 'Call Coverage Source', type: isZoom ? 'number' : undefined },
+                          { key: isZoom ? 'sourceBucket' : 'matchReason', label: isZoom ? 'Source Bucket' : 'Reason' },
+                          { key: isZoom ? 'revenue' : 'candidateHints', label: isZoom ? 'Revenue' : 'Candidate Hints', type: isZoom ? 'currency' : undefined },
+                        ] : [
+                          { key: 'reviewArea', label: 'Review Area' },
+                          { key: 'date', label: 'Date' },
+                          { key: 'dayType', label: 'Day' },
+                          { key: 'name', label: 'Luma Name' },
+                          { key: 'email', label: 'Email' },
+                          { key: 'attendeeName', label: 'Zoom Attendee' },
+                          { key: 'matchConfidence', label: 'Match Confidence' },
+                          { key: 'matchSource', label: 'Match Source' },
+                          { key: 'missingReason', label: 'Missing Reason' },
+                          { key: 'candidateHints', label: 'Candidate Hints' },
+                        ];
+                        openUnifiedDrilldown(`Unified Funnel - ${item.label}`, columns, item.rows, { highlightKey: isCoverage ? 'hubspotCallLinked' : undefined });
+                      }}
+                      style={{ ...subCard, cursor: item.rows ? 'pointer' : 'default', borderLeft: item.label.includes('Coverage') ? '4px solid #2563eb' : item.label.includes('Rate') ? '4px solid #16a34a' : '4px solid #0f766e' }}
+                    >
+                      <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>{item.label}</p>
+                      <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
+                        {item.value}
+                        {(item.changePct !== null && item.changePct !== undefined) && <ChangeBadge changePct={item.changePct} />}
+                      </p>
+                    </div>
+                  ))}
+                </div>
 
-              <div style={{ marginTop: '14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                {[
-                  { key: 'luma', title: 'Lu.ma -> HubSpot Match Confidence', rows: unifiedCurrent.matchConfidenceBreakdown?.luma || [], sourceRows: unifiedCurrent.stageRows.lumaRowsDetailed || [] },
-                  { key: 'zoom', title: 'Zoom -> HubSpot Match Confidence', rows: unifiedCurrent.matchConfidenceBreakdown?.zoom || [], sourceRows: unifiedCurrent.stageRows.zoomRowsDetailed || [] },
-                ].map((section) => (
-                  <div key={section.key} style={{ ...subCard, border: '1px solid #e2e8f0' }}>
-                    <p style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>{section.title}</p>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                      <thead>
-                        <tr style={{ backgroundColor: '#f8fafc' }}>
-                          <th style={{ textAlign: 'left', padding: '6px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#475569' }}>Confidence</th>
-                          <th style={{ textAlign: 'right', padding: '6px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#475569' }}>Count</th>
-                          <th style={{ textAlign: 'right', padding: '6px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#475569' }}>Share</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {section.rows.map((row) => (
-                          <tr
-                            key={`${section.key}-${row.confidence}`}
-                            onClick={() => openUnifiedDrilldown(
-                              `Unified Funnel - ${section.title}: ${row.confidence}`,
-                              section.key === 'luma'
+                <div style={{ marginTop: '14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  {[
+                    { key: 'luma', title: 'Lu.ma -> HubSpot Match Confidence', rows: unifiedCurrent.matchConfidenceBreakdown?.luma || [], sourceRows: unifiedCurrent.stageRows.lumaRowsDetailed || [] },
+                    { key: 'zoom', title: 'Zoom -> HubSpot Match Confidence', rows: unifiedCurrent.matchConfidenceBreakdown?.zoom || [], sourceRows: unifiedCurrent.stageRows.zoomRowsDetailed || [] },
+                  ].map((section) => (
+                    <div key={section.key} style={{ ...subCard, border: '1px solid #e2e8f0' }}>
+                      <p style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>{section.title}</p>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#f8fafc' }}>
+                            <th style={{ textAlign: 'left', padding: '6px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#475569' }}>Confidence</th>
+                            <th style={{ textAlign: 'right', padding: '6px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#475569' }}>Count</th>
+                            <th style={{ textAlign: 'right', padding: '6px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#475569' }}>Share</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {section.rows.map((row) => (
+                            <tr
+                              key={`${section.key}-${row.confidence}`}
+                              onClick={() => openUnifiedDrilldown(
+                                `Unified Funnel - ${section.title}: ${row.confidence}`,
+                                section.key === 'luma'
+                                  ? [
+                                    { key: 'date', label: 'Date' },
+                                    { key: 'name', label: 'Name' },
+                                    { key: 'email', label: 'Email' },
+                                    { key: 'matchConfidence', label: 'Match Confidence' },
+                                    { key: 'matchSource', label: 'Match Source' },
+                                    { key: 'matchReason', label: 'Reason' },
+                                    { key: 'candidateHints', label: 'Candidate Hints' },
+                                    { key: 'matchedHubspotContactId', label: 'HubSpot Contact ID', type: 'number' },
+                                    { key: 'matchedHubspotName', label: 'HubSpot Name' },
+                                    { key: 'matchedHubspotEmail', label: 'HubSpot Email' },
+                                  ]
+                                  : [
+                                    { key: 'date', label: 'Date' },
+                                    { key: 'dayType', label: 'Day' },
+                                    { key: 'attendeeName', label: 'Zoom Attendee' },
+                                    { key: 'matchedHubspot', label: 'Matched HubSpot?' },
+                                    { key: 'matchedHubspotName', label: 'HubSpot Name' },
+                                    { key: 'matchedHubspotEmail', label: 'HubSpot Email' },
+                                    { key: 'matchConfidence', label: 'Match Confidence' },
+                                    { key: 'matchSource', label: 'Match Source' },
+                                    { key: 'hubspotCallLinked', label: 'HubSpot Call Linked?' },
+                                    { key: 'hubspotCallCoverageSource', label: 'Call Coverage Source' },
+                                    { key: 'matchReason', label: 'Reason' },
+                                    { key: 'candidateHints', label: 'Candidate Hints' },
+                                  ],
+                                section.sourceRows.filter((r) => (r.matchConfidence || 'unmatched') === row.confidence),
+                                { highlightKey: section.key === 'zoom' ? 'hubspotCallLinked' : undefined }
+                              )}
+                              style={{ cursor: 'pointer' }}
+                            >
+                              <td style={{ padding: '6px', borderBottom: '1px solid #f1f5f9', fontSize: '11px' }}>{row.confidence}</td>
+                              <td style={{ padding: '6px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmt.int(row.count)}</td>
+                              <td style={{ padding: '6px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>
+                                {fmtMaybePct(row.pct)}
+                                {unifiedPrevious && <ChangeBadge changePct={confidenceChangePct(section.key, row.confidence)} />}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ marginTop: '14px', border: '1px solid #e2e8f0', borderRadius: '12px', overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f8fafc' }}>
+                        <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>Issue Bucket</th>
+                        <th style={{ textAlign: 'right', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>Rows</th>
+                        <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>Why It Matters</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        ['Meta leads missing Lu.ma', unifiedCurrent.stageRows.metaNoLumaRows || [], 'Meta paid contacts with no Lu.ma registration in this window.'],
+                        ['Meta leads missing Zoom', unifiedCurrent.stageRows.metaNoZoomRows || [], 'Meta paid contacts with no Zoom attendance in this window.'],
+                        ['Lu.ma unmatched to HubSpot', unifiedCurrent.stageRows.unmatchedLumaRows || [], 'Usually duplicate/merge timing or alternate-email/name mismatch.'],
+                        ['Zoom unmatched to HubSpot', unifiedCurrent.stageRows.unmatchedZoomRows || [], 'Alias/device-name or missing call mapping problem.'],
+                        ['Lu.ma matched but not Meta lead', unifiedCurrent.stageRows.lumaMatchedNonMetaRows || [], 'Real contacts, but not in the Meta paid base for this date window.'],
+                        ['Zoom matched but not Meta lead', unifiedCurrent.stageRows.zoomMatchedNonMetaRows || [], 'Shows attendance outside the Meta paid base.'],
+                      ].map(([label, rows, note]) => (
+                        <tr
+                          key={label}
+                          onClick={() => {
+                            const lower = String(label).toLowerCase();
+                            const isMetaGap = lower.startsWith('meta leads');
+                            const isZoomBucket = lower.includes('zoom') && !isMetaGap;
+                            const columns = isMetaGap
+                              ? [
+                                { key: 'hubspotContactId', label: 'HubSpot Contact ID', type: 'number' },
+                                { key: 'hubspotName', label: 'Name' },
+                                { key: 'hubspotPrimaryEmail', label: 'Primary Email' },
+                                { key: 'hubspotSecondaryEmails', label: 'Secondary Emails' },
+                                { key: 'metaLeadDate', label: 'Meta Lead Date' },
+                                { key: 'lumaRegistered', label: 'Luma Registered?' },
+                                { key: 'lumaMatchConfidence', label: 'Luma Match Confidence' },
+                                { key: 'sourceBucket', label: 'Source Bucket' },
+                                { key: 'originalTrafficSource', label: 'Original Traffic Source' },
+                                { key: 'originalTrafficSourceDetail1', label: 'OTS Detail 1' },
+                                { key: 'originalTrafficSourceDetail2', label: 'OTS Detail 2' },
+                                { key: 'missingReason', label: 'Missing Reason' },
+                              ]
+                              : isZoomBucket
                                 ? [
-                                  { key: 'date', label: 'Date' },
-                                  { key: 'name', label: 'Name' },
-                                  { key: 'email', label: 'Email' },
-                                  { key: 'matchConfidence', label: 'Match Confidence' },
-                                  { key: 'matchSource', label: 'Match Source' },
-                                  { key: 'matchReason', label: 'Reason' },
-                                  { key: 'candidateHints', label: 'Candidate Hints' },
-                                  { key: 'matchedHubspotContactId', label: 'HubSpot Contact ID', type: 'number' },
-                                  { key: 'matchedHubspotName', label: 'HubSpot Name' },
-                                  { key: 'matchedHubspotEmail', label: 'HubSpot Email' },
-                                ]
-                                : [
                                   { key: 'date', label: 'Date' },
                                   { key: 'dayType', label: 'Day' },
                                   { key: 'attendeeName', label: 'Zoom Attendee' },
@@ -3306,1207 +3407,1134 @@ export default function LeadsDashboard() {
                                   { key: 'matchConfidence', label: 'Match Confidence' },
                                   { key: 'matchSource', label: 'Match Source' },
                                   { key: 'hubspotCallLinked', label: 'HubSpot Call Linked?' },
-                                  { key: 'hubspotCallCoverageSource', label: 'Call Coverage Source' },
-                                  { key: 'matchReason', label: 'Reason' },
+                                  { key: 'missingReason', label: 'Missing Reason' },
                                   { key: 'candidateHints', label: 'Candidate Hints' },
-                                ],
-                              section.sourceRows.filter((r) => (r.matchConfidence || 'unmatched') === row.confidence),
-                              { highlightKey: section.key === 'zoom' ? 'hubspotCallLinked' : undefined }
-                            )}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            <td style={{ padding: '6px', borderBottom: '1px solid #f1f5f9', fontSize: '11px' }}>{row.confidence}</td>
-                            <td style={{ padding: '6px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmt.int(row.count)}</td>
-                            <td style={{ padding: '6px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>
-                              {fmtMaybePct(row.pct)}
-                              {unifiedPrevious && <ChangeBadge changePct={confidenceChangePct(section.key, row.confidence)} />}
-                            </td>
+                                ]
+                                : [
+                                  { key: 'date', label: 'Date' },
+                                  { key: 'name', label: 'Name' },
+                                  { key: 'email', label: 'Email' },
+                                  { key: 'matchConfidence', label: 'Match Confidence' },
+                                  { key: 'matchSource', label: 'Match Source' },
+                                  { key: 'matchedHubspotContactId', label: 'HubSpot Contact ID', type: 'number' },
+                                  { key: 'matchedHubspotName', label: 'HubSpot Name' },
+                                  { key: 'matchedHubspotEmail', label: 'HubSpot Email' },
+                                  { key: 'missingReason', label: 'Missing Reason' },
+                                  { key: 'candidateHints', label: 'Candidate Hints' },
+                                ];
+                            openUnifiedDrilldown(`Unified Funnel - ${label}`, columns, rows);
+                          }}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', fontWeight: 600, color: '#0f172a' }}>{label}</td>
+                          <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right', color: '#334155' }}>{fmt.int(rows.length)}</td>
+                          <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#64748b' }}>{note}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p style={{ margin: '10px 0 0', fontSize: '11px', color: '#64748b' }}>
+                  HubSpot Call coverage = % of Zoom attendee rows in this window with a matching HubSpot Call record (materialized mapping if present, otherwise name/email association checks with +/-1 day tolerance).
+                </p>
+              </>
+            )}
+          </div>
+
+          {/* â”€â”€ TOP INSIGHTS: BEST MEMBERS (ZOOM-FIRST) â”€â”€ */}
+          {leadsDecisionModule && (
+            <div style={card}>
+              <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Leads Decision KPIs (Costs + Great Members)</h3>
+              <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b' }}>
+                Decision layer for paid Meta efficiency and member quality. Great member = 3+ Zoom attendances and revenue â‰¥ $250k. HubSpot Calls (Tue/Thu scheduled) are used as the primary attendance truth.
+              </p>
+
+              <div style={{ ...subCard, border: '1px solid #dbeafe', backgroundColor: '#eff6ff', marginBottom: '12px' }}>
+                <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#1d4ed8' }}>Key Findings In This Range</p>
+                {(leadsDecisionModule.similarityBullets || []).slice(0, 6).map((line, idx) => (
+                  <p key={`ldm-sim-${idx}`} style={{ margin: '4px 0 0', fontSize: '12px', color: '#1e3a8a' }}>{line}</p>
+                ))}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: '10px' }}>
+                {(leadsDecisionModule.costCards || []).map((metric) => {
+                  const changePct = (metric.previous === null || metric.previous === undefined)
+                    ? null
+                    : computeChangePct(metric.value, metric.previous).pct;
+                  return (
+                    <div key={metric.key} style={{ ...subCard, borderLeft: `4px solid ${metric.label.toLowerCase().includes('great member') ? '#1d4ed8' : '#0f766e'}` }}>
+                      <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>{metric.label}</p>
+                      <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
+                        {metric.format === 'currency' ? fmtMaybeCurrency(metric.value) : fmt.int(metric.value)}
+                        {changePct !== null && <ChangeBadge changePct={changePct} invertColor={metric.invertColor !== false} />}
+                      </p>
+                      <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#64748b' }}>{metric.note}</p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ ...subCard, border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Great Members by Source</p>
+                    <button
+                      type="button"
+                      onClick={() => setModal({
+                        title: 'Great Members (3+ Zoom + $250k+)',
+                        columns: [
+                          { key: 'greatMemberName', label: 'Name' },
+                          { key: 'greatMemberEmail', label: 'Email' },
+                          { key: 'sourceBucket', label: 'Source Bucket' },
+                          { key: 'sourceAttributionMethod', label: 'Attribution Method' },
+                          { key: 'originalTrafficSource', label: 'Original Traffic Source' },
+                          { key: 'originalTrafficSourceDetail1', label: 'OTS Detail 1' },
+                          { key: 'originalTrafficSourceDetail2', label: 'OTS Detail 2' },
+                          { key: 'inferredMetaAdset', label: 'Inferred Meta Ad Set' },
+                          { key: 'inferredMetaTopAd', label: 'Top Ad (Spend Proxy)' },
+                          { key: 'totalZoomAttendances', label: 'Attendances', type: 'number' },
+                          { key: 'revenue', label: 'Revenue', type: 'currency' },
+                          { key: 'hubspotCreatedDate', label: 'HubSpot Created Date' },
+                          { key: 'acquiredInSelectedRange', label: 'Acq In Range?' },
+                        ],
+                        rows: leadsDecisionModule.greatMembers || [],
+                      })}
+                      style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#fff', fontSize: '11px', cursor: 'pointer' }}
+                    >
+                      Open Great Members
+                    </button>
+                  </div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '560px' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#f8fafc' }}>
+                          {['Source', 'Great Members', '% Great', 'Repeat (2+)', 'Unique', 'Great Rate'].map((h) => (
+                            <th key={h} style={{ textAlign: h === 'Source' ? 'left' : 'right', padding: '6px 8px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#475569' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(leadsDecisionModule.greatMembersBySource || []).slice(0, 8).map((row) => (
+                          <tr key={`great-source-${row.label}`}>
+                            <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', fontWeight: 600, color: '#0f172a' }}>{row.label}</td>
+                            <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmt.int(row.greatMembers)}</td>
+                            <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmtMaybePct(row.share)}</td>
+                            <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmt.int(row.repeatMembers)}</td>
+                            <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmt.int(row.uniqueAttendees)}</td>
+                            <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmtMaybePct(row.goodRate)}</td>
                           </tr>
                         ))}
+                        {(leadsDecisionModule.greatMembersBySource || []).length === 0 && (
+                          <tr><td colSpan={6} style={{ padding: '8px', fontSize: '11px', color: '#64748b' }}>No great members in this range.</td></tr>
+                        )}
                       </tbody>
                     </table>
                   </div>
-                ))}
-              </div>
-
-              <div style={{ marginTop: '14px', border: '1px solid #e2e8f0', borderRadius: '12px', overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#f8fafc' }}>
-                      <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>Issue Bucket</th>
-                      <th style={{ textAlign: 'right', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>Rows</th>
-                      <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>Why It Matters</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[
-                      ['Meta leads missing Lu.ma', unifiedCurrent.stageRows.metaNoLumaRows || [], 'Meta paid contacts with no Lu.ma registration in this window.'],
-                      ['Meta leads missing Zoom', unifiedCurrent.stageRows.metaNoZoomRows || [], 'Meta paid contacts with no Zoom attendance in this window.'],
-                      ['Lu.ma unmatched to HubSpot', unifiedCurrent.stageRows.unmatchedLumaRows || [], 'Usually duplicate/merge timing or alternate-email/name mismatch.'],
-                      ['Zoom unmatched to HubSpot', unifiedCurrent.stageRows.unmatchedZoomRows || [], 'Alias/device-name or missing call mapping problem.'],
-                      ['Lu.ma matched but not Meta lead', unifiedCurrent.stageRows.lumaMatchedNonMetaRows || [], 'Real contacts, but not in the Meta paid base for this date window.'],
-                      ['Zoom matched but not Meta lead', unifiedCurrent.stageRows.zoomMatchedNonMetaRows || [], 'Shows attendance outside the Meta paid base.'],
-                    ].map(([label, rows, note]) => (
-                      <tr
-                        key={label}
-                        onClick={() => {
-                          const lower = String(label).toLowerCase();
-                          const isMetaGap = lower.startsWith('meta leads');
-                          const isZoomBucket = lower.includes('zoom') && !isMetaGap;
-                          const columns = isMetaGap
-                            ? [
-                              { key: 'hubspotContactId', label: 'HubSpot Contact ID', type: 'number' },
-                              { key: 'hubspotName', label: 'Name' },
-                              { key: 'hubspotPrimaryEmail', label: 'Primary Email' },
-                              { key: 'hubspotSecondaryEmails', label: 'Secondary Emails' },
-                              { key: 'metaLeadDate', label: 'Meta Lead Date' },
-                              { key: 'lumaRegistered', label: 'Luma Registered?' },
-                              { key: 'lumaMatchConfidence', label: 'Luma Match Confidence' },
-                              { key: 'sourceBucket', label: 'Source Bucket' },
-                              { key: 'originalTrafficSource', label: 'Original Traffic Source' },
-                              { key: 'originalTrafficSourceDetail1', label: 'OTS Detail 1' },
-                              { key: 'originalTrafficSourceDetail2', label: 'OTS Detail 2' },
-                              { key: 'missingReason', label: 'Missing Reason' },
-                            ]
-                            : isZoomBucket
-                              ? [
-                                { key: 'date', label: 'Date' },
-                                { key: 'dayType', label: 'Day' },
-                                { key: 'attendeeName', label: 'Zoom Attendee' },
-                                { key: 'matchedHubspot', label: 'Matched HubSpot?' },
-                                { key: 'matchedHubspotName', label: 'HubSpot Name' },
-                                { key: 'matchedHubspotEmail', label: 'HubSpot Email' },
-                                { key: 'matchConfidence', label: 'Match Confidence' },
-                                { key: 'matchSource', label: 'Match Source' },
-                                { key: 'hubspotCallLinked', label: 'HubSpot Call Linked?' },
-                                { key: 'missingReason', label: 'Missing Reason' },
-                                { key: 'candidateHints', label: 'Candidate Hints' },
-                              ]
-                              : [
-                                { key: 'date', label: 'Date' },
-                                { key: 'name', label: 'Name' },
-                                { key: 'email', label: 'Email' },
-                                { key: 'matchConfidence', label: 'Match Confidence' },
-                                { key: 'matchSource', label: 'Match Source' },
-                                { key: 'matchedHubspotContactId', label: 'HubSpot Contact ID', type: 'number' },
-                                { key: 'matchedHubspotName', label: 'HubSpot Name' },
-                                { key: 'matchedHubspotEmail', label: 'HubSpot Email' },
-                                { key: 'missingReason', label: 'Missing Reason' },
-                                { key: 'candidateHints', label: 'Candidate Hints' },
-                              ];
-                          openUnifiedDrilldown(`Unified Funnel - ${label}`, columns, rows);
-                        }}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', fontWeight: 600, color: '#0f172a' }}>{label}</td>
-                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right', color: '#334155' }}>{fmt.int(rows.length)}</td>
-                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#64748b' }}>{note}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p style={{ margin: '10px 0 0', fontSize: '11px', color: '#64748b' }}>
-                HubSpot Call coverage = % of Zoom attendee rows in this window with a matching HubSpot Call record (materialized mapping if present, otherwise name/email association checks with +/-1 day tolerance).
-              </p>
-            </>
-          )}
-      </div>
-
-      {/* â”€â”€ TOP INSIGHTS: BEST MEMBERS (ZOOM-FIRST) â”€â”€ */}
-      {leadsDecisionModule && (
-        <div style={card}>
-          <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Leads Decision KPIs (Costs + Great Members)</h3>
-          <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b' }}>
-            Decision layer for paid Meta efficiency and member quality. Great member = 3+ Zoom attendances and revenue â‰¥ $250k. HubSpot Calls (Tue/Thu scheduled) are used as the primary attendance truth.
-          </p>
-
-          <div style={{ ...subCard, border: '1px solid #dbeafe', backgroundColor: '#eff6ff', marginBottom: '12px' }}>
-            <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#1d4ed8' }}>Key Findings In This Range</p>
-            {(leadsDecisionModule.similarityBullets || []).slice(0, 6).map((line, idx) => (
-              <p key={`ldm-sim-${idx}`} style={{ margin: '4px 0 0', fontSize: '12px', color: '#1e3a8a' }}>{line}</p>
-            ))}
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: '10px' }}>
-            {(leadsDecisionModule.costCards || []).map((metric) => {
-              const changePct = (metric.previous === null || metric.previous === undefined)
-                ? null
-                : computeChangePct(metric.value, metric.previous).pct;
-              return (
-                <div key={metric.key} style={{ ...subCard, borderLeft: `4px solid ${metric.label.toLowerCase().includes('great member') ? '#1d4ed8' : '#0f766e'}` }}>
-                  <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>{metric.label}</p>
-                  <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
-                    {metric.format === 'currency' ? fmtMaybeCurrency(metric.value) : fmt.int(metric.value)}
-                    {changePct !== null && <ChangeBadge changePct={changePct} invertColor={metric.invertColor !== false} />}
-                  </p>
-                  <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#64748b' }}>{metric.note}</p>
                 </div>
-              );
-            })}
-          </div>
 
-          <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <div style={{ ...subCard, border: '1px solid #e2e8f0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Great Members by Source</p>
-                <button
-                  type="button"
-                  onClick={() => setModal({
-                    title: 'Great Members (3+ Zoom + $250k+)',
-                    columns: [
-                      { key: 'greatMemberName', label: 'Name' },
-                      { key: 'greatMemberEmail', label: 'Email' },
-                      { key: 'sourceBucket', label: 'Source Bucket' },
-                      { key: 'sourceAttributionMethod', label: 'Attribution Method' },
-                      { key: 'originalTrafficSource', label: 'Original Traffic Source' },
-                      { key: 'originalTrafficSourceDetail1', label: 'OTS Detail 1' },
-                      { key: 'originalTrafficSourceDetail2', label: 'OTS Detail 2' },
-                      { key: 'inferredMetaAdset', label: 'Inferred Meta Ad Set' },
-                      { key: 'inferredMetaTopAd', label: 'Top Ad (Spend Proxy)' },
-                      { key: 'totalZoomAttendances', label: 'Attendances', type: 'number' },
-                      { key: 'revenue', label: 'Revenue', type: 'currency' },
-                      { key: 'hubspotCreatedDate', label: 'HubSpot Created Date' },
-                      { key: 'acquiredInSelectedRange', label: 'Acq In Range?' },
-                    ],
-                    rows: leadsDecisionModule.greatMembers || [],
-                  })}
-                  style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#fff', fontSize: '11px', cursor: 'pointer' }}
-                >
-                  Open Great Members
-                </button>
+                <div style={{ ...subCard, border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Meta Great-Member Cohorts (HubSpot Campaign + Inferred Ad Set)</p>
+                    <button
+                      type="button"
+                      onClick={() => setModal({
+                        title: 'Meta Great-Member Attribution Cohorts',
+                        columns: [
+                          { key: 'metaCampaignRaw', label: 'HubSpot Campaign (OTS Detail 2)' },
+                          { key: 'inferredMetaAdset', label: 'Inferred Ad Set' },
+                          { key: 'inferredMetaTopAd', label: 'Top Ad (Spend Proxy)' },
+                          { key: 'greatMemberCount', label: 'Great Members', type: 'number' },
+                          { key: 'acquiredInRangeCount', label: 'Acq In Range', type: 'number' },
+                          { key: 'totalAttendances', label: 'Total Attendances', type: 'number' },
+                          { key: 'avgRevenue', label: 'Avg Revenue', type: 'currency' },
+                          { key: 'medianRevenue', label: 'Median Revenue', type: 'currency' },
+                          { key: 'campaignSpendInRange', label: 'Campaign Spend (Range)', type: 'currency' },
+                          { key: 'estCostPerGreatMemberCampaignActive', label: 'Est Cost / Great (Active)', type: 'currency' },
+                          { key: 'estCostPerGreatMemberCampaignAcqInRange', label: 'Est Cost / Great (Acq In Range)', type: 'currency' },
+                          { key: 'estCplCampaign', label: 'Campaign CPL (Range)', type: 'currency' },
+                          { key: 'greatMemberNames', label: 'Great Members' },
+                        ],
+                        rows: leadsDecisionModule.metaGreatAttributionRows || [],
+                      })}
+                      style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#fff', fontSize: '11px', cursor: 'pointer' }}
+                    >
+                      Open Full Table
+                    </button>
+                  </div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '820px' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#f8fafc' }}>
+                          {['Campaign (HubSpot)', 'Inferred Ad Set', 'Great', 'Acq In Range', 'Campaign Spend', 'Est Cost / Great (Acq)', 'Avg Rev', 'Top Ad (Proxy)'].map((h) => (
+                            <th key={h} style={{ textAlign: (h.includes('Campaign') || h.includes('Set') || h.includes('Proxy')) ? 'left' : 'right', padding: '6px 8px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#475569' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(leadsDecisionModule.metaGreatAttributionRows || []).slice(0, 10).map((row) => (
+                          <tr key={`meta-great-${row.key}`} style={{ backgroundColor: row.greatMemberCount > 1 ? '#fef2f2' : '#fff' }}>
+                            <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', fontWeight: 600, color: '#0f172a' }}>{row.metaCampaignRaw || 'Not Found'}</td>
+                            <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155' }}>{row.inferredMetaAdset || 'Not Found'}</td>
+                            <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmt.int(row.greatMemberCount)}</td>
+                            <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmt.int(row.acquiredInRangeCount)}</td>
+                            <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmtMaybeCurrency(row.campaignSpendInRange)}</td>
+                            <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmtMaybeCurrency(row.estCostPerGreatMemberCampaignAcqInRange ?? row.estCostPerGreatMemberCampaignActive)}</td>
+                            <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmtMaybeCurrency(row.avgRevenue)}</td>
+                            <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#64748b' }}>{row.inferredMetaTopAd || 'Not Found'}</td>
+                          </tr>
+                        ))}
+                        {(leadsDecisionModule.metaGreatAttributionRows || []).length === 0 && (
+                          <tr><td colSpan={8} style={{ padding: '8px', fontSize: '11px', color: '#64748b' }}>No paid Meta great-member cohorts found in this range.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p style={{ margin: '8px 0 0', fontSize: '10px', color: '#64748b' }}>
+                    Ad set/ad detail is inferred from Meta spend rows using HubSpot campaign source detail. This is directional until click-ID-level attribution is captured end-to-end.
+                  </p>
+                </div>
               </div>
+            </div>
+          )}
+
+          <div style={card}>
+            <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Best Member Source Insights (Zoom-First)</h3>
+            <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b' }}>
+              Starts from actual Zoom attendance (Tuesday + Thursday), then matches to HubSpot to identify where the best members came from.
+              Good member = 3+ Zoom attendances and revenue ≥ $250k.
+            </p>
+
+            <div
+              style={{
+                ...subCard,
+                border: `1px solid ${currentActionableMissingHubspotCallSessions.length > 0 ? '#fecaca' : '#bbf7d0'}`,
+                backgroundColor: currentActionableMissingHubspotCallSessions.length > 0 ? '#fef2f2' : '#f0fdf4',
+                marginBottom: '12px',
+              }}
+            >
+              <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Attendance Truth Source</p>
+              <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#334155' }}>
+                {zoomSourceModule.attendanceTruthMode || 'HubSpot Calls (Tue/Thu scheduled) primary'}
+              </p>
+              <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>
+                HubSpot Calls near Tuesday 12:00 ET and Thursday 11:00 ET are the source of truth for show-ups.
+                Zoom is fallback/audit only when a HubSpot Call is missing.
+              </p>
+              <p
+                style={{
+                  margin: '4px 0 0',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: currentActionableMissingHubspotCallSessions.length > 0 ? '#991b1b' : '#166534',
+                }}
+              >
+                Missing expected HubSpot Calls in selected range (actionable): {fmt.int(currentActionableMissingHubspotCallSessions.length)}
+                {' '}| HubSpot Call sessions found (Tue/Thu scheduled): {fmt.int(zoomSourceModule.current?.hubspotCallTruthSessionCount || 0)}
+                {' '}| Likely no-meeting/holiday dates: {fmt.int(currentLikelyNoMeetingHubspotCallSessions.length)}
+              </p>
+            </div>
+
+            <div style={{ ...subCard, border: '1px solid #dbeafe', backgroundColor: '#eff6ff', marginBottom: '12px' }}>
+              <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#1d4ed8' }}>AI Recommendations (Top Priority)</p>
+              <p style={{ margin: '6px 0 0', fontSize: '13px', fontWeight: 700, color: '#1e3a8a' }}>{paidDecisionInsights.headline}</p>
+              {paidDecisionInsights.bullets.slice(0, 4).map((line, idx) => (
+                <p key={`top-ai-b-${idx}`} style={{ margin: '4px 0 0', fontSize: '12px', color: '#1e3a8a' }}>• {line}</p>
+              ))}
+              {paidDecisionInsights.moves.slice(0, 4).map((line, idx) => (
+                <p key={`top-ai-m-${idx}`} style={{ margin: '4px 0 0', fontSize: '12px', color: '#166534' }}>• {line}</p>
+              ))}
+              {paidDecisionInsights.warnings.slice(0, 2).map((line, idx) => (
+                <p key={`top-ai-w-${idx}`} style={{ margin: '4px 0 0', fontSize: '12px', color: '#92400e' }}>• {line}</p>
+              ))}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: '10px' }}>
+              <div style={{ ...subCard, borderLeft: '4px solid #0f766e' }}>
+                <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Total Good Members (3+)</p>
+                <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmt.int(zoomSourceModule.current.totalGoodMembers || 0)}</p>
+              </div>
+              <div style={{ ...subCard, borderLeft: '4px solid #0f766e' }}>
+                <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Attributed Good Members</p>
+                <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmt.int(zoomSourceModule.current.attributedGoodMembers || 0)}</p>
+              </div>
+              <div style={{ ...subCard, borderLeft: '4px solid #d97706' }}>
+                <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Unknown / Other Good Members</p>
+                <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#9a3412' }}>{fmt.int(zoomSourceModule.current.unknownOrOtherGoodMembers || 0)}</p>
+              </div>
+              <div style={{ ...subCard, borderLeft: '4px solid #0f766e' }}>
+                <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Good Member Attribution Rate</p>
+                <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmtMaybePct(zoomSourceModule.current.goodMemberAttributionRate)}</p>
+              </div>
+              <div style={{ ...subCard, borderLeft: '4px solid #0f766e' }}>
+                <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Paid Meta Cost / Good Member</p>
+                <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmtMaybeCurrency(zoomSourceModule.current.paidMeta.costPerGoodRepeatMember)}</p>
+                <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#64748b' }}>Blended active-window estimate (can include older paid cohorts)</p>
+              </div>
+              <div style={{ ...subCard, borderLeft: '4px solid #1d4ed8' }}>
+                <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Paid Meta Cost / Good Member (Acq In Range)</p>
+                <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmtMaybeCurrency(zoomSourceModule.current.paidMeta.costPerGoodRepeatMemberAcquiredInRange)}</p>
+                <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#64748b' }}>
+                  Uses paid good members whose HubSpot `createdate` is inside the selected window
+                </p>
+              </div>
+              <div style={{ ...subCard, borderLeft: '4px solid #0f766e' }}>
+                <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Paid Meta Good Members</p>
+                <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmt.int(zoomSourceModule.current.paidMeta.goodRepeatMembers || 0)}</p>
+                <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#64748b' }}>
+                  Acq in range: {fmt.int(zoomSourceModule.current.paidMeta.goodRepeatMembersAcquiredInRange || 0)} | Older cohorts active: {fmt.int(zoomSourceModule.current.paidMeta.goodRepeatMembersAcquiredBeforeRange || 0)}
+                </p>
+              </div>
+              <div style={{ ...subCard, borderLeft: '4px solid #0f766e' }}>
+                <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Tuesday Meta Share (Matched)</p>
+                <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmtMaybePct(zoomSourceModule.current.tuesdayAssumptionTest.paidMetaShareOfMatchedTuesday)}</p>
+              </div>
+              <div style={{ ...subCard, borderLeft: '4px solid #0f766e' }}>
+                <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Zoom Attribution Match Rate</p>
+                <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmtMaybePct(zoomSourceModule.current.matchRate)}</p>
+              </div>
+              <div style={{ ...subCard, borderLeft: `4px solid ${currentActionableMissingHubspotCallSessions.length > 0 ? '#dc2626' : '#16a34a'}` }}>
+                <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Missing HubSpot Calls (Tue/Thu)</p>
+                <p
+                  style={{
+                    margin: '6px 0 0',
+                    fontSize: '16px',
+                    fontWeight: 800,
+                    color: currentActionableMissingHubspotCallSessions.length > 0 ? '#991b1b' : '#166534',
+                  }}
+                >
+                  {fmt.int(currentActionableMissingHubspotCallSessions.length)}
+                </p>
+                <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#64748b' }}>
+                  Manually backfill in HubSpot, then re-sync to upgrade attendance truth automatically
+                </p>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '12px', ...subCard, border: '1px solid #e2e8f0' }}>
+              <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>
+                Missing HubSpot Call Sessions (Tuesday/Thursday)
+              </p>
+              <p style={{ margin: '4px 0 8px', fontSize: '11px', color: '#64748b' }}>
+                Expected Tuesday 12:00 ET and Thursday 11:00 ET sessions with no matching HubSpot Call. Rows with no Zoom data are marked as likely no-meeting / holiday.
+              </p>
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '560px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '860px' }}>
                   <thead>
                     <tr style={{ backgroundColor: '#f8fafc' }}>
-                      {['Source', 'Great Members', '% Great', 'Repeat (2+)', 'Unique', 'Great Rate'].map((h) => (
-                        <th key={h} style={{ textAlign: h === 'Source' ? 'left' : 'right', padding: '6px 8px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#475569' }}>{h}</th>
+                      {['Date', 'Day', 'Expected Time (ET)', 'HubSpot Call Present', 'Zoom Fallback Rows', 'Zoom Fallback Attendees', 'Zoom Meeting IDs (Audit)'].map((h) => (
+                        <th
+                          key={h}
+                          style={{
+                            textAlign: (h === 'Date' || h === 'Day' || h === 'Expected Time (ET)' || h === 'Zoom Meeting IDs (Audit)') ? 'left' : 'right',
+                            padding: '6px 8px',
+                            borderBottom: '1px solid #e2e8f0',
+                            fontSize: '11px',
+                            color: '#475569',
+                          }}
+                        >
+                          {h}
+                        </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {(leadsDecisionModule.greatMembersBySource || []).slice(0, 8).map((row) => (
-                      <tr key={`great-source-${row.label}`}>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', fontWeight: 600, color: '#0f172a' }}>{row.label}</td>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmt.int(row.greatMembers)}</td>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmtMaybePct(row.share)}</td>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmt.int(row.repeatMembers)}</td>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmt.int(row.uniqueAttendees)}</td>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmtMaybePct(row.goodRate)}</td>
+                    {currentMissingHubspotCallSessions.slice(0, 25).map((row) => (
+                      <tr key={`missing-hs-call-${row.date}-${row.dayType}`} style={{ backgroundColor: row.missingCategory === 'likely_no_meeting' ? '#f8fafc' : '#fff7ed' }}>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#0f172a', fontWeight: 600 }}>{row.date}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155' }}>{row.dayType}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155' }}>{row.expectedEtTime}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: row.missingCategory === 'likely_no_meeting' ? '#64748b' : '#991b1b', fontWeight: 700, textAlign: 'right' }}>
+                          {row.missingCategory === 'likely_no_meeting' ? 'No (Likely No Meeting)' : row.hubspotCallPresent}
+                        </td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155', textAlign: 'right' }}>{fmt.int(row.zoomFallbackRowCount || 0)}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155', textAlign: 'right' }}>{fmt.int(row.zoomFallbackAttendeeCount || 0)}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#64748b' }}>{row.zoomFallbackMeetingIds || '—'}</td>
                       </tr>
                     ))}
-                    {(leadsDecisionModule.greatMembersBySource || []).length === 0 && (
-                      <tr><td colSpan={6} style={{ padding: '8px', fontSize: '11px', color: '#64748b' }}>No great members in this range.</td></tr>
+                    {currentMissingHubspotCallSessions.length === 0 && (
+                      <tr>
+                        <td colSpan={7} style={{ padding: '8px', fontSize: '11px', color: '#166534' }}>
+                          No missing Tuesday/Thursday HubSpot Call sessions in the selected range.
+                        </td>
+                      </tr>
                     )}
                   </tbody>
                 </table>
               </div>
+              {currentMissingHubspotCallSessions.length > 25 && (
+                <p style={{ margin: '8px 0 0', fontSize: '10px', color: '#64748b' }}>
+                  Showing first 25 missing sessions. Narrow the date range to inspect all.
+                </p>
+              )}
             </div>
 
-            <div style={{ ...subCard, border: '1px solid #e2e8f0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Meta Great-Member Cohorts (HubSpot Campaign + Inferred Ad Set)</p>
-                <button
-                  type="button"
-                  onClick={() => setModal({
-                    title: 'Meta Great-Member Attribution Cohorts',
-                    columns: [
-                      { key: 'metaCampaignRaw', label: 'HubSpot Campaign (OTS Detail 2)' },
-                      { key: 'inferredMetaAdset', label: 'Inferred Ad Set' },
-                      { key: 'inferredMetaTopAd', label: 'Top Ad (Spend Proxy)' },
-                      { key: 'greatMemberCount', label: 'Great Members', type: 'number' },
-                      { key: 'acquiredInRangeCount', label: 'Acq In Range', type: 'number' },
-                      { key: 'totalAttendances', label: 'Total Attendances', type: 'number' },
-                      { key: 'avgRevenue', label: 'Avg Revenue', type: 'currency' },
-                      { key: 'medianRevenue', label: 'Median Revenue', type: 'currency' },
-                      { key: 'campaignSpendInRange', label: 'Campaign Spend (Range)', type: 'currency' },
-                      { key: 'estCostPerGreatMemberCampaignActive', label: 'Est Cost / Great (Active)', type: 'currency' },
-                      { key: 'estCostPerGreatMemberCampaignAcqInRange', label: 'Est Cost / Great (Acq In Range)', type: 'currency' },
-                      { key: 'estCplCampaign', label: 'Campaign CPL (Range)', type: 'currency' },
-                      { key: 'greatMemberNames', label: 'Great Members' },
-                    ],
-                    rows: leadsDecisionModule.metaGreatAttributionRows || [],
-                  })}
-                  style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#fff', fontSize: '11px', cursor: 'pointer' }}
-                >
-                  Open Full Table
-                </button>
-              </div>
+            <div style={{ marginTop: '12px', border: '1px solid #e2e8f0', borderRadius: '12px', overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f8fafc' }}>
+                    {['How They Found Us (Source Bucket)', 'Good Members (3+)', '% of Good Members', 'Repeat Members (2+)', 'Unique Attendees', 'Good Member Rate', 'Share of Free Show-Ups'].map((h) => (
+                      <th key={h} style={{ textAlign: h === 'Source Bucket' ? 'left' : 'right', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...(zoomSourceModule.current.goodMemberSourceRows || [])]
+                    .sort((a, b) => (b.goodRepeatMembers - a.goodRepeatMembers) || (b.repeatMembers - a.repeatMembers) || (b.uniqueAttendees - a.uniqueAttendees))
+                    .slice(0, 8)
+                    .map((row) => (
+                      <tr key={`best-top-${row.bucket}`} style={{ backgroundColor: row.bucket === 'Paid Social (Meta)' ? '#fef2f2' : '#fff' }}>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', fontWeight: 600 }}>{row.bucket}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.int(row.goodRepeatMembers)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmtMaybePct(row.goodMemberShare)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.int(row.repeatMembers)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.int(row.uniqueAttendees)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmtMaybePct(row.goodRepeatRateAmongUnique)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmtMaybePct(row.showUpShare)}</td>
+                      </tr>
+                    ))}
+                  {(!zoomSourceModule.current.goodMemberSourceRows || zoomSourceModule.current.goodMemberSourceRows.length === 0) && (
+                    <tr><td colSpan={7} style={{ padding: '12px', fontSize: '12px', color: '#64748b' }}>No good members found in this range yet.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ marginTop: '12px', ...subCard, border: '1px solid #fde68a', backgroundColor: '#fffbeb' }}>
+              <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#92400e' }}>
+                Top Unmatched Repeat Attendees (Alias / Matching Cleanup Queue)
+              </p>
+              <p style={{ margin: '4px 0 8px', fontSize: '11px', color: '#92400e' }}>
+                These are repeat attendees (2+) with no HubSpot match. This is where alias cleanup will most improve attribution quality.
+              </p>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '820px' }}>
                   <thead>
-                    <tr style={{ backgroundColor: '#f8fafc' }}>
-                      {['Campaign (HubSpot)', 'Inferred Ad Set', 'Great', 'Acq In Range', 'Campaign Spend', 'Est Cost / Great (Acq)', 'Avg Rev', 'Top Ad (Proxy)'].map((h) => (
-                        <th key={h} style={{ textAlign: (h.includes('Campaign') || h.includes('Set') || h.includes('Proxy')) ? 'left' : 'right', padding: '6px 8px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#475569' }}>{h}</th>
+                    <tr style={{ backgroundColor: '#fef3c7' }}>
+                      {['Zoom Name', 'Attendances', 'Tuesday', 'Thursday', 'Match Type', 'Why Not Matched', 'Candidate Hints'].map((h) => (
+                        <th key={h} style={{ textAlign: h === 'Zoom Name' || h.includes('Why') || h.includes('Hints') ? 'left' : 'right', padding: '6px 8px', borderBottom: '1px solid #fde68a', fontSize: '11px', color: '#78350f' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {(leadsDecisionModule.metaGreatAttributionRows || []).slice(0, 10).map((row) => (
-                      <tr key={`meta-great-${row.key}`} style={{ backgroundColor: row.greatMemberCount > 1 ? '#fef2f2' : '#fff' }}>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', fontWeight: 600, color: '#0f172a' }}>{row.metaCampaignRaw || 'Not Found'}</td>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155' }}>{row.inferredMetaAdset || 'Not Found'}</td>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmt.int(row.greatMemberCount)}</td>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmt.int(row.acquiredInRangeCount)}</td>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmtMaybeCurrency(row.campaignSpendInRange)}</td>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmtMaybeCurrency(row.estCostPerGreatMemberCampaignAcqInRange ?? row.estCostPerGreatMemberCampaignActive)}</td>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', textAlign: 'right' }}>{fmtMaybeCurrency(row.avgRevenue)}</td>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#64748b' }}>{row.inferredMetaTopAd || 'Not Found'}</td>
+                    {(zoomSourceModule.current.topUnmatchedRepeatRows || []).map((r) => (
+                      <tr key={`unmatched-repeat-${r.attendeeKey}`}>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #fef3c7', fontSize: '11px', color: '#78350f', fontWeight: 600 }}>{r.attendeeName}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #fef3c7', fontSize: '11px', color: '#78350f', textAlign: 'right' }}>{fmt.int(r.totalZoomAttendances)}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #fef3c7', fontSize: '11px', color: '#78350f', textAlign: 'right' }}>{fmt.int(r.tuesdayAttendances)}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #fef3c7', fontSize: '11px', color: '#78350f', textAlign: 'right' }}>{fmt.int(r.thursdayAttendances)}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #fef3c7', fontSize: '11px', color: '#78350f', textAlign: 'right' }}>{r.matchType}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #fef3c7', fontSize: '11px', color: '#78350f' }}>{r.matchWhy || '—'}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #fef3c7', fontSize: '11px', color: '#78350f' }}>{r.matchCandidateExamples || '—'}</td>
                       </tr>
                     ))}
-                    {(leadsDecisionModule.metaGreatAttributionRows || []).length === 0 && (
-                      <tr><td colSpan={8} style={{ padding: '8px', fontSize: '11px', color: '#64748b' }}>No paid Meta great-member cohorts found in this range.</td></tr>
+                    {(!zoomSourceModule.current.topUnmatchedRepeatRows || zoomSourceModule.current.topUnmatchedRepeatRows.length === 0) && (
+                      <tr><td colSpan={7} style={{ padding: '8px', fontSize: '11px', color: '#78350f' }}>No unmatched repeat attendees in this range.</td></tr>
                     )}
                   </tbody>
                 </table>
               </div>
-              <p style={{ margin: '8px 0 0', fontSize: '10px', color: '#64748b' }}>
-                Ad set/ad detail is inferred from Meta spend rows using HubSpot campaign source detail. This is directional until click-ID-level attribution is captured end-to-end.
-              </p>
             </div>
           </div>
-        </div>
-      )}
 
-      <div style={card}>
-        <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Best Member Source Insights (Zoom-First)</h3>
-        <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b' }}>
-          Starts from actual Zoom attendance (Tuesday + Thursday), then matches to HubSpot to identify where the best members came from.
-          Good member = 3+ Zoom attendances and revenue ≥ $250k.
-        </p>
-
-        <div
-          style={{
-            ...subCard,
-            border: `1px solid ${currentActionableMissingHubspotCallSessions.length > 0 ? '#fecaca' : '#bbf7d0'}`,
-            backgroundColor: currentActionableMissingHubspotCallSessions.length > 0 ? '#fef2f2' : '#f0fdf4',
-            marginBottom: '12px',
-          }}
-        >
-          <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Attendance Truth Source</p>
-          <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#334155' }}>
-            {zoomSourceModule.attendanceTruthMode || 'HubSpot Calls (Tue/Thu scheduled) primary'}
-          </p>
-          <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>
-            HubSpot Calls near Tuesday 12:00 ET and Thursday 11:00 ET are the source of truth for show-ups.
-            Zoom is fallback/audit only when a HubSpot Call is missing.
-          </p>
-          <p
-            style={{
-              margin: '4px 0 0',
-              fontSize: '11px',
-              fontWeight: 600,
-              color: currentActionableMissingHubspotCallSessions.length > 0 ? '#991b1b' : '#166534',
-            }}
-          >
-            Missing expected HubSpot Calls in selected range (actionable): {fmt.int(currentActionableMissingHubspotCallSessions.length)}
-            {' '}| HubSpot Call sessions found (Tue/Thu scheduled): {fmt.int(zoomSourceModule.current?.hubspotCallTruthSessionCount || 0)}
-            {' '}| Likely no-meeting/holiday dates: {fmt.int(currentLikelyNoMeetingHubspotCallSessions.length)}
-          </p>
-        </div>
-
-        <div style={{ ...subCard, border: '1px solid #dbeafe', backgroundColor: '#eff6ff', marginBottom: '12px' }}>
-          <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#1d4ed8' }}>AI Recommendations (Top Priority)</p>
-          <p style={{ margin: '6px 0 0', fontSize: '13px', fontWeight: 700, color: '#1e3a8a' }}>{paidDecisionInsights.headline}</p>
-          {paidDecisionInsights.bullets.slice(0, 4).map((line, idx) => (
-            <p key={`top-ai-b-${idx}`} style={{ margin: '4px 0 0', fontSize: '12px', color: '#1e3a8a' }}>• {line}</p>
-          ))}
-          {paidDecisionInsights.moves.slice(0, 4).map((line, idx) => (
-            <p key={`top-ai-m-${idx}`} style={{ margin: '4px 0 0', fontSize: '12px', color: '#166534' }}>• {line}</p>
-          ))}
-          {paidDecisionInsights.warnings.slice(0, 2).map((line, idx) => (
-            <p key={`top-ai-w-${idx}`} style={{ margin: '4px 0 0', fontSize: '12px', color: '#92400e' }}>• {line}</p>
-          ))}
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: '10px' }}>
-          <div style={{ ...subCard, borderLeft: '4px solid #0f766e' }}>
-            <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Total Good Members (3+)</p>
-            <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmt.int(zoomSourceModule.current.totalGoodMembers || 0)}</p>
-          </div>
-          <div style={{ ...subCard, borderLeft: '4px solid #0f766e' }}>
-            <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Attributed Good Members</p>
-            <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmt.int(zoomSourceModule.current.attributedGoodMembers || 0)}</p>
-          </div>
-          <div style={{ ...subCard, borderLeft: '4px solid #d97706' }}>
-            <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Unknown / Other Good Members</p>
-            <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#9a3412' }}>{fmt.int(zoomSourceModule.current.unknownOrOtherGoodMembers || 0)}</p>
-          </div>
-          <div style={{ ...subCard, borderLeft: '4px solid #0f766e' }}>
-            <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Good Member Attribution Rate</p>
-            <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmtMaybePct(zoomSourceModule.current.goodMemberAttributionRate)}</p>
-          </div>
-          <div style={{ ...subCard, borderLeft: '4px solid #0f766e' }}>
-            <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Paid Meta Cost / Good Member</p>
-            <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmtMaybeCurrency(zoomSourceModule.current.paidMeta.costPerGoodRepeatMember)}</p>
-            <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#64748b' }}>Blended active-window estimate (can include older paid cohorts)</p>
-          </div>
-          <div style={{ ...subCard, borderLeft: '4px solid #1d4ed8' }}>
-            <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Paid Meta Cost / Good Member (Acq In Range)</p>
-            <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmtMaybeCurrency(zoomSourceModule.current.paidMeta.costPerGoodRepeatMemberAcquiredInRange)}</p>
-            <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#64748b' }}>
-              Uses paid good members whose HubSpot `createdate` is inside the selected window
+          {/* ── GROUP 1: Free Leads ── */}
+          <div style={card}>
+            <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Group 1 — Free Leads</h3>
+            <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b' }}>
+              Meta campaigns where the campaign name does NOT contain "phoenix".
+              Tuesday: <a href="https://us02web.zoom.us/j/87199667045?pwd=CBcFMntO4jdoFDU08XrtfaHfBCAfbj.1" target="_blank" rel="noreferrer" style={{ color: '#0f766e' }}>87199667045</a> &nbsp;|&nbsp;
+              Thursday: <a href="https://us02web.zoom.us/j/84242212480?pwd=e8eQwD55guBhjGNwcfLRAix14AGjnF.1" target="_blank" rel="noreferrer" style={{ color: '#0f766e' }}>84242212480</a>
             </p>
+            <GroupPanel
+              label="Free Tuesday"
+              snap={groupedData?.current?.free?.tuesday}
+              prevSnap={groupedData?.previous?.free?.tuesday}
+              onOpenModal={openModal}
+            />
+            <GroupPanel
+              label="Free Thursday"
+              snap={groupedData?.current?.free?.thursday}
+              prevSnap={groupedData?.previous?.free?.thursday}
+              onOpenModal={openModal}
+            />
+            <GroupPanel
+              label="Free Combined"
+              snap={groupedData?.current?.free?.combined}
+              prevSnap={groupedData?.previous?.free?.combined}
+              onOpenModal={openModal}
+            />
           </div>
-          <div style={{ ...subCard, borderLeft: '4px solid #0f766e' }}>
-            <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Paid Meta Good Members</p>
-            <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmt.int(zoomSourceModule.current.paidMeta.goodRepeatMembers || 0)}</p>
-            <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#64748b' }}>
-              Acq in range: {fmt.int(zoomSourceModule.current.paidMeta.goodRepeatMembersAcquiredInRange || 0)} | Older cohorts active: {fmt.int(zoomSourceModule.current.paidMeta.goodRepeatMembersAcquiredBeforeRange || 0)}
-            </p>
-          </div>
-          <div style={{ ...subCard, borderLeft: '4px solid #0f766e' }}>
-            <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Tuesday Meta Share (Matched)</p>
-            <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmtMaybePct(zoomSourceModule.current.tuesdayAssumptionTest.paidMetaShareOfMatchedTuesday)}</p>
-          </div>
-          <div style={{ ...subCard, borderLeft: '4px solid #0f766e' }}>
-            <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Zoom Attribution Match Rate</p>
-            <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmtMaybePct(zoomSourceModule.current.matchRate)}</p>
-          </div>
-          <div style={{ ...subCard, borderLeft: `4px solid ${currentActionableMissingHubspotCallSessions.length > 0 ? '#dc2626' : '#16a34a'}` }}>
-            <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Missing HubSpot Calls (Tue/Thu)</p>
-            <p
-              style={{
-                margin: '6px 0 0',
-                fontSize: '16px',
-                fontWeight: 800,
-                color: currentActionableMissingHubspotCallSessions.length > 0 ? '#991b1b' : '#166534',
-              }}
-            >
-              {fmt.int(currentActionableMissingHubspotCallSessions.length)}
-            </p>
-            <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#64748b' }}>
-              Manually backfill in HubSpot, then re-sync to upgrade attendance truth automatically
-            </p>
-          </div>
-        </div>
 
-        <div style={{ marginTop: '12px', ...subCard, border: '1px solid #e2e8f0' }}>
-          <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>
-            Missing HubSpot Call Sessions (Tuesday/Thursday)
-          </p>
-          <p style={{ margin: '4px 0 8px', fontSize: '11px', color: '#64748b' }}>
-            Expected Tuesday 12:00 ET and Thursday 11:00 ET sessions with no matching HubSpot Call. Rows with no Zoom data are marked as likely no-meeting / holiday.
-          </p>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '860px' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#f8fafc' }}>
-                  {['Date', 'Day', 'Expected Time (ET)', 'HubSpot Call Present', 'Zoom Fallback Rows', 'Zoom Fallback Attendees', 'Zoom Meeting IDs (Audit)'].map((h) => (
-                    <th
-                      key={h}
-                      style={{
-                        textAlign: (h === 'Date' || h === 'Day' || h === 'Expected Time (ET)' || h === 'Zoom Meeting IDs (Audit)') ? 'left' : 'right',
-                        padding: '6px 8px',
-                        borderBottom: '1px solid #e2e8f0',
-                        fontSize: '11px',
-                        color: '#475569',
-                      }}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {currentMissingHubspotCallSessions.slice(0, 25).map((row) => (
-                  <tr key={`missing-hs-call-${row.date}-${row.dayType}`} style={{ backgroundColor: row.missingCategory === 'likely_no_meeting' ? '#f8fafc' : '#fff7ed' }}>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#0f172a', fontWeight: 600 }}>{row.date}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155' }}>{row.dayType}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155' }}>{row.expectedEtTime}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: row.missingCategory === 'likely_no_meeting' ? '#64748b' : '#991b1b', fontWeight: 700, textAlign: 'right' }}>
-                      {row.missingCategory === 'likely_no_meeting' ? 'No (Likely No Meeting)' : row.hubspotCallPresent}
-                    </td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155', textAlign: 'right' }}>{fmt.int(row.zoomFallbackRowCount || 0)}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155', textAlign: 'right' }}>{fmt.int(row.zoomFallbackAttendeeCount || 0)}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#64748b' }}>{row.zoomFallbackMeetingIds || '—'}</td>
-                  </tr>
-                ))}
-                {currentMissingHubspotCallSessions.length === 0 && (
-                  <tr>
-                    <td colSpan={7} style={{ padding: '8px', fontSize: '11px', color: '#166534' }}>
-                      No missing Tuesday/Thursday HubSpot Call sessions in the selected range.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          {currentMissingHubspotCallSessions.length > 25 && (
-            <p style={{ margin: '8px 0 0', fontSize: '10px', color: '#64748b' }}>
-              Showing first 25 missing sessions. Narrow the date range to inspect all.
+          {/* ── HOW HEARD (LU.MA) ── */}
+          <div style={card}>
+            <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>How Leads Heard About Sober Founders</h3>
+            <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b' }}>
+              Group 1 (Free Combined) Lu.ma responses normalized into core categories.
+              Meta includes variants like ig, insta, instagram, fb, facebook, and meta.
+              If Lu.ma answer is missing, HubSpot original source is used as fallback.
             </p>
-          )}
-        </div>
 
-        <div style={{ marginTop: '12px', border: '1px solid #e2e8f0', borderRadius: '12px', overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f8fafc' }}>
-                {['How They Found Us (Source Bucket)', 'Good Members (3+)', '% of Good Members', 'Repeat Members (2+)', 'Unique Attendees', 'Good Member Rate', 'Share of Free Show-Ups'].map((h) => (
-                  <th key={h} style={{ textAlign: h === 'Source Bucket' ? 'left' : 'right', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {[...(zoomSourceModule.current.goodMemberSourceRows || [])]
-                .sort((a, b) => (b.goodRepeatMembers - a.goodRepeatMembers) || (b.repeatMembers - a.repeatMembers) || (b.uniqueAttendees - a.uniqueAttendees))
-                .slice(0, 8)
-                .map((row) => (
-                  <tr key={`best-top-${row.bucket}`} style={{ backgroundColor: row.bucket === 'Paid Social (Meta)' ? '#fef2f2' : '#fff' }}>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', fontWeight: 600 }}>{row.bucket}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.int(row.goodRepeatMembers)}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmtMaybePct(row.goodMemberShare)}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.int(row.repeatMembers)}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.int(row.uniqueAttendees)}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmtMaybePct(row.goodRepeatRateAmongUnique)}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmtMaybePct(row.showUpShare)}</td>
-                  </tr>
-                ))}
-              {(!zoomSourceModule.current.goodMemberSourceRows || zoomSourceModule.current.goodMemberSourceRows.length === 0) && (
-                <tr><td colSpan={7} style={{ padding: '12px', fontSize: '12px', color: '#64748b' }}>No good members found in this range yet.</td></tr>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: '10px' }}>
+              {hearAboutModule.summary.map((item) => {
+                const change = item.prevCount === null ? null : computeChangePct(item.count, item.prevCount).pct;
+                return (
+                  <div key={item.key} style={{ ...subCard, borderLeft: `4px solid ${item.color}` }}>
+                    <p style={{ margin: 0, fontSize: '12px', color: '#334155', fontWeight: 700 }}>{item.label}</p>
+                    <p style={{ margin: '6px 0 0', fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>{item.count.toLocaleString()}</p>
+                    <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#64748b' }}>
+                      {fmt.pct(item.pct)}
+                      {change !== null && <ChangeBadge changePct={change} />}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ marginTop: '14px', ...subCard }}>
+              <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
+                Weekly Trend (last 12 weeks in selected date range)
+              </p>
+              {hearAboutModule.trendRows.length > 0 ? (
+                <div style={{ height: '260px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={hearAboutModule.trendRows}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#64748b' }} />
+                      <Tooltip formatter={(v, n) => [Number(v || 0).toLocaleString(), n]} />
+                      <Legend />
+                      {HEAR_ABOUT_CATEGORIES.map((item) => (
+                        <Bar key={item.key} dataKey={item.key} name={item.label} fill={item.color} stackId="hearabout" />
+                      ))}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>No Lu.ma registrations in this date range.</p>
               )}
-            </tbody>
-          </table>
-        </div>
-
-        <div style={{ marginTop: '12px', ...subCard, border: '1px solid #fde68a', backgroundColor: '#fffbeb' }}>
-          <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#92400e' }}>
-            Top Unmatched Repeat Attendees (Alias / Matching Cleanup Queue)
-          </p>
-          <p style={{ margin: '4px 0 8px', fontSize: '11px', color: '#92400e' }}>
-            These are repeat attendees (2+) with no HubSpot match. This is where alias cleanup will most improve attribution quality.
-          </p>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '820px' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#fef3c7' }}>
-                  {['Zoom Name', 'Attendances', 'Tuesday', 'Thursday', 'Match Type', 'Why Not Matched', 'Candidate Hints'].map((h) => (
-                    <th key={h} style={{ textAlign: h === 'Zoom Name' || h.includes('Why') || h.includes('Hints') ? 'left' : 'right', padding: '6px 8px', borderBottom: '1px solid #fde68a', fontSize: '11px', color: '#78350f' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(zoomSourceModule.current.topUnmatchedRepeatRows || []).map((r) => (
-                  <tr key={`unmatched-repeat-${r.attendeeKey}`}>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #fef3c7', fontSize: '11px', color: '#78350f', fontWeight: 600 }}>{r.attendeeName}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #fef3c7', fontSize: '11px', color: '#78350f', textAlign: 'right' }}>{fmt.int(r.totalZoomAttendances)}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #fef3c7', fontSize: '11px', color: '#78350f', textAlign: 'right' }}>{fmt.int(r.tuesdayAttendances)}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #fef3c7', fontSize: '11px', color: '#78350f', textAlign: 'right' }}>{fmt.int(r.thursdayAttendances)}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #fef3c7', fontSize: '11px', color: '#78350f', textAlign: 'right' }}>{r.matchType}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #fef3c7', fontSize: '11px', color: '#78350f' }}>{r.matchWhy || '—'}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #fef3c7', fontSize: '11px', color: '#78350f' }}>{r.matchCandidateExamples || '—'}</td>
-                  </tr>
-                ))}
-                {(!zoomSourceModule.current.topUnmatchedRepeatRows || zoomSourceModule.current.topUnmatchedRepeatRows.length === 0) && (
-                  <tr><td colSpan={7} style={{ padding: '8px', fontSize: '11px', color: '#78350f' }}>No unmatched repeat attendees in this range.</td></tr>
-                )}
-              </tbody>
-            </table>
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* ── GROUP 1: Free Leads ── */}
-      <div style={card}>
-        <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Group 1 — Free Leads</h3>
-        <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b' }}>
-          Meta campaigns where the campaign name does NOT contain "phoenix".
-          Tuesday: <a href="https://us02web.zoom.us/j/87199667045?pwd=CBcFMntO4jdoFDU08XrtfaHfBCAfbj.1" target="_blank" rel="noreferrer" style={{ color: '#0f766e' }}>87199667045</a> &nbsp;|&nbsp;
-          Thursday: <a href="https://us02web.zoom.us/j/84242212480?pwd=e8eQwD55guBhjGNwcfLRAix14AGjnF.1" target="_blank" rel="noreferrer" style={{ color: '#0f766e' }}>84242212480</a>
-        </p>
-        <GroupPanel
-          label="Free Tuesday"
-          snap={groupedData?.current?.free?.tuesday}
-          prevSnap={groupedData?.previous?.free?.tuesday}
-          onOpenModal={openModal}
-        />
-        <GroupPanel
-          label="Free Thursday"
-          snap={groupedData?.current?.free?.thursday}
-          prevSnap={groupedData?.previous?.free?.thursday}
-          onOpenModal={openModal}
-        />
-        <GroupPanel
-          label="Free Combined"
-          snap={groupedData?.current?.free?.combined}
-          prevSnap={groupedData?.previous?.free?.combined}
-          onOpenModal={openModal}
-        />
-      </div>
+          {/* ── META ROI / SHOW-UP QUALITY ── */}
+          <div style={card}>
+            <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Meta ROI / Show-Up Quality (Free Leads)</h3>
+            <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b' }}>
+              Uses Group 1 (Free Combined) Lu.ma registrants with HubSpot original source + Lu.ma fallback attribution.
+              "Good Repeat Member" = matched Zoom attendee with 3+ matched Zooms in Lu.ma history and revenue ≥ $250k (official preferred).
+            </p>
 
-      {/* ── HOW HEARD (LU.MA) ── */}
-      <div style={card}>
-        <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>How Leads Heard About Sober Founders</h3>
-        <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b' }}>
-          Group 1 (Free Combined) Lu.ma responses normalized into core categories.
-          Meta includes variants like ig, insta, instagram, fb, facebook, and meta.
-          If Lu.ma answer is missing, HubSpot original source is used as fallback.
-        </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: '10px' }}>
+              {[
+                {
+                  label: 'Free Meta Spend',
+                  value: fmt.currency(attendanceCostModule.current.spend || 0),
+                  changePct: attendanceCostModule.previous ? computeChangePct(attendanceCostModule.current.spend || 0, attendanceCostModule.previous.spend || 0).pct : null,
+                  invertColor: true,
+                },
+                {
+                  label: 'Paid Registrations',
+                  value: fmt.int(attendanceCostModule.current.paid.registrations || 0),
+                  changePct: attendanceCostModule.previous ? computeChangePct(attendanceCostModule.current.paid.registrations || 0, attendanceCostModule.previous.paid.registrations || 0).pct : null,
+                },
+                {
+                  label: 'Paid Show-Ups',
+                  value: fmt.int(attendanceCostModule.current.paid.showUps || 0),
+                  changePct: attendanceCostModule.previous ? computeChangePct(attendanceCostModule.current.paid.showUps || 0, attendanceCostModule.previous.paid.showUps || 0).pct : null,
+                },
+                {
+                  label: 'Paid Show-Up Rate',
+                  value: fmtMaybePct(attendanceCostModule.current.paid.showUpRate),
+                  changePct: attendanceCostModule.previous ? computeChangePct(attendanceCostModule.current.paid.showUpRate || 0, attendanceCostModule.previous.paid.showUpRate || 0).pct : null,
+                },
+                {
+                  label: 'Paid Cost / Show-Up',
+                  value: fmtMaybeCurrency(attendanceCostModule.current.paid.costPerShowUp),
+                  changePct: attendanceCostModule.previous ? computeChangePct(attendanceCostModule.current.paid.costPerShowUp || 0, attendanceCostModule.previous.paid.costPerShowUp || 0).pct : null,
+                  invertColor: true,
+                },
+                {
+                  label: 'Paid Cost / Net-New Show-Up',
+                  value: fmtMaybeCurrency(attendanceCostModule.current.paid.costPerNetNewShowUp),
+                  changePct: attendanceCostModule.previous ? computeChangePct(attendanceCostModule.current.paid.costPerNetNewShowUp || 0, attendanceCostModule.previous.paid.costPerNetNewShowUp || 0).pct : null,
+                  invertColor: true,
+                },
+                {
+                  label: 'Paid Repeat Members',
+                  value: fmt.int(attendanceCostModule.current.paid.repeatMembers || 0),
+                  changePct: attendanceCostModule.previous ? computeChangePct(attendanceCostModule.current.paid.repeatMembers || 0, attendanceCostModule.previous.paid.repeatMembers || 0).pct : null,
+                },
+                {
+                  label: 'Paid Good Repeat Members',
+                  value: fmt.int(attendanceCostModule.current.paid.goodRepeatMembers || 0),
+                  changePct: attendanceCostModule.previous ? computeChangePct(attendanceCostModule.current.paid.goodRepeatMembers || 0, attendanceCostModule.previous.paid.goodRepeatMembers || 0).pct : null,
+                },
+                {
+                  label: 'Paid Cost / Good Repeat Member',
+                  value: fmtMaybeCurrency(attendanceCostModule.current.paid.costPerGoodRepeatMember),
+                  changePct: attendanceCostModule.previous ? computeChangePct(attendanceCostModule.current.paid.costPerGoodRepeatMember || 0, attendanceCostModule.previous.paid.costPerGoodRepeatMember || 0).pct : null,
+                  invertColor: true,
+                },
+              ].map((item) => (
+                <div key={item.label} style={{ ...subCard, borderLeft: item.label.includes('Cost') ? '4px solid #dc2626' : '4px solid #0f766e' }}>
+                  <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>{item.label}</p>
+                  <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
+                    {item.value}
+                    {item.changePct !== null && item.changePct !== undefined && <ChangeBadge changePct={item.changePct} invertColor={!!item.invertColor} />}
+                  </p>
+                </div>
+              ))}
+            </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: '10px' }}>
-          {hearAboutModule.summary.map((item) => {
-            const change = item.prevCount === null ? null : computeChangePct(item.count, item.prevCount).pct;
-            return (
-              <div key={item.key} style={{ ...subCard, borderLeft: `4px solid ${item.color}` }}>
-                <p style={{ margin: 0, fontSize: '12px', color: '#334155', fontWeight: 700 }}>{item.label}</p>
-                <p style={{ margin: '6px 0 0', fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>{item.count.toLocaleString()}</p>
-                <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#64748b' }}>
-                  {fmt.pct(item.pct)}
-                  {change !== null && <ChangeBadge changePct={change} />}
+            <div style={{ marginTop: '14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div style={{ ...subCard, border: '1px solid #fecaca', backgroundColor: '#fef2f2' }}>
+                <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#991b1b' }}>Paid Cohort Snapshot</p>
+                <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#7f1d1d' }}>
+                  Show-Up Rate: <strong>{fmtMaybePct(attendanceCostModule.current.paid.showUpRate)}</strong> | Cost / Show-Up: <strong>{fmtMaybeCurrency(attendanceCostModule.current.paid.costPerShowUp)}</strong> | Cost / Good Repeat: <strong>{fmtMaybeCurrency(attendanceCostModule.current.paid.costPerGoodRepeatMember)}</strong>
                 </p>
               </div>
-            );
-          })}
-        </div>
-
-        <div style={{ marginTop: '14px', ...subCard }}>
-          <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
-            Weekly Trend (last 12 weeks in selected date range)
-          </p>
-          {hearAboutModule.trendRows.length > 0 ? (
-            <div style={{ height: '260px' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={hearAboutModule.trendRows}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#64748b' }} />
-                  <Tooltip formatter={(v, n) => [Number(v || 0).toLocaleString(), n]} />
-                  <Legend />
-                  {HEAR_ABOUT_CATEGORIES.map((item) => (
-                    <Bar key={item.key} dataKey={item.key} name={item.label} fill={item.color} stackId="hearabout" />
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>No Lu.ma registrations in this date range.</p>
-          )}
-        </div>
-      </div>
-
-      {/* ── META ROI / SHOW-UP QUALITY ── */}
-      <div style={card}>
-        <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Meta ROI / Show-Up Quality (Free Leads)</h3>
-        <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b' }}>
-          Uses Group 1 (Free Combined) Lu.ma registrants with HubSpot original source + Lu.ma fallback attribution.
-          "Good Repeat Member" = matched Zoom attendee with 3+ matched Zooms in Lu.ma history and revenue ≥ $250k (official preferred).
-        </p>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: '10px' }}>
-          {[
-            {
-              label: 'Free Meta Spend',
-              value: fmt.currency(attendanceCostModule.current.spend || 0),
-              changePct: attendanceCostModule.previous ? computeChangePct(attendanceCostModule.current.spend || 0, attendanceCostModule.previous.spend || 0).pct : null,
-              invertColor: true,
-            },
-            {
-              label: 'Paid Registrations',
-              value: fmt.int(attendanceCostModule.current.paid.registrations || 0),
-              changePct: attendanceCostModule.previous ? computeChangePct(attendanceCostModule.current.paid.registrations || 0, attendanceCostModule.previous.paid.registrations || 0).pct : null,
-            },
-            {
-              label: 'Paid Show-Ups',
-              value: fmt.int(attendanceCostModule.current.paid.showUps || 0),
-              changePct: attendanceCostModule.previous ? computeChangePct(attendanceCostModule.current.paid.showUps || 0, attendanceCostModule.previous.paid.showUps || 0).pct : null,
-            },
-            {
-              label: 'Paid Show-Up Rate',
-              value: fmtMaybePct(attendanceCostModule.current.paid.showUpRate),
-              changePct: attendanceCostModule.previous ? computeChangePct(attendanceCostModule.current.paid.showUpRate || 0, attendanceCostModule.previous.paid.showUpRate || 0).pct : null,
-            },
-            {
-              label: 'Paid Cost / Show-Up',
-              value: fmtMaybeCurrency(attendanceCostModule.current.paid.costPerShowUp),
-              changePct: attendanceCostModule.previous ? computeChangePct(attendanceCostModule.current.paid.costPerShowUp || 0, attendanceCostModule.previous.paid.costPerShowUp || 0).pct : null,
-              invertColor: true,
-            },
-            {
-              label: 'Paid Cost / Net-New Show-Up',
-              value: fmtMaybeCurrency(attendanceCostModule.current.paid.costPerNetNewShowUp),
-              changePct: attendanceCostModule.previous ? computeChangePct(attendanceCostModule.current.paid.costPerNetNewShowUp || 0, attendanceCostModule.previous.paid.costPerNetNewShowUp || 0).pct : null,
-              invertColor: true,
-            },
-            {
-              label: 'Paid Repeat Members',
-              value: fmt.int(attendanceCostModule.current.paid.repeatMembers || 0),
-              changePct: attendanceCostModule.previous ? computeChangePct(attendanceCostModule.current.paid.repeatMembers || 0, attendanceCostModule.previous.paid.repeatMembers || 0).pct : null,
-            },
-            {
-              label: 'Paid Good Repeat Members',
-              value: fmt.int(attendanceCostModule.current.paid.goodRepeatMembers || 0),
-              changePct: attendanceCostModule.previous ? computeChangePct(attendanceCostModule.current.paid.goodRepeatMembers || 0, attendanceCostModule.previous.paid.goodRepeatMembers || 0).pct : null,
-            },
-            {
-              label: 'Paid Cost / Good Repeat Member',
-              value: fmtMaybeCurrency(attendanceCostModule.current.paid.costPerGoodRepeatMember),
-              changePct: attendanceCostModule.previous ? computeChangePct(attendanceCostModule.current.paid.costPerGoodRepeatMember || 0, attendanceCostModule.previous.paid.costPerGoodRepeatMember || 0).pct : null,
-              invertColor: true,
-            },
-          ].map((item) => (
-            <div key={item.label} style={{ ...subCard, borderLeft: item.label.includes('Cost') ? '4px solid #dc2626' : '4px solid #0f766e' }}>
-              <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>{item.label}</p>
-              <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
-                {item.value}
-                {item.changePct !== null && item.changePct !== undefined && <ChangeBadge changePct={item.changePct} invertColor={!!item.invertColor} />}
-              </p>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ marginTop: '14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-          <div style={{ ...subCard, border: '1px solid #fecaca', backgroundColor: '#fef2f2' }}>
-            <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#991b1b' }}>Paid Cohort Snapshot</p>
-            <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#7f1d1d' }}>
-              Show-Up Rate: <strong>{fmtMaybePct(attendanceCostModule.current.paid.showUpRate)}</strong> | Cost / Show-Up: <strong>{fmtMaybeCurrency(attendanceCostModule.current.paid.costPerShowUp)}</strong> | Cost / Good Repeat: <strong>{fmtMaybeCurrency(attendanceCostModule.current.paid.costPerGoodRepeatMember)}</strong>
-            </p>
-          </div>
-          <div style={{ ...subCard, border: '1px solid #bfdbfe', backgroundColor: '#eff6ff' }}>
-            <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#1d4ed8' }}>Non-Paid Comparator</p>
-            <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#1e3a8a' }}>
-              Registrations: <strong>{fmt.int(attendanceCostModule.current.nonPaid.registrations || 0)}</strong> | Show-Ups: <strong>{fmt.int(attendanceCostModule.current.nonPaid.showUps || 0)}</strong> | Show-Up Rate: <strong>{fmtMaybePct(attendanceCostModule.current.nonPaid.showUpRate)}</strong>
-            </p>
-          </div>
-        </div>
-
-        <div style={{ marginTop: '14px', border: '1px solid #e2e8f0', borderRadius: '12px', overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '980px' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f8fafc' }}>
-                {['Source Bucket', 'Registrations', 'Show-Ups', 'Net New Show-Ups', 'Repeat Members', 'Good Repeat Members', 'Show-Up Rate', '% of Show-Ups', 'Cost / Show-Up'].map((h) => (
-                  <th key={h} style={{ textAlign: h === 'Source Bucket' ? 'left' : 'right', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {attendanceCostModule.current.sourceRows.map((row) => {
-                const isPaid = row.bucket === 'Paid Social (Meta)';
-                return (
-                  <tr
-                    key={row.bucket}
-                    onClick={() => {
-                      const sourceDrillCols = [
-                        { key: 'name', label: 'Name' },
-                        { key: 'email', label: 'Email Address' },
-                        { key: 'showedUp', label: 'Showed Up?' },
-                        { key: 'repeatMember', label: 'Repeat Member?' },
-                        { key: 'goodRepeatMember', label: 'Good Repeat Member?' },
-                        { key: '_historyShowUps', label: 'Matched Zooms (History)', type: 'number' },
-                        { key: 'revenue', label: 'Revenue', type: 'currency' },
-                        { key: 'sobrietyDate', label: 'Sobriety Date' },
-                        { key: 'originalTrafficSource', label: 'Original Traffic Source' },
-                        { key: 'originalTrafficSourceDetail1', label: 'Original Traffic Source Detail 1' },
-                        { key: 'originalTrafficSourceDetail2', label: 'Original Traffic Source Detail 2' },
-                        { key: 'hearAboutCategory', label: 'How Heard (Category)' },
-                        { key: 'hearAbout', label: 'How Did You Hear About Sober Founders?' },
-                        { key: 'hearAboutSource', label: 'Hear About Source' },
-                        { key: 'adGroup', label: 'Facebook Ad Group' },
-                        { key: 'sourceBucket', label: 'Source Bucket' },
-                      ];
-                      setModal({
-                        title: `Free Leads — ${row.bucket} Cohort`,
-                        columns: sourceDrillCols,
-                        rows: row.rows || [],
-                        highlightKey: 'matchedZoom',
-                      });
-                    }}
-                    style={{ cursor: 'pointer', backgroundColor: isPaid ? '#fef2f2' : '#fff' }}
-                  >
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#0f172a', fontWeight: isPaid ? 700 : 600 }}>{row.bucket}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#334155', textAlign: 'right' }}>{fmt.int(row.registrations)}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#334155', textAlign: 'right' }}>{fmt.int(row.showUps)}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#334155', textAlign: 'right' }}>{fmt.int(row.netNewShowUps)}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#334155', textAlign: 'right' }}>{fmt.int(row.repeatMembers)}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#334155', textAlign: 'right' }}>{fmt.int(row.goodRepeatMembers)}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#334155', textAlign: 'right' }}>{fmtMaybePct(row.showUpRate)}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#334155', textAlign: 'right' }}>{fmtMaybePct(row.pctOfShowUps)}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: isPaid ? '#991b1b' : '#94a3b8', textAlign: 'right', fontWeight: isPaid ? 700 : 500 }}>
-                      {isPaid ? fmtMaybeCurrency(attendanceCostModule.current.paid.costPerShowUp) : 'N/A'}
-                    </td>
-                  </tr>
-                );
-              })}
-              {attendanceCostModule.current.sourceRows.length === 0 && (
-                <tr>
-                  <td colSpan={9} style={{ padding: '12px', fontSize: '12px', color: '#64748b' }}>No Lu.ma registrants available in this date range.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <p style={{ margin: '10px 0 0', fontSize: '11px', color: '#64748b' }}>
-          Click any source row to inspect the actual registrants in that cohort. Cost metrics use Group 1 Free Meta spend for the selected date range.
-        </p>
-      </div>
-
-      {/* ── ZOOM SOURCE ATTRIBUTION (TUESDAY + THURSDAY) ── */}
-      <div style={card}>
-        <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Zoom Source Attribution (Free Meetings)</h3>
-        <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b' }}>
-          Uses Zoom attendee names (Tuesday + Thursday) matched to HubSpot via canonicalized names and aliases, so Tuesday attendees are included even without Lu.ma.
-          Costs use Group 1 Free Meta spend in the selected date range. Repeat counts use loaded Zoom history ({zoomSourceModule.loadedHistoryDays} days). Good members = 3+ Zoom attendances and revenue ≥ $250k.
-        </p>
-
-        <div style={{ ...subCard, border: '1px solid #dbeafe', backgroundColor: '#eff6ff', marginBottom: '12px' }}>
-          <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#1d4ed8' }}>AI Paid Strategy Summary</p>
-          <p style={{ margin: '6px 0 0', fontSize: '13px', fontWeight: 700, color: '#1e3a8a' }}>{paidDecisionInsights.headline}</p>
-          {paidDecisionInsights.bullets.length > 0 && (
-            <div style={{ marginTop: '8px' }}>
-              {paidDecisionInsights.bullets.map((line, idx) => (
-                <p key={`ai-b-${idx}`} style={{ margin: '4px 0', fontSize: '12px', color: '#1e3a8a' }}>• {line}</p>
-              ))}
-            </div>
-          )}
-          {paidDecisionInsights.warnings.length > 0 && (
-            <div style={{ marginTop: '8px', padding: '8px', borderRadius: '8px', backgroundColor: '#fffbeb', border: '1px solid #fde68a' }}>
-              <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#92400e' }}>Data / confidence warnings</p>
-              {paidDecisionInsights.warnings.map((line, idx) => (
-                <p key={`ai-w-${idx}`} style={{ margin: '4px 0 0', fontSize: '12px', color: '#92400e' }}>• {line}</p>
-              ))}
-            </div>
-          )}
-          {paidDecisionInsights.moves.length > 0 && (
-            <div style={{ marginTop: '8px', padding: '8px', borderRadius: '8px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0' }}>
-              <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#166534' }}>Suggested business moves</p>
-              {paidDecisionInsights.moves.map((line, idx) => (
-                <p key={`ai-m-${idx}`} style={{ margin: '4px 0 0', fontSize: '12px', color: '#166534' }}>• {line}</p>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: '10px' }}>
-          {[
-            {
-              label: 'Free Zoom Show-Up Rows',
-              value: fmt.int(zoomSourceModule.current.totalShowUpRows || 0),
-              changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.totalShowUpRows || 0, zoomSourceModule.previous.totalShowUpRows || 0).pct : null,
-            },
-            {
-              label: 'Attribution Match Rate',
-              value: fmtMaybePct(zoomSourceModule.current.matchRate),
-              changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.matchRate || 0, zoomSourceModule.previous.matchRate || 0).pct : null,
-            },
-            {
-              label: 'Paid Meta Zoom Show-Ups',
-              value: fmt.int(zoomSourceModule.current.paidMeta.showUpRows || 0),
-              changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.paidMeta.showUpRows || 0, zoomSourceModule.previous.paidMeta.showUpRows || 0).pct : null,
-            },
-            {
-              label: 'Paid Meta Share of Free Show-Ups',
-              value: fmtMaybePct(zoomSourceModule.current.paidMeta.showUpShare),
-              changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.paidMeta.showUpShare || 0, zoomSourceModule.previous.paidMeta.showUpShare || 0).pct : null,
-            },
-            {
-              label: 'Paid Meta Cost / Zoom Show-Up',
-              value: fmtMaybeCurrency(zoomSourceModule.current.paidMeta.costPerShowUp),
-              changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.paidMeta.costPerShowUp || 0, zoomSourceModule.previous.paidMeta.costPerShowUp || 0).pct : null,
-              invertColor: true,
-            },
-            {
-              label: 'Paid Meta Repeat Members',
-              value: fmt.int(zoomSourceModule.current.paidMeta.repeatMembers || 0),
-              changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.paidMeta.repeatMembers || 0, zoomSourceModule.previous.paidMeta.repeatMembers || 0).pct : null,
-            },
-            {
-              label: 'Paid Meta Good Repeat Members',
-              value: fmt.int(zoomSourceModule.current.paidMeta.goodRepeatMembers || 0),
-              changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.paidMeta.goodRepeatMembers || 0, zoomSourceModule.previous.paidMeta.goodRepeatMembers || 0).pct : null,
-            },
-            {
-              label: 'Paid Meta Cost / Good Repeat',
-              value: fmtMaybeCurrency(zoomSourceModule.current.paidMeta.costPerGoodRepeatMember),
-              changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.paidMeta.costPerGoodRepeatMember || 0, zoomSourceModule.previous.paidMeta.costPerGoodRepeatMember || 0).pct : null,
-              invertColor: true,
-            },
-            {
-              label: 'Tuesday Meta Share (All Rows)',
-              value: fmtMaybePct(zoomSourceModule.current.tuesdayAssumptionTest.paidMetaShareOfTuesday),
-              changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.tuesdayAssumptionTest.paidMetaShareOfTuesday || 0, zoomSourceModule.previous.tuesdayAssumptionTest.paidMetaShareOfTuesday || 0).pct : null,
-            },
-            {
-              label: 'Tuesday Meta Share (Matched Rows)',
-              value: fmtMaybePct(zoomSourceModule.current.tuesdayAssumptionTest.paidMetaShareOfMatchedTuesday),
-              changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.tuesdayAssumptionTest.paidMetaShareOfMatchedTuesday || 0, zoomSourceModule.previous.tuesdayAssumptionTest.paidMetaShareOfMatchedTuesday || 0).pct : null,
-            },
-          ].map((item) => (
-            <div key={item.label} style={{ ...subCard, borderLeft: item.label.includes('Cost') ? '4px solid #dc2626' : '4px solid #0f766e' }}>
-              <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>{item.label}</p>
-              <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
-                {item.value}
-                {item.changePct !== null && item.changePct !== undefined && <ChangeBadge changePct={item.changePct} invertColor={!!item.invertColor} />}
-              </p>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-          <div style={{ ...subCard, border: '1px solid #fecaca', backgroundColor: '#fef2f2' }}>
-            <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#991b1b' }}>Tuesday Assumption Test</p>
-            <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#7f1d1d' }}>
-              Meta paid matched to <strong>{fmt.int(zoomSourceModule.current.tuesdayAssumptionTest.paidMetaTuesdayRows || 0)}</strong> of <strong>{fmt.int(zoomSourceModule.current.tuesdayAssumptionTest.totalTuesdayRows || 0)}</strong> Tuesday show-up rows.
-              Matched-rows share: <strong>{fmtMaybePct(zoomSourceModule.current.tuesdayAssumptionTest.paidMetaShareOfMatchedTuesday)}</strong>.
-            </p>
-          </div>
-          <div style={{ ...subCard, border: '1px solid #cbd5e1', backgroundColor: '#f8fafc' }}>
-            <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#334155' }}>What to Read First</p>
-            <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#475569' }}>
-              Use <strong>Paid Meta Cost / Good Repeat</strong> as the north-star metric.
-              Then inspect the source table rows below and click into paid/organic cohorts to validate individual attendees and revenue quality.
-            </p>
-          </div>
-        </div>
-
-        <div style={{ marginTop: '14px', border: '1px solid #e2e8f0', borderRadius: '12px', overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1220px' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f8fafc' }}>
-                {['Source Bucket', 'Show-Up Rows', 'Unique Attendees', 'Tuesday', 'Thursday', 'Net New Rows', 'Repeat Members', 'Good Repeat Members', 'Repeat Rate', 'Good Repeat Rate', 'Share of Show-Ups', 'HubSpot Match Rate', 'Cost / Show-Up'].map((h) => (
-                  <th key={h} style={{ textAlign: h === 'Source Bucket' ? 'left' : 'right', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {zoomSourceModule.current.sourceRows.map((row) => {
-                const isPaidMeta = row.bucket === 'Paid Social (Meta)';
-                const hubspotMatchRate = (row.matchedHubspotRows + row.unmatchedHubspotRows) > 0
-                  ? row.matchedHubspotRows / (row.matchedHubspotRows + row.unmatchedHubspotRows)
-                  : null;
-
-                return (
-                  <tr
-                    key={`zoom-src-${row.bucket}`}
-                    onClick={() => {
-                      const cols = [
-                        { key: 'date', label: 'Date' },
-                        { key: 'dayType', label: 'Day' },
-                        { key: 'attendeeName', label: 'Zoom Attendee (Canonical)' },
-                        { key: 'rawName', label: 'Zoom Attendee (Raw)' },
-                        { key: 'matchedHubspot', label: 'Matched HubSpot?' },
-                        { key: 'matchType', label: 'Match Type' },
-                        { key: 'matchLookupStrategy', label: 'Lookup Strategy' },
-                        { key: 'matchWhy', label: 'Why / Match Note' },
-                        { key: 'matchCandidateExamples', label: 'Candidate Hints' },
-                        { key: 'matchCandidateCount', label: 'Name Candidates', type: 'number' },
-                        { key: 'hubspotName', label: 'HubSpot Name' },
-                        { key: 'email', label: 'Email Address' },
-                        { key: 'sourceBucket', label: 'Source Bucket' },
-                        { key: 'sourceAttributionMethod', label: 'Source Attribution Method' },
-                        { key: 'missingAttributionReason', label: 'Missing Attribution Reason' },
-                        { key: 'manualAttributionOverride', label: 'Manual Override?' },
-                        { key: 'manualAttributionNote', label: 'Manual Override Note' },
-                        { key: 'manualHubspotContactId', label: 'Manual HubSpot Contact ID', type: 'number' },
-                        { key: 'manualHubspotUrl', label: 'Manual HubSpot URL' },
-                        { key: 'originalTrafficSource', label: 'Original Traffic Source' },
-                        { key: 'originalTrafficSourceDetail1', label: 'Original Traffic Detail 1' },
-                        { key: 'originalTrafficSourceDetail2', label: 'Original Traffic Detail 2' },
-                        { key: 'lumaHowHeardCategoryFallback', label: 'Luma How Heard (Fallback Category)' },
-                        { key: 'lumaHowHeardFallback', label: 'Luma How Heard (Fallback Raw)' },
-                        { key: 'netNewAttendee', label: 'Net New Attendee?' },
-                        { key: 'repeatAttendee', label: 'Repeat Attendee?' },
-                        { key: 'goodRepeatMember', label: 'Good Repeat Member?' },
-                        { key: 'totalZoomAttendances', label: 'Zoom Attendances (History)', type: 'number' },
-                        { key: 'revenue', label: 'Revenue', type: 'currency' },
-                      ];
-                      setModal({
-                        title: `Free Zoom Show-Ups — ${row.bucket}`,
-                        columns: cols,
-                        rows: row.rows || [],
-                        highlightKey: 'isMetaPaid',
-                      });
-                    }}
-                    style={{ cursor: 'pointer', backgroundColor: isPaidMeta ? '#fef2f2' : '#fff' }}
-                  >
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#0f172a', fontWeight: isPaidMeta ? 700 : 600 }}>{row.bucket}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.int(row.showUpRows)}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.int(row.uniqueAttendees)}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.int(row.tuesdayShowUps)}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.int(row.thursdayShowUps)}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.int(row.netNewRows)}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.int(row.repeatMembers)}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.int(row.goodRepeatMembers)}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmtMaybePct(row.repeatRateAmongUnique)}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmtMaybePct(row.goodRepeatRateAmongUnique)}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmtMaybePct(row.showUpShare)}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmtMaybePct(hubspotMatchRate)}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right', color: isPaidMeta ? '#991b1b' : '#94a3b8', fontWeight: isPaidMeta ? 700 : 500 }}>
-                      {isPaidMeta ? fmtMaybeCurrency(zoomSourceModule.current.paidMeta.costPerShowUp) : 'N/A'}
-                    </td>
-                  </tr>
-                );
-              })}
-              {zoomSourceModule.current.sourceRows.length === 0 && (
-                <tr>
-                  <td colSpan={13} style={{ padding: '12px', fontSize: '12px', color: '#64748b' }}>No Zoom attendees in the selected date range.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <p style={{ margin: '10px 0 0', fontSize: '11px', color: '#64748b' }}>
-          Click any source row to inspect attendee-level matches (date, day, name match type, traffic source, repeat status, and revenue).
-        </p>
-      </div>
-
-      {/* ── GROUP 2: Phoenix Forum Leads ── */}
-      <div style={card}>
-        <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Group 2 — Phoenix Forum Leads</h3>
-        <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b' }}>
-          Meta campaigns where the campaign name CONTAINS "phoenix". Paid funnel tracked separately.
-        </p>
-        <GroupPanel
-          label="Phoenix Forum"
-          snap={groupedData?.current?.phoenix}
-          prevSnap={groupedData?.previous?.phoenix}
-          onOpenModal={openModal}
-        />
-      </div>
-
-      {/* ── Legacy / existing analytics below ── */}
-      {analytics && (
-        <>
-          <AIAnalysisCard analysis={analytics.analysis} />
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-            {analytics.costCards.slice(0, 4).map((c) => (
-              <div key={c.key} onClick={() => setDrilldownMetricKey(c.key)} style={{ cursor: 'pointer', borderRadius: '16px', boxShadow: drilldownMetricKey === c.key ? '0 0 0 2px #0f766e' : 'none' }}>
-                <KPICard title={c.label} value={fmt.currency(c.value)} trend={trendDirection(c.value, c.previous)} invertColor={true} color="var(--color-orange)" />
+              <div style={{ ...subCard, border: '1px solid #bfdbfe', backgroundColor: '#eff6ff' }}>
+                <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#1d4ed8' }}>Non-Paid Comparator</p>
+                <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#1e3a8a' }}>
+                  Registrations: <strong>{fmt.int(attendanceCostModule.current.nonPaid.registrations || 0)}</strong> | Show-Ups: <strong>{fmt.int(attendanceCostModule.current.nonPaid.showUps || 0)}</strong> | Show-Up Rate: <strong>{fmtMaybePct(attendanceCostModule.current.nonPaid.showUpRate)}</strong>
+                </p>
               </div>
-            ))}
+            </div>
+
+            <div style={{ marginTop: '14px', border: '1px solid #e2e8f0', borderRadius: '12px', overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '980px' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f8fafc' }}>
+                    {['Source Bucket', 'Registrations', 'Show-Ups', 'Net New Show-Ups', 'Repeat Members', 'Good Repeat Members', 'Show-Up Rate', '% of Show-Ups', 'Cost / Show-Up'].map((h) => (
+                      <th key={h} style={{ textAlign: h === 'Source Bucket' ? 'left' : 'right', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {attendanceCostModule.current.sourceRows.map((row) => {
+                    const isPaid = row.bucket === 'Paid Social (Meta)';
+                    return (
+                      <tr
+                        key={row.bucket}
+                        onClick={() => {
+                          const sourceDrillCols = [
+                            { key: 'name', label: 'Name' },
+                            { key: 'email', label: 'Email Address' },
+                            { key: 'showedUp', label: 'Showed Up?' },
+                            { key: 'repeatMember', label: 'Repeat Member?' },
+                            { key: 'goodRepeatMember', label: 'Good Repeat Member?' },
+                            { key: '_historyShowUps', label: 'Matched Zooms (History)', type: 'number' },
+                            { key: 'revenue', label: 'Revenue', type: 'currency' },
+                            { key: 'sobrietyDate', label: 'Sobriety Date' },
+                            { key: 'originalTrafficSource', label: 'Original Traffic Source' },
+                            { key: 'originalTrafficSourceDetail1', label: 'Original Traffic Source Detail 1' },
+                            { key: 'originalTrafficSourceDetail2', label: 'Original Traffic Source Detail 2' },
+                            { key: 'hearAboutCategory', label: 'How Heard (Category)' },
+                            { key: 'hearAbout', label: 'How Did You Hear About Sober Founders?' },
+                            { key: 'hearAboutSource', label: 'Hear About Source' },
+                            { key: 'adGroup', label: 'Facebook Ad Group' },
+                            { key: 'sourceBucket', label: 'Source Bucket' },
+                          ];
+                          setModal({
+                            title: `Free Leads — ${row.bucket} Cohort`,
+                            columns: sourceDrillCols,
+                            rows: row.rows || [],
+                            highlightKey: 'matchedZoom',
+                          });
+                        }}
+                        style={{ cursor: 'pointer', backgroundColor: isPaid ? '#fef2f2' : '#fff' }}
+                      >
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#0f172a', fontWeight: isPaid ? 700 : 600 }}>{row.bucket}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#334155', textAlign: 'right' }}>{fmt.int(row.registrations)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#334155', textAlign: 'right' }}>{fmt.int(row.showUps)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#334155', textAlign: 'right' }}>{fmt.int(row.netNewShowUps)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#334155', textAlign: 'right' }}>{fmt.int(row.repeatMembers)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#334155', textAlign: 'right' }}>{fmt.int(row.goodRepeatMembers)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#334155', textAlign: 'right' }}>{fmtMaybePct(row.showUpRate)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#334155', textAlign: 'right' }}>{fmtMaybePct(row.pctOfShowUps)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: isPaid ? '#991b1b' : '#94a3b8', textAlign: 'right', fontWeight: isPaid ? 700 : 500 }}>
+                          {isPaid ? fmtMaybeCurrency(attendanceCostModule.current.paid.costPerShowUp) : 'N/A'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {attendanceCostModule.current.sourceRows.length === 0 && (
+                    <tr>
+                      <td colSpan={9} style={{ padding: '12px', fontSize: '12px', color: '#64748b' }}>No Lu.ma registrants available in this date range.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <p style={{ margin: '10px 0 0', fontSize: '11px', color: '#64748b' }}>
+              Click any source row to inspect the actual registrants in that cohort. Cost metrics use Group 1 Free Meta spend for the selected date range.
+            </p>
           </div>
 
+          {/* ── ZOOM SOURCE ATTRIBUTION (TUESDAY + THURSDAY) ── */}
           <div style={card}>
-            <h3 style={{ fontSize: '18px', marginBottom: '10px' }}>Thursday Lu.ma Funnel Integrity</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '8px' }}>
+            <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Zoom Source Attribution (Free Meetings)</h3>
+            <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b' }}>
+              Uses Zoom attendee names (Tuesday + Thursday) matched to HubSpot via canonicalized names and aliases, so Tuesday attendees are included even without Lu.ma.
+              Costs use Group 1 Free Meta spend in the selected date range. Repeat counts use loaded Zoom history ({zoomSourceModule.loadedHistoryDays} days). Good members = 3+ Zoom attendances and revenue ≥ $250k.
+            </p>
+
+            <div style={{ ...subCard, border: '1px solid #dbeafe', backgroundColor: '#eff6ff', marginBottom: '12px' }}>
+              <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#1d4ed8' }}>AI Paid Strategy Summary</p>
+              <p style={{ margin: '6px 0 0', fontSize: '13px', fontWeight: 700, color: '#1e3a8a' }}>{paidDecisionInsights.headline}</p>
+              {paidDecisionInsights.bullets.length > 0 && (
+                <div style={{ marginTop: '8px' }}>
+                  {paidDecisionInsights.bullets.map((line, idx) => (
+                    <p key={`ai-b-${idx}`} style={{ margin: '4px 0', fontSize: '12px', color: '#1e3a8a' }}>• {line}</p>
+                  ))}
+                </div>
+              )}
+              {paidDecisionInsights.warnings.length > 0 && (
+                <div style={{ marginTop: '8px', padding: '8px', borderRadius: '8px', backgroundColor: '#fffbeb', border: '1px solid #fde68a' }}>
+                  <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#92400e' }}>Data / confidence warnings</p>
+                  {paidDecisionInsights.warnings.map((line, idx) => (
+                    <p key={`ai-w-${idx}`} style={{ margin: '4px 0 0', fontSize: '12px', color: '#92400e' }}>• {line}</p>
+                  ))}
+                </div>
+              )}
+              {paidDecisionInsights.moves.length > 0 && (
+                <div style={{ marginTop: '8px', padding: '8px', borderRadius: '8px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+                  <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#166534' }}>Suggested business moves</p>
+                  {paidDecisionInsights.moves.map((line, idx) => (
+                    <p key={`ai-m-${idx}`} style={{ margin: '4px 0 0', fontSize: '12px', color: '#166534' }}>• {line}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: '10px' }}>
               {[
-                { key: 'registrations', label: 'Registrations', value: Math.round(analytics.thursdayLumaFunnel.registrations) },
-                { key: 'luma_zoom_matches', label: 'Matched in Zoom', value: Math.round(analytics.thursdayLumaFunnel.zoomMatches) },
-                { key: 'luma_zoom_net_new_matches', label: 'Matched Net New', value: Math.round(analytics.thursdayLumaFunnel.zoomNetNewMatches) },
-                { key: 'luma_hubspot_matches', label: 'Matched HubSpot', value: Math.round(analytics.thursdayLumaFunnel.hubspotMatches) },
+                {
+                  label: 'Free Zoom Show-Up Rows',
+                  value: fmt.int(zoomSourceModule.current.totalShowUpRows || 0),
+                  changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.totalShowUpRows || 0, zoomSourceModule.previous.totalShowUpRows || 0).pct : null,
+                },
+                {
+                  label: 'Attribution Match Rate',
+                  value: fmtMaybePct(zoomSourceModule.current.matchRate),
+                  changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.matchRate || 0, zoomSourceModule.previous.matchRate || 0).pct : null,
+                },
+                {
+                  label: 'Paid Meta Zoom Show-Ups',
+                  value: fmt.int(zoomSourceModule.current.paidMeta.showUpRows || 0),
+                  changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.paidMeta.showUpRows || 0, zoomSourceModule.previous.paidMeta.showUpRows || 0).pct : null,
+                },
+                {
+                  label: 'Paid Meta Share of Free Show-Ups',
+                  value: fmtMaybePct(zoomSourceModule.current.paidMeta.showUpShare),
+                  changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.paidMeta.showUpShare || 0, zoomSourceModule.previous.paidMeta.showUpShare || 0).pct : null,
+                },
+                {
+                  label: 'Paid Meta Cost / Zoom Show-Up',
+                  value: fmtMaybeCurrency(zoomSourceModule.current.paidMeta.costPerShowUp),
+                  changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.paidMeta.costPerShowUp || 0, zoomSourceModule.previous.paidMeta.costPerShowUp || 0).pct : null,
+                  invertColor: true,
+                },
+                {
+                  label: 'Paid Meta Repeat Members',
+                  value: fmt.int(zoomSourceModule.current.paidMeta.repeatMembers || 0),
+                  changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.paidMeta.repeatMembers || 0, zoomSourceModule.previous.paidMeta.repeatMembers || 0).pct : null,
+                },
+                {
+                  label: 'Paid Meta Good Repeat Members',
+                  value: fmt.int(zoomSourceModule.current.paidMeta.goodRepeatMembers || 0),
+                  changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.paidMeta.goodRepeatMembers || 0, zoomSourceModule.previous.paidMeta.goodRepeatMembers || 0).pct : null,
+                },
+                {
+                  label: 'Paid Meta Cost / Good Repeat',
+                  value: fmtMaybeCurrency(zoomSourceModule.current.paidMeta.costPerGoodRepeatMember),
+                  changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.paidMeta.costPerGoodRepeatMember || 0, zoomSourceModule.previous.paidMeta.costPerGoodRepeatMember || 0).pct : null,
+                  invertColor: true,
+                },
+                {
+                  label: 'Tuesday Meta Share (All Rows)',
+                  value: fmtMaybePct(zoomSourceModule.current.tuesdayAssumptionTest.paidMetaShareOfTuesday),
+                  changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.tuesdayAssumptionTest.paidMetaShareOfTuesday || 0, zoomSourceModule.previous.tuesdayAssumptionTest.paidMetaShareOfTuesday || 0).pct : null,
+                },
+                {
+                  label: 'Tuesday Meta Share (Matched Rows)',
+                  value: fmtMaybePct(zoomSourceModule.current.tuesdayAssumptionTest.paidMetaShareOfMatchedTuesday),
+                  changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.tuesdayAssumptionTest.paidMetaShareOfMatchedTuesday || 0, zoomSourceModule.previous.tuesdayAssumptionTest.paidMetaShareOfMatchedTuesday || 0).pct : null,
+                },
               ].map((item) => (
-                <div key={item.key} onClick={() => setDrilldownMetricKey(item.key)} style={{ ...subCard, cursor: 'pointer', boxShadow: drilldownMetricKey === item.key ? '0 0 0 2px #0f766e' : 'none' }}>
-                  <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>{item.label}</p>
-                  <p style={{ margin: '4px 0 0', fontWeight: 700 }}>{item.value.toLocaleString()}</p>
+                <div key={item.label} style={{ ...subCard, borderLeft: item.label.includes('Cost') ? '4px solid #dc2626' : '4px solid #0f766e' }}>
+                  <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>{item.label}</p>
+                  <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
+                    {item.value}
+                    {item.changePct !== null && item.changePct !== undefined && <ChangeBadge changePct={item.changePct} invertColor={!!item.invertColor} />}
+                  </p>
                 </div>
               ))}
-              <div style={subCard}>
-                <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Reg to Net New Show Rate</p>
-                <p style={{ margin: '4px 0 0', fontWeight: 700 }}>{fmt.pct(analytics.thursdayLumaFunnel.regToShowRate)}</p>
-              </div>
             </div>
-          </div>
 
-          <div style={card}>
-            <h3 style={{ fontSize: '18px', marginBottom: '14px' }}>Funnel Visualization</h3>
-            <div style={{ height: '310px' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={analytics.funnelStages} layout="vertical" margin={{ left: 24, right: 24 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis type="number" tick={{ fontSize: 12, fill: '#64748b' }} />
-                  <YAxis dataKey="label" type="category" width={140} tick={{ fontSize: 12, fill: '#334155' }} />
-                  <Tooltip formatter={(v, _, p) => [Number(v || 0).toLocaleString(), p?.payload?.label || '']} labelFormatter={(_, p) => { const r = p?.[0]?.payload; if (!r) return ''; return r.conversionFromPrevious === null ? 'Stage start' : `From previous: ${(r.conversionFromPrevious * 100).toFixed(1)}%`; }} />
-                  <Bar dataKey="value" fill="#0f766e" radius={[4, 4, 4, 4]} cursor="pointer" onClick={(p) => { if (p?.key) setDrilldownMetricKey(p.key); }} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div style={card}>
-              <h3 style={{ fontSize: '18px', marginBottom: '14px' }}>Lead Quality Breakdown</h3>
-              <div style={{ height: '240px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={analytics.leadQualityBreakdown.chartRows} dataKey="value" nameKey="name" outerRadius={90}>
-                      {analytics.leadQualityBreakdown.chartRows.map((e) => <Cell key={e.name} fill={e.color} />)}
-                    </Pie>
-                    <Tooltip formatter={(v) => Number(v || 0).toLocaleString()} />
-                  </PieChart>
-                </ResponsiveContainer>
+            <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div style={{ ...subCard, border: '1px solid #fecaca', backgroundColor: '#fef2f2' }}>
+                <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#991b1b' }}>Tuesday Assumption Test</p>
+                <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#7f1d1d' }}>
+                  Meta paid matched to <strong>{fmt.int(zoomSourceModule.current.tuesdayAssumptionTest.paidMetaTuesdayRows || 0)}</strong> of <strong>{fmt.int(zoomSourceModule.current.tuesdayAssumptionTest.totalTuesdayRows || 0)}</strong> Tuesday show-up rows.
+                  Matched-rows share: <strong>{fmtMaybePct(zoomSourceModule.current.tuesdayAssumptionTest.paidMetaShareOfMatchedTuesday)}</strong>.
+                </p>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px' }}>
-                {analytics.leadQualityBreakdown.chartRows.map((r) => (
-                  <div key={r.name} onClick={() => setDrilldownMetricKey(r.name.toLowerCase())} style={{ ...subCard, cursor: 'pointer', boxShadow: drilldownMetricKey === r.name.toLowerCase() ? '0 0 0 2px #0f766e' : 'none' }}>
-                    <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>{r.name}</p>
-                    <p style={{ margin: '4px 0 0', fontWeight: 700 }}>{Math.round(r.value).toLocaleString()}</p>
-                    <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#64748b' }}>{fmt.pct(r.pct)}</p>
-                  </div>
-                ))}
+              <div style={{ ...subCard, border: '1px solid #cbd5e1', backgroundColor: '#f8fafc' }}>
+                <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#334155' }}>What to Read First</p>
+                <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#475569' }}>
+                  Use <strong>Paid Meta Cost / Good Repeat</strong> as the north-star metric.
+                  Then inspect the source table rows below and click into paid/organic cohorts to validate individual attendees and revenue quality.
+                </p>
               </div>
             </div>
 
-            <div style={card}>
-              <h3 style={{ fontSize: '18px', marginBottom: '14px' }}>Show-Up Tracker (Net New)</h3>
-              <div style={{ height: '240px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={showupRows}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} />
-                    <YAxis tick={{ fontSize: 11, fill: '#64748b' }} />
-                    <Tooltip /><Legend />
-                    <Line type="monotone" dataKey="netNewTuesday" name="Tuesday Net New" stroke="#0ea5e9" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="netNewThursday" name="Thursday Net New" stroke="#6366f1" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="netNewTotal" name="Total Net New" stroke="#0f766e" strokeWidth={2} dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-              <div style={{ marginTop: '10px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <div style={subCard}><p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Tue Avg Net New</p><p style={{ margin: '4px 0 0', fontWeight: 700 }}>{analytics.showUpTracker.averageTuesday.toFixed(2)}</p></div>
-                <div style={subCard}><p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Thu Avg Net New</p><p style={{ margin: '4px 0 0', fontWeight: 700 }}>{analytics.showUpTracker.averageThursday.toFixed(2)}</p></div>
-              </div>
-            </div>
-          </div>
-
-          {/* Ad Attribution Table */}
-          <div style={card}>
-            <h3 style={{ fontSize: '18px', marginBottom: '14px' }}>Ad Attribution Table</h3>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1200px' }}>
+            <div style={{ marginTop: '14px', border: '1px solid #e2e8f0', borderRadius: '12px', overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1220px' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#f8fafc' }}>
-                    {['Campaign', 'Ad Set', 'Ad', 'Spend', 'Meta Leads', 'Attr Leads', 'Attr Regs', 'Attr Show-Ups', 'Attr Qual', 'Attr Great', 'CPL', 'CPQL', 'CPGL', 'Show-Up Rate', 'Quality Score'].map((h) => (
-                      <th key={h} style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>{h}</th>
+                    {['Source Bucket', 'Show-Up Rows', 'Unique Attendees', 'Tuesday', 'Thursday', 'Net New Rows', 'Repeat Members', 'Good Repeat Members', 'Repeat Rate', 'Good Repeat Rate', 'Share of Show-Ups', 'HubSpot Match Rate', 'Cost / Show-Up'].map((h) => (
+                      <th key={h} style={{ textAlign: h === 'Source Bucket' ? 'left' : 'right', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {topAttributionRows.map((r) => (
-                    <tr key={r.adId}>
-                      {[r.campaignName, r.adsetName, r.adName, fmt.currency(r.spend), fmt.int(r.metaLeads), r.attributedLeads.toFixed(2), r.attributedRegistrations.toFixed(2), r.attributedShowUps.toFixed(2), r.attributedQualifiedLeads.toFixed(2), r.attributedGreatLeads.toFixed(2), fmt.currency(r.cpl), r.attributedQualifiedLeads > 0 ? fmt.currency(r.cpql) : 'N/A', r.attributedGreatLeads > 0 ? fmt.currency(r.cpgl) : 'N/A', fmt.pct(r.showUpRate), r.qualityScore.toFixed(1)].map((v, i) => (
-                        <td key={i} style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#334155' }}>{v}</td>
-                      ))}
+                  {zoomSourceModule.current.sourceRows.map((row) => {
+                    const isPaidMeta = row.bucket === 'Paid Social (Meta)';
+                    const hubspotMatchRate = (row.matchedHubspotRows + row.unmatchedHubspotRows) > 0
+                      ? row.matchedHubspotRows / (row.matchedHubspotRows + row.unmatchedHubspotRows)
+                      : null;
+
+                    return (
+                      <tr
+                        key={`zoom-src-${row.bucket}`}
+                        onClick={() => {
+                          const cols = [
+                            { key: 'date', label: 'Date' },
+                            { key: 'dayType', label: 'Day' },
+                            { key: 'attendeeName', label: 'Zoom Attendee (Canonical)' },
+                            { key: 'rawName', label: 'Zoom Attendee (Raw)' },
+                            { key: 'matchedHubspot', label: 'Matched HubSpot?' },
+                            { key: 'matchType', label: 'Match Type' },
+                            { key: 'matchLookupStrategy', label: 'Lookup Strategy' },
+                            { key: 'matchWhy', label: 'Why / Match Note' },
+                            { key: 'matchCandidateExamples', label: 'Candidate Hints' },
+                            { key: 'matchCandidateCount', label: 'Name Candidates', type: 'number' },
+                            { key: 'hubspotName', label: 'HubSpot Name' },
+                            { key: 'email', label: 'Email Address' },
+                            { key: 'sourceBucket', label: 'Source Bucket' },
+                            { key: 'sourceAttributionMethod', label: 'Source Attribution Method' },
+                            { key: 'missingAttributionReason', label: 'Missing Attribution Reason' },
+                            { key: 'manualAttributionOverride', label: 'Manual Override?' },
+                            { key: 'manualAttributionNote', label: 'Manual Override Note' },
+                            { key: 'manualHubspotContactId', label: 'Manual HubSpot Contact ID', type: 'number' },
+                            { key: 'manualHubspotUrl', label: 'Manual HubSpot URL' },
+                            { key: 'originalTrafficSource', label: 'Original Traffic Source' },
+                            { key: 'originalTrafficSourceDetail1', label: 'Original Traffic Detail 1' },
+                            { key: 'originalTrafficSourceDetail2', label: 'Original Traffic Detail 2' },
+                            { key: 'lumaHowHeardCategoryFallback', label: 'Luma How Heard (Fallback Category)' },
+                            { key: 'lumaHowHeardFallback', label: 'Luma How Heard (Fallback Raw)' },
+                            { key: 'netNewAttendee', label: 'Net New Attendee?' },
+                            { key: 'repeatAttendee', label: 'Repeat Attendee?' },
+                            { key: 'goodRepeatMember', label: 'Good Repeat Member?' },
+                            { key: 'totalZoomAttendances', label: 'Zoom Attendances (History)', type: 'number' },
+                            { key: 'revenue', label: 'Revenue', type: 'currency' },
+                          ];
+                          setModal({
+                            title: `Free Zoom Show-Ups — ${row.bucket}`,
+                            columns: cols,
+                            rows: row.rows || [],
+                            highlightKey: 'isMetaPaid',
+                          });
+                        }}
+                        style={{ cursor: 'pointer', backgroundColor: isPaidMeta ? '#fef2f2' : '#fff' }}
+                      >
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#0f172a', fontWeight: isPaidMeta ? 700 : 600 }}>{row.bucket}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.int(row.showUpRows)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.int(row.uniqueAttendees)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.int(row.tuesdayShowUps)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.int(row.thursdayShowUps)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.int(row.netNewRows)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.int(row.repeatMembers)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.int(row.goodRepeatMembers)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmtMaybePct(row.repeatRateAmongUnique)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmtMaybePct(row.goodRepeatRateAmongUnique)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmtMaybePct(row.showUpShare)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmtMaybePct(hubspotMatchRate)}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right', color: isPaidMeta ? '#991b1b' : '#94a3b8', fontWeight: isPaidMeta ? 700 : 500 }}>
+                          {isPaidMeta ? fmtMaybeCurrency(zoomSourceModule.current.paidMeta.costPerShowUp) : 'N/A'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {zoomSourceModule.current.sourceRows.length === 0 && (
+                    <tr>
+                      <td colSpan={13} style={{ padding: '12px', fontSize: '12px', color: '#64748b' }}>No Zoom attendees in the selected date range.</td>
                     </tr>
-                  ))}
-                  {topAttributionRows.length === 0 && <tr><td colSpan={15} style={{ padding: '10px', color: '#64748b', fontSize: '12px' }}>No attribution data.</td></tr>}
+                  )}
                 </tbody>
               </table>
             </div>
+            <p style={{ margin: '10px 0 0', fontSize: '11px', color: '#64748b' }}>
+              Click any source row to inspect attendee-level matches (date, day, name match type, traffic source, repeat status, and revenue).
+            </p>
           </div>
 
-          {/* Top / Bottom Ads */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div style={card}>
-              <h3 style={{ fontSize: '18px', marginBottom: '10px' }}>Top Performing Ads</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {analytics.topAds.map((r) => (
-                  <div key={r.adId} style={{ ...subCard }}>
-                    <p style={{ margin: 0, fontWeight: 700, fontSize: '13px' }}>{r.adName}</p>
-                    <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#64748b' }}>{r.adsetName}</p>
-                    <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#0f766e' }}>CPGL: {r.attributedGreatLeads > 0 ? fmt.currency(r.cpgl) : 'N/A'} | Show-Up: {fmt.pct(r.showUpRate)}</p>
+          {/* ── GROUP 2: Phoenix Forum Leads ── */}
+          <div style={card}>
+            <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Group 2 — Phoenix Forum Leads</h3>
+            <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b' }}>
+              Meta campaigns where the campaign name CONTAINS "phoenix". Paid funnel tracked separately.
+            </p>
+            <GroupPanel
+              label="Phoenix Forum"
+              snap={groupedData?.current?.phoenix}
+              prevSnap={groupedData?.previous?.phoenix}
+              onOpenModal={openModal}
+            />
+          </div>
+
+          {/* ── Legacy / existing analytics below ── */}
+          {analytics && (
+            <>
+              <AIAnalysisCard analysis={analytics.analysis} />
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                {analytics.costCards.slice(0, 4).map((c) => (
+                  <div key={c.key} onClick={() => setDrilldownMetricKey(c.key)} style={{ cursor: 'pointer', borderRadius: '16px', boxShadow: drilldownMetricKey === c.key ? '0 0 0 2px #0f766e' : 'none' }}>
+                    <KPICard title={c.label} value={fmt.currency(c.value)} trend={trendDirection(c.value, c.previous)} invertColor={true} color="var(--color-orange)" />
                   </div>
                 ))}
-                {!analytics.topAds.length && <p style={{ color: '#64748b', fontSize: '13px' }}>No top ads.</p>}
               </div>
-            </div>
-            <div style={card}>
-              <h3 style={{ fontSize: '18px', marginBottom: '10px' }}>Bottom Performing Ads</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {analytics.bottomAds.map((r) => (
-                  <div key={r.adId} style={{ backgroundColor: '#fff7ed', borderRadius: '10px', padding: '10px', border: '1px solid #fed7aa' }}>
-                    <p style={{ margin: 0, fontWeight: 700, fontSize: '13px' }}>{r.adName}</p>
-                    <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#9a3412' }}>{r.adsetName}</p>
-                    <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#9a3412' }}>Spend: {fmt.currency(r.spend)} | CPL: {fmt.currency(r.cpl)}</p>
-                  </div>
-                ))}
-                {!analytics.bottomAds.length && <p style={{ color: '#64748b', fontSize: '13px' }}>No bottom ads.</p>}
-              </div>
-            </div>
-          </div>
 
-          {/* WoW / MoM */}
-          <div style={card}>
-            <h3 style={{ fontSize: '18px', marginBottom: '10px' }}>Week-over-Week and Month-over-Month</h3>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '780px' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#f8fafc' }}>
-                    {['Metric', 'Current', 'WoW', 'MoM'].map((h) => (
-                      <th key={h} style={{ textAlign: h === 'Metric' ? 'left' : 'right', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {analytics.analysis.metricSnapshotRows.slice(0, 10).map((r) => (
-                    <tr key={r.id}>
-                      <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px' }}>{r.label}</td>
-                      <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{r.format === 'currency' ? fmt.currency(r.current) : r.format === 'percent' ? fmt.pct(r.current) : fmt.int(r.current)}</td>
-                      <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.deltaPct(r.weeklyDelta?.deltaPct)}</td>
-                      <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.deltaPct(r.monthlyDelta?.deltaPct)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Fact Check Drilldown (collapsed) */}
-          <div style={card}>
-            <details>
-              <summary style={{ cursor: 'pointer', fontWeight: 700, fontSize: '16px', color: '#0f172a', listStyle: 'none' }}>
-                Fact Check Drilldown
-                <span style={{ marginLeft: '8px', fontWeight: 500, fontSize: '12px', color: '#64748b' }}>
-                  Click to expand raw supporting rows
-                </span>
-              </summary>
-              <div style={{ marginTop: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                  <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Click KPI numbers above, or choose a metric and window below.</p>
-                  <select value={drilldownWindowKey} onChange={(e) => setDrilldownWindowKey(e.target.value)} style={{ padding: '8px 10px', borderRadius: '10px', border: '1px solid #cbd5e1', backgroundColor: '#fff', fontSize: '12px', fontWeight: 600, color: '#334155' }}>
-                    {Object.entries(analytics.drilldowns.windows || {}).map(([k, w]) => <option key={k} value={k}>{w.label}: {w.startKey} to {w.endKey}</option>)}
-                  </select>
-                </div>
-                <div style={{ marginTop: '10px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {drilldownQuickMetrics.map((k) => (
-                    <button key={k} onClick={() => setDrilldownMetricKey(k)} style={{ border: '1px solid #cbd5e1', backgroundColor: drilldownMetricKey === k ? '#0f766e' : '#f8fafc', color: drilldownMetricKey === k ? '#fff' : '#334155', borderRadius: '999px', padding: '6px 10px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
-                      {analytics.drilldowns.metricLabels?.[k] || k}
-                    </button>
-                  ))}
-                </div>
-                {activeDrilldownWindow && activeDrilldownTable ? (
-                  <>
-                    <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                      <p style={{ margin: 0, fontSize: '13px', fontWeight: 700 }}>{analytics.drilldowns.metricLabels?.[drilldownMetricKey] || drilldownMetricKey}</p>
-                      <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Rows: {activeDrilldownTable.rows.length.toLocaleString()}</p>
+              <div style={card}>
+                <h3 style={{ fontSize: '18px', marginBottom: '10px' }}>Thursday Lu.ma Funnel Integrity</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '8px' }}>
+                  {[
+                    { key: 'registrations', label: 'Registrations', value: Math.round(analytics.thursdayLumaFunnel.registrations) },
+                    { key: 'luma_zoom_matches', label: 'Matched in Zoom', value: Math.round(analytics.thursdayLumaFunnel.zoomMatches) },
+                    { key: 'luma_zoom_net_new_matches', label: 'Matched Net New', value: Math.round(analytics.thursdayLumaFunnel.zoomNetNewMatches) },
+                    { key: 'luma_hubspot_matches', label: 'Matched HubSpot', value: Math.round(analytics.thursdayLumaFunnel.hubspotMatches) },
+                  ].map((item) => (
+                    <div key={item.key} onClick={() => setDrilldownMetricKey(item.key)} style={{ ...subCard, cursor: 'pointer', boxShadow: drilldownMetricKey === item.key ? '0 0 0 2px #0f766e' : 'none' }}>
+                      <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>{item.label}</p>
+                      <p style={{ margin: '4px 0 0', fontWeight: 700 }}>{item.value.toLocaleString()}</p>
                     </div>
-                    <div style={{ marginTop: '10px', border: '1px solid #e2e8f0', borderRadius: '12px', overflowX: 'auto' }}>
-                      <table style={{ width: '100%', minWidth: '900px', borderCollapse: 'collapse' }}>
-                        <thead>
-                          <tr style={{ backgroundColor: '#f8fafc' }}>
-                            {activeDrilldownTable.columns.map((col) => (
-                              <th key={col.key} style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>{col.label}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {activeDrilldownTable.rows.map((row, i) => (
-                            <tr key={i}>
-                              {activeDrilldownTable.columns.map((col) => (
-                                <td key={col.key} style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#334155' }}>
-                                  {col.type === 'currency' ? fmt.currency(row[col.key]) : col.type === 'number' ? fmt.int(row[col.key]) : col.type === 'percent' ? fmt.pct(row[col.key]) : String(row[col.key] ?? '—')}
-                                </td>
-                              ))}
-                            </tr>
+                  ))}
+                  <div style={subCard}>
+                    <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Reg to Net New Show Rate</p>
+                    <p style={{ margin: '4px 0 0', fontWeight: 700 }}>{fmt.pct(analytics.thursdayLumaFunnel.regToShowRate)}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div style={card}>
+                <h3 style={{ fontSize: '18px', marginBottom: '14px' }}>Funnel Visualization</h3>
+                <div style={{ height: '310px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analytics.funnelStages} layout="vertical" margin={{ left: 24, right: 24 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis type="number" tick={{ fontSize: 12, fill: '#64748b' }} />
+                      <YAxis dataKey="label" type="category" width={140} tick={{ fontSize: 12, fill: '#334155' }} />
+                      <Tooltip formatter={(v, _, p) => [Number(v || 0).toLocaleString(), p?.payload?.label || '']} labelFormatter={(_, p) => { const r = p?.[0]?.payload; if (!r) return ''; return r.conversionFromPrevious === null ? 'Stage start' : `From previous: ${(r.conversionFromPrevious * 100).toFixed(1)}%`; }} />
+                      <Bar dataKey="value" fill="#0f766e" radius={[4, 4, 4, 4]} cursor="pointer" onClick={(p) => { if (p?.key) setDrilldownMetricKey(p.key); }} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div style={card}>
+                  <h3 style={{ fontSize: '18px', marginBottom: '14px' }}>Lead Quality Breakdown</h3>
+                  <div style={{ height: '240px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={analytics.leadQualityBreakdown.chartRows} dataKey="value" nameKey="name" outerRadius={90}>
+                          {analytics.leadQualityBreakdown.chartRows.map((e) => <Cell key={e.name} fill={e.color} />)}
+                        </Pie>
+                        <Tooltip formatter={(v) => Number(v || 0).toLocaleString()} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px' }}>
+                    {analytics.leadQualityBreakdown.chartRows.map((r) => (
+                      <div key={r.name} onClick={() => setDrilldownMetricKey(r.name.toLowerCase())} style={{ ...subCard, cursor: 'pointer', boxShadow: drilldownMetricKey === r.name.toLowerCase() ? '0 0 0 2px #0f766e' : 'none' }}>
+                        <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>{r.name}</p>
+                        <p style={{ margin: '4px 0 0', fontWeight: 700 }}>{Math.round(r.value).toLocaleString()}</p>
+                        <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#64748b' }}>{fmt.pct(r.pct)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={card}>
+                  <h3 style={{ fontSize: '18px', marginBottom: '14px' }}>Show-Up Tracker (Net New)</h3>
+                  <div style={{ height: '240px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={showupRows}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} />
+                        <YAxis tick={{ fontSize: 11, fill: '#64748b' }} />
+                        <Tooltip /><Legend />
+                        <Line type="monotone" dataKey="netNewTuesday" name="Tuesday Net New" stroke="#0ea5e9" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="netNewThursday" name="Thursday Net New" stroke="#6366f1" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="netNewTotal" name="Total Net New" stroke="#0f766e" strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div style={{ marginTop: '10px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <div style={subCard}><p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Tue Avg Net New</p><p style={{ margin: '4px 0 0', fontWeight: 700 }}>{analytics.showUpTracker.averageTuesday.toFixed(2)}</p></div>
+                    <div style={subCard}><p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Thu Avg Net New</p><p style={{ margin: '4px 0 0', fontWeight: 700 }}>{analytics.showUpTracker.averageThursday.toFixed(2)}</p></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Ad Attribution Table */}
+              <div style={card}>
+                <h3 style={{ fontSize: '18px', marginBottom: '14px' }}>Ad Attribution Table</h3>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1200px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f8fafc' }}>
+                        {['Campaign', 'Ad Set', 'Ad', 'Spend', 'Meta Leads', 'Attr Leads', 'Attr Regs', 'Attr Show-Ups', 'Attr Qual', 'Attr Great', 'CPL', 'CPQL', 'CPGL', 'Show-Up Rate', 'Quality Score'].map((h) => (
+                          <th key={h} style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {topAttributionRows.map((r) => (
+                        <tr key={r.adId}>
+                          {[r.campaignName, r.adsetName, r.adName, fmt.currency(r.spend), fmt.int(r.metaLeads), r.attributedLeads.toFixed(2), r.attributedRegistrations.toFixed(2), r.attributedShowUps.toFixed(2), r.attributedQualifiedLeads.toFixed(2), r.attributedGreatLeads.toFixed(2), fmt.currency(r.cpl), r.attributedQualifiedLeads > 0 ? fmt.currency(r.cpql) : 'N/A', r.attributedGreatLeads > 0 ? fmt.currency(r.cpgl) : 'N/A', fmt.pct(r.showUpRate), r.qualityScore.toFixed(1)].map((v, i) => (
+                            <td key={i} style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#334155' }}>{v}</td>
                           ))}
-                          {activeDrilldownTable.rows.length === 0 && (
-                            <tr><td colSpan={activeDrilldownTable.columns.length} style={{ padding: '12px', fontSize: '12px', color: '#64748b' }}>{activeDrilldownTable.emptyMessage}</td></tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
-                ) : (
-                  <p style={{ marginTop: '12px', fontSize: '12px', color: '#64748b' }}>No drilldown data available.</p>
-                )}
+                        </tr>
+                      ))}
+                      {topAttributionRows.length === 0 && <tr><td colSpan={15} style={{ padding: '10px', color: '#64748b', fontSize: '12px' }}>No attribution data.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </details>
-          </div>
-        </>
-      )}
 
-      {/* ── AI Insights Panel ── */}
-      <AIInsightsPanel supabaseUrl={supabaseUrl} supabaseKey={supabaseKey} groupedData={groupedData} />
+              {/* Top / Bottom Ads */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div style={card}>
+                  <h3 style={{ fontSize: '18px', marginBottom: '10px' }}>Top Performing Ads</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {analytics.topAds.map((r) => (
+                      <div key={r.adId} style={{ ...subCard }}>
+                        <p style={{ margin: 0, fontWeight: 700, fontSize: '13px' }}>{r.adName}</p>
+                        <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#64748b' }}>{r.adsetName}</p>
+                        <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#0f766e' }}>CPGL: {r.attributedGreatLeads > 0 ? fmt.currency(r.cpgl) : 'N/A'} | Show-Up: {fmt.pct(r.showUpRate)}</p>
+                      </div>
+                    ))}
+                    {!analytics.topAds.length && <p style={{ color: '#64748b', fontSize: '13px' }}>No top ads.</p>}
+                  </div>
+                </div>
+                <div style={card}>
+                  <h3 style={{ fontSize: '18px', marginBottom: '10px' }}>Bottom Performing Ads</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {analytics.bottomAds.map((r) => (
+                      <div key={r.adId} style={{ backgroundColor: '#fff7ed', borderRadius: '10px', padding: '10px', border: '1px solid #fed7aa' }}>
+                        <p style={{ margin: 0, fontWeight: 700, fontSize: '13px' }}>{r.adName}</p>
+                        <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#9a3412' }}>{r.adsetName}</p>
+                        <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#9a3412' }}>Spend: {fmt.currency(r.spend)} | CPL: {fmt.currency(r.cpl)}</p>
+                      </div>
+                    ))}
+                    {!analytics.bottomAds.length && <p style={{ color: '#64748b', fontSize: '13px' }}>No bottom ads.</p>}
+                  </div>
+                </div>
+              </div>
+
+              {/* WoW / MoM */}
+              <div style={card}>
+                <h3 style={{ fontSize: '18px', marginBottom: '10px' }}>Week-over-Week and Month-over-Month</h3>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '780px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f8fafc' }}>
+                        {['Metric', 'Current', 'WoW', 'MoM'].map((h) => (
+                          <th key={h} style={{ textAlign: h === 'Metric' ? 'left' : 'right', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analytics.analysis.metricSnapshotRows.slice(0, 10).map((r) => (
+                        <tr key={r.id}>
+                          <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px' }}>{r.label}</td>
+                          <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{r.format === 'currency' ? fmt.currency(r.current) : r.format === 'percent' ? fmt.pct(r.current) : fmt.int(r.current)}</td>
+                          <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.deltaPct(r.weeklyDelta?.deltaPct)}</td>
+                          <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', textAlign: 'right' }}>{fmt.deltaPct(r.monthlyDelta?.deltaPct)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Fact Check Drilldown (collapsed) */}
+              <div style={card}>
+                <details>
+                  <summary style={{ cursor: 'pointer', fontWeight: 700, fontSize: '16px', color: '#0f172a', listStyle: 'none' }}>
+                    Fact Check Drilldown
+                    <span style={{ marginLeft: '8px', fontWeight: 500, fontSize: '12px', color: '#64748b' }}>
+                      Click to expand raw supporting rows
+                    </span>
+                  </summary>
+                  <div style={{ marginTop: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                      <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Click KPI numbers above, or choose a metric and window below.</p>
+                      <select value={drilldownWindowKey} onChange={(e) => setDrilldownWindowKey(e.target.value)} style={{ padding: '8px 10px', borderRadius: '10px', border: '1px solid #cbd5e1', backgroundColor: '#fff', fontSize: '12px', fontWeight: 600, color: '#334155' }}>
+                        {Object.entries(analytics.drilldowns.windows || {}).map(([k, w]) => <option key={k} value={k}>{w.label}: {w.startKey} to {w.endKey}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ marginTop: '10px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {drilldownQuickMetrics.map((k) => (
+                        <button key={k} onClick={() => setDrilldownMetricKey(k)} style={{ border: '1px solid #cbd5e1', backgroundColor: drilldownMetricKey === k ? '#0f766e' : '#f8fafc', color: drilldownMetricKey === k ? '#fff' : '#334155', borderRadius: '999px', padding: '6px 10px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                          {analytics.drilldowns.metricLabels?.[k] || k}
+                        </button>
+                      ))}
+                    </div>
+                    {activeDrilldownWindow && activeDrilldownTable ? (
+                      <>
+                        <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                          <p style={{ margin: 0, fontSize: '13px', fontWeight: 700 }}>{analytics.drilldowns.metricLabels?.[drilldownMetricKey] || drilldownMetricKey}</p>
+                          <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Rows: {activeDrilldownTable.rows.length.toLocaleString()}</p>
+                        </div>
+                        <div style={{ marginTop: '10px', border: '1px solid #e2e8f0', borderRadius: '12px', overflowX: 'auto' }}>
+                          <table style={{ width: '100%', minWidth: '900px', borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr style={{ backgroundColor: '#f8fafc' }}>
+                                {activeDrilldownTable.columns.map((col) => (
+                                  <th key={col.key} style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>{col.label}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {activeDrilldownTable.rows.map((row, i) => (
+                                <tr key={i}>
+                                  {activeDrilldownTable.columns.map((col) => (
+                                    <td key={col.key} style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#334155' }}>
+                                      {col.type === 'currency' ? fmt.currency(row[col.key]) : col.type === 'number' ? fmt.int(row[col.key]) : col.type === 'percent' ? fmt.pct(row[col.key]) : String(row[col.key] ?? '—')}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                              {activeDrilldownTable.rows.length === 0 && (
+                                <tr><td colSpan={activeDrilldownTable.columns.length} style={{ padding: '12px', fontSize: '12px', color: '#64748b' }}>{activeDrilldownTable.emptyMessage}</td></tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
+                    ) : (
+                      <p style={{ marginTop: '12px', fontSize: '12px', color: '#64748b' }}>No drilldown data available.</p>
+                    )}
+                  </div>
+                </details>
+              </div>
+            </>
+          )}
+
+          {/* ── AI Insights Panel ── */}
+          <AIInsightsPanel supabaseUrl={supabaseUrl} supabaseKey={supabaseKey} groupedData={groupedData} />
 
         </div>
       </details>

@@ -13,7 +13,7 @@ function toNumber(value) {
 }
 
 function safeDivide(numerator, denominator) {
-  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) return 0;
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) return null;
   return numerator / denominator;
 }
 
@@ -98,10 +98,12 @@ function classifyLeadFunnel(row) {
 }
 
 function leadTierFromRevenue(value) {
+  if (value === null || value === undefined || value === '') return 'unknown';
   const revenue = toNumber(value);
   if (revenue >= 1_000_000) return 'great';
-  if (revenue >= 250_000 && revenue < 1_000_000) return 'qualified';
-  return 'standard';
+  if (revenue >= 250_000) return 'qualified';
+  if (revenue >= 100_000) return 'ok';
+  return 'bad';
 }
 
 function resolveHubspotRevenue(row) {
@@ -562,8 +564,8 @@ function summarizeAdRows(adTotals) {
     const ctr = safeDivide(row.clicks, row.impressions);
     const clickToLeadRate = safeDivide(row.metaLeads, row.clicks);
     const showUpRate = safeDivide(row.attributedShowUps, attributedBaseLeads);
-    const qualityScore = (safeDivide(row.attributedQualifiedLeads, attributedBaseLeads) * 100)
-      + (safeDivide(row.attributedGreatLeads, attributedBaseLeads) * 200);
+    const qualityScore = ((safeDivide(row.attributedQualifiedLeads, attributedBaseLeads) ?? 0) * 100)
+      + ((safeDivide(row.attributedGreatLeads, attributedBaseLeads) ?? 0) * 200);
 
     return {
       ...row,
@@ -603,7 +605,10 @@ function getSnapshot({ adsRows, paidLeads, zoomDaily, lumaRegistrations, hasDire
 
   const qualifiedLeads = leadsInRange.filter((row) => row.tier === 'qualified').length;
   const greatLeads = leadsInRange.filter((row) => row.tier === 'great').length;
-  const standardLeads = Math.max(leads - qualifiedLeads - greatLeads, 0);
+  const okLeads = leadsInRange.filter((row) => row.tier === 'ok').length;
+  const badLeads = leadsInRange.filter((row) => row.tier === 'bad').length;
+  const unknownLeads = leadsInRange.filter((row) => row.tier === 'unknown').length;
+  const standardLeads = Math.max(leads - qualifiedLeads - greatLeads - okLeads - badLeads - unknownLeads, 0);
 
   const tuesdayShowUps = showupsInRange.reduce((acc, row) => acc + row.tuesday, 0);
   const thursdayShowUps = showupsInRange.reduce((acc, row) => acc + row.thursday, 0);
@@ -650,8 +655,10 @@ function getSnapshot({ adsRows, paidLeads, zoomDaily, lumaRegistrations, hasDire
 }
 
 function metricDelta(current, previous) {
-  const delta = current - previous;
-  const deltaPct = previous === 0 ? null : delta / previous;
+  const c = Number.isFinite(current) ? current : 0;
+  const p = Number.isFinite(previous) ? previous : 0;
+  const delta = c - p;
+  const deltaPct = p === 0 ? null : delta / p;
   return { delta, deltaPct };
 }
 
@@ -757,10 +764,10 @@ function getTopAds(adRows) {
   const scored = adRows
     .filter((row) => row.spend > 0)
     .map((row) => {
-      const cpglScore = row.attributedGreatLeads > 0 ? 1 / row.cpgl : 0;
-      const cpqlScore = row.attributedQualifiedLeads > 0 ? 1 / row.cpql : 0;
-      const showupScore = row.showUpRate;
-      const qualityScore = safeDivide(row.qualityScore, 100);
+      const cpglScore = row.attributedGreatLeads > 0 && row.cpgl ? 1 / row.cpgl : 0;
+      const cpqlScore = row.attributedQualifiedLeads > 0 && row.cpql ? 1 / row.cpql : 0;
+      const showupScore = row.showUpRate ?? 0;
+      const qualityScore = (safeDivide(row.qualityScore, 100)) ?? 0;
       return {
         ...row,
         rankingScore: cpglScore * 0.5 + cpqlScore * 0.2 + showupScore * 0.15 + qualityScore * 0.15,
@@ -777,7 +784,7 @@ function getBottomAds(adRows) {
     .map((row) => {
       const zeroGreatPenalty = row.attributedGreatLeads === 0 ? 1 : 0;
       const zeroQualifiedPenalty = row.attributedQualifiedLeads === 0 ? 1 : 0;
-      const cplPenalty = row.cpl;
+      const cplPenalty = row.cpl ?? 0;
       return {
         ...row,
         wasteScore: row.spend * (1 + zeroGreatPenalty + zeroQualifiedPenalty) + cplPenalty * 5,
@@ -813,8 +820,8 @@ function buildRecommendations(monthCurrent, monthPrevious, topAds, bottomAds, fu
     const worst = bottomAds[0];
     const best = topAds[0];
     const budgetShift = worst.spend * 0.25;
-    const worstGreatPerDollar = safeDivide(worst.attributedGreatLeads, worst.spend);
-    const bestGreatPerDollar = safeDivide(best.attributedGreatLeads, best.spend);
+    const worstGreatPerDollar = safeDivide(worst.attributedGreatLeads, worst.spend) ?? 0;
+    const bestGreatPerDollar = safeDivide(best.attributedGreatLeads, best.spend) ?? 0;
     const expectedGreatLift = Math.max((bestGreatPerDollar - worstGreatPerDollar) * budgetShift, 0);
 
     recommendations.push({
@@ -848,8 +855,8 @@ function buildRecommendations(monthCurrent, monthPrevious, topAds, bottomAds, fu
     });
   }
 
-  const tueAvg = safeDivide(showupSummary.totalTuesday, showupSummary.tuesdaySessions);
-  const thuAvg = safeDivide(showupSummary.totalThursday, showupSummary.thursdaySessions);
+  const tueAvg = safeDivide(showupSummary.totalTuesday, showupSummary.tuesdaySessions) ?? 0;
+  const thuAvg = safeDivide(showupSummary.totalThursday, showupSummary.thursdaySessions) ?? 0;
   if (Math.abs(tueAvg - thuAvg) >= 1) {
     const weakerDay = tueAvg < thuAvg ? 'Tuesday' : 'Thursday';
     recommendations.push({

@@ -13,7 +13,7 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    "Access-Control-Allow-Methods": "POST,OPTIONS",
+    "Access-Control-Allow-Methods": "POST, GET, OPTIONS, PATCH, PUT, DELETE",
 };
 
 function stripCodeFences(text: string) {
@@ -384,7 +384,7 @@ function buildMockMetaAdGuide(data: any, sourceDocs: string[]) {
                 hook: "Why high-performing sober founders outgrow generic entrepreneur groups",
                 overlay_text: "For sober founders scaling past $250k+",
                 audience_strategy: "Broad, creative-led targeting (30-55, country only)",
-                headlines: ["Sober founders, this room is different", "Built a business but decisions still feel heavy?" ],
+                headlines: ["Sober founders, this room is different", "Built a business but decisions still feel heavy?"],
                 primary_texts: [
                     "If you are a sober founder building a serious business, you do not need another generic networking group. Join a room built for sober entrepreneurs making real decisions.",
                     "The wrong room can slow your business down. The right room helps you make better decisions faster. If you are a sober founder, check out our free founder group.",

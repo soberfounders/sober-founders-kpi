@@ -231,7 +231,6 @@ async function hubspotBatchReadContacts(
     "firstname",
     "lastname",
     "createdate",
-    "annual_revenue_in_usd_official",
     "annual_revenue_in_dollars__official_",
     "annual_revenue_in_dollars",
     "sobriety_date",
@@ -301,8 +300,9 @@ function mapHubspotContactToRawContactRow(contact: any) {
   const props = contact?.properties || {};
 
   const officialRevenueRaw = firstPresent(props, [
-    "annual_revenue_in_usd_official",
     "annual_revenue_in_dollars__official_",
+    // Legacy alias fallback if older cached exports used a different key.
+    "annual_revenue_in_usd_official",
   ]);
   const fallbackRevenueRaw = firstPresent(props, ["annual_revenue_in_dollars"]);
   const officialRevenue = toNumberOrNull(officialRevenueRaw);
