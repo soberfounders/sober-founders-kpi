@@ -18,6 +18,7 @@ import {
   Clock3,
   Globe,
   Loader2,
+  RefreshCw,
   Search,
   Sparkles,
   Users,
@@ -26,6 +27,25 @@ import {
 const SOURCE_KEYS = ['zoom', 'google_analytics', 'google_search_console'];
 const LOOKBACK_DAYS = 210;
 const HUBSPOT_CONTACT_LOOKBACK_DAYS = 210;
+const MODULE_ANALYSIS_TTL_HOURS = 24;
+const ET_TIMEZONE = 'America/New_York';
+const GROUP_CALL_ET_MINUTES = {
+  Tuesday: 12 * 60,
+  Thursday: 11 * 60,
+};
+const GROUP_CALL_TIME_TOLERANCE_MINUTES = 120;
+
+const etWeekdayFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: ET_TIMEZONE,
+  weekday: 'short',
+});
+
+const etTimePartsFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: ET_TIMEZONE,
+  hour12: false,
+  hour: '2-digit',
+  minute: '2-digit',
+});
 
 function dateToUtc(dateStr) {
   return new Date(`${dateStr}T00:00:00.000Z`);
@@ -53,6 +73,26 @@ function parseMaybeDate(value) {
   if (!value) return null;
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function etGroupTypeFromDate(dateLike) {
+  const d = parseMaybeDate(dateLike);
+  if (!d) return null;
+
+  const weekdayShort = etWeekdayFormatter.format(d);
+  const dayType = weekdayShort === 'Tue' ? 'Tuesday' : (weekdayShort === 'Thu' ? 'Thursday' : null);
+  if (!dayType) return null;
+
+  const parts = etTimePartsFormatter.formatToParts(d);
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value || NaN);
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value || NaN);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+
+  const minuteOfDay = hour * 60 + minute;
+  const expectedMinute = GROUP_CALL_ET_MINUTES[dayType];
+  const minutesFromExpected = Math.abs(minuteOfDay - expectedMinute);
+  if (minutesFromExpected <= GROUP_CALL_TIME_TOLERANCE_MINUTES) return dayType;
+  return null;
 }
 
 function safeNum(value) {
@@ -147,6 +187,12 @@ function classifyGroupCall(activity, attendeeCount) {
     if (day === 2) return 'Tuesday';
     if (day === 4) return 'Thursday';
   }
+
+  // Fallback for generic call titles or sessions with sparse associations:
+  // classify by expected ET meeting window so Tue/Thu rows still surface.
+  const scheduledEtGroupType = etGroupTypeFromDate(start);
+  if (scheduledEtGroupType) return scheduledEtGroupType;
+
   return null;
 }
 
@@ -372,6 +418,51 @@ function summaryToInsightBullets(summary) {
     .filter(Boolean);
 }
 
+function managerFallbackSummaryBullets(manager) {
+  const buckets = [
+    ...(summaryToInsightBullets(manager?.summaries?.bigPicture).map((b) => b.text)),
+    ...(summaryToInsightBullets(manager?.summaries?.month).map((b) => b.text)),
+    ...(summaryToInsightBullets(manager?.summaries?.week).map((b) => b.text)),
+  ];
+  return buckets
+    .map((text) => String(text || '').trim())
+    .filter(Boolean)
+    .slice(0, 5);
+}
+
+function actionCompletionMessage(action, payload) {
+  const result = payload || {};
+  const isNotionTask = action?.kind === 'create_notion_task';
+  if (isNotionTask) return 'Done — task sent to Notion.';
+
+  if (Array.isArray(result?.results)) {
+    const okCount = result.results.filter((row) => row?.status === 'success').length;
+    const failCount = result.results.filter((row) => row?.status && row.status !== 'success').length;
+    if (okCount > 0 || failCount > 0) {
+      if (failCount > 0) return `Done — ${okCount} sync step(s) succeeded, ${failCount} had issues.`;
+      return `Done — ${okCount} sync step(s) completed.`;
+    }
+  }
+
+  const numericFields = [
+    'count',
+    'rows_written',
+    'sessions_written',
+    'attendee_mappings_written',
+    'raw_hubspot_meeting_activities_upserted',
+    'hubspot_activity_contact_associations_upserted',
+    'raw_hubspot_contacts_upserted',
+  ];
+  for (const field of numericFields) {
+    const value = Number(result?.[field]);
+    if (Number.isFinite(value) && value > 0) {
+      return `Done — ${Math.round(value)} item(s) updated.`;
+    }
+  }
+
+  return 'Done — action completed.';
+}
+
 const baseCardStyle = {
   backgroundColor: 'white',
   border: '1px solid var(--color-border)',
@@ -387,9 +478,11 @@ const DashboardOverview = () => {
   const [metrics, setMetrics] = useState([]);
   const [hubspotContacts, setHubspotContacts] = useState([]);
   const [fbAdsRows, setFbAdsRows] = useState([]);
+  const [donationRows, setDonationRows] = useState([]);
   const [hubspotActivities, setHubspotActivities] = useState([]);
   const [hubspotActivityAssocs, setHubspotActivityAssocs] = useState([]);
   const [actionState, setActionState] = useState({});
+  const [moduleAnalysisState, setModuleAnalysisState] = useState({});
   const [notionModal, setNotionModal] = useState({ open: false, taskName: '' });
 
   useEffect(() => {
@@ -413,6 +506,7 @@ const DashboardOverview = () => {
       metricsRes,
       hubspotContactsRes,
       fbAdsRes,
+      donationsRes,
       hubspotActivitiesRes,
     ] = await Promise.all([
       supabase
@@ -432,10 +526,15 @@ const DashboardOverview = () => {
         .gte('date_day', startDate)
         .order('date_day', { ascending: true }),
       supabase
+        .from('donation_transactions_unified')
+        .select('source_system,amount,currency,is_recurring,status,campaign_name,donated_at')
+        .gte('donated_at', `${startDate}T00:00:00.000Z`)
+        .order('donated_at', { ascending: true }),
+      supabase
         .from('raw_hubspot_meeting_activities')
         .select('hubspot_activity_id,activity_type,hs_timestamp,created_at_hubspot,title')
-        .eq('activity_type', 'call')
-        .gte('hs_timestamp', `${startDate}T00:00:00.000Z`)
+        .in('activity_type', ['call', 'meeting'])
+        .or(`hs_timestamp.gte.${startDate},created_at_hubspot.gte.${startDate}`)
         .order('hs_timestamp', { ascending: true }),
     ]);
 
@@ -451,8 +550,11 @@ const DashboardOverview = () => {
     if (fbAdsRes.error) {
       nextWarnings.push(`Meta Ads rows unavailable for Leads manager: ${fbAdsRes.error.message}`);
     }
+    if (donationsRes.error) {
+      nextWarnings.push(`Donations rows unavailable for Donations manager: ${donationsRes.error.message}`);
+    }
     if (hubspotActivitiesRes.error) {
-      nextWarnings.push(`HubSpot call activities unavailable for Attendees manager: ${hubspotActivitiesRes.error.message}`);
+      nextWarnings.push(`HubSpot call/meeting activities unavailable for Attendance manager: ${hubspotActivitiesRes.error.message}`);
     }
 
     let assocRows = [];
@@ -468,9 +570,9 @@ const DashboardOverview = () => {
           .from('hubspot_activity_contact_associations')
           .select('hubspot_activity_id,activity_type,hubspot_contact_id,contact_email,contact_firstname,contact_lastname')
           .in('hubspot_activity_id', chunk)
-          .eq('activity_type', 'call');
+          .in('activity_type', ['call', 'meeting']);
         if (assocRes.error) {
-          nextWarnings.push(`HubSpot call associations unavailable for Attendees manager: ${assocRes.error.message}`);
+          nextWarnings.push(`HubSpot call/meeting associations unavailable for Attendance manager: ${assocRes.error.message}`);
           assocChunks.length = 0;
           break;
         }
@@ -482,6 +584,7 @@ const DashboardOverview = () => {
     setMetrics(metricsRes.data || []);
     setHubspotContacts(hubspotContactsRes.data || []);
     setFbAdsRows(fbAdsRes.data || []);
+    setDonationRows(donationsRes.data || []);
     setHubspotActivities(activityRows);
     setHubspotActivityAssocs(assocRows);
     setWarnings(nextWarnings);
@@ -783,20 +886,24 @@ const DashboardOverview = () => {
       };
     };
 
+    const activityAssocKey = (activityId, activityType) => `${String(activityType || '').toLowerCase()}:${String(activityId || '')}`;
     const assocByActivityId = new Map();
     hubspotActivityAssocs.forEach((assoc) => {
       const id = Number(assoc?.hubspot_activity_id);
+      const activityType = String(assoc?.activity_type || '').toLowerCase();
       if (!Number.isFinite(id)) return;
-      if (!assocByActivityId.has(id)) assocByActivityId.set(id, []);
-      assocByActivityId.get(id).push(assoc);
+      const key = activityAssocKey(id, activityType);
+      if (!assocByActivityId.has(key)) assocByActivityId.set(key, []);
+      assocByActivityId.get(key).push(assoc);
     });
 
     const parsedCalls = hubspotActivities
       .map((activity) => {
         const id = Number(activity?.hubspot_activity_id);
+        const activityType = String(activity?.activity_type || '').toLowerCase();
         const startedAt = toUtcDayStart(activity?.hs_timestamp || activity?.created_at_hubspot);
         if (!startedAt || !Number.isFinite(id)) return null;
-        const assocs = assocByActivityId.get(id) || [];
+        const assocs = assocByActivityId.get(activityAssocKey(id, activityType)) || [];
         const attendeeKeys = Array.from(new Set(
           assocs.map(attendeeAssocKey).filter(Boolean)
         ));
@@ -819,7 +926,18 @@ const DashboardOverview = () => {
       .filter(Boolean)
       .sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
 
-    const freeGroupEvents = parsedCalls.filter((e) => !!e.groupType);
+    const freeGroupEventsAll = parsedCalls.filter((e) => !!e.groupType);
+    const freeGroupByDate = new Map();
+    freeGroupEventsAll.forEach((event) => {
+      const dateKey = event.startedAt.toISOString().slice(0, 10);
+      const key = `${event.groupType}|${dateKey}`;
+      const existing = freeGroupByDate.get(key);
+      if (!existing || Number(event.attendeeCount || 0) > Number(existing.attendeeCount || 0)) {
+        freeGroupByDate.set(key, event);
+      }
+    });
+    const freeGroupEvents = Array.from(freeGroupByDate.values())
+      .sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
     const phoenixForumCalls = parsedCalls.filter((e) => e.isPhoenixForum);
     const unclassifiedLargeCalls = parsedCalls.filter((e) => !e.groupType && !e.isPhoenixForum && e.attendeeCount >= 5).length;
 
@@ -1111,9 +1229,9 @@ const DashboardOverview = () => {
     });
 
     const attendeesBigPictureSummary = [
-      'Attendance reporting here is driven by HubSpot call attendance (not the legacy Zoom metric), which keeps the manager aligned with the current attendance pipeline.',
+      'Attendance reporting here is driven by HubSpot call/meeting attendance (not the legacy Zoom metric), which keeps the manager aligned with the current attendance pipeline.',
       `Over the last 30 days, free groups generated ${formatInt(attendeesMonth.newAttendees)} net-new attendees, ${formatInt(attendeesMonth.attendanceParticipations)} total attendances, and ${Number.isFinite(attendeesMonth.avgVisits) ? attendeesMonth.avgVisits.toFixed(2) : 'N/A'} average visits per attendee with estimated Meta cost per new attendee at ${Number.isFinite(monthFreeCostPerNewAttendee) ? formatCurrency(monthFreeCostPerNewAttendee) : 'N/A'}.`,
-      `${phoenixCallsMonth.sessions > 0 ? `Phoenix Forum-tagged calls in the same period: ${formatInt(phoenixCallsMonth.sessions)} sessions and ${formatInt(phoenixCallsMonth.attendanceParticipations)} attendances.` : 'Phoenix Forum-tagged call titles were not detected in the last 30 days from HubSpot calls.'}`,
+      `${phoenixCallsMonth.sessions > 0 ? `Phoenix Forum-tagged calls in the same period: ${formatInt(phoenixCallsMonth.sessions)} sessions and ${formatInt(phoenixCallsMonth.attendanceParticipations)} attendances.` : 'Phoenix Forum-tagged call titles were not detected in the last 30 days from HubSpot call/meeting activity.'}`,
       unclassifiedLargeCalls > 0
         ? `${formatInt(unclassifiedLargeCalls)} high-attendance calls are still unclassified, which can understate free-group counts until titles are standardized.`
         : 'Classification coverage looks clean for high-attendance calls in the current window.',
@@ -1187,6 +1305,171 @@ const DashboardOverview = () => {
       'If clicks rise without downstream quality, treat it as an intent/conversion-path problem; if clicks fall, treat it as a discovery/ranking problem.',
     ].join(' ');
 
+    const parsedDonations = (donationRows || [])
+      .map((row) => {
+        const donatedAt = toUtcDayStart(row?.donated_at);
+        return {
+          ...row,
+          _donatedAt: donatedAt,
+          _amount: Number(row?.amount || 0),
+          _isRecurring: !!row?.is_recurring,
+        };
+      })
+      .filter((row) => row._donatedAt && Number.isFinite(row._amount));
+
+    const donationStats = (start, end) => {
+      const rows = parsedDonations.filter((row) => inUtcDayRange(row._donatedAt, start, end));
+      const totalAmount = rows.reduce((acc, row) => acc + safeNum(row._amount), 0);
+      const recurringCount = rows.filter((row) => row._isRecurring).length;
+      return {
+        transactions: rows.length,
+        totalAmount,
+        recurringCount,
+        avgGift: ratioOrNull(totalAmount, rows.length),
+      };
+    };
+
+    const donationsMonth = donationStats(monthStart, monthEnd);
+    const donationsPrevMonth = donationStats(prevMonthStart, prevMonthEnd);
+    const donationAmountDelta = comparePeriod(donationsMonth.totalAmount, donationsPrevMonth.totalAmount);
+    const donationTxnDelta = comparePeriod(donationsMonth.transactions, donationsPrevMonth.transactions);
+    const donationRecurringDelta = comparePeriod(donationsMonth.recurringCount, donationsPrevMonth.recurringCount);
+
+    const leadsAnalysisContext = {
+      module_key: 'leads',
+      as_of: periodMeta.asOfLabel,
+      windows: {
+        last_7_days: periodMeta.lastWeekLabel,
+        last_30_days: periodMeta.lastMonthLabel,
+      },
+      current_7d: {
+        paid_social_leads: leadsWeek.paidSocial,
+        great_leads: weekPaidQuality.great,
+        high_quality_leads: weekPaidQuality.highQuality,
+        high_quality_rate: weekPaidQuality.highQualityRate,
+        lead_gen_spend: adsWeek.leadGenSpend,
+        cpql: cpqlWeek,
+        cpgl: cpglWeek,
+      },
+      previous_7d: {
+        paid_social_leads: leadsPrevWeek.paidSocial,
+        great_leads: prevWeekPaidQuality.great,
+        high_quality_leads: prevWeekPaidQuality.highQuality,
+        high_quality_rate: prevWeekPaidQuality.highQualityRate,
+        lead_gen_spend: adsPrevWeek.leadGenSpend,
+        cpql: cpqlPrevWeek,
+        cpgl: cpglPrevWeek,
+      },
+      current_30d: {
+        paid_social_leads: leadsMonth.paidSocial,
+        great_leads: monthPaidQuality.great,
+        qualified_leads: monthPaidQuality.qualified,
+        high_quality_leads: monthPaidQuality.highQuality,
+        high_quality_rate: monthPaidQuality.highQualityRate,
+        lead_gen_spend: adsMonth.leadGenSpend,
+        cpql: cpqlMonth,
+        cpgl: cpglMonth,
+        phoenix_paid_lead_share: phoenixPaidShareMonth,
+      },
+      diagnostics: {
+        quality_coverage_rate_30d: monthPaidQuality.qualityCoverage,
+      },
+    };
+
+    const attendanceAnalysisContext = {
+      module_key: 'attendance',
+      as_of: periodMeta.asOfLabel,
+      windows: {
+        last_7_days: periodMeta.lastWeekLabel,
+        last_30_days: periodMeta.lastMonthLabel,
+      },
+      current_7d: {
+        sessions: attendeesWeek.sessions,
+        tuesday_sessions: attendeesWeek.tuesdaySessions,
+        thursday_sessions: attendeesWeek.thursdaySessions,
+        new_attendees: attendeesWeek.newAttendees,
+        attendance_participations: attendeesWeek.attendanceParticipations,
+        avg_visits: attendeesWeek.avgVisits,
+        repeat_rate: attendeesWeek.repeatRate,
+        free_group_ad_spend: adsWeek.freeSpend,
+        cost_per_new_attendee: weekFreeCostPerNewAttendee,
+      },
+      previous_7d: {
+        sessions: attendeesPrevWeek.sessions,
+        tuesday_sessions: attendeesPrevWeek.tuesdaySessions,
+        thursday_sessions: attendeesPrevWeek.thursdaySessions,
+        new_attendees: attendeesPrevWeek.newAttendees,
+        attendance_participations: attendeesPrevWeek.attendanceParticipations,
+        avg_visits: attendeesPrevWeek.avgVisits,
+        repeat_rate: attendeesPrevWeek.repeatRate,
+        free_group_ad_spend: adsPrevWeek.freeSpend,
+        cost_per_new_attendee: prevWeekFreeCostPerNewAttendee,
+      },
+      current_30d: {
+        sessions: attendeesMonth.sessions,
+        new_attendees: attendeesMonth.newAttendees,
+        attendance_participations: attendeesMonth.attendanceParticipations,
+        avg_visits: attendeesMonth.avgVisits,
+        repeat_rate: attendeesMonth.repeatRate,
+        free_group_ad_spend: adsMonth.freeSpend,
+        cost_per_new_attendee: monthFreeCostPerNewAttendee,
+      },
+      diagnostics: {
+        unclassified_large_calls: unclassifiedLargeCalls,
+        phoenix_sessions_30d: phoenixCallsMonth.sessions,
+      },
+    };
+
+    const seoAnalysisContext = {
+      module_key: 'seo',
+      as_of: periodMeta.asOfLabel,
+      windows: {
+        last_7_days: periodMeta.lastWeekLabel,
+        last_30_days: periodMeta.lastMonthLabel,
+      },
+      current_7d: {
+        ga_sessions: dashboard.cards.sessions7d,
+        ga_users: dashboard.cards.users7d,
+        ga_engagement_rate: dashboard.cards.engagement7d,
+        gsc_clicks: dashboard.cards.clicks7d,
+        gsc_impressions: dashboard.cards.impressions7d,
+        gsc_ctr: dashboard.cards.ctr7d,
+        gsc_avg_position: dashboard.cards.position7d,
+      },
+      current_30d: {
+        ga_sessions: dashboard.cards.sessions30d,
+        ga_users: dashboard.cards.users30d,
+        ga_engagement_rate: dashboard.cards.engagement30d,
+        gsc_clicks: dashboard.cards.clicks30d,
+        gsc_impressions: dashboard.cards.impressions30d,
+        gsc_ctr: dashboard.cards.ctr30d,
+        gsc_avg_position: dashboard.cards.position30d,
+      },
+      trends: {
+        sessions_7d_change: dashboard.trends.sessionsTrend,
+        clicks_7d_change: dashboard.trends.clicksTrend,
+        sessions_30d_change: dashboard.trends.sessions30dTrend,
+        clicks_30d_change: dashboard.trends.clicks30dTrend,
+      },
+    };
+
+    const donationsAnalysisContext = {
+      module_key: 'donations',
+      as_of: periodMeta.asOfLabel,
+      windows: {
+        last_30_days: periodMeta.lastMonthLabel,
+        previous_30_days: formatDateRange(prevMonthStart, prevMonthEnd),
+      },
+      current_30d: donationsMonth,
+      previous_30d: donationsPrevMonth,
+      trends: {
+        total_amount_change: donationAmountDelta,
+        transaction_change: donationTxnDelta,
+        recurring_count_change: donationRecurringDelta,
+      },
+      data_rows_loaded: parsedDonations.length,
+    };
+
     const managers = [
       {
         key: 'leads',
@@ -1200,6 +1483,7 @@ const DashboardOverview = () => {
         },
         scopeLabel: `HubSpot contacts + Meta Ads (${periodMeta.asOfLabel} as of) | Quality = revenue + sobriety at lead date`,
         sectionFocus: 'Lead quality, source mix, and acquisition efficiency across Phoenix Forum and feeder campaigns',
+        analysisContext: leadsAnalysisContext,
         summaries: {
           week: leadsWeekSummary,
           month: leadsMonthSummary,
@@ -1208,6 +1492,7 @@ const DashboardOverview = () => {
         autonomousActions: [
           {
             id: 'leads-sync-all',
+            action_key: 'leads_sync_all',
             label: 'Sync all data',
             description: 'Run full master sync (HubSpot, ads, metrics, SEO, attendance support tables).',
             kind: 'invoke_function',
@@ -1216,6 +1501,7 @@ const DashboardOverview = () => {
           },
           {
             id: 'leads-sync-hubspot',
+            action_key: 'leads_sync_hubspot',
             label: 'Sync HubSpot leads',
             description: 'Refresh HubSpot contacts/leads used by the Leads manager.',
             kind: 'invoke_function',
@@ -1224,6 +1510,7 @@ const DashboardOverview = () => {
           },
           {
             id: 'leads-sync-meta',
+            action_key: 'leads_sync_meta_ads',
             label: 'Sync Meta ads',
             description: 'Refresh Meta spend/leads for CPL and mix tracking.',
             kind: 'invoke_function',
@@ -1238,8 +1525,8 @@ const DashboardOverview = () => {
         ],
       },
       {
-        key: 'attendees',
-        title: 'Attendees AI Manager',
+        key: 'attendance',
+        title: 'Attendance AI Manager',
         icon: Users,
         accent: {
           bg: 'linear-gradient(135deg, #eff6ff 0%, #eef2ff 100%)',
@@ -1247,8 +1534,9 @@ const DashboardOverview = () => {
           pillBg: '#dbeafe',
           pillText: '#1e3a8a',
         },
-        scopeLabel: `HubSpot call activities + associations (free groups; not legacy Zoom attendance)`,
+        scopeLabel: `HubSpot call/meeting activities + associations (free groups; not legacy Zoom attendance)`,
         sectionFocus: 'Acquisition efficiency and repeat behavior in free groups (feeder into Phoenix Forum)',
+        analysisContext: attendanceAnalysisContext,
         summaries: {
           week: attendeesWeekSummary,
           month: attendeesMonthSummary,
@@ -1257,22 +1545,27 @@ const DashboardOverview = () => {
         autonomousActions: [
           {
             id: 'attendees-sync-hubspot-calls',
-            label: 'Sync HubSpot calls',
-            description: 'Refresh call/meeting activities (attendance source of truth).',
+            action_key: 'attendance_sync_hubspot_calls',
+            label: 'Sync HubSpot attendance',
+            description: 'Refresh HubSpot call/meeting attendance source + mappings.',
             kind: 'invoke_function',
             functionName: 'sync_hubspot_meeting_activities',
+            body: { days: 45, include_calls: true, include_meetings: true },
             reloadAfter: true,
           },
           {
             id: 'attendees-reconcile-mappings',
+            action_key: 'attendance_reconcile_mappings',
             label: 'Reconcile mappings',
             description: 'Refresh attendee/contact mappings for better attribution and dedupe.',
             kind: 'invoke_function',
             functionName: 'reconcile_zoom_attendee_hubspot_mappings',
+            body: { dry_run: false, days: 45 },
             reloadAfter: true,
           },
           {
             id: 'attendees-sync-luma',
+            action_key: 'attendance_sync_luma_registrations',
             label: 'Sync registrations',
             description: 'Refresh Luma registrations to support funnel and attendance context.',
             kind: 'invoke_function',
@@ -1301,6 +1594,7 @@ const DashboardOverview = () => {
         },
         scopeLabel: `Google Analytics + Search Console KPI metrics (${periodMeta.asOfLabel} as of)`,
         sectionFocus: 'Organic discovery quality and conversion-path health into Phoenix Forum (and future donations)',
+        analysisContext: seoAnalysisContext,
         summaries: {
           week: seoWeekSummary,
           month: seoMonthSummary,
@@ -1309,6 +1603,7 @@ const DashboardOverview = () => {
         autonomousActions: [
           {
             id: 'seo-sync-ga',
+            action_key: 'seo_sync_ga',
             label: 'Sync GA',
             description: 'Refresh Google Analytics KPI metrics.',
             kind: 'invoke_function',
@@ -1317,6 +1612,7 @@ const DashboardOverview = () => {
           },
           {
             id: 'seo-sync-gsc',
+            action_key: 'seo_sync_search_console',
             label: 'Sync Search Console',
             description: 'Refresh Search Console KPI metrics and queries.',
             kind: 'invoke_function',
@@ -1325,6 +1621,7 @@ const DashboardOverview = () => {
           },
           {
             id: 'seo-sync-metrics',
+            action_key: 'seo_sync_kpi_metrics',
             label: 'Sync KPI metrics',
             description: 'Refresh derived KPI metrics and dashboard aggregates.',
             kind: 'invoke_function',
@@ -1348,16 +1645,18 @@ const DashboardOverview = () => {
           pillBg: '#ffedd5',
           pillText: '#9a3412',
         },
-        scopeLabel: 'Module planned (no donation data source connected yet)',
+        scopeLabel: `Zeffy + manual donation transactions (${periodMeta.asOfLabel} as of)`,
         sectionFocus: 'Donations readiness, compliance setup, and launch planning',
+        analysisContext: donationsAnalysisContext,
         summaries: {
-          week: `In the last 7 days, there is still no live donation performance to report because the module is not connected yet. The useful work this week is implementation readiness: donation event tracking, source attribution, and acknowledgment workflow design so launch data is reliable from day one.`,
-          month: `Over the last 30 days, the donations area is still in planning mode rather than performance mode. The risk is building a payment form before the compliance and reporting model is defined, which would create cleanup work later.`,
-          bigPicture: `Donations should become a separate, compliance-safe operating lane for the nonprofit. The manager should report on donation performance once the module is live, but until then it should act like a launch program manager: define data contracts, compliance checks, and stewardship operations before rollout.`,
+          week: `No 7-day donation rollup is shown in this card; donations are tracked in 30-day windows for now. Use Refresh Analysis to get AI recommendations with current donation records.`,
+          month: `Last 30 days: ${formatInt(donationsMonth.transactions)} donation transactions totaling ${formatCurrency(donationsMonth.totalAmount)} (${changeLabel(donationTxnDelta)} transactions and ${changeLabel(donationAmountDelta)} amount vs prior 30-day window). Recurring donations this period: ${formatInt(donationsMonth.recurringCount)} (${changeLabel(donationRecurringDelta)}).`,
+          bigPicture: `Donations are now ingesting from Zeffy/manual sources. Operations focus should be acknowledgment quality, recurring donor growth, and campaign-level attribution hygiene while keeping nonprofit compliance workflows clean.`,
         },
         autonomousActions: [
           {
             id: 'donations-create-spec-task',
+            action_key: 'donations_create_build_spec_task',
             label: 'Create build spec task',
             description: 'Auto-create a Notion task for donations module schema + event tracking spec.',
             kind: 'create_notion_task',
@@ -1365,6 +1664,7 @@ const DashboardOverview = () => {
           },
           {
             id: 'donations-create-compliance-task',
+            action_key: 'donations_create_compliance_checklist_task',
             label: 'Create compliance checklist',
             description: 'Auto-create a Notion task for donation compliance requirements and review.',
             kind: 'create_notion_task',
@@ -1372,6 +1672,7 @@ const DashboardOverview = () => {
           },
           {
             id: 'donations-create-ops-task',
+            action_key: 'donations_create_donor_ops_task',
             label: 'Create donor ops task',
             description: 'Auto-create a Notion task for donor acknowledgment and stewardship workflow.',
             kind: 'create_notion_task',
@@ -1391,7 +1692,106 @@ const DashboardOverview = () => {
       periodMeta,
       managers,
     };
-  }, [dashboard, fbAdsRows, hubspotActivities, hubspotActivityAssocs, hubspotContacts]);
+  }, [dashboard, donationRows, fbAdsRows, hubspotActivities, hubspotActivityAssocs, hubspotContacts]);
+
+  const managerByKey = useMemo(() => {
+    const out = new Map();
+    (aiManagers?.managers || []).forEach((manager) => {
+      out.set(manager.key, manager);
+    });
+    return out;
+  }, [aiManagers]);
+
+  async function requestModuleAnalysis(manager, forceRefresh = false) {
+    if (!manager?.key) return;
+    const key = manager.key;
+    const actionCatalog = (manager.autonomousActions || [])
+      .map((action) => ({
+        action_key: String(action?.action_key || '').trim(),
+        description: String(action?.description || '').trim(),
+      }))
+      .filter((row) => row.action_key && row.description);
+
+    setModuleAnalysisState((prev) => ({
+      ...prev,
+      [key]: {
+        ...(prev[key] || {}),
+        status: 'loading',
+        error: '',
+        requestedAt: Date.now(),
+      },
+    }));
+
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke('ai-module-analysis', {
+        body: {
+          module_key: key,
+          context: manager.analysisContext || {},
+          action_catalog: actionCatalog,
+          ttl_hours: MODULE_ANALYSIS_TTL_HOURS,
+          force_refresh: forceRefresh,
+          fallback_summary: managerFallbackSummaryBullets(manager),
+          fallback_human_actions: (manager.humanActions || []).slice(0, 3),
+        },
+      });
+
+      if (invokeError) throw invokeError;
+      if (!data?.ok) throw new Error(data?.error || 'AI module analysis request failed.');
+
+      const summary = Array.isArray(data?.analysis?.summary)
+        ? data.analysis.summary.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 5)
+        : [];
+      const autonomousActions = Array.isArray(data?.analysis?.autonomous_actions)
+        ? data.analysis.autonomous_actions
+            .map((item) => ({
+              action_key: String(item?.action_key || '').trim(),
+              description: String(item?.description || '').trim(),
+            }))
+            .filter((item) => item.action_key && item.description)
+            .slice(0, 3)
+        : [];
+      const humanActions = Array.isArray(data?.analysis?.human_actions)
+        ? data.analysis.human_actions.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 3)
+        : [];
+
+      setModuleAnalysisState((prev) => ({
+        ...prev,
+        [key]: {
+          status: 'ready',
+          error: '',
+          requestedAt: prev[key]?.requestedAt || Date.now(),
+          generatedAt: String(data?.generated_at || '') || null,
+          fromCache: !!data?.from_cache,
+          aiModel: String(data?.ai_model || ''),
+          isMock: !!data?.is_mock,
+          data: {
+            summary,
+            autonomous_actions: autonomousActions,
+            human_actions: humanActions,
+          },
+        },
+      }));
+    } catch (err) {
+      setModuleAnalysisState((prev) => ({
+        ...prev,
+        [key]: {
+          ...(prev[key] || {}),
+          status: 'error',
+          error: err?.message || 'AI module analysis failed.',
+        },
+      }));
+    }
+  }
+
+  useEffect(() => {
+    (aiManagers?.managers || []).forEach((manager) => {
+      const state = moduleAnalysisState[manager.key];
+      if (!state) {
+        requestModuleAnalysis(manager, false);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiManagers?.managers?.length]);
 
   async function runAutonomousAction(action) {
     if (!action?.id) return;
@@ -1401,27 +1801,38 @@ const DashboardOverview = () => {
     }));
 
     try {
+      let payload = null;
       if (action.kind === 'invoke_function') {
         const options = action.body ? { body: action.body } : {};
-        const { error: invokeError } = await supabase.functions.invoke(action.functionName, options);
+        const { data: invokeData, error: invokeError } = await supabase.functions.invoke(action.functionName, options);
         if (invokeError) throw invokeError;
+        payload = invokeData || null;
       } else if (action.kind === 'create_notion_task') {
         const properties = buildNotionTaskProperties(String(action.taskName || '').trim());
-        const { error: notionError } = await supabase.functions.invoke('master-sync', {
+        const { data: notionData, error: notionError } = await supabase.functions.invoke('master-sync', {
           body: { action: 'create_task', properties },
         });
         if (notionError) throw notionError;
+        payload = notionData || null;
       } else {
         throw new Error(`Unsupported action type: ${action.kind || 'unknown'}`);
       }
 
+      const message = actionCompletionMessage(action, payload);
       setActionState((prev) => ({
         ...prev,
-        [action.id]: { status: 'success', error: '', at: Date.now() },
+        [action.id]: { status: 'success', error: '', at: Date.now(), message },
       }));
 
       if (action.reloadAfter) {
         await loadData();
+      }
+
+      if (action.moduleKey) {
+        const manager = managerByKey.get(action.moduleKey);
+        if (manager) {
+          await requestModuleAnalysis(manager, true);
+        }
       }
     } catch (err) {
       setActionState((prev) => ({
@@ -1505,7 +1916,7 @@ const DashboardOverview = () => {
               <h3 style={{ fontSize: '18px' }}>AI Manager Summary by Section</h3>
             </div>
             <p style={{ marginTop: '6px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
-              Big-picture recap + recommended next moves for each section, with 30-day and 7-day supporting signals.
+              AI-generated module summaries with autonomous actions (Do This) and human-only follow-ups (For You to Do).
             </p>
           </div>
           <div style={{ display: 'grid', gap: '4px', alignContent: 'start', textAlign: 'right' }}>
@@ -1520,6 +1931,49 @@ const DashboardOverview = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
           {aiManagers.managers.map((manager) => {
             const Icon = manager.icon || Bot;
+            const analysis = moduleAnalysisState[manager.key] || {};
+            const analysisData = analysis?.data || {};
+            const summaryBullets = Array.isArray(analysisData?.summary) && analysisData.summary.length > 0
+              ? analysisData.summary
+              : managerFallbackSummaryBullets(manager);
+            const actionCatalogByKey = new Map(
+              (manager.autonomousActions || [])
+                .filter((action) => action?.action_key)
+                .map((action) => [action.action_key, action]),
+            );
+            const fallbackAutonomous = (manager.autonomousActions || []).slice(0, 3).map((action) => ({
+              action_key: action.action_key,
+              description: action.description,
+            }));
+            const chosenAutonomous = Array.isArray(analysisData?.autonomous_actions) && analysisData.autonomous_actions.length > 0
+              ? analysisData.autonomous_actions
+              : fallbackAutonomous;
+            const autonomousActions = chosenAutonomous
+              .map((item) => {
+                const actionKey = String(item?.action_key || '').trim();
+                const action = actionCatalogByKey.get(actionKey);
+                if (!action) return null;
+                return {
+                  ...action,
+                  moduleKey: manager.key,
+                  aiDescription: String(item?.description || action.description || '').trim(),
+                };
+              })
+              .filter(Boolean)
+              .slice(0, 3);
+            const humanActions = (
+              Array.isArray(analysisData?.human_actions) && analysisData.human_actions.length > 0
+                ? analysisData.human_actions
+                : manager.humanActions
+            )
+              .map((item) => String(item || '').trim())
+              .filter(Boolean)
+              .slice(0, 3);
+            const analysisStatusLabel = analysis?.status === 'loading'
+              ? 'Analyzing...'
+              : analysis?.generatedAt
+                ? `Updated ${new Date(analysis.generatedAt).toLocaleString()}${analysis.fromCache ? ' (cached)' : ''}`
+                : 'Analysis pending';
             return (
               <div
                 key={manager.key}
@@ -1561,21 +2015,50 @@ const DashboardOverview = () => {
                         <p style={{ marginTop: '2px', fontSize: '12px', color: '#475569' }}>{manager.sectionFocus}</p>
                       </div>
                     </div>
-                    <span
-                      style={{
-                        backgroundColor: manager.accent.pillBg,
-                        color: manager.accent.pillText,
-                        borderRadius: '999px',
-                        padding: '5px 9px',
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      AI Manager
-                    </span>
+                    <div style={{ display: 'grid', gap: '6px', justifyItems: 'end' }}>
+                      <span
+                        style={{
+                          backgroundColor: manager.accent.pillBg,
+                          color: manager.accent.pillText,
+                          borderRadius: '999px',
+                          padding: '5px 9px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        AI Manager
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => requestModuleAnalysis(manager, true)}
+                        disabled={analysis?.status === 'loading'}
+                        style={{
+                          border: '1px solid rgba(100,116,139,0.4)',
+                          backgroundColor: 'rgba(255,255,255,0.9)',
+                          color: '#0f172a',
+                          borderRadius: '8px',
+                          padding: '6px 9px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: analysis?.status === 'loading' ? 'not-allowed' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        {analysis?.status === 'loading' ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={12} />}
+                        Refresh Analysis
+                      </button>
+                    </div>
                   </div>
                   <p style={{ marginTop: '10px', fontSize: '12px', color: '#334155' }}>{manager.scopeLabel}</p>
+                  <p style={{ marginTop: '6px', fontSize: '11px', color: '#475569' }}>{analysisStatusLabel}</p>
+                  {analysis?.status === 'error' && (
+                    <p style={{ marginTop: '6px', fontSize: '11px', color: '#b91c1c' }}>
+                      Analysis failed: {analysis.error}
+                    </p>
+                  )}
                   {manager.diagnostics && (
                     <div style={{ marginTop: '8px', padding: '8px 10px', backgroundColor: 'rgba(255,255,255,0.75)', borderRadius: '10px', border: '1px solid rgba(148,163,184,0.4)' }}>
                       <p style={{ fontSize: '12px', color: '#475569' }}>{manager.diagnostics}</p>
@@ -1586,117 +2069,20 @@ const DashboardOverview = () => {
                 <div style={{ padding: '14px', display: 'grid', gap: '14px', flex: 1 }}>
                   <div style={{ display: 'grid', gap: '10px' }}>
                     <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', backgroundColor: '#f8fafc' }}>
-                      <p style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b' }}>Big Picture Recap</p>
+                      <p style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b' }}>
+                        Module Summary (AI-Generated)
+                      </p>
                       <ul style={{ marginTop: '6px', paddingLeft: '18px', display: 'grid', gap: '6px' }}>
-                        {summaryToInsightBullets(manager.summaries.bigPicture).map((bullet, idx) => (
-                          <li key={`${manager.key}-big-${idx}`} style={{ fontSize: '13px', lineHeight: 1.45, color: '#0f172a' }}>
-                            {bullet.label ? (
-                              <span
-                                style={{
-                                  display: 'inline-block',
-                                  marginRight: '6px',
-                                  padding: '1px 6px',
-                                  borderRadius: '999px',
-                                  fontSize: '10px',
-                                  fontWeight: 700,
-                                  letterSpacing: '0.02em',
-                                  verticalAlign: 'middle',
-                                  backgroundColor:
-                                    bullet.kind === 'action'
-                                      ? '#dcfce7'
-                                      : bullet.kind === 'note'
-                                        ? '#fef3c7'
-                                        : '#e2e8f0',
-                                  color:
-                                    bullet.kind === 'action'
-                                      ? '#166534'
-                                      : bullet.kind === 'note'
-                                        ? '#92400e'
-                                        : '#334155',
-                                }}
-                              >
-                                {bullet.label}
-                              </span>
-                            ) : null}
-                            <span>{bullet.text}</span>
+                        {summaryBullets.map((bullet, idx) => (
+                          <li key={`${manager.key}-summary-${idx}`} style={{ fontSize: '13px', lineHeight: 1.45, color: '#0f172a' }}>
+                            {bullet}
                           </li>
                         ))}
-                      </ul>
-                    </div>
-                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', backgroundColor: '#fff' }}>
-                      <p style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b' }}>Last 30 Days Insight</p>
-                      <ul style={{ marginTop: '6px', paddingLeft: '18px', display: 'grid', gap: '6px' }}>
-                        {summaryToInsightBullets(manager.summaries.month).map((bullet, idx) => (
-                          <li key={`${manager.key}-month-${idx}`} style={{ fontSize: '13px', lineHeight: 1.45, color: '#0f172a' }}>
-                            {bullet.label ? (
-                              <span
-                                style={{
-                                  display: 'inline-block',
-                                  marginRight: '6px',
-                                  padding: '1px 6px',
-                                  borderRadius: '999px',
-                                  fontSize: '10px',
-                                  fontWeight: 700,
-                                  letterSpacing: '0.02em',
-                                  verticalAlign: 'middle',
-                                  backgroundColor:
-                                    bullet.kind === 'action'
-                                      ? '#dcfce7'
-                                      : bullet.kind === 'note'
-                                        ? '#fef3c7'
-                                        : '#e2e8f0',
-                                  color:
-                                    bullet.kind === 'action'
-                                      ? '#166534'
-                                      : bullet.kind === 'note'
-                                        ? '#92400e'
-                                        : '#334155',
-                                }}
-                              >
-                                {bullet.label}
-                              </span>
-                            ) : null}
-                            <span>{bullet.text}</span>
+                        {summaryBullets.length === 0 && (
+                          <li style={{ fontSize: '13px', lineHeight: 1.45, color: '#64748b' }}>
+                            No summary generated yet for this module.
                           </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', backgroundColor: '#fff' }}>
-                      <p style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b' }}>Last 7 Days Signal</p>
-                      <ul style={{ marginTop: '6px', paddingLeft: '18px', display: 'grid', gap: '6px' }}>
-                        {summaryToInsightBullets(manager.summaries.week).map((bullet, idx) => (
-                          <li key={`${manager.key}-week-${idx}`} style={{ fontSize: '13px', lineHeight: 1.45, color: '#0f172a' }}>
-                            {bullet.label ? (
-                              <span
-                                style={{
-                                  display: 'inline-block',
-                                  marginRight: '6px',
-                                  padding: '1px 6px',
-                                  borderRadius: '999px',
-                                  fontSize: '10px',
-                                  fontWeight: 700,
-                                  letterSpacing: '0.02em',
-                                  verticalAlign: 'middle',
-                                  backgroundColor:
-                                    bullet.kind === 'action'
-                                      ? '#dcfce7'
-                                      : bullet.kind === 'note'
-                                        ? '#fef3c7'
-                                        : '#e2e8f0',
-                                  color:
-                                    bullet.kind === 'action'
-                                      ? '#166534'
-                                      : bullet.kind === 'note'
-                                        ? '#92400e'
-                                        : '#334155',
-                                }}
-                              >
-                                {bullet.label}
-                              </span>
-                            ) : null}
-                            <span>{bullet.text}</span>
-                          </li>
-                        ))}
+                        )}
                       </ul>
                     </div>
                   </div>
@@ -1704,10 +2090,12 @@ const DashboardOverview = () => {
                   <div style={{ display: 'grid', gap: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <Bot size={14} color="#334155" />
-                      <p style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>Suggested next actions (AI can run - click to approve)</p>
+                      <p style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>Autonomous Actions</p>
                     </div>
-                    <p style={{ fontSize: '11px', color: '#64748b' }}>Each action starts immediately after approval and refreshes the section if needed.</p>
-                    {manager.autonomousActions.map((action) => {
+                    <p style={{ fontSize: '11px', color: '#64748b' }}>
+                      AI-selected actions that can run immediately. Click Do This to execute.
+                    </p>
+                    {autonomousActions.map((action) => {
                       const state = actionState[action.id] || {};
                       const isRunning = state.status === 'running';
                       const isSuccess = state.status === 'success';
@@ -1717,7 +2105,9 @@ const DashboardOverview = () => {
                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center' }}>
                             <div>
                               <p style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>{action.label}</p>
-                              <p style={{ marginTop: '3px', fontSize: '12px', color: '#64748b' }}>{action.description}</p>
+                              <p style={{ marginTop: '3px', fontSize: '12px', color: '#64748b' }}>
+                                {action.aiDescription || action.description}
+                              </p>
                             </div>
                             <button
                               type="button"
@@ -1727,7 +2117,7 @@ const DashboardOverview = () => {
                                 border: 'none',
                                 borderRadius: '9px',
                                 padding: '8px 10px',
-                                backgroundColor: isRunning ? '#cbd5e1' : '#0f172a',
+                                backgroundColor: isRunning ? '#86efac' : '#16a34a',
                                 color: 'white',
                                 fontSize: '12px',
                                 fontWeight: 700,
@@ -1739,25 +2129,32 @@ const DashboardOverview = () => {
                               }}
                             >
                               {isRunning ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Sparkles size={13} />}
-                              {isRunning ? 'Starting...' : 'Approve & Run'}
+                              {isRunning ? 'Running...' : 'Do This'}
                             </button>
                           </div>
                           {(isSuccess || isError) && (
                             <p style={{ marginTop: '6px', fontSize: '12px', color: isError ? '#b91c1c' : '#166534' }}>
-                              {isError ? state.error : 'Completed'}
+                              {isError ? state.error : (state.message || 'Done')}
                             </p>
                           )}
                         </div>
                       );
                     })}
+                    {autonomousActions.length === 0 && (
+                      <div style={{ border: '1px dashed #cbd5e1', borderRadius: '10px', padding: '10px', backgroundColor: '#fff' }}>
+                        <p style={{ fontSize: '12px', color: '#64748b' }}>
+                          No runnable autonomous actions available for this module yet.
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ display: 'grid', gap: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <Sparkles size={14} color="#334155" />
-                      <p style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>Suggested next actions (human)</p>
+                      <p style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>For You to Do</p>
                     </div>
-                    {manager.humanActions.map((item) => (
+                    {humanActions.map((item) => (
                       <div key={`${manager.key}-${item}`} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', backgroundColor: '#fff', display: 'grid', gap: '8px' }}>
                         <p style={{ fontSize: '13px', color: '#0f172a', lineHeight: 1.4 }}>{item}</p>
                         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -1780,6 +2177,13 @@ const DashboardOverview = () => {
                         </div>
                       </div>
                     ))}
+                    {humanActions.length === 0 && (
+                      <div style={{ border: '1px dashed #cbd5e1', borderRadius: '10px', padding: '10px', backgroundColor: '#fff' }}>
+                        <p style={{ fontSize: '12px', color: '#64748b' }}>
+                          No human-only suggestions generated yet.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

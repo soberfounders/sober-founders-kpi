@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-/* -- DATA SOURCE: HubSpot Calls only. Do not add Zoom data as a fallback or supplement. See audit performed 2026-02-23. */
+/* -- DATA SOURCE: HubSpot call/meeting activities only. Do not add Zoom data as a fallback or supplement. See audit performed 2026-02-23. */
 import { supabase } from '../lib/supabaseClient';
 import { resolveCanonicalAttendeeName } from '../lib/attendeeCanonicalization';
 import { getZoomAttributionOverride } from '../lib/zoomAttributionOverrides';
@@ -24,6 +24,8 @@ import {
   AlertTriangle,
   Brain,
   Download,
+  Loader2,
+  RefreshCcw,
   Sparkles,
 } from 'lucide-react';
 
@@ -31,6 +33,12 @@ const TUE_MEETING_ID = '87199667045';
 const THU_MEETING_ID = '84242212480';
 const RECENT_WINDOW = 8;
 const HUBSPOT_PORTAL_ID = String(import.meta.env.VITE_HUBSPOT_PORTAL_ID || '45070276').trim();
+const ET_TIMEZONE = 'America/New_York';
+const GROUP_CALL_ET_MINUTES = {
+  Tuesday: 12 * 60,
+  Thursday: 11 * 60,
+};
+const GROUP_CALL_TIME_TOLERANCE_MINUTES = 120;
 
 function normalizeName(name = '') {
   return name.toLowerCase().trim().replace(/\s+/g, ' ');
@@ -569,6 +577,38 @@ function safeDate(dateLike) {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+const etWeekdayFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: ET_TIMEZONE,
+  weekday: 'short',
+});
+
+const etTimePartsFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: ET_TIMEZONE,
+  hour12: false,
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+function etGroupTypeFromDate(dateLike) {
+  const d = safeDate(dateLike);
+  if (!d) return null;
+
+  const weekdayShort = etWeekdayFormatter.format(d);
+  const dayType = weekdayShort === 'Tue' ? 'Tuesday' : (weekdayShort === 'Thu' ? 'Thursday' : null);
+  if (!dayType) return null;
+
+  const parts = etTimePartsFormatter.formatToParts(d);
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value || NaN);
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value || NaN);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+
+  const minuteOfDay = hour * 60 + minute;
+  const expectedMinute = GROUP_CALL_ET_MINUTES[dayType];
+  const minutesFromExpected = Math.abs(minuteOfDay - expectedMinute);
+  if (minutesFromExpected <= GROUP_CALL_TIME_TOLERANCE_MINUTES) return dayType;
+  return null;
+}
+
 /** Export cleaned attendance data as CSV */
 function exportAttendanceCSV(sessions) {
   const rows = [['canonical_name', 'session_date', 'group', 'is_net_new']];
@@ -832,13 +872,14 @@ function buildMonthlyAverageSeries(sessions = [], groupType = 'Tuesday') {
  * HUBSPOT-ONLY: Build sessions from HubSpot meeting activity logs
  * (raw_hubspot_meeting_activities + hubspot_activity_contact_associations).
  * 
- * -- DATA SOURCE: HubSpot Calls only. Do not add Zoom data as a fallback or supplement.
+ * -- DATA SOURCE: HubSpot call/meeting activities only. Do not add Zoom data as a fallback or supplement.
  * Audited 2026-02-23.
  */
 function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs = [], hubspotContactMap = new Map()) {
   const aliasMap = new Map(
     (aliases || []).map((a) => [normalizeName(a.original_name), a.target_name?.trim() || a.original_name]),
   );
+  const activityAssocKey = (activityId, activityType) => `${String(activityType || '').toLowerCase()}:${String(activityId || '')}`;
 
   // ── Helpers to classify session type from HubSpot activity title or day/size heuristic ──
   function getSessionType(activity, attendeeCount) {
@@ -854,30 +895,37 @@ function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs 
     if (title.includes("entrepreneur's big book") || title.includes('big book')) return 'Thursday';
     if (title.includes('sober founders mastermind') && !title.includes('intro')) return 'Thursday';
 
-    // Heuristic: Tuesdays/Thursdays with > 4 attendees likely are the group sessions
-    // This catches generic titles like "Call with unknown contact" (Bug 1 fix)
+    // Heuristic: Tuesdays/Thursdays with > 4 attendees likely are the group sessions.
     if (attendeeCount >= 5) {
       if (day === 2) return 'Tuesday';
       if (day === 4) return 'Thursday';
     }
 
+    // Fallback for generic call titles: use expected ET meeting windows so
+    // sessions with missing attendee check-ins can still be surfaced as data-quality gaps.
+    const scheduledEtGroupType = etGroupTypeFromDate(start);
+    if (scheduledEtGroupType) return scheduledEtGroupType;
+
     return null;
   }
 
-  // ── 1. Build sessions from HubSpot call activities (authoritative source) ──
+  // ── 1. Build sessions from HubSpot call/meeting activities (authoritative source) ──
   const assocsByActivity = new Map();
   (hubspotContactAssocs || []).forEach(assoc => {
     const aid = String(assoc.hubspot_activity_id || '');
+    const aType = String(assoc?.activity_type || '').toLowerCase();
+    const key = activityAssocKey(aid, aType);
     if (!aid) return;
-    if (!assocsByActivity.has(aid)) assocsByActivity.set(aid, []);
-    assocsByActivity.get(aid).push(assoc);
+    if (!assocsByActivity.has(key)) assocsByActivity.set(key, []);
+    assocsByActivity.get(key).push(assoc);
   });
 
   let sessions = [];
 
   (hubspotActivities || []).forEach(activity => {
     const activityId = String(activity.hubspot_activity_id || '');
-    const assocs = assocsByActivity.get(activityId) || [];
+    const activityType = String(activity?.activity_type || '').toLowerCase();
+    const assocs = assocsByActivity.get(activityAssocKey(activityId, activityType)) || [];
 
     const type = getSessionType(activity, assocs.length);
     if (!type) return;
@@ -954,6 +1002,24 @@ function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs 
   });
 
   sessions = sessions.sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
+
+  // Ensure one canonical Tue/Thu session per date: keep the activity with strongest attendee evidence.
+  const sessionsByGroupDate = new Map();
+  sessions.forEach((session) => {
+    const key = `${session.type}|${session.dateLabel}`;
+    const existing = sessionsByGroupDate.get(key);
+    if (!existing) {
+      sessionsByGroupDate.set(key, session);
+      return;
+    }
+    const existingScore = Number(existing.sourceCount || 0) * 1000 + Number(existing.derivedCount || 0);
+    const nextScore = Number(session.sourceCount || 0) * 1000 + Number(session.derivedCount || 0);
+    if (nextScore > existingScore) {
+      sessionsByGroupDate.set(key, session);
+    }
+  });
+  sessions = Array.from(sessionsByGroupDate.values())
+    .sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
 
   // 2. Identify New vs Repeat — SEPARATELY per day
   const seenTuesday = new Set();
@@ -1132,6 +1198,15 @@ function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs 
   const oneTimeShareThu = uniqueThu ? oneTimersThu / uniqueThu : 0;
 
   const lowRecentShowRatePeople = peopleArr.filter((p) => p.recentShowRate < 0.25).length;
+  const sessionsMissingMarkedAttendees = sessions
+    .filter((s) => Number(s?.sourceCount || 0) === 0)
+    .map((s) => ({
+      id: s.id,
+      type: s.type,
+      dateLabel: s.dateLabel,
+      dateFormatted: s.dateFormatted,
+      title: s.title,
+    }));
   const allCanonicalNames = peopleArr.map((p) => p.name);
   const duplicateCandidatesByName = {};
   allCanonicalNames.forEach((name) => {
@@ -1205,6 +1280,7 @@ function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs 
       atRiskOneTimers: atRiskBreakdown.oneAndDoneMissedNext,
       atRiskRepeaters: atRiskBreakdown.repeatMissedTwoInRow,
       lowRecentShowRatePeople,
+      sessionsMissingMarkedAttendees: sessionsMissingMarkedAttendees.length,
     },
     trendDataTue,
     trendDataThu,
@@ -1223,6 +1299,7 @@ function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs 
     welcomeNewSessions: [...welcomeNewSessionsTue, ...welcomeNewSessionsThu],
     welcomeNewSessionsTue,
     welcomeNewSessionsThu,
+    sessionsMissingMarkedAttendees,
     duplicateCandidatesByName,
   };
 }
@@ -1478,7 +1555,7 @@ const AttendanceDashboard = () => {
   const [rawHubspotContacts, setRawHubspotContacts] = useState([]);
   const [rawLumaRegistrations, setRawLumaRegistrations] = useState([]);
   const [attendeeHubspotMappings, setAttendeeHubspotMappings] = useState([]);
-  // HubSpot-first data source: group call activities + their contact associations
+  // HubSpot-first data source: group call/meeting activities + their contact associations
   const [hubspotActivities, setHubspotActivities] = useState([]);
   const [hubspotContactAssocs, setHubspotContactAssocs] = useState([]);
   const [identityWarning, setIdentityWarning] = useState('');
@@ -1489,6 +1566,11 @@ const AttendanceDashboard = () => {
   const [detailMessage, setDetailMessage] = useState('');
   const [mergingAliasKey, setMergingAliasKey] = useState('');
   const [humanTaskWorkflow, setHumanTaskWorkflow] = useState({});
+  const [syncNowState, setSyncNowState] = useState({
+    status: 'idle',
+    message: '',
+    lastRunAtIso: '',
+  });
 
   // Build raw_hubspot_contacts lookup map for enrichment (revenue, source etc.)
   const hubspotContactMap = useMemo(() => {
@@ -1514,6 +1596,21 @@ const AttendanceDashboard = () => {
     [rawHubspotContacts, rawLumaRegistrations, attendeeHubspotMappings],
   );
   const planItems = useMemo(() => buildPlan(analytics?.stats), [analytics]);
+  const hostAttendanceDataWarning = useMemo(() => {
+    const recentCutoff = dateKeyDaysAgo(21);
+    const gaps = (analytics?.sessionsMissingMarkedAttendees || [])
+      .filter((s) => s?.dateLabel && s.dateLabel >= recentCutoff)
+      .sort((a, b) => (b?.dateLabel || '').localeCompare(a?.dateLabel || ''));
+
+    if (!gaps.length) return '';
+
+    const examples = gaps
+      .slice(0, 4)
+      .map((s) => `${s.type} ${s.dateFormatted || s.dateLabel}`)
+      .join(', ');
+    const extraCount = gaps.length > 4 ? ` (+${gaps.length - 4} more)` : '';
+    return `Incomplete HubSpot attendance data for ${examples}${extraCount}. Sync is running, but attendee rows are missing because the host did not mark attendees in the HubSpot call/meeting record. Mark attendees in HubSpot, then click Sync Now.`;
+  }, [analytics]);
 
   useEffect(() => {
     const defaultState = {};
@@ -2049,6 +2146,78 @@ const AttendanceDashboard = () => {
     return tableReload.data;
   }
 
+  async function handleSyncNow() {
+    setSyncNowState((prev) => ({
+      ...prev,
+      status: 'running',
+      message: 'Syncing HubSpot attendance now...',
+    }));
+
+    try {
+      let syncData = null;
+      const primary = await supabase.functions.invoke('sync_attendance_from_hubspot', {
+        method: 'POST',
+        body: { days: 45, include_reconcile: true, include_luma: true },
+      });
+
+      if (!primary.error) {
+        syncData = primary.data || null;
+      } else {
+        const fallbackHubspot = await supabase.functions.invoke('sync_hubspot_meeting_activities', {
+          method: 'POST',
+          body: { days: 45, include_calls: true, include_meetings: true },
+        });
+        if (fallbackHubspot.error) throw fallbackHubspot.error;
+
+        const fallbackReconcile = await supabase.functions.invoke('reconcile_zoom_attendee_hubspot_mappings', {
+          method: 'POST',
+          body: { days: 45, dry_run: false },
+        });
+
+        syncData = {
+          ok: !fallbackReconcile.error,
+          fallback: true,
+          host_data_warning_summary: '',
+          non_fatal_step_errors: fallbackReconcile.error
+            ? [{ step: 'hubspot_attendance_reconcile', error: fallbackReconcile.error.message || 'reconcile failed' }]
+            : [],
+        };
+      }
+
+      await loadAll();
+
+      const warningSummary = String(syncData?.host_data_warning_summary || '').trim();
+      const nonFatalCount = Array.isArray(syncData?.non_fatal_step_errors)
+        ? syncData.non_fatal_step_errors.length
+        : 0;
+      const successMessage = warningSummary
+        ? `${warningSummary}${nonFatalCount > 0 ? ` (${nonFatalCount} non-fatal sync warning(s))` : ''}`
+        : `HubSpot attendance sync completed.${nonFatalCount > 0 ? ` (${nonFatalCount} non-fatal sync warning(s))` : ''}`;
+
+      if (warningSummary) {
+        setIdentityWarning((prev) => {
+          if (!prev) return warningSummary;
+          if (String(prev).includes(warningSummary)) return prev;
+          return `${prev} | ${warningSummary}`;
+        });
+      }
+
+      setSyncNowState({
+        status: 'success',
+        message: successMessage,
+        lastRunAtIso: new Date().toISOString(),
+      });
+    } catch (syncError) {
+      const message = syncError?.message || 'HubSpot attendance sync failed.';
+      setSyncNowState((prev) => ({
+        ...prev,
+        status: 'error',
+        message,
+      }));
+      setDetailMessage(message);
+    }
+  }
+
   async function loadAll() {
     setLoading(true);
     setError('');
@@ -2071,19 +2240,19 @@ const AttendanceDashboard = () => {
       lumaResult,
       attendeeMappingsResult,
     ] = await Promise.all([
-      // HubSpot group call activities (the sessions themselves)
+      // HubSpot group call/meeting activities (the sessions themselves)
       supabase
         .from('raw_hubspot_meeting_activities')
         .select('hubspot_activity_id,activity_type,hs_timestamp,created_at_hubspot,title,body_preview,metadata')
-        .eq('activity_type', 'call')
-        .gte('hs_timestamp', `${identityStartDate}T00:00:00.000Z`)
+        .in('activity_type', ['call', 'meeting'])
+        .or(`hs_timestamp.gte.${identityStartDate},created_at_hubspot.gte.${identityStartDate}`)
         .order('hs_timestamp', { ascending: false })
         .limit(5000),
       // Contact associations for those activities
       supabase
         .from('hubspot_activity_contact_associations')
         .select('hubspot_activity_id,activity_type,hubspot_contact_id,contact_email,contact_firstname,contact_lastname')
-        .eq('activity_type', 'call')
+        .in('activity_type', ['call', 'meeting'])
         .limit(50000),
       // HubSpot contact enrichment (revenue, source, email, etc.)
       supabase
@@ -2128,7 +2297,7 @@ const AttendanceDashboard = () => {
       hubspotContactsData = hubspotContactsResult.data || [];
     }
 
-    // Backfill any contact IDs referenced by the loaded HubSpot call sessions but missing from the
+    // Backfill any contact IDs referenced by the loaded HubSpot call/meeting sessions but missing from the
     // capped base contact query (old contacts often fall outside the newest-N limit).
     if (!hsActivitiesResult.error && !hsAssocsResult.error) {
       const sessionActivityIds = new Set(
@@ -2179,7 +2348,7 @@ const AttendanceDashboard = () => {
           identityWarnings.push(`HubSpot contacts enrichment backfill had ${backfillErrors.length} error(s); some revenue/sobriety fields may be missing.`);
         }
         if (stillMissingCount > 0) {
-          identityWarnings.push(`${stillMissingCount} HubSpot call-linked contact(s) were not found in raw_hubspot_contacts cache; refresh contact sync to fill enrichment fields.`);
+          identityWarnings.push(`${stillMissingCount} HubSpot activity-linked contact(s) were not found in raw_hubspot_contacts cache; refresh contact sync to fill enrichment fields.`);
         }
       }
     }
@@ -2534,6 +2703,33 @@ const AttendanceDashboard = () => {
         </div>
       )}
 
+      {hostAttendanceDataWarning && (
+        <div style={{ ...cardStyle, borderLeft: '4px solid #dc2626', backgroundColor: '#fef2f2' }}>
+          <p style={{ color: '#991b1b', fontWeight: 700 }}>HubSpot Attendee Marking Required</p>
+          <p style={{ marginTop: '6px', color: '#991b1b' }}>{hostAttendanceDataWarning}</p>
+          <p style={{ marginTop: '6px', color: '#991b1b', fontSize: '12px' }}>
+            This is not a sync outage. Attendance cannot be reconstructed when attendees are not marked on the HubSpot call/meeting record.
+          </p>
+        </div>
+      )}
+
+      {(syncNowState.status === 'success' || syncNowState.status === 'error') && (
+        <div
+          style={{
+            ...cardStyle,
+            borderLeft: syncNowState.status === 'success' ? '4px solid #16a34a' : '4px solid #dc2626',
+            backgroundColor: syncNowState.status === 'success' ? '#f0fdf4' : '#fef2f2',
+          }}
+        >
+          <p style={{ color: syncNowState.status === 'success' ? '#166534' : '#991b1b', fontWeight: 700 }}>
+            {syncNowState.status === 'success' ? 'Sync Complete' : 'Sync Failed'}
+          </p>
+          <p style={{ marginTop: '6px', color: syncNowState.status === 'success' ? '#166534' : '#991b1b' }}>
+            {syncNowState.message || (syncNowState.status === 'success' ? 'HubSpot attendance sync completed.' : 'HubSpot attendance sync failed.')}
+          </p>
+        </div>
+      )}
+
       <div
         style={{
           ...cardStyle,
@@ -2555,8 +2751,33 @@ const AttendanceDashboard = () => {
           <p style={{ marginTop: '6px', opacity: 0.85, fontSize: '12px' }}>
             Data source: {hubspotActivities.length} verified HubSpot group sessions · {hubspotContactAssocs.length} attendee associations · {rawHubspotContacts.length} HubSpot contacts enriched
           </p>
+          {syncNowState.lastRunAtIso && (
+            <p style={{ marginTop: '4px', opacity: 0.85, fontSize: '12px' }}>
+              Last manual sync: {new Date(syncNowState.lastRunAtIso).toLocaleString()}
+            </p>
+          )}
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={handleSyncNow}
+            disabled={syncNowState.status === 'running'}
+            style={{
+              display: 'flex',
+              gap: '8px',
+              alignItems: 'center',
+              backgroundColor: 'rgba(255,255,255,0.15)',
+              color: 'white',
+              borderRadius: '10px',
+              padding: '10px 14px',
+              border: '1px solid rgba(255,255,255,0.3)',
+              fontWeight: 600,
+              cursor: syncNowState.status === 'running' ? 'not-allowed' : 'pointer',
+              opacity: syncNowState.status === 'running' ? 0.8 : 1,
+            }}
+          >
+            {syncNowState.status === 'running' ? <Loader2 size={16} /> : <RefreshCcw size={16} />}
+            {syncNowState.status === 'running' ? 'Syncing...' : 'Sync Now'}
+          </button>
           <button
             onClick={() => exportAttendanceCSV(analytics.sessions)}
             style={{
@@ -3276,7 +3497,7 @@ const AttendanceDashboard = () => {
           <div>
             <h3 style={{ fontSize: '18px', color: '#991b1b' }}>Bad Names QA (HubSpot Contacts)</h3>
             <p style={{ marginTop: '4px', fontSize: '12px', color: '#7f1d1d' }}>
-              Flags suspicious HubSpot contact names attached to Tuesday/Thursday HubSpot call attendance (email text in name, device-like names, digits, or missing names).
+              Flags suspicious HubSpot contact names attached to Tuesday/Thursday HubSpot call/meeting attendance (email text in name, device-like names, digits, or missing names).
             </p>
             <p style={{ marginTop: '4px', fontSize: '11px', color: '#991b1b' }}>
               Rename in HubSpot, refresh data, and matched Attendance rows should backfill to the updated HubSpot contact name.
@@ -3356,7 +3577,7 @@ const AttendanceDashboard = () => {
               {badNameQa.rows.length === 0 && (
                 <tr>
                   <td colSpan={7} style={{ padding: '12px', fontSize: '12px', color: '#6b7280' }}>
-                    No suspicious HubSpot contact names detected in current Tuesday/Thursday HubSpot call attendance rows.
+                    No suspicious HubSpot contact names detected in current Tuesday/Thursday HubSpot call/meeting attendance rows.
                   </td>
                 </tr>
               )}

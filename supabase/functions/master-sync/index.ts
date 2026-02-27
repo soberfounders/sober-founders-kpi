@@ -187,7 +187,10 @@ serve(async (req: Request) => {
     // Stage 2: jobs that benefit from the refreshed HubSpot/Zoom caches.
     await Promise.all([
       runStep('luma_registrations', 'sync_luma_registrations', { method: 'POST' }),
-      runStep('zoom_hubspot_reconcile', 'reconcile_zoom_attendee_hubspot_mappings', { method: 'POST' }),
+      runStep('zoom_hubspot_reconcile', 'reconcile_zoom_attendee_hubspot_mappings', {
+        method: 'POST',
+        body: { dry_run: false, days: hubspotDays },
+      }),
     ]);
 
     // Keep a local Notion sync fallback if generic sync path is unavailable/misconfigured.

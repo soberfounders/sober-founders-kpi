@@ -376,9 +376,37 @@ function objectBodyPreview(props: Record<string, any>) {
   return String(props?.hs_body_preview || "").trim();
 }
 
+function parseEpochLikeToIso(value: number): string | null {
+  if (!Number.isFinite(value)) return null;
+  const abs = Math.abs(value);
+  // Heuristic:
+  // - >= 1e12 => milliseconds
+  // - >= 1e9  => seconds
+  const ms = abs >= 1e12 ? value : abs >= 1e9 ? value * 1000 : NaN;
+  if (!Number.isFinite(ms)) return null;
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
 function parseIsoMaybe(value: any): string | null {
-  if (!value) return null;
-  const d = new Date(value);
+  if (value === null || value === undefined || value === "") return null;
+
+  if (typeof value === "number") {
+    const epochIso = parseEpochLikeToIso(value);
+    if (epochIso) return epochIso;
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  if (/^\d+$/.test(raw)) {
+    const n = Number(raw);
+    const epochIso = parseEpochLikeToIso(n);
+    if (epochIso) return epochIso;
+  }
+
+  const d = new Date(raw);
   if (Number.isNaN(d.getTime())) return null;
   return d.toISOString();
 }
@@ -456,12 +484,16 @@ serve(async (req: Request) => {
 
       for (const obj of objects) {
         const props = obj?.properties || {};
+        const createdAtIso = parseIsoMaybe(props?.createdate || obj?.createdAt);
+        const hsTimestampIso = parseIsoMaybe(props?.hs_timestamp) || createdAtIso;
         rawActivityRows.push({
           hubspot_activity_id: Number(obj.id),
           activity_type: objectType === "meetings" ? "meeting" : "call",
           portal_id: portalId,
-          hs_timestamp: parseIsoMaybe(props?.hs_timestamp),
-          created_at_hubspot: parseIsoMaybe(props?.createdate || obj?.createdAt),
+          // Use created_at_hubspot fallback to prevent dropping valid call rows
+          // when hs_timestamp is absent or provided in an epoch format.
+          hs_timestamp: hsTimestampIso,
+          created_at_hubspot: createdAtIso,
           updated_at_hubspot: parseIsoMaybe(props?.hs_lastmodifieddate || obj?.updatedAt),
           title: objectTitle(objectType, props) || null,
           body_preview: objectBodyPreview(props) || null,
