@@ -1,8 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Clock3, DollarSign, Repeat2, Users } from 'lucide-react';
 import {
-  Bar,
-  BarChart,
   CartesianGrid,
   Cell,
   Legend,
@@ -150,7 +148,7 @@ function DonationsDashboard() {
           .limit(5000),
         supabase
           .from('raw_zeffy_supporter_profiles')
-          .select('donor_email,donor_name,commitment_amount,last_payment_at,manual_lists,donor_city,donor_region,donor_country')
+          .select('donor_email,donor_name,donor_company_name,commitment_amount,last_payment_at,manual_lists,donor_city,donor_region,donor_country')
           .order('last_payment_at', { ascending: false })
           .limit(5000),
       ]);
@@ -261,33 +259,36 @@ function DonationsDashboard() {
     return Array.from(byMethod.values()).sort((a, b) => b.amount - a.amount);
   }, [transactions]);
 
-  const topCampaigns = useMemo(() => {
-    const byCampaign = new Map();
-    transactions.forEach((row) => {
-      const key = row.campaign_name || 'Unattributed';
-      const existing = byCampaign.get(key) || { name: key, amount: 0, count: 0 };
-      existing.amount += row.amount;
-      existing.count += 1;
-      byCampaign.set(key, existing);
+  const supporterProfileByEmail = useMemo(() => {
+    const out = new Map();
+    (supporterProfiles || []).forEach((row) => {
+      const email = String(row?.donor_email || '').trim().toLowerCase();
+      if (!email) return;
+      if (!out.has(email)) {
+        out.set(email, row);
+      }
     });
-    return Array.from(byCampaign.values())
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 8);
-  }, [transactions]);
+    return out;
+  }, [supporterProfiles]);
 
   const topDonors = useMemo(() => {
     const byDonor = new Map();
     transactions.forEach((row) => {
       const key = donorKey(row);
+      const donorEmail = String(row?.donor_email || '').trim().toLowerCase();
+      const profile = donorEmail ? supporterProfileByEmail.get(donorEmail) : null;
       const existing = byDonor.get(key) || {
         key,
-        donor_name: row.donor_name || 'Unknown donor',
+        donor_name: profile?.donor_name || row.donor_name || 'Unknown donor',
         donor_email: row.donor_email || '',
+        donor_company_name: profile?.donor_company_name || '',
         totalAmount: 0,
         gifts: 0,
         recurringGifts: 0,
         lastGiftAt: row.donatedAt,
       };
+      if (profile?.donor_name) existing.donor_name = profile.donor_name;
+      if (profile?.donor_company_name) existing.donor_company_name = profile.donor_company_name;
       existing.totalAmount += row.amount;
       existing.gifts += 1;
       if (row.is_recurring) existing.recurringGifts += 1;
@@ -297,7 +298,7 @@ function DonationsDashboard() {
     return Array.from(byDonor.values())
       .sort((a, b) => b.totalAmount - a.totalAmount)
       .slice(0, 12);
-  }, [transactions]);
+  }, [transactions, supporterProfileByEmail]);
 
   const recentTransactions = useMemo(() => transactions.slice(0, 15), [transactions]);
 
@@ -418,22 +419,6 @@ function DonationsDashboard() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '16px' }}>
         <div style={baseCardStyle}>
-          <h3 style={{ fontSize: '18px', marginBottom: '6px' }}>Top campaigns</h3>
-          <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '12px' }}>Highest gross donation totals by campaign label.</p>
-          <div style={{ width: '100%', height: '300px' }}>
-            <ResponsiveContainer>
-              <BarChart data={topCampaigns} layout="vertical" margin={{ left: 12, right: 12 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" tickFormatter={(v) => `$${Number(v).toLocaleString()}`} />
-                <YAxis type="category" dataKey="name" width={130} />
-                <Tooltip formatter={(value) => formatCurrency(value)} />
-                <Bar dataKey="amount" fill="#0369a1" radius={[0, 6, 6, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div style={baseCardStyle}>
           <h3 style={{ fontSize: '18px', marginBottom: '6px' }}>Supporter commitment snapshot</h3>
           <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '12px' }}>
             From Zeffy supporter export ({summary.activeSupporters.toLocaleString()} profiles loaded).
@@ -492,7 +477,14 @@ function DonationsDashboard() {
                 {topDonors.map((row, idx) => (
                   <tr key={row.key}>
                     <td style={{ fontSize: '12px', padding: '10px', borderBottom: '1px solid #f1f5f9' }}>#{idx + 1}</td>
-                    <td style={{ fontSize: '12px', fontWeight: 700, padding: '10px', borderBottom: '1px solid #f1f5f9' }}>{row.donor_name}</td>
+                    <td style={{ fontSize: '12px', fontWeight: 700, padding: '10px', borderBottom: '1px solid #f1f5f9' }}>
+                      <div style={{ display: 'grid', gap: '2px' }}>
+                        <span>{row.donor_name}</span>
+                        {!!row.donor_company_name && (
+                          <span style={{ fontSize: '11px', fontWeight: 500, color: '#64748b' }}>{row.donor_company_name}</span>
+                        )}
+                      </div>
+                    </td>
                     <td style={{ fontSize: '12px', padding: '10px', borderBottom: '1px solid #f1f5f9' }}>{row.donor_email || '-'}</td>
                     <td style={{ fontSize: '12px', fontWeight: 700, textAlign: 'right', padding: '10px', borderBottom: '1px solid #f1f5f9' }}>{formatCurrency(row.totalAmount)}</td>
                     <td style={{ fontSize: '12px', textAlign: 'right', padding: '10px', borderBottom: '1px solid #f1f5f9' }}>{row.gifts}</td>
