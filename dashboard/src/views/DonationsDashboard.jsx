@@ -456,7 +456,7 @@ function DonationsDashboard() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  {['Rank', 'Donor', 'Email', 'Total Donated', 'Gift Count', 'Recurring Gifts', 'Last Gift'].map((h) => (
+                  {['Rank', 'Donor', 'Company Name', 'Total Donated', 'Gift Count', 'Recurring Gifts', 'Last Gift'].map((h) => (
                     <th
                       key={h}
                       style={{
@@ -485,7 +485,7 @@ function DonationsDashboard() {
                         )}
                       </div>
                     </td>
-                    <td style={{ fontSize: '12px', padding: '10px', borderBottom: '1px solid #f1f5f9' }}>{row.donor_email || '-'}</td>
+                    <td style={{ fontSize: '12px', padding: '10px', borderBottom: '1px solid #f1f5f9' }}>{row.donor_company_name || '-'}</td>
                     <td style={{ fontSize: '12px', fontWeight: 700, textAlign: 'right', padding: '10px', borderBottom: '1px solid #f1f5f9' }}>{formatCurrency(row.totalAmount)}</td>
                     <td style={{ fontSize: '12px', textAlign: 'right', padding: '10px', borderBottom: '1px solid #f1f5f9' }}>{row.gifts}</td>
                     <td style={{ fontSize: '12px', textAlign: 'right', padding: '10px', borderBottom: '1px solid #f1f5f9' }}>{row.recurringGifts}</td>
