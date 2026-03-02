@@ -49,6 +49,12 @@ function parseAmountFromPayload(payload: any, kind: "gross" | "fee" | "tip" | "n
   return toNumberOrNull(firstPresent(payload, dollarPaths[kind]));
 }
 
+function parseEligibleAmountFromPayload(payload: any): number | null {
+  const cents = toNumberOrNull(firstPresent(payload, ["eligible_amount_cents", "amounts.eligible_cents"]));
+  if (cents !== null) return cents / 100;
+  return toNumberOrNull(firstPresent(payload, ["eligible_amount", "amounts.eligible"]));
+}
+
 function parseBool(value: any): boolean {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value !== 0;
@@ -114,6 +120,7 @@ function mapPayloadToRow(payload: any) {
   const feeAmount = parseAmountFromPayload(payload, "fee");
   const tipAmount = parseAmountFromPayload(payload, "tip");
   const netAmount = parseAmountFromPayload(payload, "net");
+  const eligibleAmount = parseEligibleAmountFromPayload(payload);
   const donatedAt =
     parseIsoMaybe(firstPresent(payload, [
       "donated_at",
@@ -132,6 +139,8 @@ function mapPayloadToRow(payload: any) {
     "customer.email",
     "payer.email",
   ]));
+  const donorFirstName = compactWhitespace(firstPresent(payload, ["first_name", "supporter.first_name", "customer.first_name"]));
+  const donorLastName = compactWhitespace(firstPresent(payload, ["last_name", "supporter.last_name", "customer.last_name"]));
   const donorName = donorNameFromPayload(payload);
   const sourceEventId = deriveSourceEventId(payload, donatedAt, grossAmount);
   const zeffyDonationId = compactWhitespace(firstPresent(payload, ["donation_id", "data.donation_id", "zeffy_donation_id"]));
@@ -142,6 +151,16 @@ function mapPayloadToRow(payload: any) {
   const paymentMethod = compactWhitespace(firstPresent(payload, ["payment_method", "method", "card_brand", "data.payment_method"]));
   const isRecurring = parseBool(firstPresent(payload, ["is_recurring", "recurring", "subscription", "donation_type"]));
   const currency = compactWhitespace(firstPresent(payload, ["currency", "amount_currency"])) || "USD";
+  const donorAddress = firstPresent(payload, ["address", "donor_address", "supporter.address", "customer.address"]) || {};
+  const donorCity = compactWhitespace(firstPresent(payload, ["city", "supporter.city", "customer.city", "address.city"]));
+  const donorRegion = compactWhitespace(firstPresent(payload, ["region", "state", "province", "supporter.region", "customer.region", "address.region", "address.state"]));
+  const donorPostalCode = compactWhitespace(firstPresent(payload, ["postal_code", "zip", "supporter.postal_code", "customer.postal_code", "address.postal_code", "address.zip"]));
+  const donorCountry = compactWhitespace(firstPresent(payload, ["country", "supporter.country", "customer.country", "address.country"]));
+  const donorCompanyName = compactWhitespace(firstPresent(payload, ["company_name", "supporter.company_name", "customer.company_name"]));
+  const donorLanguage = compactWhitespace(firstPresent(payload, ["language", "supporter.language", "customer.language"]));
+  const receiptUrl = compactWhitespace(firstPresent(payload, ["receipt", "receipt_url", "receipt_link", "data.receipt"]));
+  const sourceFile = compactWhitespace(firstPresent(payload, ["source_file", "import_file"]));
+  const isHistoricalBackfill = parseBool(firstPresent(payload, ["is_historical_backfill", "historical_backfill"]));
 
   return {
     source_event_id: sourceEventId,
@@ -154,6 +173,7 @@ function mapPayloadToRow(payload: any) {
     fee_amount: feeAmount,
     tip_amount: tipAmount,
     net_amount: netAmount,
+    eligible_amount: eligibleAmount,
     donated_at: donatedAt,
     source_created_at: parseIsoMaybe(firstPresent(payload, ["created_at", "date", "timestamp"])),
     status,
@@ -161,7 +181,18 @@ function mapPayloadToRow(payload: any) {
     campaign_name: campaignName,
     form_name: formName,
     payment_method: paymentMethod,
-    donor_address: firstPresent(payload, ["address", "donor_address", "supporter.address", "customer.address"]) || {},
+    receipt_url: receiptUrl,
+    donor_first_name: donorFirstName,
+    donor_last_name: donorLastName,
+    donor_company_name: donorCompanyName,
+    donor_language: donorLanguage,
+    donor_city: donorCity,
+    donor_region: donorRegion,
+    donor_postal_code: donorPostalCode,
+    donor_country: donorCountry,
+    source_file: sourceFile,
+    is_historical_backfill: isHistoricalBackfill,
+    donor_address: donorAddress,
     payload,
     ingested_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
