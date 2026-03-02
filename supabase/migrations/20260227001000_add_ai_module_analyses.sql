@@ -15,12 +15,9 @@ CREATE TABLE IF NOT EXISTS public.ai_module_analyses (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS idx_ai_module_analyses_generated_at
   ON public.ai_module_analyses (generated_at DESC);
-
 ALTER TABLE public.ai_module_analyses ENABLE ROW LEVEL SECURITY;
-
 DO $$
 BEGIN
   IF NOT EXISTS (

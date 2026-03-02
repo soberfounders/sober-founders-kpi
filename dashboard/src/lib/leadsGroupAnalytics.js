@@ -455,6 +455,31 @@ function buildZoomShowUpRows(zoomRows, startKey, endKey, dayTypeFilter) {
     return rows;
 }
 
+function normalizePersonNameKey(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/['’]s\s*(iphone|ipad|android|galaxy|phone|pc|macbook|desktop|laptop)$/gi, '')
+        .replace(/\((iphone|ipad|android|galaxy|phone)\)$/gi, '')
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function filterZoomShowUpsByLumaMatches(zoomRows, lumaRows) {
+    if (!Array.isArray(zoomRows) || zoomRows.length === 0) return [];
+    if (!Array.isArray(lumaRows) || lumaRows.length === 0) return [];
+
+    const matchedNames = new Set();
+    for (const row of lumaRows) {
+        if (!row?.matchedZoom) continue;
+        const key = normalizePersonNameKey(row?.name);
+        if (key) matchedNames.add(key);
+    }
+    if (matchedNames.size === 0) return [];
+
+    return zoomRows.filter((row) => matchedNames.has(normalizePersonNameKey(row?.name)));
+}
+
 function countZoomShowUps(zoomRows, startKey, endKey, dayTypeFilter) {
     return buildZoomShowUpRows(zoomRows, startKey, endKey, dayTypeFilter).length;
 }
@@ -981,7 +1006,10 @@ function buildSubRowSnapshot(label, adsRows, hubspotRows, lumaRows, zoomRows, st
         .filter((r) => funnelFilter === 'any' || r.funnel === funnelFilter);
     const lumaCount = lumaFiltered.length;
 
-    const zoomShowUpRows = buildZoomShowUpRows(zoomRows, startKey, endKey, zoomDayType);
+    const zoomShowUpRowsRaw = buildZoomShowUpRows(zoomRows, startKey, endKey, zoomDayType);
+    const zoomShowUpRows = funnelFilter === 'any'
+        ? zoomShowUpRowsRaw
+        : filterZoomShowUpsByLumaMatches(zoomShowUpRowsRaw, lumaFiltered);
     const zoomCount = zoomShowUpRows.length;
 
     // HubSpot contacts in date window

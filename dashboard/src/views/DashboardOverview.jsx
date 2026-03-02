@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import { supabase, hasSupabaseConfig } from '../lib/supabaseClient';
 import SendToNotionModal from '../components/SendToNotionModal';
 import {
   ResponsiveContainer,
@@ -25,9 +25,49 @@ import {
 } from 'lucide-react';
 
 const SOURCE_KEYS = ['zoom', 'google_analytics', 'google_search_console'];
-const LOOKBACK_DAYS = 210;
-const HUBSPOT_CONTACT_LOOKBACK_DAYS = 210;
+const DEFAULT_LOOKBACK_DAYS = 730;
+const LOOKBACK_DAYS = (() => {
+  const parsed = Number(import.meta.env.VITE_DASHBOARD_LOOKBACK_DAYS || DEFAULT_LOOKBACK_DAYS);
+  if (!Number.isFinite(parsed) || parsed < 30) return DEFAULT_LOOKBACK_DAYS;
+  return Math.min(Math.floor(parsed), 1095);
+})();
+const HUBSPOT_CONTACT_LOOKBACK_DAYS = (() => {
+  const parsed = Number(import.meta.env.VITE_HUBSPOT_CONTACT_LOOKBACK_DAYS || LOOKBACK_DAYS);
+  if (!Number.isFinite(parsed) || parsed < 30) return LOOKBACK_DAYS;
+  return Math.min(Math.floor(parsed), 1095);
+})();
 const MODULE_ANALYSIS_TTL_HOURS = 24;
+const REMOTE_AI_MODULE_ANALYSIS_ENABLED = String(import.meta.env.VITE_ENABLE_REMOTE_AI_MODULE_ANALYSIS || '').toLowerCase() === 'true';
+const USE_DUMMY_DONATIONS = String(import.meta.env.VITE_USE_DUMMY_DONATIONS || '').toLowerCase() === 'true';
+const DUMMY_DONATION_ROWS = [
+  {
+    source_system: 'dummy',
+    amount: 5000,
+    currency: 'USD',
+    is_recurring: false,
+    status: 'posted',
+    campaign_name: 'Dummy Campaign - Scholarship',
+    donated_at: '2026-02-20T15:30:00.000Z',
+  },
+  {
+    source_system: 'dummy',
+    amount: 1200,
+    currency: 'USD',
+    is_recurring: true,
+    status: 'posted',
+    campaign_name: 'Dummy Campaign - Recurring Circle',
+    donated_at: '2026-02-18T13:00:00.000Z',
+  },
+  {
+    source_system: 'dummy',
+    amount: 750,
+    currency: 'USD',
+    is_recurring: false,
+    status: 'posted',
+    campaign_name: 'Dummy Campaign - Monthly Support',
+    donated_at: '2026-01-25T09:15:00.000Z',
+  },
+];
 const ET_TIMEZONE = 'America/New_York';
 const GROUP_CALL_ET_MINUTES = {
   Tuesday: 12 * 60,
@@ -525,11 +565,13 @@ const DashboardOverview = () => {
         .select('date_day,spend,leads,funnel_key,campaign_name')
         .gte('date_day', startDate)
         .order('date_day', { ascending: true }),
-      supabase
-        .from('donation_transactions_unified')
-        .select('source_system,amount,currency,is_recurring,status,campaign_name,donated_at')
-        .gte('donated_at', `${startDate}T00:00:00.000Z`)
-        .order('donated_at', { ascending: true }),
+      USE_DUMMY_DONATIONS
+        ? Promise.resolve({ data: DUMMY_DONATION_ROWS, error: null, isDummy: true })
+        : supabase
+            .from('donation_transactions_unified')
+            .select('source_system,amount,currency,is_recurring,status,campaign_name,donated_at')
+            .gte('donated_at', `${startDate}T00:00:00.000Z`)
+            .order('donated_at', { ascending: true }),
       supabase
         .from('raw_hubspot_meeting_activities')
         .select('hubspot_activity_id,activity_type,hs_timestamp,created_at_hubspot,title')
@@ -552,6 +594,8 @@ const DashboardOverview = () => {
     }
     if (donationsRes.error) {
       nextWarnings.push(`Donations rows unavailable for Donations manager: ${donationsRes.error.message}`);
+    } else if (donationsRes.isDummy) {
+      nextWarnings.push('Donations manager is currently using dummy data.');
     }
     if (hubspotActivitiesRes.error) {
       nextWarnings.push(`HubSpot call/meeting activities unavailable for Attendance manager: ${hubspotActivitiesRes.error.message}`);
@@ -1701,10 +1745,18 @@ const DashboardOverview = () => {
     });
     return out;
   }, [aiManagers]);
+  const disableRemoteModuleAnalysis = useMemo(() => {
+    const host = typeof window !== 'undefined' ? window.location.hostname : '';
+    const isLocalHost = host === 'localhost' || host === '127.0.0.1';
+    const isRemoteFeatureEnabled = REMOTE_AI_MODULE_ANALYSIS_ENABLED && hasSupabaseConfig;
+    return isLocalHost || !isRemoteFeatureEnabled;
+  }, []);
 
   async function requestModuleAnalysis(manager, forceRefresh = false) {
     if (!manager?.key) return;
     const key = manager.key;
+    const fallbackSummary = managerFallbackSummaryBullets(manager);
+    const fallbackHumanActions = (manager.humanActions || []).slice(0, 3);
     const actionCatalog = (manager.autonomousActions || [])
       .map((action) => ({
         action_key: String(action?.action_key || '').trim(),
@@ -1722,6 +1774,27 @@ const DashboardOverview = () => {
       },
     }));
 
+    if (disableRemoteModuleAnalysis) {
+      setModuleAnalysisState((prev) => ({
+        ...prev,
+        [key]: {
+          status: 'ready',
+          error: '',
+          requestedAt: prev[key]?.requestedAt || Date.now(),
+          generatedAt: new Date().toISOString(),
+          fromCache: false,
+          aiModel: 'local-fallback',
+          isMock: true,
+          data: {
+            summary: fallbackSummary,
+            autonomous_actions: actionCatalog.slice(0, 3),
+            human_actions: fallbackHumanActions,
+          },
+        },
+      }));
+      return;
+    }
+
     try {
       const { data, error: invokeError } = await supabase.functions.invoke('ai-module-analysis', {
         body: {
@@ -1730,8 +1803,8 @@ const DashboardOverview = () => {
           action_catalog: actionCatalog,
           ttl_hours: MODULE_ANALYSIS_TTL_HOURS,
           force_refresh: forceRefresh,
-          fallback_summary: managerFallbackSummaryBullets(manager),
-          fallback_human_actions: (manager.humanActions || []).slice(0, 3),
+          fallback_summary: fallbackSummary,
+          fallback_human_actions: fallbackHumanActions,
         },
       });
 

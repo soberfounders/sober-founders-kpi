@@ -34,15 +34,12 @@ create table if not exists public.raw_luma_registrations (
   updated_at timestamptz not null default now(),
   unique(event_api_id, guest_api_id)
 );
-
 create index if not exists idx_raw_luma_reg_event_date on public.raw_luma_registrations (event_date);
 create index if not exists idx_raw_luma_reg_email on public.raw_luma_registrations (guest_email);
 create index if not exists idx_raw_luma_reg_zoom on public.raw_luma_registrations (matched_zoom, matched_zoom_net_new);
 create index if not exists idx_raw_luma_reg_hubspot on public.raw_luma_registrations (matched_hubspot);
 create index if not exists idx_raw_luma_reg_zoom_meeting_id on public.raw_luma_registrations (zoom_meeting_id);
-
 alter table public.raw_luma_registrations enable row level security;
-
 do $$
 begin
   if not exists (

@@ -435,7 +435,10 @@ serve(async (req: Request) => {
     const url = new URL(req.url);
     const reqBody = req.method === "POST" ? (await req.json().catch(() => ({}))) : {};
 
-    const days = Number(url.searchParams.get("days") || reqBody?.days || 30);
+    const daysRaw = Number(url.searchParams.get("days") || reqBody?.days || 90);
+    const days = Number.isFinite(daysRaw) && daysRaw > 0
+      ? Math.min(Math.floor(daysRaw), 730)
+      : 90;
     const fromDate = String(url.searchParams.get("from") || reqBody?.from || dateDaysAgo(days));
     const toDate = String(url.searchParams.get("to") || reqBody?.to || isoDateOnly(new Date()));
     const includeMeetings = readBoolFlag(url, reqBody, "include_meetings", true);

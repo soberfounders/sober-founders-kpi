@@ -106,8 +106,6 @@ SELECT
   END AS wow_organic_pct
 FROM lagged
 ORDER BY metric_date;
-
-
 -- =============================================================================
 -- VIEW 2: vw_seo_ai_traffic_estimate
 -- =============================================================================
@@ -170,8 +168,6 @@ SELECT
   END AS wow_referral_pct
 FROM with_dark
 ORDER BY metric_date;
-
-
 -- =============================================================================
 -- VIEW 3: vw_seo_search_performance
 -- =============================================================================
@@ -261,8 +257,6 @@ SELECT
 FROM keywords
 WHERE COALESCE(impressions, 0) > 0
 ORDER BY clicks DESC, impressions DESC;
-
-
 -- =============================================================================
 -- VIEW 4: vw_seo_opportunity_pages
 -- =============================================================================
@@ -295,8 +289,6 @@ WHERE
   (impressions >= 300 AND ctr < 0.03)
   OR (avg_position BETWEEN 5 AND 20 AND impressions >= 80)
 ORDER BY impact_score DESC, impressions DESC;
-
-
 -- =============================================================================
 -- VIEW 5: vw_seo_ranking_drops
 -- =============================================================================
@@ -340,8 +332,6 @@ WHERE
   (avg_position > 15 AND impressions > 200)
   OR (avg_position > 20 AND impressions > 100)
 ORDER BY impressions DESC, avg_position DESC;
-
-
 -- =============================================================================
 -- VIEW 6: vw_seo_organic_zoom_attendees
 -- =============================================================================

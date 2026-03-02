@@ -51,10 +51,8 @@ SELECT
 FROM public.raw_hubspot_contacts c
 CROSS JOIN LATERAL regexp_split_to_table(COALESCE(c.hs_additional_emails, ''), '\s*,\s*') AS extra(email_value)
 WHERE BTRIM(COALESCE(extra.email_value, '')) <> '';
-
 COMMENT ON VIEW public.hubspot_contact_identity_emails_v1 IS
   'Explodes HubSpot primary and hs_additional_emails into one email-match row per contact. Use this before any name-based fallback.';
-
 -- ------------------------------------------------------------
 -- 2) Zoom attendee rows expanded from kpi_metrics metadata.attendees
 --    (raw names only; email may not exist for repeat attendees)
@@ -83,10 +81,8 @@ CROSS JOIN LATERAL (
   SELECT jsonb_array_elements_text(COALESCE(km.metadata->'attendees', '[]'::jsonb)) AS attendee_name
 ) attendee
 WHERE km.metric_name = 'Zoom Meeting Attendees';
-
 COMMENT ON VIEW public.zoom_meeting_attendee_rows_v1 IS
   'Expanded Zoom attendee names from kpi_metrics metadata.attendees for attendee-level auditing and matching.';
-
 -- ------------------------------------------------------------
 -- 3) HubSpot Call records with associated contacts (highest-confidence
 --    Zoom attendee mapping signal when available)
@@ -119,7 +115,5 @@ JOIN public.hubspot_activity_contact_associations assoc
   ON assoc.hubspot_activity_id = a.hubspot_activity_id
  AND LOWER(COALESCE(assoc.activity_type, '')) = LOWER(COALESCE(a.activity_type, ''))
 WHERE LOWER(COALESCE(a.activity_type, '')) = 'call';
-
 COMMENT ON VIEW public.hubspot_call_contact_rows_v1 IS
   'HubSpot Call records joined to associated contacts. Use as highest-confidence attendee->HubSpot evidence before name-only fallbacks.';
-

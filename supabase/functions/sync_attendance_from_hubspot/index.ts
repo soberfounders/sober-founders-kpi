@@ -179,10 +179,14 @@ serve(async (req: Request) => {
     const url = new URL(req.url);
     const reqBody = req.method === "POST" ? (await req.json().catch(() => ({}))) : {};
 
-    const daysRaw = Number(url.searchParams.get("days") || reqBody?.days || 30);
+    const daysRaw = Number(url.searchParams.get("days") || reqBody?.days || 90);
     const days = Number.isFinite(daysRaw) && daysRaw > 0
-      ? Math.min(Math.floor(daysRaw), 365)
-      : 30;
+      ? Math.min(Math.floor(daysRaw), 730)
+      : 90;
+    const fromRaw = String(url.searchParams.get("from") || reqBody?.from || "").trim();
+    const toRaw = String(url.searchParams.get("to") || reqBody?.to || "").trim();
+    const fromDate = /^\d{4}-\d{2}-\d{2}$/.test(fromRaw) ? fromRaw : "";
+    const toDate = /^\d{4}-\d{2}-\d{2}$/.test(toRaw) ? toRaw : "";
     const includeReconcile = readBoolFlag(url, reqBody, "include_reconcile", true);
     const includeLuma = readBoolFlag(url, reqBody, "include_luma", true);
 
@@ -206,23 +210,36 @@ serve(async (req: Request) => {
       }
     };
 
+    const sourceSyncBody: Record<string, any> = {
+      include_calls: true,
+      include_meetings: true,
+    };
+    if (fromDate) sourceSyncBody.from = fromDate;
+    else sourceSyncBody.days = days;
+    if (toDate) sourceSyncBody.to = toDate;
+
     await runStep(
       "hubspot_attendance_source_sync",
       "sync_hubspot_meeting_activities",
       {
         method: "POST",
-        body: { days, include_calls: true, include_meetings: true },
+        body: sourceSyncBody,
       },
       true,
     );
 
     if (includeReconcile) {
+      const reconcileBody: Record<string, any> = { dry_run: false };
+      if (fromDate) reconcileBody.from = fromDate;
+      else reconcileBody.days = days;
+      if (toDate) reconcileBody.to = toDate;
+
       await runStep(
         "hubspot_attendance_reconcile",
         "reconcile_zoom_attendee_hubspot_mappings",
         {
           method: "POST",
-          body: { dry_run: false, days },
+          body: reconcileBody,
         },
         false,
       );
@@ -237,7 +254,7 @@ serve(async (req: Request) => {
       );
     }
 
-    const recentFromDate = dateDaysAgo(Math.min(days, 60));
+    const recentFromDate = fromDate || dateDaysAgo(Math.min(days, 730));
     const { data: activities, error: activitiesError } = await supabase
       .from("raw_hubspot_meeting_activities")
       .select("hubspot_activity_id,activity_type,hs_timestamp,created_at_hubspot,title")
@@ -330,6 +347,8 @@ serve(async (req: Request) => {
     return new Response(JSON.stringify({
       ok: true,
       days,
+      from: fromDate || null,
+      to: toDate || null,
       include_reconcile: includeReconcile,
       include_luma: includeLuma,
       steps: stepResults,

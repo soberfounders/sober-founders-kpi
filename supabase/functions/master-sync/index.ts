@@ -139,8 +139,23 @@ serve(async (req: Request) => {
       Number(url.searchParams.get("hubspot_days") || parsedBody?.hubspot_days || 45);
     const hubspotDays =
       Number.isFinite(hubspotDaysRaw) && hubspotDaysRaw > 0
-        ? Math.min(Math.floor(hubspotDaysRaw), 365)
+        ? Math.min(Math.floor(hubspotDaysRaw), 730)
         : 45;
+    const hubspotFromRaw = String(url.searchParams.get("hubspot_from") || parsedBody?.hubspot_from || "").trim();
+    const hubspotToRaw = String(url.searchParams.get("hubspot_to") || parsedBody?.hubspot_to || "").trim();
+    const hubspotFrom = /^\d{4}-\d{2}-\d{2}$/.test(hubspotFromRaw) ? hubspotFromRaw : "";
+    const hubspotTo = /^\d{4}-\d{2}-\d{2}$/.test(hubspotToRaw) ? hubspotToRaw : "";
+    const hubspotSourceSyncBody: Record<string, any> = {
+      include_calls: true,
+      include_meetings: true,
+    };
+    if (hubspotFrom) hubspotSourceSyncBody.from = hubspotFrom;
+    else hubspotSourceSyncBody.days = hubspotDays;
+    if (hubspotTo) hubspotSourceSyncBody.to = hubspotTo;
+    const hubspotReconcileBody: Record<string, any> = { dry_run: false };
+    if (hubspotFrom) hubspotReconcileBody.from = hubspotFrom;
+    else hubspotReconcileBody.days = hubspotDays;
+    if (hubspotTo) hubspotReconcileBody.to = hubspotTo;
 
     console.log(`Starting Master Sync for week: ${weekStart}, force refresh: ${triggerRefresh}`);
 
@@ -169,7 +184,7 @@ serve(async (req: Request) => {
       }),
       runStep('hubspot_calls', 'sync_hubspot_meeting_activities', {
         method: 'POST',
-        body: { days: hubspotDays, include_calls: true, include_meetings: true },
+        body: hubspotSourceSyncBody,
       }),
       runStep('facebook_ads', 'sync_fb_ads', {
         method: 'GET',
@@ -189,7 +204,7 @@ serve(async (req: Request) => {
       runStep('luma_registrations', 'sync_luma_registrations', { method: 'POST' }),
       runStep('zoom_hubspot_reconcile', 'reconcile_zoom_attendee_hubspot_mappings', {
         method: 'POST',
-        body: { dry_run: false, days: hubspotDays },
+        body: hubspotReconcileBody,
       }),
     ]);
 
@@ -207,7 +222,14 @@ serve(async (req: Request) => {
     const hasErrors = results.some((r) => r.status === 'error');
 
     return new Response(
-      JSON.stringify({ ok: !hasErrors, results, week_start: weekStart, hubspot_days: hubspotDays }),
+      JSON.stringify({
+        ok: !hasErrors,
+        results,
+        week_start: weekStart,
+        hubspot_days: hubspotDays,
+        hubspot_from: hubspotFrom || null,
+        hubspot_to: hubspotTo || null,
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 

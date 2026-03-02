@@ -14,7 +14,4 @@ test('marketing section loads correctly', async ({ page }) => {
   
   // Also check for "Engagement Trends"
   await expect(page.getByText('Engagement Trends')).toBeVisible();
-
-  // Take a screenshot of the Marketing section
-  await page.screenshot({ path: 'e2e/screenshots/marketing.png' });
 });

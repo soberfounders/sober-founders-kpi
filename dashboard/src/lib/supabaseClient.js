@@ -1,6 +1,19 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://ldnucnghzpkuixmnfjbs.supabase.co'
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' // Needs real anon key
+const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || '').trim()
+const supabaseAnonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim()
+const looksLikeJwt = (value) => value.split('.').length === 3
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const hasSupabaseConfig = Boolean(supabaseUrl && supabaseAnonKey && looksLikeJwt(supabaseAnonKey))
+export const supabaseConfigError = hasSupabaseConfig
+  ? ''
+  : 'Missing or invalid VITE_SUPABASE_URL and/or VITE_SUPABASE_ANON_KEY in deployment environment.'
+
+// Keep a valid client object so imports are stable even when env vars are missing.
+const fallbackUrl = 'https://ldnucnghzpkuixmnfjbs.supabase.co'
+const fallbackAnonKey = 'missing-supabase-anon-key'
+
+export const supabase = createClient(
+  hasSupabaseConfig ? supabaseUrl : fallbackUrl,
+  hasSupabaseConfig ? supabaseAnonKey : fallbackAnonKey
+)

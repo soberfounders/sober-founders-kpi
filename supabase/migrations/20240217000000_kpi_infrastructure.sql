@@ -1,7 +1,6 @@
 -- Enable necessary extensions
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS pg_cron;
-
 -- 1. Supported Integrations
 CREATE TABLE IF NOT EXISTS public.supported_integrations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -12,7 +11,6 @@ CREATE TABLE IF NOT EXISTS public.supported_integrations (
   auth_type TEXT NOT NULL, -- 'api_key', 'oauth2', 'service_role'
   created_at TIMESTAMPTZ DEFAULT now()
 );
-
 -- 2. User Integrations (Connections)
 CREATE TABLE IF NOT EXISTS public.user_integrations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -23,7 +21,6 @@ CREATE TABLE IF NOT EXISTS public.user_integrations (
   created_at TIMESTAMPTZ DEFAULT now(),
   UNIQUE(user_id, integration_id)
 );
-
 -- 3. Integration Credentials (Vault-like)
 CREATE TABLE IF NOT EXISTS public.integration_credentials (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -34,7 +31,6 @@ CREATE TABLE IF NOT EXISTS public.integration_credentials (
   created_at TIMESTAMPTZ DEFAULT now(),
   UNIQUE(user_integration_id, credential_key)
 );
-
 -- 5. Notion To-Dos (Specific list storage)
 CREATE TABLE IF NOT EXISTS public.notion_todos (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -49,7 +45,6 @@ CREATE TABLE IF NOT EXISTS public.notion_todos (
   last_updated_at TIMESTAMPTZ DEFAULT now(),
   created_at TIMESTAMPTZ DEFAULT now()
 );
-
 -- 4. Unified KPI Metrics
 CREATE TABLE IF NOT EXISTS public.kpi_metrics (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -62,29 +57,23 @@ CREATE TABLE IF NOT EXISTS public.kpi_metrics (
   metadata JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT now()
 );
-
 -- RLS POLICIES
 ALTER TABLE public.supported_integrations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_integrations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.integration_credentials ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.kpi_metrics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notion_todos ENABLE ROW LEVEL SECURITY;
-
 -- Everyone can see supported integrations (including anon for dev)
 CREATE POLICY "Public read supported_integrations" ON public.supported_integrations
   FOR SELECT TO anon, authenticated USING (true);
-
 -- Public read access for dashboard (development mode)
 CREATE POLICY "Public read access for todos" ON public.notion_todos
   FOR SELECT TO anon, authenticated USING (true);
-
 CREATE POLICY "Public read access for metrics" ON public.kpi_metrics
   FOR SELECT TO anon, authenticated USING (true);
-
 -- Users can only see their own connections
 CREATE POLICY "Users view own integrations" ON public.user_integrations
   FOR ALL TO authenticated USING (auth.uid() = user_id);
-
 -- Users can only see their own credentials
 CREATE POLICY "Users view own credentials" ON public.integration_credentials
   FOR ALL TO authenticated USING (
@@ -94,14 +83,11 @@ CREATE POLICY "Users view own credentials" ON public.integration_credentials
       AND public.user_integrations.user_id = auth.uid()
     )
   );
-
 -- Users can only see/edit their own data (full access)
 CREATE POLICY "Users manage own todos" ON public.notion_todos
   FOR ALL TO authenticated USING (auth.uid() = user_id);
-
 CREATE POLICY "Users manage own metrics" ON public.kpi_metrics
   FOR ALL TO authenticated USING (auth.uid() = user_id);
-
 -- SEED DATA
 INSERT INTO public.supported_integrations (name, slug, auth_type) VALUES
   ('Notion', 'notion', 'api_key'),
@@ -111,7 +97,6 @@ INSERT INTO public.supported_integrations (name, slug, auth_type) VALUES
   ('HubSpot', 'hubspot', 'api_key'),
   ('Facebook Ads', 'facebook', 'oauth2')
 ON CONFLICT (slug) DO NOTHING;
-
 -- CRON JOB: Every Monday at 1:00 AM EST
 -- Note: Supabase Timestamps are UTC. 1 AM EST is 6 AM UTC (or 5 AM during DST).
 -- We'll schedule for 6:00 AM UTC Mondays.

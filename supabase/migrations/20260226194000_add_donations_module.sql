@@ -24,7 +24,6 @@ CREATE TABLE IF NOT EXISTS public.raw_zeffy_donations (
   ingested_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -37,13 +36,10 @@ BEGIN
       ADD CONSTRAINT raw_zeffy_donations_source_event_id_key UNIQUE (source_event_id);
   END IF;
 END $$;
-
 CREATE INDEX IF NOT EXISTS idx_raw_zeffy_donations_donated_at
   ON public.raw_zeffy_donations (donated_at DESC);
-
 CREATE INDEX IF NOT EXISTS idx_raw_zeffy_donations_donor_email
   ON public.raw_zeffy_donations (lower(donor_email));
-
 CREATE TABLE IF NOT EXISTS public.manual_donation_entries (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   donor_name text NOT NULL,
@@ -60,13 +56,10 @@ CREATE TABLE IF NOT EXISTS public.manual_donation_entries (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS idx_manual_donation_entries_donated_at
   ON public.manual_donation_entries (donated_at DESC);
-
 CREATE INDEX IF NOT EXISTS idx_manual_donation_entries_donor_email
   ON public.manual_donation_entries (lower(donor_email));
-
 CREATE OR REPLACE VIEW public.donation_transactions_unified AS
 SELECT
   'zeffy'::text AS source_system,

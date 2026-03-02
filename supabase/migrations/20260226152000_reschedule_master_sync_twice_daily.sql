@@ -3,7 +3,6 @@
 -- This maps to 17:00 and 18:05 UTC and will shift by one hour during EDT.
 
 CREATE EXTENSION IF NOT EXISTS pg_cron;
-
 DO $$
 DECLARE
   v_jobid integer;
@@ -25,7 +24,6 @@ BEGIN
     PERFORM cron.unschedule(v_jobid);
   END IF;
 END $$;
-
 -- 12:00 PM EST = 17:00 UTC (fixed EST schedule)
 SELECT cron.schedule(
   'daily-kpi-sync-1200-est',
@@ -35,7 +33,6 @@ SELECT cron.schedule(
       headers:='{"Content-Type": "application/json", "Authorization": "Bearer ' || current_setting('app.settings.service_role_key') || '"}'::jsonb
   ) $$
 );
-
 -- 1:05 PM EST = 18:05 UTC (fixed EST schedule)
 SELECT cron.schedule(
   'daily-kpi-sync-1305-est',

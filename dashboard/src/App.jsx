@@ -12,11 +12,72 @@ import WebsiteTrafficDashboard from './views/WebsiteTrafficDashboard';
 import SEODashboard from './views/SEODashboard';
 import AIBriefingDashboard from './views/AIBriefingDashboard';
 import DonationsDashboard from './views/DonationsDashboard';
+import { hasSupabaseConfig, supabaseConfigError } from './lib/supabaseClient';
+
+function PlaceholderView({ tab }) {
+  return (
+    <div style={{
+      backgroundColor: 'white',
+      border: '1px solid var(--color-border)',
+      borderRadius: '16px',
+      padding: '24px',
+      maxWidth: '760px',
+    }}>
+      <p style={{ fontSize: '12px', textTransform: 'uppercase', color: 'var(--color-text-secondary)' }}>Module Placeholder</p>
+      <h3 style={{ marginTop: '8px', fontSize: '22px', color: 'var(--color-text-primary)' }}>{tab}</h3>
+      <p style={{ marginTop: '10px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+        This section does not have an implemented view yet. It is intentionally shown as a placeholder to avoid falling
+        back to the Dashboard tab content.
+      </p>
+    </div>
+  );
+}
+
+function SupabaseEnvRequiredView() {
+  return (
+    <div style={{
+      backgroundColor: 'white',
+      border: '1px solid var(--color-border)',
+      borderRadius: '16px',
+      padding: '24px',
+      maxWidth: '920px',
+    }}>
+      <p style={{ fontSize: '12px', textTransform: 'uppercase', color: 'var(--color-text-secondary)' }}>Configuration Required</p>
+      <h3 style={{ marginTop: '8px', fontSize: '22px', color: 'var(--color-text-primary)' }}>Supabase Environment Variables Missing</h3>
+      <p style={{ marginTop: '10px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+        {supabaseConfigError || 'Set Supabase env vars in your deployment to load live KPI data.'}
+      </p>
+      <div style={{ marginTop: '12px', fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
+        <p><strong>Required:</strong> `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`</p>
+      </div>
+    </div>
+  );
+}
+
+function tabRequiresSupabase(activeTab) {
+  return [
+    'Dashboard',
+    'Attendance',
+    'Leads',
+    'Email',
+    'Website Traffic',
+    'SEO',
+    'Donations',
+    'Marketing',
+    "To-Do's",
+    'AI Manager',
+    'Data Integrity',
+  ].includes(activeTab);
+}
 
 function App() {
   const [activeTab, setActiveTab] = useState('Dashboard');
 
   const renderView = () => {
+    if (!hasSupabaseConfig && tabRequiresSupabase(activeTab)) {
+      return <SupabaseEnvRequiredView />;
+    }
+
     switch (activeTab) {
       case 'Leads':
         return <LeadsDashboard />;
@@ -38,6 +99,14 @@ function App() {
         return <DataCleaning />;
       case 'Attendance': // Added case for AttendanceDashboard
         return <AttendanceDashboard />;
+      case 'Sales':
+        return <PlaceholderView tab="Sales" />;
+      case 'Revenue':
+        return <PlaceholderView tab="Revenue" />;
+      case 'Operations':
+        return <PlaceholderView tab="Operations" />;
+      case 'Analysis':
+        return <PlaceholderView tab="Analysis" />;
       default:
         return <DashboardOverview />;
     }

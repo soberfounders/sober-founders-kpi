@@ -14,8 +14,17 @@ import {
   CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell,
 } from 'recharts';
 
-const LOOKBACK_DAYS = 120;
-const ATTRIBUTION_HISTORY_DAYS = 365;
+const DEFAULT_LEADS_LOOKBACK_DAYS = 730;
+const LOOKBACK_DAYS = (() => {
+  const parsed = Number(import.meta.env.VITE_LEADS_LOOKBACK_DAYS || DEFAULT_LEADS_LOOKBACK_DAYS);
+  if (!Number.isFinite(parsed) || parsed < 30) return DEFAULT_LEADS_LOOKBACK_DAYS;
+  return Math.min(Math.floor(parsed), 1095);
+})();
+const ATTRIBUTION_HISTORY_DAYS = (() => {
+  const parsed = Number(import.meta.env.VITE_LEADS_ATTRIBUTION_HISTORY_DAYS || LOOKBACK_DAYS);
+  if (!Number.isFinite(parsed) || parsed < 30) return LOOKBACK_DAYS;
+  return Math.min(Math.floor(parsed), 1095);
+})();
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 const fmt = {

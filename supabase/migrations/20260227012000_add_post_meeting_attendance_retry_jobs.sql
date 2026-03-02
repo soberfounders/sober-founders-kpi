@@ -4,7 +4,6 @@
 -- so recent Tuesday/Thursday sessions backfill without manual intervention.
 
 CREATE EXTENSION IF NOT EXISTS pg_cron;
-
 DO $$
 DECLARE
   v_jobid integer;
@@ -19,7 +18,6 @@ BEGIN
     PERFORM cron.unschedule(v_jobid);
   END IF;
 END $$;
-
 -- Tuesday retry: 4:15 PM EST = 21:15 UTC
 SELECT cron.schedule(
   'post-meeting-attendance-sync-tue-1615-est-retry',
@@ -29,7 +27,6 @@ SELECT cron.schedule(
       headers:='{"Content-Type": "application/json", "Authorization": "Bearer ' || current_setting('app.settings.service_role_key') || '"}'::jsonb
   ) $$
 );
-
 -- Thursday retry: 3:15 PM EST = 20:15 UTC
 SELECT cron.schedule(
   'post-meeting-attendance-sync-thu-1515-est-retry',

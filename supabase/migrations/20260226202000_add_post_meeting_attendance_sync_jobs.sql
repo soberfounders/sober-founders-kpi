@@ -9,7 +9,6 @@
 -- - Thursday 12:15 PM EST => 17:15 UTC
 
 CREATE EXTENSION IF NOT EXISTS pg_cron;
-
 DO $$
 DECLARE
   v_jobid integer;
@@ -24,7 +23,6 @@ BEGIN
     PERFORM cron.unschedule(v_jobid);
   END IF;
 END $$;
-
 SELECT cron.schedule(
   'post-meeting-attendance-sync-tue-1315-est',
   '15 18 * * 2',
@@ -33,7 +31,6 @@ SELECT cron.schedule(
       headers:='{"Content-Type": "application/json", "Authorization": "Bearer ' || current_setting('app.settings.service_role_key') || '"}'::jsonb
   ) $$
 );
-
 SELECT cron.schedule(
   'post-meeting-attendance-sync-thu-1215-est',
   '15 17 * * 4',

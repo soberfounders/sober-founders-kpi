@@ -27,10 +27,8 @@ CREATE TABLE IF NOT EXISTS public.mailchimp_campaigns (
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
-
 -- Enable RLS
 ALTER TABLE public.mailchimp_campaigns ENABLE ROW LEVEL SECURITY;
-
 -- Public read access for dashboard (idempotent)
 DO $$
 BEGIN
@@ -46,7 +44,6 @@ BEGIN
   END IF;
 END
 $$;
-
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_mailchimp_campaign_group ON public.mailchimp_campaigns(campaign_group);
 CREATE INDEX IF NOT EXISTS idx_mailchimp_send_time ON public.mailchimp_campaigns(send_time DESC);

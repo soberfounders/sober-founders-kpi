@@ -32,6 +32,11 @@ import {
 const TUE_MEETING_ID = '87199667045';
 const THU_MEETING_ID = '84242212480';
 const RECENT_WINDOW = 8;
+const ATTENDANCE_BACKFILL_DAYS = (() => {
+  const parsed = Number(import.meta.env.VITE_ATTENDANCE_BACKFILL_DAYS || 730);
+  if (!Number.isFinite(parsed) || parsed < 30) return 730;
+  return Math.min(Math.floor(parsed), 1095);
+})();
 const HUBSPOT_PORTAL_ID = String(import.meta.env.VITE_HUBSPOT_PORTAL_ID || '45070276').trim();
 const ET_TIMEZONE = 'America/New_York';
 const GROUP_CALL_ET_MINUTES = {
@@ -152,6 +157,32 @@ function chunkArray(items = [], chunkSize = 200) {
     chunks.push(items.slice(i, i + normalizedSize));
   }
   return chunks;
+}
+
+async function selectAllRows(buildQuery, options = {}) {
+  const pageSize = Math.max(100, Number(options.pageSize) || 1000);
+  const maxPages = Math.max(1, Number(options.maxPages) || 200);
+  const rows = [];
+
+  for (let page = 0; page < maxPages; page += 1) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    const result = await buildQuery(from, to);
+    if (result?.error) {
+      return { data: rows, error: result.error };
+    }
+
+    const pageRows = Array.isArray(result?.data) ? result.data : [];
+    rows.push(...pageRows);
+    if (pageRows.length < pageSize) {
+      return { data: rows, error: null };
+    }
+  }
+
+  return {
+    data: rows,
+    error: new Error(`Pagination maxPages (${maxPages}) reached before dataset completed.`),
+  };
 }
 
 function tokenizeName(name = '') {
@@ -2157,7 +2188,7 @@ const AttendanceDashboard = () => {
       let syncData = null;
       const primary = await supabase.functions.invoke('sync_attendance_from_hubspot', {
         method: 'POST',
-        body: { days: 45, include_reconcile: true, include_luma: true },
+        body: { days: ATTENDANCE_BACKFILL_DAYS, include_reconcile: true, include_luma: true },
       });
 
       if (!primary.error) {
@@ -2165,13 +2196,13 @@ const AttendanceDashboard = () => {
       } else {
         const fallbackHubspot = await supabase.functions.invoke('sync_hubspot_meeting_activities', {
           method: 'POST',
-          body: { days: 45, include_calls: true, include_meetings: true },
+          body: { days: ATTENDANCE_BACKFILL_DAYS, include_calls: true, include_meetings: true },
         });
         if (fallbackHubspot.error) throw fallbackHubspot.error;
 
         const fallbackReconcile = await supabase.functions.invoke('reconcile_zoom_attendee_hubspot_mappings', {
           method: 'POST',
-          body: { days: 45, dry_run: false },
+          body: { days: ATTENDANCE_BACKFILL_DAYS, dry_run: false },
         });
 
         syncData = {
@@ -2230,64 +2261,90 @@ const AttendanceDashboard = () => {
     }
 
     const identityWarnings = [];
-    const identityStartDate = dateKeyDaysAgo(730);
+    const identityStartDate = dateKeyDaysAgo(ATTENDANCE_BACKFILL_DAYS);
+    const identityStartIso = `${identityStartDate}T00:00:00.000Z`;
 
     // ── PRIMARY: HubSpot meeting activity groups (call-type, group sessions) ──
     const [
       hsActivitiesResult,
-      hsAssocsResult,
       hubspotContactsResult,
       lumaResult,
       attendeeMappingsResult,
     ] = await Promise.all([
-      // HubSpot group call/meeting activities (the sessions themselves)
-      supabase
-        .from('raw_hubspot_meeting_activities')
-        .select('hubspot_activity_id,activity_type,hs_timestamp,created_at_hubspot,title,body_preview,metadata')
-        .in('activity_type', ['call', 'meeting'])
-        .or(`hs_timestamp.gte.${identityStartDate},created_at_hubspot.gte.${identityStartDate}`)
-        .order('hs_timestamp', { ascending: false })
-        .limit(5000),
-      // Contact associations for those activities
-      supabase
-        .from('hubspot_activity_contact_associations')
-        .select('hubspot_activity_id,activity_type,hubspot_contact_id,contact_email,contact_firstname,contact_lastname')
-        .in('activity_type', ['call', 'meeting'])
-        .limit(50000),
-      // HubSpot contact enrichment (revenue, source, email, etc.)
-      supabase
-        .from('raw_hubspot_contacts')
-        .select('*')
-        .order('createdate', { ascending: false })
-        .limit(20000),
-      // Lu.ma registrations (kept for fallback resolver)
-      supabase
-        .from('raw_luma_registrations')
-        .select('event_date,guest_name,guest_email,approval_status,is_thursday,matched_zoom,matched_hubspot,matched_hubspot_contact_id,matched_hubspot_name,matched_hubspot_email')
-        .gte('event_date', identityStartDate)
-        .order('event_date', { ascending: false })
-        .limit(20000),
-      // zoom_attendee_hubspot_mappings (kept for resolver on Zoom-only sessions if needed)
-      supabase
-        .from('zoom_attendee_hubspot_mappings')
-        .select('session_date,meeting_id,zoom_attendee_raw_name,zoom_attendee_canonical_name,hubspot_contact_id,hubspot_name,hubspot_email,mapping_source,mapping_reason,mapping_confidence,match_note,hubspot_activity_id')
-        .gte('session_date', identityStartDate)
-        .order('session_date', { ascending: false })
-        .limit(50000),
+      selectAllRows((from, to) => (
+        supabase
+          .from('raw_hubspot_meeting_activities')
+          .select('hubspot_activity_id,activity_type,hs_timestamp,created_at_hubspot,title,body_preview,metadata')
+          .in('activity_type', ['call', 'meeting'])
+          .or(`hs_timestamp.gte.${identityStartDate},created_at_hubspot.gte.${identityStartDate}`)
+          .order('hs_timestamp', { ascending: false })
+          .range(from, to)
+      ), { pageSize: 1000, maxPages: 120 }),
+      selectAllRows((from, to) => (
+        supabase
+          .from('raw_hubspot_contacts')
+          .select('*')
+          .gte('createdate', identityStartIso)
+          .order('createdate', { ascending: false })
+          .range(from, to)
+      ), { pageSize: 1000, maxPages: 120 }),
+      selectAllRows((from, to) => (
+        supabase
+          .from('raw_luma_registrations')
+          .select('event_date,guest_name,guest_email,approval_status,is_thursday,matched_zoom,matched_hubspot,matched_hubspot_contact_id,matched_hubspot_name,matched_hubspot_email')
+          .gte('event_date', identityStartDate)
+          .order('event_date', { ascending: false })
+          .range(from, to)
+      ), { pageSize: 1000, maxPages: 120 }),
+      selectAllRows((from, to) => (
+        supabase
+          .from('zoom_attendee_hubspot_mappings')
+          .select('session_date,meeting_id,zoom_attendee_raw_name,zoom_attendee_canonical_name,hubspot_contact_id,hubspot_name,hubspot_email,mapping_source,mapping_reason,mapping_confidence,match_note,hubspot_activity_id')
+          .gte('session_date', identityStartDate)
+          .order('session_date', { ascending: false })
+          .range(from, to)
+      ), { pageSize: 1000, maxPages: 120 }),
     ]);
 
+    const hsActivityRows = hsActivitiesResult.data || [];
     if (hsActivitiesResult.error) {
       identityWarnings.push(`HubSpot activity feed unavailable: ${hsActivitiesResult.error.message || 'read failed'}`);
       setHubspotActivities([]);
     } else {
-      setHubspotActivities(hsActivitiesResult.data || []);
+      setHubspotActivities(hsActivityRows);
     }
 
-    if (hsAssocsResult.error) {
-      identityWarnings.push(`HubSpot contact associations unavailable: ${hsAssocsResult.error.message || 'read failed'}`);
+    let hsAssocRows = [];
+    let hsAssocsLoadError = null;
+    if (!hsActivitiesResult.error && hsActivityRows.length > 0) {
+      const recentActivityIds = Array.from(new Set(
+        hsActivityRows
+          .map((row) => Number(row?.hubspot_activity_id))
+          .filter((id) => Number.isFinite(id)),
+      ));
+
+      for (const idChunk of chunkArray(recentActivityIds, 200)) {
+        const assocResult = await supabase
+          .from('hubspot_activity_contact_associations')
+          .select('hubspot_activity_id,activity_type,hubspot_contact_id,contact_email,contact_firstname,contact_lastname')
+          .in('activity_type', ['call', 'meeting'])
+          .in('hubspot_activity_id', idChunk);
+
+        if (assocResult.error) {
+          hsAssocsLoadError = assocResult.error;
+          break;
+        }
+
+        hsAssocRows.push(...(assocResult.data || []));
+      }
+    }
+
+    if (hsAssocsLoadError) {
+      identityWarnings.push(`HubSpot contact associations unavailable: ${hsAssocsLoadError.message || 'read failed'}`);
       setHubspotContactAssocs([]);
+      hsAssocRows = [];
     } else {
-      setHubspotContactAssocs(hsAssocsResult.data || []);
+      setHubspotContactAssocs(hsAssocRows);
     }
 
     let hubspotContactsData = [];
@@ -2297,16 +2354,16 @@ const AttendanceDashboard = () => {
       hubspotContactsData = hubspotContactsResult.data || [];
     }
 
-    // Backfill any contact IDs referenced by the loaded HubSpot call/meeting sessions but missing from the
-    // capped base contact query (old contacts often fall outside the newest-N limit).
-    if (!hsActivitiesResult.error && !hsAssocsResult.error) {
+    // Backfill any contact IDs referenced by loaded HubSpot call/meeting sessions but missing from the
+    // scoped contact query.
+    if (!hsActivitiesResult.error && !hsAssocsLoadError) {
       const sessionActivityIds = new Set(
-        (hsActivitiesResult.data || [])
+        hsActivityRows
           .map((row) => String(row?.hubspot_activity_id || ''))
           .filter(Boolean),
       );
       const neededContactIds = Array.from(new Set(
-        (hsAssocsResult.data || [])
+        hsAssocRows
           .filter((row) => sessionActivityIds.has(String(row?.hubspot_activity_id || '')))
           .map((row) => Number(row?.hubspot_contact_id))
           .filter((id) => Number.isFinite(id) && id > 0),

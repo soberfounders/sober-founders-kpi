@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import { supabase, hasSupabaseConfig, supabaseConfigError } from '../lib/supabaseClient';
 import SendToNotionModal from '../components/SendToNotionModal';
 import {
     Bot,
@@ -47,10 +47,12 @@ function AIBriefingDashboard() {
 
     // Load history on mount
     useEffect(() => {
+        if (!hasSupabaseConfig) return;
         loadHistory();
     }, []);
 
     const loadHistory = async () => {
+        if (!hasSupabaseConfig) return;
         const { data, error: err } = await supabase
             .from('ai_briefings')
             .select('*')
@@ -60,26 +62,20 @@ function AIBriefingDashboard() {
     };
 
     const runBriefing = useCallback(async (mode) => {
+        if (!hasSupabaseConfig) {
+            setError(supabaseConfigError || 'Missing Supabase environment configuration.');
+            return;
+        }
+
         setLoading(true);
         setLoadingMode(mode);
         setError(null);
         try {
-            const { data: { session } } = await supabase.auth.getSession();
-            const token = session?.access_token;
-            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://ldnucnghzpkuixmnfjbs.supabase.co';
-
-            const resp = await fetch(`${supabaseUrl}/functions/v1/ai-briefing`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                    'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || '',
-                },
-                body: JSON.stringify({ mode, send_slack: true }),
+            const { data: result, error: invokeError } = await supabase.functions.invoke('ai-briefing', {
+                body: { mode, send_slack: true },
             });
-
-            const result = await resp.json();
-            if (!resp.ok || !result.ok) throw new Error(result.error || 'Briefing generation failed');
+            if (invokeError) throw invokeError;
+            if (!result?.ok) throw new Error(result?.error || 'Briefing generation failed');
 
             setActiveBriefing(result.briefing);
             loadHistory(); // Refresh history
