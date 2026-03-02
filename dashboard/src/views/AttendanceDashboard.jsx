@@ -497,27 +497,6 @@ function utcDateOnly(dateLike) {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 }
 
-function addUtcDays(dateObj, days) {
-  if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) return null;
-  const out = new Date(dateObj);
-  out.setUTCDate(out.getUTCDate() + Number(days || 0));
-  return out;
-}
-
-function mondayUtc(dateLike) {
-  const d = utcDateOnly(dateLike);
-  if (!d) return null;
-  const day = d.getUTCDay();
-  const offset = day === 0 ? -6 : 1 - day;
-  d.setUTCDate(d.getUTCDate() + offset);
-  return d;
-}
-
-function isoDateUtc(dateObj) {
-  if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) return '';
-  return dateObj.toISOString().slice(0, 10);
-}
-
 function addYearsUtc(dateObj, years) {
   if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) return null;
   const y = dateObj.getUTCFullYear() + Number(years || 0);
@@ -1269,76 +1248,26 @@ function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs 
     duplicateCandidatesByName[name] = findPotentialDuplicates(name, allCanonicalNames);
   });
 
-  function buildWeeklyShowUpTrend(dayType) {
-    const dayOffset = dayType === 'Tuesday' ? 1 : 3; // Monday+1=Tue, Monday+3=Thu
-    const source = sessions
-      .filter((s) => s.type === dayType && s.date)
-      .sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
-
-    if (!source.length) return [];
-
-    const byWeek = new Map();
-    source.forEach((s) => {
-      const wk = mondayUtc(s.date);
-      const key = isoDateUtc(wk);
-      const existing = byWeek.get(key) || {
-        weekStart: wk,
-        representativeDateLabel: s.dateLabel,
-        representativeSessionKey: `${s.type}|${s.dateLabel}`,
-        representativeTotal: 0,
-        newCount: 0,
-        repeatCount: 0,
-        total: 0,
-        newNamesSet: new Set(),
-      };
-
-      existing.newCount += Number(s.newCount || 0);
-      existing.repeatCount += Number(s.repeatCount || 0);
-      existing.total += Number(s.derivedCount || 0);
-      (s.newNames || []).forEach((name) => existing.newNamesSet.add(name));
-
-      const rowTotal = Number(s.derivedCount || 0);
-      if (rowTotal >= existing.representativeTotal) {
-        existing.representativeTotal = rowTotal;
-        existing.representativeDateLabel = s.dateLabel;
-        existing.representativeSessionKey = `${s.type}|${s.dateLabel}`;
-      }
-
-      byWeek.set(key, existing);
-    });
-
-    const weekKeys = Array.from(byWeek.keys()).sort();
-    const minWeek = byWeek.get(weekKeys[0])?.weekStart;
-    const maxWeek = byWeek.get(weekKeys[weekKeys.length - 1])?.weekStart;
-    if (!minWeek || !maxWeek) return [];
-
-    const out = [];
-    for (let cursor = new Date(minWeek); cursor <= maxWeek; cursor = addUtcDays(cursor, 7)) {
-      const cursorKey = isoDateUtc(cursor);
-      const weekRow = byWeek.get(cursorKey) || null;
-      const canonicalGroupDate = addUtcDays(cursor, dayOffset);
-      const fallbackDateLabel = isoDateUtc(canonicalGroupDate);
-      const fullDate = weekRow?.representativeDateLabel || fallbackDateLabel;
-      const sessionKey = weekRow?.representativeSessionKey || '';
-      const newNames = weekRow ? Array.from(weekRow.newNamesSet) : [];
-
-      out.push({
-        date: formatDateMMDDYY(fullDate),
-        fullDate,
-        sessionKey,
-        dayName: getDayName(fullDate),
-        newCount: weekRow?.newCount || 0,
-        repeatCount: weekRow?.repeatCount || 0,
-        total: weekRow?.total || 0,
-        newNames,
-        syntheticGap: !weekRow,
-      });
-    }
-    return out;
-  }
-
-  const trendDataTue = buildWeeklyShowUpTrend('Tuesday');
-  const trendDataThu = buildWeeklyShowUpTrend('Thursday');
+  const trendDataTue = sessions.filter(s => s.type === 'Tuesday').map((s) => ({
+    date: s.dateFormatted,
+    fullDate: s.dateLabel,
+    sessionKey: `${s.type}|${s.dateLabel}`,
+    dayName: getDayName(s.dateLabel),
+    newCount: s.newCount,
+    repeatCount: s.repeatCount,
+    total: s.derivedCount,
+    newNames: s.newNames
+  }));
+  const trendDataThu = sessions.filter(s => s.type === 'Thursday').map((s) => ({
+    date: s.dateFormatted,
+    fullDate: s.dateLabel,
+    sessionKey: `${s.type}|${s.dateLabel}`,
+    dayName: getDayName(s.dateLabel),
+    newCount: s.newCount,
+    repeatCount: s.repeatCount,
+    total: s.derivedCount,
+    newNames: s.newNames
+  }));
 
   // Welcome New: keep top-of-page focused to 2 Tuesday + 2 Thursday sessions.
   const welcomeNewSessionsTue = sessions
@@ -2705,11 +2634,6 @@ const AttendanceDashboard = () => {
             <span style={{ color: '#64748b', fontWeight: 600 }}>Return: {d.repeatCount}</span>
             <span style={{ color: '#0f172a', fontWeight: 700 }}>Total: {d.total}</span>
           </div>
-          {d.syntheticGap && (
-            <p style={{ marginTop: '8px', fontSize: '11px', color: '#64748b' }}>
-              No classified HubSpot group call logged for this week.
-            </p>
-          )}
           {d.newNames && d.newNames.length > 0 && (
             <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #f1f5f9' }}>
               <p style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>Welcome New:</p>
