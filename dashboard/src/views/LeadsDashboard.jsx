@@ -22,6 +22,7 @@ import {
 
 const LOOKBACK_DAYS = LEADS_LOOKBACK_DAYS;
 const ATTRIBUTION_HISTORY_DAYS = LEADS_ATTRIBUTION_HISTORY_DAYS;
+const EXPECTED_ZERO_GROUP_SESSION_KEYS = new Set(['2025-12-25|Thursday']);
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 const fmt = {
@@ -701,7 +702,7 @@ export default function LeadsDashboard() {
     try {
       const activitiesR = await supabase.from('raw_hubspot_meeting_activities')
         .select('hubspot_activity_id,activity_type,hs_timestamp,created_at_hubspot,title,metadata')
-        .gte('hs_timestamp', `${attributionStartKey}T00:00:00.000Z`)
+        .or(`hs_timestamp.gte.${attributionStartKey}T00:00:00.000Z,created_at_hubspot.gte.${attributionStartKey}T00:00:00.000Z`)
         .order('hs_timestamp', { ascending: true });
 
       if (activitiesR.error) {
@@ -723,7 +724,10 @@ export default function LeadsDashboard() {
 
       const activityIds = Array.from(new Set(
         (hubspotActivitiesData || [])
-          .filter((row) => String(row?.activity_type || '').toLowerCase() === 'call')
+          .filter((row) => {
+            const activityType = String(row?.activity_type || '').toLowerCase();
+            return activityType === 'call' || activityType === 'meeting';
+          })
           .map((row) => Number(row?.hubspot_activity_id))
           .filter((id) => Number.isFinite(id))
       ));
@@ -1435,13 +1439,16 @@ export default function LeadsDashboard() {
       return heardBucket;
     };
 
+    const activityAssocKey = (activityType, activityId) => `${String(activityType || '').toLowerCase()}:${Number(activityId)}`;
     const hubspotAssocByActivityId = new Map();
     (rawHubspotActivityAssociations || []).forEach((assoc) => {
-      if (String(assoc?.activity_type || '').toLowerCase() !== 'call') return;
+      const activityType = String(assoc?.activity_type || '').toLowerCase();
+      if (activityType !== 'call' && activityType !== 'meeting') return;
       const activityId = Number(assoc?.hubspot_activity_id);
       if (!Number.isFinite(activityId)) return;
-      if (!hubspotAssocByActivityId.has(activityId)) hubspotAssocByActivityId.set(activityId, []);
-      hubspotAssocByActivityId.get(activityId).push(assoc);
+      const key = activityAssocKey(activityType, activityId);
+      if (!hubspotAssocByActivityId.has(key)) hubspotAssocByActivityId.set(key, []);
+      hubspotAssocByActivityId.get(key).push(assoc);
     });
 
     const zoomRowsByDateDay = new Map();
@@ -1465,7 +1472,8 @@ export default function LeadsDashboard() {
 
     const hubspotCallCandidatesByDateDay = new Map();
     (rawHubspotActivities || []).forEach((activity) => {
-      if (String(activity?.activity_type || '').toLowerCase() !== 'call') return;
+      const activityType = String(activity?.activity_type || '').toLowerCase();
+      if (activityType !== 'call' && activityType !== 'meeting') return;
       const activityId = Number(activity?.hubspot_activity_id);
       if (!Number.isFinite(activityId)) return;
       const ts = activity?.hs_timestamp || activity?.created_at_hubspot;
@@ -1473,11 +1481,11 @@ export default function LeadsDashboard() {
       if (!et?.dayType || !et?.etDateKey) return;
       if (!Number.isFinite(Number(et.minutesFromExpected)) || Number(et.minutesFromExpected) > HUBSPOT_CALL_TIME_TOLERANCE_MINUTES) return;
 
-      const assocs = hubspotAssocByActivityId.get(activityId) || [];
+      const assocs = hubspotAssocByActivityId.get(activityAssocKey(activityType, activityId)) || [];
       const attendeeCount = assocs
-        .filter((a) => Number.isFinite(Number(a?.hubspot_contact_id)))
+        .filter((a) => Number.isFinite(Number(a?.hubspot_contact_id)) || normalizeEmail(a?.contact_email))
         .length;
-      if (attendeeCount < 2) return;
+      if (attendeeCount < 1) return;
 
       const title = String(activity?.title || '').trim();
       const titleLc = title.toLowerCase();
@@ -1491,6 +1499,7 @@ export default function LeadsDashboard() {
       hubspotCallCandidatesByDateDay.get(key).push({
         activity,
         activityId,
+        activityType,
         assocs,
         attendeeCount,
         et,
@@ -1508,7 +1517,36 @@ export default function LeadsDashboard() {
         const bTs = Date.parse(b.activity?.hs_timestamp || b.activity?.created_at_hubspot || '');
         return aTs - bTs;
       });
-      if (ranked[0]) chosenHubspotCallSessionByDateDay.set(key, ranked[0]);
+      if (!ranked[0]) return;
+
+      const mergedAssocByKey = new Map();
+      const activityIds = [];
+      ranked.forEach((candidate) => {
+        if (Number.isFinite(candidate?.activityId)) {
+          const id = Number(candidate.activityId);
+          if (!activityIds.includes(id)) activityIds.push(id);
+        }
+        (candidate?.assocs || []).forEach((assoc) => {
+          const contactId = Number(assoc?.hubspot_contact_id);
+          if (Number.isFinite(contactId) && contactId > 0) {
+            const assocKey = `hubspot:${contactId}`;
+            if (!mergedAssocByKey.has(assocKey)) mergedAssocByKey.set(assocKey, assoc);
+            return;
+          }
+          const email = normalizeEmail(assoc?.contact_email || '');
+          if (email) {
+            const assocKey = `email:${email}`;
+            if (!mergedAssocByKey.has(assocKey)) mergedAssocByKey.set(assocKey, assoc);
+          }
+        });
+      });
+
+      chosenHubspotCallSessionByDateDay.set(key, {
+        ...ranked[0],
+        activityIds,
+        assocs: Array.from(mergedAssocByKey.values()),
+        attendeeCount: mergedAssocByKey.size,
+      });
     });
 
     const aliasMap = buildAliasMap(aliases || []);
@@ -1577,8 +1615,12 @@ export default function LeadsDashboard() {
       const history = new Map();
       chosenHubspotCallSessionByDateDay.forEach((chosen, dateDayKey) => {
         const [dateKey, dayType] = String(dateDayKey).split('|');
+        if (EXPECTED_ZERO_GROUP_SESSION_KEYS.has(`${dateKey}|${dayType}`)) return;
         const activity = chosen?.activity || {};
-        const meetingId = `hubspot-call-${chosen?.activityId || ''}`;
+        const mergedActivityIds = (chosen?.activityIds || [])
+          .map((id) => Number(id))
+          .filter((id) => Number.isFinite(id));
+        const meetingId = `hubspot-call-${mergedActivityIds[0] || chosen?.activityId || ''}`;
         const sessionKey = `${dateKey}|${dayType}|${meetingId}`;
         const dedup = new Map();
         (chosen?.assocs || []).forEach((assoc) => {
@@ -1602,6 +1644,7 @@ export default function LeadsDashboard() {
             nameLookupKey: normalizeName(displayName),
             sessionTruthSource: 'hubspot_call',
             hubspotActivityId: Number(chosen?.activityId) || null,
+            hubspotActivityIds: mergedActivityIds,
             hubspotContactId: Number.isFinite(contactId) ? contactId : null,
             associationName: assocName || 'Not Found',
             associationEmail: assocEmail || 'Not Found',
@@ -1650,6 +1693,10 @@ export default function LeadsDashboard() {
         const dayType = dow === 2 ? 'Tuesday' : (dow === 4 ? 'Thursday' : null);
         if (dayType) {
           const dateKey = cursor.toISOString().slice(0, 10);
+          if (EXPECTED_ZERO_GROUP_SESSION_KEYS.has(`${dateKey}|${dayType}`)) {
+            cursor.setUTCDate(cursor.getUTCDate() + 1);
+            continue;
+          }
           const key = `${dateKey}|${dayType}`;
           const chosen = chosenHubspotCallSessionByDateDay.get(key);
           if (!chosen) {

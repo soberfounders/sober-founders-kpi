@@ -134,6 +134,42 @@ When a row is wrong/missing:
 - They may be delayed if attendee mapping in HubSpot is done manually after the meeting
 - Current system should keep working using Zoom/Lu.ma fallback during that delay
 
+## 2026-03 Stabilization: Split-Call Merge (Permanent Fix)
+
+### Root cause found
+
+Some Tue/Thu sessions were logged in HubSpot as **multiple call/meeting activities on the same date** (often by different hosts/users).  
+Older dashboard logic kept only one "best" activity per date, which dropped attendees from sibling activities and caused partial historical counts.
+
+### Permanent fix shipped
+
+- Attendance and Dashboard Overview now **merge all HubSpot group activities for the same `dayType + date`**.
+- Attendees are de-duplicated by:
+  1. `hubspot_contact_id`
+  2. fallback `contact_email`
+  3. fallback normalized name
+- Reconcile loader now includes activities using either `hs_timestamp` **or** `created_at_hubspot` lower-bound filtering.
+- Expected holiday exception is explicitly preserved: **Thursday 2025-12-25**.
+
+### Why this sticks
+
+The merge is deterministic and runs at read-time from additive HubSpot raw tables, so future split-call logging does not regress counts back to a single-owner subset.
+
+### Backfill / prefill run sequence
+
+Run from repo root:
+
+```bash
+./scripts/supabase.sh functions invoke sync_hubspot_meeting_activities --no-verify-jwt --body "{\"from\":\"2024-03-03\",\"to\":\"2026-03-03\",\"include_calls\":true,\"include_meetings\":true}"
+./scripts/supabase.sh functions invoke reconcile_zoom_attendee_hubspot_mappings --no-verify-jwt --body "{\"from\":\"2024-03-03\",\"to\":\"2026-03-03\",\"dry_run\":false}"
+./scripts/supabase.sh functions invoke sync_attendance_from_hubspot --no-verify-jwt --body "{\"days\":365,\"include_reconcile\":true,\"include_luma\":true}"
+```
+
+### Quick verification query (conceptual)
+
+- For a sample date with multiple HubSpot activities, verify merged count > single-activity max.
+- Confirm no unexpected zero-attendance Tue/Thu rows after merge, except planned holiday exception (`2025-12-25`).
+
 ## Next Build Step (after data is present)
 
 Implement `reconcile_zoom_attendee_hubspot_mappings` to materialize:

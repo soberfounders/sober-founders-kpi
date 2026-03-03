@@ -46,6 +46,7 @@ const GROUP_CALL_ET_MINUTES = {
   Thursday: 11 * 60,
 };
 const GROUP_CALL_TIME_TOLERANCE_MINUTES = 120;
+const EXPECTED_ZERO_GROUP_SESSION_KEYS = new Set(['Thursday|2025-12-25']);
 
 function normalizeName(name = '') {
   return name.toLowerCase().trim().replace(/\s+/g, ' ');
@@ -642,6 +643,15 @@ function etGroupTypeFromDate(dateLike) {
   return null;
 }
 
+function etWeekdayGroupFromDate(dateLike) {
+  const d = safeDate(dateLike);
+  if (!d) return null;
+  const weekdayShort = etWeekdayFormatter.format(d);
+  if (weekdayShort === 'Tue') return 'Tuesday';
+  if (weekdayShort === 'Thu') return 'Thursday';
+  return null;
+}
+
 /** Export cleaned attendance data as CSV */
 function exportAttendanceCSV(sessions) {
   const rows = [['canonical_name', 'session_date', 'group', 'is_net_new']];
@@ -920,18 +930,16 @@ function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs 
     const start = safeDate(activity.hs_timestamp || activity.created_at_hubspot);
     if (!start) return null;
 
-    const day = start.getUTCDay(); // 0=Sun, 2=Tue, 4=Thu
-
     // Explicit title match
     if (title.includes('tactic tuesday')) return 'Tuesday';
     if (title.includes('mastermind on zoom') || title.includes('all are welcome')) return 'Thursday';
     if (title.includes("entrepreneur's big book") || title.includes('big book')) return 'Thursday';
     if (title.includes('sober founders mastermind') && !title.includes('intro')) return 'Thursday';
 
-    // Heuristic: Tuesdays/Thursdays with > 4 attendees likely are the group sessions.
+    // Heuristic: ET weekdays with >4 attendees are likely the recurring group sessions.
     if (attendeeCount >= 5) {
-      if (day === 2) return 'Tuesday';
-      if (day === 4) return 'Thursday';
+      const etWeekdayGroup = etWeekdayGroupFromDate(start);
+      if (etWeekdayGroup) return etWeekdayGroup;
     }
 
     // Fallback for generic call titles: use expected ET meeting windows so
@@ -1036,23 +1044,122 @@ function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs 
 
   sessions = sessions.sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
 
-  // Ensure one canonical Tue/Thu session per date: keep the activity with strongest attendee evidence.
+  // Merge same-day/same-group HubSpot rows so multi-host call logging does not drop attendees.
   const sessionsByGroupDate = new Map();
+  const attendeeMergeKey = (attendee = {}) => {
+    const contactId = Number(attendee?.hubspotContactId);
+    if (Number.isFinite(contactId) && contactId > 0) return `hubspot:${contactId}`;
+    const emailKey = normalizeEmail(attendee?.hubspotEmail || '');
+    if (emailKey) return `email:${emailKey}`;
+    const nameKey = normalizeName(attendee?.name || '');
+    if (nameKey) return `name:${nameKey}`;
+    return '';
+  };
+
+  const mergeAttendeeObjects = (existing = {}, incoming = {}) => {
+    const existingMatched = !!existing?.hubspotMatched;
+    const incomingMatched = !!incoming?.hubspotMatched;
+    if (!existingMatched && incomingMatched) return incoming;
+    if (existingMatched && !incomingMatched) return existing;
+
+    const existingNameLen = String(existing?.name || '').trim().length;
+    const incomingNameLen = String(incoming?.name || '').trim().length;
+    if (incomingNameLen > existingNameLen) return { ...existing, ...incoming };
+    return { ...incoming, ...existing };
+  };
+
   sessions.forEach((session) => {
     const key = `${session.type}|${session.dateLabel}`;
-    const existing = sessionsByGroupDate.get(key);
-    if (!existing) {
-      sessionsByGroupDate.set(key, session);
-      return;
+    if (!sessionsByGroupDate.has(key)) {
+      sessionsByGroupDate.set(key, {
+        ...session,
+        id: key,
+        meetingId: `${session.type}-${session.dateLabel}`,
+        mergedActivityIds: session?.meetingId ? [String(session.meetingId)] : [],
+        title: session?.title || '',
+        sourceCount: 0,
+        attendeeByKey: new Map(),
+      });
     }
-    const existingScore = Number(existing.sourceCount || 0) * 1000 + Number(existing.derivedCount || 0);
-    const nextScore = Number(session.sourceCount || 0) * 1000 + Number(session.derivedCount || 0);
-    if (nextScore > existingScore) {
-      sessionsByGroupDate.set(key, session);
+
+    const merged = sessionsByGroupDate.get(key);
+    const sourceIds = merged.mergedActivityIds || [];
+    if (session?.meetingId) {
+      const activityId = String(session.meetingId);
+      if (!sourceIds.includes(activityId)) sourceIds.push(activityId);
+      merged.mergedActivityIds = sourceIds;
     }
+
+    const existingTs = merged?.startTimeIso ? Date.parse(merged.startTimeIso) : NaN;
+    const sessionTs = session?.startTimeIso ? Date.parse(session.startTimeIso) : NaN;
+    if (!Number.isFinite(existingTs) || (Number.isFinite(sessionTs) && sessionTs < existingTs)) {
+      merged.startTimeIso = session?.startTimeIso || merged.startTimeIso;
+      merged.date = session?.date || merged.date;
+      merged.dateFormatted = session?.dateFormatted || merged.dateFormatted;
+    }
+
+    if (session?.title && merged.title && merged.title !== session.title) {
+      merged.title = 'Merged HubSpot activities';
+    } else if (!merged.title && session?.title) {
+      merged.title = session.title;
+    }
+
+    (session?.attendeeObjects || []).forEach((attendee) => {
+      const key = attendeeMergeKey(attendee);
+      if (!key) return;
+      const existing = merged.attendeeByKey.get(key);
+      merged.attendeeByKey.set(key, existing ? mergeAttendeeObjects(existing, attendee) : attendee);
+    });
   });
+
   sessions = Array.from(sessionsByGroupDate.values())
+    .map((merged) => {
+      const { attendeeByKey, ...rest } = merged;
+      const attendeeObjects = Array.from(merged.attendeeByKey.values()).sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')));
+      return {
+        ...rest,
+        attendeeObjects,
+        attendees: attendeeObjects.map((a) => a.name),
+        derivedCount: attendeeObjects.length,
+        sourceCount: attendeeObjects.length,
+        dataSource: rest.mergedActivityIds?.length > 1 ? 'hubspot_merged' : 'hubspot',
+      };
+    })
     .sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
+
+  // Keep exactly one explicit expected-zero holiday session (Christmas 2025) and drop
+  // unexpected zero sessions caused by sparse/unlinked HubSpot rows.
+  sessions = sessions.filter((session) => {
+    const key = `${session.type}|${session.dateLabel}`;
+    if (EXPECTED_ZERO_GROUP_SESSION_KEYS.has(key)) return false;
+    return Number(session?.derivedCount || 0) > 0;
+  });
+  EXPECTED_ZERO_GROUP_SESSION_KEYS.forEach((key) => {
+    const [type, dateLabel] = key.split('|');
+    const d = safeDate(`${dateLabel}T00:00:00.000Z`);
+    if (!d) return;
+    sessions.push({
+      id: key,
+      type,
+      date: d,
+      dateLabel,
+      dateFormatted: formatDateMMDDYY(d),
+      meetingId: key,
+      startTimeIso: `${dateLabel}T00:00:00.000Z`,
+      title: 'Holiday (no session)',
+      attendees: [],
+      attendeeObjects: [],
+      derivedCount: 0,
+      sourceCount: 0,
+      mismatch: false,
+      dataSource: 'holiday_expected_zero',
+      mergedActivityIds: [],
+      newNames: [],
+      newCount: 0,
+      repeatCount: 0,
+    });
+  });
+  sessions = sessions.sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
 
   // Attendance charts and KPIs should only reflect sessions that already occurred.
   const nowTs = Date.now();

@@ -49,6 +49,54 @@ function formatDateMMDDYYYY(dateLike: any): string {
   return `${mm}/${dd}/${yyyy}`;
 }
 
+const ET_TIMEZONE = "America/New_York";
+const GROUP_CALL_ET_MINUTES: Record<"Tuesday" | "Thursday", number> = {
+  Tuesday: 12 * 60,
+  Thursday: 11 * 60,
+};
+const GROUP_CALL_TIME_TOLERANCE_MINUTES = 120;
+
+function etDateKey(dateLike: any): string | null {
+  const d = safeDate(dateLike);
+  if (!d) return null;
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: ET_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return fmt.format(d);
+}
+
+function etGroupTypeFromDate(dateLike: any): "Tuesday" | "Thursday" | null {
+  const d = safeDate(dateLike);
+  if (!d) return null;
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone: ET_TIMEZONE,
+    weekday: "short",
+  }).format(d);
+  const groupType =
+    weekday === "Tue" ? "Tuesday" :
+    weekday === "Thu" ? "Thursday" :
+    null;
+  if (!groupType) return null;
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: ET_TIMEZONE,
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(d);
+  const hour = Number(parts.find((p) => p.type === "hour")?.value || NaN);
+  const minute = Number(parts.find((p) => p.type === "minute")?.value || NaN);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+
+  const minutes = (hour * 60) + minute;
+  const expected = GROUP_CALL_ET_MINUTES[groupType];
+  if (Math.abs(minutes - expected) > GROUP_CALL_TIME_TOLERANCE_MINUTES) return null;
+  return groupType;
+}
+
 function classifyGroupCall(activity: any): "Tuesday" | "Thursday" | null {
   const title = String(activity?.title || "").toLowerCase();
   const start = safeDate(activity?.hs_timestamp || activity?.created_at_hubspot);
@@ -59,10 +107,7 @@ function classifyGroupCall(activity: any): "Tuesday" | "Thursday" | null {
   if (title.includes("entrepreneur's big book") || title.includes("big book")) return "Thursday";
   if (title.includes("sober founders mastermind") && !title.includes("intro")) return "Thursday";
 
-  const day = start.getUTCDay();
-  if (day === 2) return "Tuesday";
-  if (day === 4) return "Thursday";
-  return null;
+  return etGroupTypeFromDate(start);
 }
 
 async function invokeEdgeFunction(
@@ -302,39 +347,53 @@ serve(async (req: Request) => {
     const canonicalSessionsByDate = new Map<
       string,
       {
-        hubspotActivityId: number;
-        activityType: "call" | "meeting";
+        hubspotActivityIds: number[];
+        activityTypes: Array<"call" | "meeting">;
         groupType: "Tuesday" | "Thursday";
-        startAt: string | null;
+        sessionDate: string | null;
         title: string;
+        associationCount: number;
       }
     >();
     for (const session of groupSessions) {
-      const sessionDate = session.startAt ? String(session.startAt).slice(0, 10) : "unknown";
+      const sessionDate = etDateKey(session.startAt) || (session.startAt ? String(session.startAt).slice(0, 10) : "unknown");
       const key = `${session.groupType}:${sessionDate}`;
       const existing = canonicalSessionsByDate.get(key);
       if (!existing) {
-        canonicalSessionsByDate.set(key, session);
+        const assocCount = assocCounts.get(`${session.activityType}:${session.hubspotActivityId}`) || 0;
+        canonicalSessionsByDate.set(key, {
+          hubspotActivityIds: [session.hubspotActivityId],
+          activityTypes: [session.activityType],
+          groupType: session.groupType,
+          sessionDate,
+          title: session.title,
+          associationCount: assocCount,
+        });
         continue;
       }
-      const existingCount = assocCounts.get(`${existing.activityType}:${existing.hubspotActivityId}`) || 0;
       const sessionCount = assocCounts.get(`${session.activityType}:${session.hubspotActivityId}`) || 0;
-      if (sessionCount > existingCount) {
-        canonicalSessionsByDate.set(key, session);
+      if (!existing.hubspotActivityIds.includes(session.hubspotActivityId)) {
+        existing.hubspotActivityIds.push(session.hubspotActivityId);
       }
+      if (!existing.activityTypes.includes(session.activityType)) {
+        existing.activityTypes.push(session.activityType);
+      }
+      existing.associationCount += sessionCount;
+      if (!existing.title && session.title) existing.title = session.title;
+      canonicalSessionsByDate.set(key, existing);
     }
     const canonicalSessions = Array.from(canonicalSessionsByDate.values());
 
     const missingAttendanceSessions = canonicalSessions
-      .filter((row) => (assocCounts.get(`${row.activityType}:${row.hubspotActivityId}`) || 0) === 0)
+      .filter((row) => Number(row?.associationCount || 0) === 0)
       .slice(0, 8);
 
     const hostDataWarnings = missingAttendanceSessions.map((row) => ({
-      hubspot_activity_id: row.hubspotActivityId,
-      activity_type: row.activityType,
+      hubspot_activity_ids: row.hubspotActivityIds,
+      activity_types: row.activityTypes,
       group_type: row.groupType,
-      session_date: row.startAt ? String(row.startAt).slice(0, 10) : null,
-      message: `${row.groupType} ${formatDateMMDDYYYY(row.startAt)} has no attendee associations in the HubSpot call/meeting record.`,
+      session_date: row.sessionDate || null,
+      message: `${row.groupType} ${formatDateMMDDYYYY(row.sessionDate)} has no attendee associations across HubSpot call/meeting records for that session date.`,
       remediation: "Host must mark attendees in HubSpot call/meeting record, then run Sync Now.",
       is_user_action_required: true,
       reason_code: "hubspot_activity_missing_attendees",

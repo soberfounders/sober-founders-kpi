@@ -144,7 +144,7 @@ serve(async (req) => {
       supabase.from("attendee_aliases").select("original_name,target_name").limit(5000),
       supabase.from("raw_hubspot_meeting_activities")
         .select("hubspot_activity_id,activity_type,hs_timestamp,created_at_hubspot,title")
-        .gte("hs_timestamp", `${startDate}T00:00:00.000Z`)
+        .or(`hs_timestamp.gte.${startDate}T00:00:00.000Z,created_at_hubspot.gte.${startDate}T00:00:00.000Z`)
         .order("hs_timestamp", { ascending: true })
         .limit(10000),
       supabase.from("hubspot_activity_contact_associations")
@@ -277,7 +277,7 @@ serve(async (req) => {
       let secondScore = -Infinity;
       for (const a of candidates.values()) {
         const contacts = contactsByActivity.get(a._k) || [];
-        if (contacts.length < 2) continue;
+        if (contacts.length < 1) continue;
         const exactMap = new Map<string, any[]>();
         const initMap = new Map<string, any[]>();
         const emailMap = new Map<string, any[]>();

@@ -69,6 +69,7 @@ const GROUP_CALL_ET_MINUTES = {
   Thursday: 11 * 60,
 };
 const GROUP_CALL_TIME_TOLERANCE_MINUTES = 120;
+const EXPECTED_ZERO_GROUP_SESSION_KEYS = new Set(['Thursday|2025-12-25']);
 
 const etWeekdayFormatter = new Intl.DateTimeFormat('en-US', {
   timeZone: ET_TIMEZONE,
@@ -127,6 +128,15 @@ function etGroupTypeFromDate(dateLike) {
   const expectedMinute = GROUP_CALL_ET_MINUTES[dayType];
   const minutesFromExpected = Math.abs(minuteOfDay - expectedMinute);
   if (minutesFromExpected <= GROUP_CALL_TIME_TOLERANCE_MINUTES) return dayType;
+  return null;
+}
+
+function etWeekdayGroupFromDate(dateLike) {
+  const d = parseMaybeDate(dateLike);
+  if (!d) return null;
+  const weekdayShort = etWeekdayFormatter.format(d);
+  if (weekdayShort === 'Tue') return 'Tuesday';
+  if (weekdayShort === 'Thu') return 'Thursday';
   return null;
 }
 
@@ -211,7 +221,6 @@ function classifyGroupCall(activity, attendeeCount) {
   const title = String(activity?.title || '').toLowerCase();
   const start = parseMaybeDate(activity?.hs_timestamp || activity?.created_at_hubspot);
   if (!start) return null;
-  const day = start.getUTCDay();
 
   if (title.includes('tactic tuesday')) return 'Tuesday';
   if (title.includes('mastermind on zoom') || title.includes('all are welcome')) return 'Thursday';
@@ -219,8 +228,8 @@ function classifyGroupCall(activity, attendeeCount) {
   if (title.includes('sober founders mastermind') && !title.includes('intro')) return 'Thursday';
 
   if (attendeeCount >= 5) {
-    if (day === 2) return 'Tuesday';
-    if (day === 4) return 'Thursday';
+    const etWeekdayGroup = etWeekdayGroupFromDate(start);
+    if (etWeekdayGroup) return etWeekdayGroup;
   }
 
   // Fallback for generic call titles or sessions with sparse associations:
@@ -970,10 +979,44 @@ const DashboardOverview = () => {
     freeGroupEventsAll.forEach((event) => {
       const dateKey = event.startedAt.toISOString().slice(0, 10);
       const key = `${event.groupType}|${dateKey}`;
-      const existing = freeGroupByDate.get(key);
-      if (!existing || Number(event.attendeeCount || 0) > Number(existing.attendeeCount || 0)) {
-        freeGroupByDate.set(key, event);
+      if (!freeGroupByDate.has(key)) {
+        freeGroupByDate.set(key, {
+          ...event,
+          attendeeKeys: [],
+          mergedActivityIds: [],
+        });
       }
+      const merged = freeGroupByDate.get(key);
+      const attendeeSet = new Set(merged.attendeeKeys || []);
+      (event.attendeeKeys || []).forEach((attendeeKey) => attendeeSet.add(attendeeKey));
+      merged.attendeeKeys = Array.from(attendeeSet);
+      merged.attendeeCount = merged.attendeeKeys.length;
+
+      const mergedActivityIds = merged.mergedActivityIds || [];
+      if (Number.isFinite(Number(event.id))) {
+        const eventId = Number(event.id);
+        if (!mergedActivityIds.includes(eventId)) mergedActivityIds.push(eventId);
+      }
+      merged.mergedActivityIds = mergedActivityIds;
+
+      const mergedTs = merged.startedAt?.getTime?.() || 0;
+      const eventTs = event.startedAt?.getTime?.() || 0;
+      if (!merged.startedAt || (eventTs > 0 && eventTs < mergedTs)) {
+        merged.startedAt = event.startedAt;
+      }
+      if (merged.title && event.title && merged.title !== event.title) {
+        merged.title = 'Merged HubSpot activities';
+      } else if (!merged.title && event.title) {
+        merged.title = event.title;
+      }
+    });
+    EXPECTED_ZERO_GROUP_SESSION_KEYS.forEach((key) => {
+      if (!freeGroupByDate.has(key)) return;
+      const merged = freeGroupByDate.get(key);
+      merged.attendeeKeys = [];
+      merged.attendeeCount = 0;
+      merged.title = 'Holiday (no session)';
+      freeGroupByDate.set(key, merged);
     });
     const freeGroupEvents = Array.from(freeGroupByDate.values())
       .sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
