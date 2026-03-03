@@ -277,7 +277,7 @@ serve(async (req) => {
       let secondScore = -Infinity;
       for (const a of candidates.values()) {
         const contacts = contactsByActivity.get(a._k) || [];
-        if (contacts.length < 1) continue;
+        if (contacts.length < 3) continue;
         const exactMap = new Map<string, any[]>();
         const initMap = new Map<string, any[]>();
         const emailMap = new Map<string, any[]>();

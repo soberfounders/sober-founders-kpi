@@ -69,6 +69,7 @@ const GROUP_CALL_ET_MINUTES = {
   Thursday: 11 * 60,
 };
 const GROUP_CALL_TIME_TOLERANCE_MINUTES = 120;
+const MIN_GROUP_ATTENDEES = 3;
 const EXPECTED_ZERO_GROUP_SESSION_KEYS = new Set(['Thursday|2025-12-25']);
 
 const etWeekdayFormatter = new Intl.DateTimeFormat('en-US', {
@@ -138,6 +139,29 @@ function etWeekdayGroupFromDate(dateLike) {
   if (weekdayShort === 'Tue') return 'Tuesday';
   if (weekdayShort === 'Thu') return 'Thursday';
   return null;
+}
+
+function etGroupTimingFromDate(dateLike) {
+  const d = parseMaybeDate(dateLike);
+  if (!d) return null;
+  const dayType = etWeekdayGroupFromDate(d);
+  if (!dayType) return null;
+
+  const parts = etTimePartsFormatter.formatToParts(d);
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value || NaN);
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value || NaN);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+
+  const minuteOfDay = (hour * 60) + minute;
+  const expectedMinute = GROUP_CALL_ET_MINUTES[dayType];
+  const minutesFromExpected = Math.abs(minuteOfDay - expectedMinute);
+  return {
+    dayType,
+    minuteOfDay,
+    expectedMinute,
+    minutesFromExpected,
+    isNearScheduled: Number.isFinite(minutesFromExpected) && minutesFromExpected <= GROUP_CALL_TIME_TOLERANCE_MINUTES,
+  };
 }
 
 function safeNum(value) {
@@ -222,20 +246,19 @@ function classifyGroupCall(activity, attendeeCount) {
   const start = parseMaybeDate(activity?.hs_timestamp || activity?.created_at_hubspot);
   if (!start) return null;
 
-  if (title.includes('tactic tuesday')) return 'Tuesday';
-  if (title.includes('mastermind on zoom') || title.includes('all are welcome')) return 'Thursday';
-  if (title.includes("entrepreneur's big book") || title.includes('big book')) return 'Thursday';
-  if (title.includes('sober founders mastermind') && !title.includes('intro')) return 'Thursday';
+  const timing = etGroupTimingFromDate(start);
+  const titleType =
+    title.includes('tactic tuesday') ? 'Tuesday' :
+    (title.includes('mastermind on zoom') || title.includes('all are welcome')) ? 'Thursday' :
+    (title.includes("entrepreneur's big book") || title.includes('big book')) ? 'Thursday' :
+    (title.includes('sober founders mastermind') && !title.includes('intro')) ? 'Thursday' :
+    null;
 
-  if (attendeeCount >= 5) {
-    const etWeekdayGroup = etWeekdayGroupFromDate(start);
-    if (etWeekdayGroup) return etWeekdayGroup;
-  }
+  if (timing?.isNearScheduled && timing?.dayType) return timing.dayType;
+  if (titleType && attendeeCount >= MIN_GROUP_ATTENDEES) return titleType;
+  if (timing?.dayType && attendeeCount >= MIN_GROUP_ATTENDEES) return timing.dayType;
 
-  // Fallback for generic call titles or sessions with sparse associations:
-  // classify by expected ET meeting window so Tue/Thu rows still surface.
-  const scheduledEtGroupType = etGroupTypeFromDate(start);
-  if (scheduledEtGroupType) return scheduledEtGroupType;
+  if (titleType) return titleType;
 
   return null;
 }
@@ -951,6 +974,7 @@ const DashboardOverview = () => {
         const activityType = String(activity?.activity_type || '').toLowerCase();
         const startedAt = toUtcDayStart(activity?.hs_timestamp || activity?.created_at_hubspot);
         if (!startedAt || !Number.isFinite(id)) return null;
+        const timing = etGroupTimingFromDate(activity?.hs_timestamp || activity?.created_at_hubspot);
         const assocs = assocByActivityId.get(activityAssocKey(id, activityType)) || [];
         const attendeeKeys = Array.from(new Set(
           assocs.map(attendeeAssocKey).filter(Boolean)
@@ -968,60 +992,60 @@ const DashboardOverview = () => {
           attendeeKeys,
           attendeeCount,
           groupType,
+          minutesFromExpected: Number(timing?.minutesFromExpected ?? Number.POSITIVE_INFINITY),
+          isNearScheduled: !!timing?.isNearScheduled,
           isPhoenixForum,
         };
       })
       .filter(Boolean)
       .sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
 
-    const freeGroupEventsAll = parsedCalls.filter((e) => !!e.groupType);
+    const freeGroupEventsAll = parsedCalls.filter((e) => !!e.groupType && Number(e.attendeeCount || 0) >= MIN_GROUP_ATTENDEES);
     const freeGroupByDate = new Map();
+    const compareSessionCandidates = (candidate, existing) => {
+      if (!!candidate.isNearScheduled !== !!existing.isNearScheduled) {
+        return candidate.isNearScheduled ? 1 : -1;
+      }
+      if (candidate.isNearScheduled && existing.isNearScheduled) {
+        const candidateDiff = Number(candidate?.minutesFromExpected || Number.POSITIVE_INFINITY);
+        const existingDiff = Number(existing?.minutesFromExpected || Number.POSITIVE_INFINITY);
+        if (candidateDiff !== existingDiff) return candidateDiff < existingDiff ? 1 : -1;
+      }
+      const candidateCount = Number(candidate?.attendeeCount || 0);
+      const existingCount = Number(existing?.attendeeCount || 0);
+      if (candidateCount !== existingCount) return candidateCount > existingCount ? 1 : -1;
+      return 0;
+    };
     freeGroupEventsAll.forEach((event) => {
       const dateKey = event.startedAt.toISOString().slice(0, 10);
       const key = `${event.groupType}|${dateKey}`;
-      if (!freeGroupByDate.has(key)) {
-        freeGroupByDate.set(key, {
-          ...event,
-          attendeeKeys: [],
-          mergedActivityIds: [],
-        });
-      }
-      const merged = freeGroupByDate.get(key);
-      const attendeeSet = new Set(merged.attendeeKeys || []);
-      (event.attendeeKeys || []).forEach((attendeeKey) => attendeeSet.add(attendeeKey));
-      merged.attendeeKeys = Array.from(attendeeSet);
-      merged.attendeeCount = merged.attendeeKeys.length;
-
-      const mergedActivityIds = merged.mergedActivityIds || [];
-      if (Number.isFinite(Number(event.id))) {
-        const eventId = Number(event.id);
-        if (!mergedActivityIds.includes(eventId)) mergedActivityIds.push(eventId);
-      }
-      merged.mergedActivityIds = mergedActivityIds;
-
-      const mergedTs = merged.startedAt?.getTime?.() || 0;
-      const eventTs = event.startedAt?.getTime?.() || 0;
-      if (!merged.startedAt || (eventTs > 0 && eventTs < mergedTs)) {
-        merged.startedAt = event.startedAt;
-      }
-      if (merged.title && event.title && merged.title !== event.title) {
-        merged.title = 'Merged HubSpot activities';
-      } else if (!merged.title && event.title) {
-        merged.title = event.title;
+      const existing = freeGroupByDate.get(key);
+      if (!existing || compareSessionCandidates(event, existing) > 0) {
+        freeGroupByDate.set(key, event);
       }
     });
     EXPECTED_ZERO_GROUP_SESSION_KEYS.forEach((key) => {
-      if (!freeGroupByDate.has(key)) return;
-      const merged = freeGroupByDate.get(key);
-      merged.attendeeKeys = [];
-      merged.attendeeCount = 0;
-      merged.title = 'Holiday (no session)';
-      freeGroupByDate.set(key, merged);
+      const [groupType, dateKey] = key.split('|');
+      const startedAt = toUtcDayStart(dateKey);
+      if (!startedAt) return;
+      freeGroupByDate.set(key, {
+        id: `expected-zero-${key}`,
+        startedAt,
+        title: 'Holiday (no session)',
+        lowerTitle: 'holiday',
+        attendeeKeys: [],
+        attendeeCount: 0,
+        groupType,
+        minutesFromExpected: 0,
+        isNearScheduled: true,
+        isPhoenixForum: false,
+        isExpectedZero: true,
+      });
     });
     const freeGroupEvents = Array.from(freeGroupByDate.values())
       .sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
     const phoenixForumCalls = parsedCalls.filter((e) => e.isPhoenixForum);
-    const unclassifiedLargeCalls = parsedCalls.filter((e) => !e.groupType && !e.isPhoenixForum && e.attendeeCount >= 5).length;
+    const unclassifiedLargeCalls = parsedCalls.filter((e) => !e.groupType && !e.isPhoenixForum && e.attendeeCount >= MIN_GROUP_ATTENDEES).length;
 
     const firstSeenFreeGroup = new Map();
     freeGroupEvents.forEach((event) => {

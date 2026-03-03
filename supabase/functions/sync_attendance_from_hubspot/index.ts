@@ -55,6 +55,8 @@ const GROUP_CALL_ET_MINUTES: Record<"Tuesday" | "Thursday", number> = {
   Thursday: 11 * 60,
 };
 const GROUP_CALL_TIME_TOLERANCE_MINUTES = 120;
+const MIN_GROUP_ATTENDEES = 3;
+const EXPECTED_ZERO_GROUP_SESSION_KEYS = new Set(["Thursday:2025-12-25"]);
 
 function etDateKey(dateLike: any): string | null {
   const d = safeDate(dateLike);
@@ -95,6 +97,38 @@ function etGroupTypeFromDate(dateLike: any): "Tuesday" | "Thursday" | null {
   const expected = GROUP_CALL_ET_MINUTES[groupType];
   if (Math.abs(minutes - expected) > GROUP_CALL_TIME_TOLERANCE_MINUTES) return null;
   return groupType;
+}
+
+function etGroupTimingFromDate(dateLike: any) {
+  const d = safeDate(dateLike);
+  if (!d) return null;
+  const groupType = etGroupTypeFromDate(d);
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone: ET_TIMEZONE,
+    weekday: "short",
+  }).format(d);
+  const etWeekdayGroupType =
+    weekday === "Tue" ? "Tuesday" :
+    weekday === "Thu" ? "Thursday" :
+    null;
+  if (!etWeekdayGroupType) return null;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: ET_TIMEZONE,
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(d);
+  const hour = Number(parts.find((p) => p.type === "hour")?.value || NaN);
+  const minute = Number(parts.find((p) => p.type === "minute")?.value || NaN);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  const minutes = (hour * 60) + minute;
+  const expected = GROUP_CALL_ET_MINUTES[etWeekdayGroupType];
+  const minutesFromExpected = Math.abs(minutes - expected);
+  return {
+    groupType: etWeekdayGroupType,
+    minutesFromExpected,
+    isNearScheduled: !!groupType,
+  };
 }
 
 function classifyGroupCall(activity: any): "Tuesday" | "Thursday" | null {
@@ -347,40 +381,97 @@ serve(async (req: Request) => {
     const canonicalSessionsByDate = new Map<
       string,
       {
-        hubspotActivityIds: number[];
-        activityTypes: Array<"call" | "meeting">;
+        hubspotActivityId: number;
+        activityType: "call" | "meeting";
         groupType: "Tuesday" | "Thursday";
         sessionDate: string | null;
         title: string;
         associationCount: number;
+        minutesFromExpected: number;
+        isNearScheduled: boolean;
       }
     >();
+    const compareSessionCandidates = (
+      candidate: {
+        associationCount: number;
+        minutesFromExpected: number;
+        isNearScheduled: boolean;
+      },
+      existing: {
+        associationCount: number;
+        minutesFromExpected: number;
+        isNearScheduled: boolean;
+      },
+    ) => {
+      if (candidate.isNearScheduled !== existing.isNearScheduled) {
+        return candidate.isNearScheduled ? 1 : -1;
+      }
+      if (candidate.isNearScheduled && existing.isNearScheduled) {
+        if (candidate.minutesFromExpected !== existing.minutesFromExpected) {
+          return candidate.minutesFromExpected < existing.minutesFromExpected ? 1 : -1;
+        }
+      }
+      if (candidate.associationCount !== existing.associationCount) {
+        return candidate.associationCount > existing.associationCount ? 1 : -1;
+      }
+      return 0;
+    };
     for (const session of groupSessions) {
       const sessionDate = etDateKey(session.startAt) || (session.startAt ? String(session.startAt).slice(0, 10) : "unknown");
       const key = `${session.groupType}:${sessionDate}`;
-      const existing = canonicalSessionsByDate.get(key);
-      if (!existing) {
-        const assocCount = assocCounts.get(`${session.activityType}:${session.hubspotActivityId}`) || 0;
-        canonicalSessionsByDate.set(key, {
-          hubspotActivityIds: [session.hubspotActivityId],
-          activityTypes: [session.activityType],
-          groupType: session.groupType,
-          sessionDate,
-          title: session.title,
-          associationCount: assocCount,
-        });
+      const associationCount = assocCounts.get(`${session.activityType}:${session.hubspotActivityId}`) || 0;
+      if (!EXPECTED_ZERO_GROUP_SESSION_KEYS.has(key) && associationCount < MIN_GROUP_ATTENDEES) {
         continue;
       }
-      const sessionCount = assocCounts.get(`${session.activityType}:${session.hubspotActivityId}`) || 0;
-      if (!existing.hubspotActivityIds.includes(session.hubspotActivityId)) {
-        existing.hubspotActivityIds.push(session.hubspotActivityId);
+      const timing = etGroupTimingFromDate(session.startAt) || {
+        groupType: session.groupType,
+        minutesFromExpected: Number.POSITIVE_INFINITY,
+        isNearScheduled: false,
+      };
+      const candidate = {
+        hubspotActivityId: session.hubspotActivityId,
+        activityType: session.activityType,
+        groupType: session.groupType,
+        sessionDate,
+        title: session.title,
+        associationCount,
+        minutesFromExpected: Number.isFinite(Number(timing.minutesFromExpected))
+          ? Number(timing.minutesFromExpected)
+          : Number.POSITIVE_INFINITY,
+        isNearScheduled: !!timing.isNearScheduled,
+      };
+      const existing = canonicalSessionsByDate.get(key);
+      if (!existing) {
+        canonicalSessionsByDate.set(key, candidate);
+        continue;
       }
-      if (!existing.activityTypes.includes(session.activityType)) {
-        existing.activityTypes.push(session.activityType);
+      if (compareSessionCandidates(candidate, existing) > 0) {
+        canonicalSessionsByDate.set(key, candidate);
       }
-      existing.associationCount += sessionCount;
-      if (!existing.title && session.title) existing.title = session.title;
-      canonicalSessionsByDate.set(key, existing);
+    }
+    EXPECTED_ZERO_GROUP_SESSION_KEYS.forEach((key) => {
+      if (canonicalSessionsByDate.has(key)) {
+        const existing = canonicalSessionsByDate.get(key)!;
+        canonicalSessionsByDate.set(key, {
+          ...existing,
+          associationCount: 0,
+          title: "Holiday (no session)",
+          isNearScheduled: true,
+          minutesFromExpected: 0,
+        });
+        return;
+      }
+      const [groupType, sessionDate] = key.split(":");
+      canonicalSessionsByDate.set(key, {
+        hubspotActivityId: 0,
+        activityType: "call",
+        groupType: groupType as "Tuesday" | "Thursday",
+        sessionDate,
+        title: "Holiday (no session)",
+        associationCount: 0,
+        isNearScheduled: true,
+        minutesFromExpected: 0,
+      });
     }
     const canonicalSessions = Array.from(canonicalSessionsByDate.values());
 
@@ -389,11 +480,11 @@ serve(async (req: Request) => {
       .slice(0, 8);
 
     const hostDataWarnings = missingAttendanceSessions.map((row) => ({
-      hubspot_activity_ids: row.hubspotActivityIds,
-      activity_types: row.activityTypes,
+      hubspot_activity_id: row.hubspotActivityId || null,
+      activity_type: row.activityType || null,
       group_type: row.groupType,
       session_date: row.sessionDate || null,
-      message: `${row.groupType} ${formatDateMMDDYYYY(row.sessionDate)} has no attendee associations across HubSpot call/meeting records for that session date.`,
+      message: `${row.groupType} ${formatDateMMDDYYYY(row.sessionDate)} has no attendee associations in the canonical HubSpot call/meeting record.`,
       remediation: "Host must mark attendees in HubSpot call/meeting record, then run Sync Now.",
       is_user_action_required: true,
       reason_code: "hubspot_activity_missing_attendees",

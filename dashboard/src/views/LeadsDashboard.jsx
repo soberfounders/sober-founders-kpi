@@ -22,6 +22,7 @@ import {
 
 const LOOKBACK_DAYS = LEADS_LOOKBACK_DAYS;
 const ATTRIBUTION_HISTORY_DAYS = LEADS_ATTRIBUTION_HISTORY_DAYS;
+const MIN_GROUP_ATTENDEES = 3;
 const EXPECTED_ZERO_GROUP_SESSION_KEYS = new Set(['2025-12-25|Thursday']);
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
@@ -1076,7 +1077,7 @@ export default function LeadsDashboard() {
       Tuesday: 12 * 60, // 12pm ET
       Thursday: 11 * 60, // 11am ET
     };
-    const HUBSPOT_CALL_TIME_TOLERANCE_MINUTES = 240; // intentionally wide for DST/manual timing variance
+    const HUBSPOT_CALL_TIME_TOLERANCE_MINUTES = 120;
 
     const formatEtDateKey = (value) => {
       if (!value) return null;
@@ -1485,7 +1486,7 @@ export default function LeadsDashboard() {
       const attendeeCount = assocs
         .filter((a) => Number.isFinite(Number(a?.hubspot_contact_id)) || normalizeEmail(a?.contact_email))
         .length;
-      if (attendeeCount < 1) return;
+      if (attendeeCount < MIN_GROUP_ATTENDEES) return;
 
       const title = String(activity?.title || '').trim();
       const titleLc = title.toLowerCase();
@@ -1511,42 +1512,25 @@ export default function LeadsDashboard() {
     const chosenHubspotCallSessionByDateDay = new Map();
     hubspotCallCandidatesByDateDay.forEach((candidates, key) => {
       const ranked = [...(candidates || [])].sort((a, b) => {
-        if (b.score !== a.score) return b.score - a.score;
+        const aNear = Number.isFinite(Number(a?.et?.minutesFromExpected))
+          && Number(a.et.minutesFromExpected) <= HUBSPOT_CALL_TIME_TOLERANCE_MINUTES;
+        const bNear = Number.isFinite(Number(b?.et?.minutesFromExpected))
+          && Number(b.et.minutesFromExpected) <= HUBSPOT_CALL_TIME_TOLERANCE_MINUTES;
+        if (aNear !== bNear) return bNear - aNear;
+
+        if (aNear && bNear) {
+          const aDiff = Number(a?.et?.minutesFromExpected || Number.POSITIVE_INFINITY);
+          const bDiff = Number(b?.et?.minutesFromExpected || Number.POSITIVE_INFINITY);
+          if (aDiff !== bDiff) return aDiff - bDiff;
+        }
+
         if (b.attendeeCount !== a.attendeeCount) return b.attendeeCount - a.attendeeCount;
+        if (b.score !== a.score) return b.score - a.score;
         const aTs = Date.parse(a.activity?.hs_timestamp || a.activity?.created_at_hubspot || '');
         const bTs = Date.parse(b.activity?.hs_timestamp || b.activity?.created_at_hubspot || '');
         return aTs - bTs;
       });
-      if (!ranked[0]) return;
-
-      const mergedAssocByKey = new Map();
-      const activityIds = [];
-      ranked.forEach((candidate) => {
-        if (Number.isFinite(candidate?.activityId)) {
-          const id = Number(candidate.activityId);
-          if (!activityIds.includes(id)) activityIds.push(id);
-        }
-        (candidate?.assocs || []).forEach((assoc) => {
-          const contactId = Number(assoc?.hubspot_contact_id);
-          if (Number.isFinite(contactId) && contactId > 0) {
-            const assocKey = `hubspot:${contactId}`;
-            if (!mergedAssocByKey.has(assocKey)) mergedAssocByKey.set(assocKey, assoc);
-            return;
-          }
-          const email = normalizeEmail(assoc?.contact_email || '');
-          if (email) {
-            const assocKey = `email:${email}`;
-            if (!mergedAssocByKey.has(assocKey)) mergedAssocByKey.set(assocKey, assoc);
-          }
-        });
-      });
-
-      chosenHubspotCallSessionByDateDay.set(key, {
-        ...ranked[0],
-        activityIds,
-        assocs: Array.from(mergedAssocByKey.values()),
-        attendeeCount: mergedAssocByKey.size,
-      });
+      if (ranked[0]) chosenHubspotCallSessionByDateDay.set(key, ranked[0]);
     });
 
     const aliasMap = buildAliasMap(aliases || []);
@@ -1620,6 +1604,9 @@ export default function LeadsDashboard() {
         const mergedActivityIds = (chosen?.activityIds || [])
           .map((id) => Number(id))
           .filter((id) => Number.isFinite(id));
+        if (mergedActivityIds.length === 0 && Number.isFinite(Number(chosen?.activityId))) {
+          mergedActivityIds.push(Number(chosen.activityId));
+        }
         const meetingId = `hubspot-call-${mergedActivityIds[0] || chosen?.activityId || ''}`;
         const sessionKey = `${dateKey}|${dayType}|${meetingId}`;
         const dedup = new Map();
