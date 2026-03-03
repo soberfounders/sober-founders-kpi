@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import DashboardOverview from './views/DashboardOverview';
@@ -70,8 +70,63 @@ function tabRequiresSupabase(activeTab) {
   ].includes(activeTab);
 }
 
+const MOBILE_BREAKPOINT = 1024;
+
 function App() {
   const [activeTab, setActiveTab] = useState('Dashboard');
+  const [isMobile, setIsMobile] = useState(
+    () => (typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false),
+  );
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const mediaQuery = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
+    const handleMediaChange = (event) => {
+      setIsMobile(event.matches);
+      if (!event.matches) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    handleMediaChange(mediaQuery);
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleMediaChange);
+      return () => mediaQuery.removeEventListener('change', handleMediaChange);
+    }
+
+    mediaQuery.addListener(handleMediaChange);
+    return () => mediaQuery.removeListener(handleMediaChange);
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const previousOverflow = document.body.style.overflow;
+    if (isMobile && isMobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isMobile, isMobileMenuOpen]);
+
+  const handleSetActiveTab = (tab) => {
+    setActiveTab(tab);
+    if (isMobile) setIsMobileMenuOpen(false);
+  };
+
+  const handleMenuToggle = () => {
+    if (isMobile) {
+      setIsMobileMenuOpen((previous) => !previous);
+      return;
+    }
+    setIsSidebarCollapsed((previous) => !previous);
+  };
 
   const renderView = () => {
     if (!hasSupabaseConfig && tabRequiresSupabase(activeTab)) {
@@ -114,10 +169,18 @@ function App() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <Header activeTab={activeTab} />
-        <main style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={handleSetActiveTab}
+        isMobile={isMobile}
+        isOpen={!isMobile || isMobileMenuOpen}
+        isCollapsed={!isMobile && isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed((previous) => !previous)}
+        onClose={() => setIsMobileMenuOpen(false)}
+      />
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <Header activeTab={activeTab} onMenuClick={handleMenuToggle} isMobile={isMobile} />
+        <main style={{ flex: 1, minWidth: 0, padding: isMobile ? '12px' : '24px', overflowY: 'auto' }}>
           {renderView()}
         </main>
       </div>
