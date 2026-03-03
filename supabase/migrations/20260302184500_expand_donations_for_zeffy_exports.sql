@@ -50,6 +50,10 @@ CREATE TABLE IF NOT EXISTS public.raw_zeffy_supporter_profiles (
 CREATE INDEX IF NOT EXISTS idx_raw_zeffy_supporter_profiles_email
   ON public.raw_zeffy_supporter_profiles (lower(donor_email));
 
+-- Recreate view from scratch to avoid column-order conflicts on environments
+-- where an older definition already exists.
+DROP VIEW IF EXISTS public.donation_transactions_unified;
+
 CREATE OR REPLACE VIEW public.donation_transactions_unified AS
 SELECT
   'zeffy'::text AS source_system,
