@@ -1677,10 +1677,14 @@ const cardStyle = {
   padding: '20px',
   boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.08)',
 };
+const MOBILE_BREAKPOINT = 900;
 
 const AttendanceDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isMobile, setIsMobile] = useState(
+    () => (typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false),
+  );
   const [aliasWarning, setAliasWarning] = useState('');
   const [aliases, setAliases] = useState([]);
   const [rawHubspotContacts, setRawHubspotContacts] = useState([]);
@@ -1702,6 +1706,19 @@ const AttendanceDashboard = () => {
     message: '',
     lastRunAtIso: '',
   });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const media = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
+    const onChange = (event) => setIsMobile(event.matches);
+    setIsMobile(media.matches);
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', onChange);
+      return () => media.removeEventListener('change', onChange);
+    }
+    media.addListener(onChange);
+    return () => media.removeListener(onChange);
+  }, []);
 
   // Build raw_hubspot_contacts lookup map for enrichment (revenue, source etc.)
   const hubspotContactMap = useMemo(() => {
@@ -2967,8 +2984,15 @@ const AttendanceDashboard = () => {
             </span>
           </div>
 
-          <div style={{ overflowX: 'auto' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px', minWidth: '920px' }}>
+          <div style={{ overflowX: isMobile ? 'visible' : 'auto' }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, minmax(0, 1fr))',
+                gap: '12px',
+                minWidth: isMobile ? 'auto' : '920px',
+              }}
+            >
               {[...(analytics.welcomeNewSessionsTue || []), ...(analytics.welcomeNewSessionsThu || [])].map((session, idx) => {
                 const isTuesday = session.type === 'Tuesday';
                 return (
@@ -3073,7 +3097,7 @@ const AttendanceDashboard = () => {
       </div>
 
       {/* ─── Show-Up Charts (Tue & Thu separate) ─── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
         <div style={cardStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
             <TrendingUp size={17} color="#0ea5e9" />
@@ -3166,160 +3190,230 @@ const AttendanceDashboard = () => {
               </div>
             </div>
 
-            <div style={{ marginTop: '14px', border: '1px solid #e2e8f0', borderRadius: '12px', overflowX: 'auto' }}>
-              <table style={{ width: '100%', minWidth: '1320px', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                    <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Display Name</th>
-                    <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Revenue</th>
-                    <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Sobriety Date</th>
-                    <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Times Visited Meeting</th>
-                    <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Total Visits</th>
-                    <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Email Address</th>
-                    <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>HubSpot Contact</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedSessionDetail.attendeeRows.map((row) => (
-                    <tr key={row.name} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '10px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>{row.displayName || row.name}</span>
+            {isMobile ? (
+              <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {selectedSessionDetail.attendeeRows.map((row) => (
+                  <div key={row.name} style={{ border: '1px solid #e2e8f0', borderRadius: '12px', padding: '10px', backgroundColor: 'white' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>{row.displayName || row.name}</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: '999px', fontSize: '10px', fontWeight: 700, backgroundColor: row.isNew ? '#dcfce7' : '#e2e8f0', color: row.isNew ? '#166534' : '#334155', textTransform: 'uppercase' }}>
+                        {row.isNew ? 'Net New' : 'Returning'}
+                      </span>
+                    </div>
+
+                    <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                      <div>
+                        <p style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase' }}>Revenue</p>
+                        <p style={{ fontSize: '12px', color: '#0f172a', fontWeight: 700 }}>{formatCurrencyMaybe(row.revenue)}</p>
+                      </div>
+                      <div>
+                        <p style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase' }}>Meeting Visits</p>
+                        <p style={{ fontSize: '12px', color: '#0f172a', fontWeight: 700 }}>{row.groupVisitsIncludingThisSession} (total {row.totalVisitsIncludingThisSession})</p>
+                      </div>
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <p style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase' }}>HubSpot</p>
+                        <p style={{ fontSize: '12px', color: '#0f172a', fontWeight: 600 }}>{row.hubspotName || 'Not Found'}</p>
+                        <p style={{ fontSize: '11px', color: '#475569', marginTop: '2px' }}>{row.hubspotEmail || 'Not Found'}</p>
+                        {row.hubspotUrl ? (
+                          <a href={row.hubspotUrl} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 700, textDecoration: 'underline' }}>
+                            Open in HubSpot
+                          </a>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {row.duplicateActions.length > 0 && (
+                      <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {row.duplicateActions.map((action) => {
+                          const mergeKey = `${normalizeName(action.source)}->${normalizeName(action.target)}`;
+                          const isBusy = mergingAliasKey === mergeKey;
+                          return (
+                            <button
+                              key={mergeKey}
+                              onClick={() => handleMergeAlias(action.source, action.target)}
+                              disabled={!!mergingAliasKey}
+                              style={{
+                                border: '1px solid #cbd5e1',
+                                backgroundColor: '#f8fafc',
+                                color: '#1e293b',
+                                borderRadius: '999px',
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                padding: '3px 8px',
+                                cursor: 'pointer',
+                                opacity: !!mergingAliasKey && !isBusy ? 0.55 : 1,
+                              }}
+                            >
+                              {isBusy ? 'Merging...' : action.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {selectedSessionDetail.attendeeRows.length === 0 && (
+                  <div style={{ padding: '14px', textAlign: 'center', fontSize: '13px', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
+                    No attendees found for this session.
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ marginTop: '14px', border: '1px solid #e2e8f0', borderRadius: '12px', overflowX: 'auto' }}>
+                <table style={{ width: '100%', minWidth: '1320px', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                      <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Display Name</th>
+                      <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Revenue</th>
+                      <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Sobriety Date</th>
+                      <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Times Visited Meeting</th>
+                      <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Total Visits</th>
+                      <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Email Address</th>
+                      <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>HubSpot Contact</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedSessionDetail.attendeeRows.map((row) => (
+                      <tr key={row.name} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '10px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>{row.displayName || row.name}</span>
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  padding: '2px 8px',
+                                  borderRadius: '999px',
+                                  fontSize: '10px',
+                                  fontWeight: 700,
+                                  backgroundColor: row.isNew ? '#dcfce7' : '#e2e8f0',
+                                  color: row.isNew ? '#166534' : '#334155',
+                                  textTransform: 'uppercase',
+                                }}
+                              >
+                                {row.isNew ? 'Net New' : 'Returning'}
+                              </span>
+                            </div>
+                            {normalizeName(row.displayName || '') !== normalizeName(row.name || '') && (
+                              <span style={{ fontSize: '11px', color: '#64748b' }}>Attendance row name: {row.name}</span>
+                            )}
+                            {!row.hubspotMatched && row.missingIdentityReason ? (
+                              <span style={{ fontSize: '10px', color: '#b45309' }}>{row.missingIdentityReason}</span>
+                            ) : null}
+                            {row.duplicateActions.length > 0 && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '2px' }}>
+                                {row.duplicateActions.map((action) => {
+                                  const mergeKey = `${normalizeName(action.source)}->${normalizeName(action.target)}`;
+                                  const isBusy = mergingAliasKey === mergeKey;
+                                  return (
+                                    <button
+                                      key={mergeKey}
+                                      onClick={() => handleMergeAlias(action.source, action.target)}
+                                      disabled={!!mergingAliasKey}
+                                      style={{
+                                        border: '1px solid #cbd5e1',
+                                        backgroundColor: '#f8fafc',
+                                        color: '#1e293b',
+                                        borderRadius: '999px',
+                                        fontSize: '10px',
+                                        fontWeight: 700,
+                                        padding: '3px 8px',
+                                        cursor: 'pointer',
+                                        opacity: !!mergingAliasKey && !isBusy ? 0.55 : 1,
+                                      }}
+                                    >
+                                      {isBusy ? 'Merging...' : action.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td style={{ padding: '10px', fontSize: '12px', textAlign: 'right', color: Number.isFinite(row.revenue) ? '#0f172a' : '#94a3b8', fontWeight: Number.isFinite(row.revenue) ? 700 : 500 }}>
+                          {formatCurrencyMaybe(row.revenue)}
+                        </td>
+                        <td style={{ padding: '10px' }}>
+                          {row.sobrietyDate ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              <span style={{ fontSize: '12px', color: '#0f172a', fontWeight: 600 }}>
+                                {formatDateMMDDYY(row.sobrietyDate)}{row.sobrietyDurationLabel ? ` (${row.sobrietyDurationLabel})` : ''}
+                              </span>
+                              {row.sobrietySoonLabel ? (
+                                <span style={{ fontSize: '10px', color: '#b45309', fontWeight: 700 }}>{row.sobrietySoonLabel}</span>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <span style={{ fontSize: '12px', color: '#94a3b8' }}>Not Found</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '10px', fontSize: '13px', color: '#334155', textAlign: 'right', fontWeight: 700 }}>
+                          {row.groupVisitsIncludingThisSession}
+                        </td>
+                        <td style={{ padding: '10px', fontSize: '13px', color: '#334155', textAlign: 'right', fontWeight: 700 }}>
+                          {row.totalVisitsIncludingThisSession}
+                        </td>
+                        <td style={{ padding: '10px', fontSize: '12px', color: row.hubspotEmail !== 'Not Found' ? '#0f172a' : '#94a3b8' }}>
+                          {row.hubspotEmail || 'Not Found'}
+                        </td>
+                        <td style={{ padding: '10px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                             <span
                               style={{
                                 display: 'inline-flex',
                                 alignItems: 'center',
+                                width: 'fit-content',
                                 padding: '2px 8px',
                                 borderRadius: '999px',
                                 fontSize: '10px',
                                 fontWeight: 700,
-                                backgroundColor: row.isNew ? '#dcfce7' : '#e2e8f0',
-                                color: row.isNew ? '#166534' : '#334155',
+                                backgroundColor: row.hubspotMatched ? '#dcfce7' : '#fee2e2',
+                                color: row.hubspotMatched ? '#166534' : '#991b1b',
                                 textTransform: 'uppercase',
                               }}
                             >
-                              {row.isNew ? 'Net New' : 'Returning'}
+                              {row.hubspotMatched ? 'Matched' : 'Missing'}
                             </span>
-                          </div>
-                          {normalizeName(row.displayName || '') !== normalizeName(row.name || '') && (
-                            <span style={{ fontSize: '11px', color: '#64748b' }}>Attendance row name: {row.name}</span>
-                          )}
-                          {!row.hubspotMatched && row.missingIdentityReason ? (
-                            <span style={{ fontSize: '10px', color: '#b45309' }}>{row.missingIdentityReason}</span>
-                          ) : null}
-                          {row.duplicateActions.length > 0 && (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '2px' }}>
-                              {row.duplicateActions.map((action) => {
-                                const mergeKey = `${normalizeName(action.source)}->${normalizeName(action.target)}`;
-                                const isBusy = mergingAliasKey === mergeKey;
-                                return (
-                                  <button
-                                    key={mergeKey}
-                                    onClick={() => handleMergeAlias(action.source, action.target)}
-                                    disabled={!!mergingAliasKey}
-                                    style={{
-                                      border: '1px solid #cbd5e1',
-                                      backgroundColor: '#f8fafc',
-                                      color: '#1e293b',
-                                      borderRadius: '999px',
-                                      fontSize: '10px',
-                                      fontWeight: 700,
-                                      padding: '3px 8px',
-                                      cursor: 'pointer',
-                                      opacity: !!mergingAliasKey && !isBusy ? 0.55 : 1,
-                                    }}
-                                  >
-                                    {isBusy ? 'Merging...' : action.label}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td style={{ padding: '10px', fontSize: '12px', textAlign: 'right', color: Number.isFinite(row.revenue) ? '#0f172a' : '#94a3b8', fontWeight: Number.isFinite(row.revenue) ? 700 : 500 }}>
-                        {formatCurrencyMaybe(row.revenue)}
-                      </td>
-                      <td style={{ padding: '10px' }}>
-                        {row.sobrietyDate ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                            <span style={{ fontSize: '12px', color: '#0f172a', fontWeight: 600 }}>
-                              {formatDateMMDDYY(row.sobrietyDate)}{row.sobrietyDurationLabel ? ` (${row.sobrietyDurationLabel})` : ''}
-                            </span>
-                            {row.sobrietySoonLabel ? (
-                              <span style={{ fontSize: '10px', color: '#b45309', fontWeight: 700 }}>{row.sobrietySoonLabel}</span>
+                            <span style={{ fontSize: '12px', color: '#334155', fontWeight: 600 }}>{row.hubspotName || 'Not Found'}</span>
+                            {row.hubspotUrl ? (
+                              <a
+                                href={row.hubspotUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 700, textDecoration: 'underline' }}
+                              >
+                                Open in HubSpot
+                              </a>
+                            ) : (
+                              <span style={{ fontSize: '11px', color: '#94a3b8' }}>No HubSpot link</span>
+                            )}
+                            {row.hubspotContactId ? (
+                              <span style={{ fontSize: '10px', color: '#64748b' }}>ID: {row.hubspotContactId}</span>
                             ) : null}
-                          </div>
-                        ) : (
-                          <span style={{ fontSize: '12px', color: '#94a3b8' }}>Not Found</span>
-                        )}
-                      </td>
-                      <td style={{ padding: '10px', fontSize: '13px', color: '#334155', textAlign: 'right', fontWeight: 700 }}>
-                        {row.groupVisitsIncludingThisSession}
-                      </td>
-                      <td style={{ padding: '10px', fontSize: '13px', color: '#334155', textAlign: 'right', fontWeight: 700 }}>
-                        {row.totalVisitsIncludingThisSession}
-                      </td>
-                      <td style={{ padding: '10px', fontSize: '12px', color: row.hubspotEmail !== 'Not Found' ? '#0f172a' : '#94a3b8' }}>
-                        {row.hubspotEmail || 'Not Found'}
-                      </td>
-                      <td style={{ padding: '10px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <span
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              width: 'fit-content',
-                              padding: '2px 8px',
-                              borderRadius: '999px',
-                              fontSize: '10px',
-                              fontWeight: 700,
-                              backgroundColor: row.hubspotMatched ? '#dcfce7' : '#fee2e2',
-                              color: row.hubspotMatched ? '#166534' : '#991b1b',
-                              textTransform: 'uppercase',
-                            }}
-                          >
-                            {row.hubspotMatched ? 'Matched' : 'Missing'}
-                          </span>
-                          <span style={{ fontSize: '12px', color: '#334155', fontWeight: 600 }}>{row.hubspotName || 'Not Found'}</span>
-                          {row.hubspotUrl ? (
-                            <a
-                              href={row.hubspotUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 700, textDecoration: 'underline' }}
-                            >
-                              Open in HubSpot
-                            </a>
-                          ) : (
-                            <span style={{ fontSize: '11px', color: '#94a3b8' }}>No HubSpot link</span>
-                          )}
-                          {row.hubspotContactId ? (
-                            <span style={{ fontSize: '10px', color: '#64748b' }}>ID: {row.hubspotContactId}</span>
-                          ) : null}
-                          <span style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase' }}>
-                            {row.identityMappingSource === 'hubspot_call_activity' ? 'HubSpot Session' : (row.identityMappingSource || 'none')}
-                          </span>
-                          {row.identityMappingSource !== 'hubspot_call_activity' && (
-                            <span style={{ fontSize: '10px', color: '#64748b' }}>
-                              Confidence: {row.identityMappingConfidence || 'Low'}
+                            <span style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase' }}>
+                              {row.identityMappingSource === 'hubspot_call_activity' ? 'HubSpot Session' : (row.identityMappingSource || 'none')}
                             </span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {selectedSessionDetail.attendeeRows.length === 0 && (
-                    <tr>
-                      <td colSpan={7} style={{ padding: '14px', textAlign: 'center', fontSize: '13px', color: '#64748b' }}>
-                        No attendees found for this session.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                            {row.identityMappingSource !== 'hubspot_call_activity' && (
+                              <span style={{ fontSize: '10px', color: '#64748b' }}>
+                                Confidence: {row.identityMappingConfidence || 'Low'}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {selectedSessionDetail.attendeeRows.length === 0 && (
+                      <tr>
+                        <td colSpan={7} style={{ padding: '14px', textAlign: 'center', fontSize: '13px', color: '#64748b' }}>
+                          No attendees found for this session.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -3344,7 +3438,7 @@ const AttendanceDashboard = () => {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
         <MonthlyAverageCard
           title="Tuesday Monthly Avg Visits (MoM / YoY)"
           color="#0ea5e9"
@@ -3359,7 +3453,7 @@ const AttendanceDashboard = () => {
         />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
         <div style={cardStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
             <Users size={17} color="#0ea5e9" />
@@ -3377,7 +3471,7 @@ const AttendanceDashboard = () => {
         </div>
       </div>
       {/* ─── Top Repeaters & At-Risk ─── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
         <div style={cardStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
             <UserRoundCheck size={17} color="#0f766e" />
@@ -3392,7 +3486,7 @@ const AttendanceDashboard = () => {
                 key={p.name}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '1fr auto auto',
+                  gridTemplateColumns: isMobile ? '1fr' : '1fr auto auto',
                   gap: '10px',
                   alignItems: 'center',
                   backgroundColor: '#f8fafc',
@@ -3462,7 +3556,7 @@ const AttendanceDashboard = () => {
                   </p>
                 )}
 
-              <div style={{ marginTop: '10px', display: 'grid', gridTemplateColumns: 'minmax(220px, 1fr) 1.5fr', gap: '10px' }}>
+              <div style={{ marginTop: '10px', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(220px, 1fr) 1.5fr', gap: '10px' }}>
                 <div style={{ maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   {selectedRepeaterDetail.attendedSessions.map((session) => {
                     const isSelected = session.sessionKey === selectedRepeaterDetail.selectedSessionKey;
@@ -3565,7 +3659,7 @@ const AttendanceDashboard = () => {
                   key={p.name}
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '1fr auto',
+                    gridTemplateColumns: isMobile ? '1fr' : '1fr auto',
                     gap: '10px',
                     alignItems: 'start',
                     backgroundColor: '#fffbeb',
@@ -3670,77 +3764,127 @@ const AttendanceDashboard = () => {
           </div>
         </div>
 
-        <div style={{ marginTop: '10px', border: '1px solid #fee2e2', borderRadius: '12px', overflowX: 'auto', maxHeight: '360px' }}>
-          <table style={{ width: '100%', minWidth: '1120px', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#fef2f2', borderBottom: '1px solid #fee2e2' }}>
-                <th style={{ textAlign: 'left', padding: '10px', fontSize: '11px', color: '#7f1d1d', textTransform: 'uppercase' }}>Current HubSpot Name</th>
-                <th style={{ textAlign: 'left', padding: '10px', fontSize: '11px', color: '#7f1d1d', textTransform: 'uppercase' }}>Call Snapshot Name(s)</th>
-                <th style={{ textAlign: 'left', padding: '10px', fontSize: '11px', color: '#7f1d1d', textTransform: 'uppercase' }}>Email</th>
-                <th style={{ textAlign: 'left', padding: '10px', fontSize: '11px', color: '#7f1d1d', textTransform: 'uppercase' }}>Reason(s)</th>
-                <th style={{ textAlign: 'right', padding: '10px', fontSize: '11px', color: '#7f1d1d', textTransform: 'uppercase' }}>Group Call Rows</th>
-                <th style={{ textAlign: 'left', padding: '10px', fontSize: '11px', color: '#7f1d1d', textTransform: 'uppercase' }}>Last Seen</th>
-                <th style={{ textAlign: 'left', padding: '10px', fontSize: '11px', color: '#7f1d1d', textTransform: 'uppercase' }}>HubSpot</th>
-              </tr>
-            </thead>
-            <tbody>
-              {badNameQa.rows.slice(0, 100).map((row) => (
-                <tr key={`bad-name-${row.hubspotContactId}`} style={{ borderBottom: '1px solid #fef2f2' }}>
-                  <td style={{ padding: '10px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ fontSize: '12px', color: '#111827', fontWeight: 700 }}>{row.currentName || 'Not Found'}</span>
-                      <span style={{ fontSize: '10px', color: '#6b7280' }}>ID: {row.hubspotContactId}</span>
-                    </div>
-                  </td>
-                  <td style={{ padding: '10px', fontSize: '11px', color: '#374151' }}>
-                    {row.snapshotNames.length > 0 ? row.snapshotNames.join(' | ') : 'None'}
-                  </td>
-                  <td style={{ padding: '10px', fontSize: '11px', color: '#111827' }}>{row.currentEmail || 'Not Found'}</td>
-                  <td style={{ padding: '10px' }}>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                      {row.reasons.map((reason) => (
-                        <span
-                          key={`${row.hubspotContactId}-${reason}`}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            padding: '2px 8px',
-                            borderRadius: '999px',
-                            backgroundColor: '#fff1f2',
-                            border: '1px solid #fecdd3',
-                            color: '#9f1239',
-                            fontSize: '10px',
-                            fontWeight: 700,
-                          }}
-                        >
-                          {reason}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td style={{ padding: '10px', textAlign: 'right', fontSize: '12px', fontWeight: 700, color: '#111827' }}>{row.associationRows}</td>
-                  <td style={{ padding: '10px', fontSize: '11px', color: '#374151' }}>{row.lastSeenDateFormatted || 'Unknown'}</td>
-                  <td style={{ padding: '10px' }}>
-                    {row.hubspotUrl ? (
-                      <a href={row.hubspotUrl} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 700, textDecoration: 'underline' }}>
-                        Open in HubSpot
-                      </a>
-                    ) : (
-                      <span style={{ fontSize: '11px', color: '#9ca3af' }}>No link</span>
-                    )}
-                  </td>
+        {isMobile ? (
+          <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '420px', overflowY: 'auto' }}>
+            {badNameQa.rows.slice(0, 100).map((row) => (
+              <div key={`bad-name-${row.hubspotContactId}`} style={{ border: '1px solid #fecaca', borderRadius: '10px', backgroundColor: '#fffafa', padding: '10px' }}>
+                <p style={{ fontSize: '12px', color: '#111827', fontWeight: 700 }}>{row.currentName || 'Not Found'}</p>
+                <p style={{ marginTop: '2px', fontSize: '10px', color: '#6b7280' }}>ID: {row.hubspotContactId}</p>
+                <p style={{ marginTop: '6px', fontSize: '11px', color: '#374151' }}>Email: {row.currentEmail || 'Not Found'}</p>
+                <p style={{ marginTop: '4px', fontSize: '11px', color: '#374151' }}>
+                  Snapshot names: {row.snapshotNames.length > 0 ? row.snapshotNames.join(' | ') : 'None'}
+                </p>
+                <div style={{ marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                  {row.reasons.map((reason) => (
+                    <span
+                      key={`${row.hubspotContactId}-${reason}`}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        padding: '2px 8px',
+                        borderRadius: '999px',
+                        backgroundColor: '#fff1f2',
+                        border: '1px solid #fecdd3',
+                        color: '#9f1239',
+                        fontSize: '10px',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {reason}
+                    </span>
+                  ))}
+                </div>
+                <p style={{ marginTop: '6px', fontSize: '11px', color: '#374151' }}>
+                  Group rows: <strong>{row.associationRows}</strong> · Last seen: {row.lastSeenDateFormatted || 'Unknown'}
+                </p>
+                {row.hubspotUrl ? (
+                  <a href={row.hubspotUrl} target="_blank" rel="noreferrer" style={{ marginTop: '4px', display: 'inline-block', fontSize: '11px', color: '#1d4ed8', fontWeight: 700, textDecoration: 'underline' }}>
+                    Open in HubSpot
+                  </a>
+                ) : (
+                  <span style={{ marginTop: '4px', display: 'inline-block', fontSize: '11px', color: '#9ca3af' }}>No link</span>
+                )}
+              </div>
+            ))}
+            {badNameQa.rows.length === 0 && (
+              <div style={{ padding: '12px', fontSize: '12px', color: '#6b7280', border: '1px solid #fee2e2', borderRadius: '10px' }}>
+                No suspicious HubSpot contact names detected in current Tuesday/Thursday HubSpot call/meeting attendance rows.
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ marginTop: '10px', border: '1px solid #fee2e2', borderRadius: '12px', overflowX: 'auto', maxHeight: '360px' }}>
+            <table style={{ width: '100%', minWidth: '1120px', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#fef2f2', borderBottom: '1px solid #fee2e2' }}>
+                  <th style={{ textAlign: 'left', padding: '10px', fontSize: '11px', color: '#7f1d1d', textTransform: 'uppercase' }}>Current HubSpot Name</th>
+                  <th style={{ textAlign: 'left', padding: '10px', fontSize: '11px', color: '#7f1d1d', textTransform: 'uppercase' }}>Call Snapshot Name(s)</th>
+                  <th style={{ textAlign: 'left', padding: '10px', fontSize: '11px', color: '#7f1d1d', textTransform: 'uppercase' }}>Email</th>
+                  <th style={{ textAlign: 'left', padding: '10px', fontSize: '11px', color: '#7f1d1d', textTransform: 'uppercase' }}>Reason(s)</th>
+                  <th style={{ textAlign: 'right', padding: '10px', fontSize: '11px', color: '#7f1d1d', textTransform: 'uppercase' }}>Group Call Rows</th>
+                  <th style={{ textAlign: 'left', padding: '10px', fontSize: '11px', color: '#7f1d1d', textTransform: 'uppercase' }}>Last Seen</th>
+                  <th style={{ textAlign: 'left', padding: '10px', fontSize: '11px', color: '#7f1d1d', textTransform: 'uppercase' }}>HubSpot</th>
                 </tr>
-              ))}
-              {badNameQa.rows.length === 0 && (
-                <tr>
-                  <td colSpan={7} style={{ padding: '12px', fontSize: '12px', color: '#6b7280' }}>
-                    No suspicious HubSpot contact names detected in current Tuesday/Thursday HubSpot call/meeting attendance rows.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {badNameQa.rows.slice(0, 100).map((row) => (
+                  <tr key={`bad-name-${row.hubspotContactId}`} style={{ borderBottom: '1px solid #fef2f2' }}>
+                    <td style={{ padding: '10px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <span style={{ fontSize: '12px', color: '#111827', fontWeight: 700 }}>{row.currentName || 'Not Found'}</span>
+                        <span style={{ fontSize: '10px', color: '#6b7280' }}>ID: {row.hubspotContactId}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '10px', fontSize: '11px', color: '#374151' }}>
+                      {row.snapshotNames.length > 0 ? row.snapshotNames.join(' | ') : 'None'}
+                    </td>
+                    <td style={{ padding: '10px', fontSize: '11px', color: '#111827' }}>{row.currentEmail || 'Not Found'}</td>
+                    <td style={{ padding: '10px' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {row.reasons.map((reason) => (
+                          <span
+                            key={`${row.hubspotContactId}-${reason}`}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              padding: '2px 8px',
+                              borderRadius: '999px',
+                              backgroundColor: '#fff1f2',
+                              border: '1px solid #fecdd3',
+                              color: '#9f1239',
+                              fontSize: '10px',
+                              fontWeight: 700,
+                            }}
+                          >
+                            {reason}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td style={{ padding: '10px', textAlign: 'right', fontSize: '12px', fontWeight: 700, color: '#111827' }}>{row.associationRows}</td>
+                    <td style={{ padding: '10px', fontSize: '11px', color: '#374151' }}>{row.lastSeenDateFormatted || 'Unknown'}</td>
+                    <td style={{ padding: '10px' }}>
+                      {row.hubspotUrl ? (
+                        <a href={row.hubspotUrl} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 700, textDecoration: 'underline' }}>
+                          Open in HubSpot
+                        </a>
+                      ) : (
+                        <span style={{ fontSize: '11px', color: '#9ca3af' }}>No link</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {badNameQa.rows.length === 0 && (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '12px', fontSize: '12px', color: '#6b7280' }}>
+                      No suspicious HubSpot contact names detected in current Tuesday/Thursday HubSpot call/meeting attendance rows.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div style={{ ...cardStyle, borderLeft: '5px solid #8b5cf6', background: 'linear-gradient(180deg, #faf5ff 0%, #ffffff 75%)' }}>
@@ -3774,7 +3918,7 @@ const AttendanceDashboard = () => {
           {attendanceAiInsight.headline}
         </p>
 
-        <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '12px' }}>
+        <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.2fr 1fr', gap: '12px' }}>
           <div style={{ border: '1px solid #e9d5ff', borderRadius: '12px', backgroundColor: 'white', padding: '12px' }}>
             <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', color: '#7c3aed' }}>Session Summary</p>
             <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -3863,7 +4007,7 @@ const AttendanceDashboard = () => {
           </div>
         </div>
 
-        <div style={{ marginTop: '14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+        <div style={{ marginTop: '14px', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px' }}>
           {[{ title: 'Autonomous', items: autonomousTasks, icon: Calendar }, { title: 'Human', items: humanTasks, icon: Users }].map(
             (group) => {
               const GroupIcon = group.icon;
@@ -3890,7 +4034,7 @@ const AttendanceDashboard = () => {
                             borderRadius: '10px',
                             padding: '10px',
                             display: 'grid',
-                            gridTemplateColumns: '1fr auto',
+                            gridTemplateColumns: isMobile ? '1fr' : '1fr auto',
                             alignItems: 'start',
                             gap: '10px',
                           }}

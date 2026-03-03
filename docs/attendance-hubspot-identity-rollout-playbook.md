@@ -156,6 +156,28 @@ Without strict selection rules, attendance could drift to the wrong record (too 
 
 The selector is deterministic and based on explicit meeting-time + attendee-threshold rules, so split-call noise and low-attendance side meetings are consistently filtered out.
 
+### Automated post-meeting continuation (Tue/Thu, permanent)
+
+Migration: `supabase/migrations/20260303113000_harden_attendance_post_meeting_schedule.sql`
+
+This schedule keeps attendance syncing automatically after every Tuesday/Thursday call:
+
+- Tuesday post-meeting sync window (ET 1:15 PM): both UTC variants are scheduled
+  - `18:15 UTC` (EST season)
+  - `17:15 UTC` (EDT season)
+- Thursday post-meeting sync window (ET 12:15 PM): both UTC variants are scheduled
+  - `17:15 UTC` (EST season)
+  - `16:15 UTC` (EDT season)
+- Same-day retries are also scheduled for both EST/EDT mappings
+- Daily catch-up (`09:05 UTC`) re-syncs recent data (`days=30`) to absorb provider lag and delayed attendee marking in HubSpot
+
+All jobs call `sync_attendance_from_hubspot` with:
+
+- `include_reconcile=true`
+- `include_luma=true`
+
+Because the sync path is idempotent, multiple runs are safe and intentionally used to prevent DST drift and late-write gaps.
+
 ### Backfill / prefill run sequence
 
 Run from repo root:
