@@ -1,5 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase, hasSupabaseConfig } from '../lib/supabaseClient';
+import {
+  DASHBOARD_LOOKBACK_DAYS,
+  ENABLE_REMOTE_AI_MODULE_ANALYSIS,
+  HUBSPOT_CONTACT_LOOKBACK_DAYS,
+  USE_DUMMY_DONATIONS,
+} from '../lib/env';
 import SendToNotionModal from '../components/SendToNotionModal';
 import {
   ResponsiveContainer,
@@ -25,20 +31,9 @@ import {
 } from 'lucide-react';
 
 const SOURCE_KEYS = ['zoom', 'google_analytics', 'google_search_console'];
-const DEFAULT_LOOKBACK_DAYS = 730;
-const LOOKBACK_DAYS = (() => {
-  const parsed = Number(import.meta.env.VITE_DASHBOARD_LOOKBACK_DAYS || DEFAULT_LOOKBACK_DAYS);
-  if (!Number.isFinite(parsed) || parsed < 30) return DEFAULT_LOOKBACK_DAYS;
-  return Math.min(Math.floor(parsed), 1095);
-})();
-const HUBSPOT_CONTACT_LOOKBACK_DAYS = (() => {
-  const parsed = Number(import.meta.env.VITE_HUBSPOT_CONTACT_LOOKBACK_DAYS || LOOKBACK_DAYS);
-  if (!Number.isFinite(parsed) || parsed < 30) return LOOKBACK_DAYS;
-  return Math.min(Math.floor(parsed), 1095);
-})();
+const LOOKBACK_DAYS = DASHBOARD_LOOKBACK_DAYS;
 const MODULE_ANALYSIS_TTL_HOURS = 24;
-const REMOTE_AI_MODULE_ANALYSIS_ENABLED = String(import.meta.env.VITE_ENABLE_REMOTE_AI_MODULE_ANALYSIS || '').toLowerCase() === 'true';
-const USE_DUMMY_DONATIONS = String(import.meta.env.VITE_USE_DUMMY_DONATIONS || '').toLowerCase() === 'true';
+const REMOTE_AI_MODULE_ANALYSIS_ENABLED = ENABLE_REMOTE_AI_MODULE_ANALYSIS;
 const DUMMY_DONATION_ROWS = [
   {
     source_system: 'dummy',

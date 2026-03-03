@@ -46,6 +46,21 @@ Create a `.env` file in the root and in `/dashboard` with the following (see
 - `HUBSPOT_PRIVATE_APP_TOKEN`
 - `LUMA_API_KEY` (for `sync_luma_registrations` function)
 
+### Supabase CLI (without re-exporting env each time)
+
+Use the helper wrapper from repo root:
+
+1. Add `SUPABASE_ACCESS_TOKEN` to root `.env` (one-time).
+2. Run commands through `./scripts/supabase.sh ...`.
+
+Examples:
+
+- `./scripts/supabase.sh --version`
+- `./scripts/supabase.sh projects list`
+- `./scripts/supabase.sh link --project-ref ldnucnghzpkuixmnfjbs`
+
+The wrapper auto-loads root `.env`, so you can keep moving without manual `export` steps every session.
+
 ### Vercel Deployment Notes
 
 - Root Directory: `dashboard`

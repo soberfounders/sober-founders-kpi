@@ -1,5 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import {
+  LEADS_ATTRIBUTION_HISTORY_DAYS,
+  LEADS_LOOKBACK_DAYS,
+  SUPABASE_ANON_KEY,
+  SUPABASE_URL,
+} from '../lib/env';
 import { buildLeadAnalytics } from '../lib/leadAnalytics';
 import { buildGroupedLeadsSnapshot, buildDateRangeWindows, computeChangePct } from '../lib/leadsGroupAnalytics';
 import { buildAliasMap, resolveCanonicalAttendeeName } from '../lib/attendeeCanonicalization';
@@ -14,17 +20,8 @@ import {
   CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell,
 } from 'recharts';
 
-const DEFAULT_LEADS_LOOKBACK_DAYS = 730;
-const LOOKBACK_DAYS = (() => {
-  const parsed = Number(import.meta.env.VITE_LEADS_LOOKBACK_DAYS || DEFAULT_LEADS_LOOKBACK_DAYS);
-  if (!Number.isFinite(parsed) || parsed < 30) return DEFAULT_LEADS_LOOKBACK_DAYS;
-  return Math.min(Math.floor(parsed), 1095);
-})();
-const ATTRIBUTION_HISTORY_DAYS = (() => {
-  const parsed = Number(import.meta.env.VITE_LEADS_ATTRIBUTION_HISTORY_DAYS || LOOKBACK_DAYS);
-  if (!Number.isFinite(parsed) || parsed < 30) return LOOKBACK_DAYS;
-  return Math.min(Math.floor(parsed), 1095);
-})();
+const LOOKBACK_DAYS = LEADS_LOOKBACK_DAYS;
+const ATTRIBUTION_HISTORY_DAYS = LEADS_ATTRIBUTION_HISTORY_DAYS;
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 const fmt = {
@@ -655,8 +652,8 @@ export default function LeadsDashboard() {
   const [drilldownMetricKey, setDrilldownMetricKey] = useState('leads');
 
   // Supabase connection info for AI panel
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+  const supabaseUrl = SUPABASE_URL;
+  const supabaseKey = SUPABASE_ANON_KEY;
 
   useEffect(() => { fetchData(); }, []);
 

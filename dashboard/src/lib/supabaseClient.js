@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from './env'
 
-const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || '').trim()
-const supabaseAnonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim()
+const supabaseUrl = SUPABASE_URL
+const supabaseAnonKey = SUPABASE_ANON_KEY
 const looksLikeJwt = (value) => value.split('.').length === 3
 
 export const hasSupabaseConfig = Boolean(supabaseUrl && supabaseAnonKey && looksLikeJwt(supabaseAnonKey))

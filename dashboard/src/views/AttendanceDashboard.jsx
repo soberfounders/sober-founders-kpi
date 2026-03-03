@@ -1,6 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 /* -- DATA SOURCE: HubSpot call/meeting activities only. Do not add Zoom data as a fallback or supplement. See audit performed 2026-02-23. */
 import { supabase } from '../lib/supabaseClient';
+import {
+  ANTHROPIC_API_KEY,
+  ATTENDANCE_BACKFILL_DAYS,
+  CLAUDE_API_KEY,
+  GEMINI_API_KEY,
+  HUBSPOT_PORTAL_ID,
+  OPENAI_API_KEY,
+} from '../lib/env';
 import { resolveCanonicalAttendeeName } from '../lib/attendeeCanonicalization';
 import { getZoomAttributionOverride } from '../lib/zoomAttributionOverrides';
 import {
@@ -32,12 +40,6 @@ import {
 const TUE_MEETING_ID = '87199667045';
 const THU_MEETING_ID = '84242212480';
 const RECENT_WINDOW = 8;
-const ATTENDANCE_BACKFILL_DAYS = (() => {
-  const parsed = Number(import.meta.env.VITE_ATTENDANCE_BACKFILL_DAYS || 730);
-  if (!Number.isFinite(parsed) || parsed < 30) return 730;
-  return Math.min(Math.floor(parsed), 1095);
-})();
-const HUBSPOT_PORTAL_ID = String(import.meta.env.VITE_HUBSPOT_PORTAL_ID || '45070276').trim();
 const ET_TIMEZONE = 'America/New_York';
 const GROUP_CALL_ET_MINUTES = {
   Tuesday: 12 * 60,
@@ -2074,9 +2076,9 @@ const AttendanceDashboard = () => {
     if ((badNameQa.counts?.suspiciousContacts || 0) > 0) blindSpots.push(`${badNameQa.counts.suspiciousContacts} HubSpot contacts used in Attendance still have suspicious name data.`);
 
     const providerStatuses = [
-      { key: 'openai', label: 'OpenAI', configured: !!String(import.meta.env.VITE_OPENAI_API_KEY || '').trim(), note: 'Frontend placeholder only; prefer Supabase Edge Function secrets' },
-      { key: 'gemini', label: 'Gemini', configured: !!String(import.meta.env.VITE_GEMINI_API_KEY || '').trim(), note: 'Frontend placeholder only; prefer Supabase Edge Function secrets' },
-      { key: 'claude', label: 'Claude', configured: !!String(import.meta.env.VITE_CLAUDE_API_KEY || import.meta.env.VITE_ANTHROPIC_API_KEY || '').trim(), note: 'Frontend placeholder only; prefer Supabase Edge Function secrets' },
+      { key: 'openai', label: 'OpenAI', configured: !!OPENAI_API_KEY, note: 'Frontend placeholder only; prefer Supabase Edge Function secrets' },
+      { key: 'gemini', label: 'Gemini', configured: !!GEMINI_API_KEY, note: 'Frontend placeholder only; prefer Supabase Edge Function secrets' },
+      { key: 'claude', label: 'Claude', configured: !!(CLAUDE_API_KEY || ANTHROPIC_API_KEY), note: 'Frontend placeholder only; prefer Supabase Edge Function secrets' },
     ];
 
     const autonomousWorkflow = [
