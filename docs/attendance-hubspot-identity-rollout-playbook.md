@@ -60,19 +60,19 @@ Ensure env vars exist in Supabase project:
 Start with last 30 days:
 
 ```bash
-npx supabase functions invoke sync_hubspot_meeting_activities --no-verify-jwt --body "{\"days\":30}"
+npx supabase functions invoke sync_hubspot_meeting_activities --jwt "$SUPABASE_SERVICE_ROLE_KEY" --body "{\"days\":30}"
 ```
 
 Then extend:
 
 ```bash
-npx supabase functions invoke sync_hubspot_meeting_activities --no-verify-jwt --body "{\"days\":90}"
+npx supabase functions invoke sync_hubspot_meeting_activities --jwt "$SUPABASE_SERVICE_ROLE_KEY" --body "{\"days\":90}"
 ```
 
 If you want a specific range (useful for timezone/date debugging):
 
 ```bash
-npx supabase functions invoke sync_hubspot_meeting_activities --no-verify-jwt --body "{\"from\":\"2026-01-20\",\"to\":\"2026-02-05\"}"
+npx supabase functions invoke sync_hubspot_meeting_activities --jwt "$SUPABASE_SERVICE_ROLE_KEY" --body "{\"from\":\"2026-01-20\",\"to\":\"2026-02-05\"}"
 ```
 
 ### 4. Re-sync / backfill Zoom attendance if a date is missing
@@ -80,7 +80,7 @@ npx supabase functions invoke sync_hubspot_meeting_activities --no-verify-jwt --
 If a meeting happened but no `Zoom Meeting Attendees` row exists (example: `2026-01-29`), run:
 
 ```bash
-npx supabase functions invoke sync_zoom_attendance --no-verify-jwt
+npx supabase functions invoke sync_zoom_attendance --jwt "$SUPABASE_SERVICE_ROLE_KEY"
 ```
 
 Then verify `kpi_metrics` has the missing date.
@@ -90,7 +90,7 @@ Then verify `kpi_metrics` has the missing date.
 This refreshes Lu.ma bridges and `matched_hubspot_*` fields:
 
 ```bash
-npx supabase functions invoke sync_luma_registrations --no-verify-jwt
+npx supabase functions invoke sync_luma_registrations --jwt "$SUPABASE_SERVICE_ROLE_KEY"
 ```
 
 ### 6. Validate in Attendance dashboard
@@ -103,7 +103,7 @@ Look at the **Show-Up Drilldown** table for a recent Thursday:
 ### 7. Run shadow reconciliation summary (no writes yet)
 
 ```bash
-npx supabase functions invoke reconcile_zoom_attendee_hubspot_mappings --no-verify-jwt --body "{\"days\":30,\"dry_run\":true}"
+npx supabase functions invoke reconcile_zoom_attendee_hubspot_mappings --jwt "$SUPABASE_SERVICE_ROLE_KEY" --body "{\"days\":30,\"dry_run\":true}"
 ```
 
 This confirms:
@@ -183,16 +183,16 @@ Because the sync path is idempotent, multiple runs are safe and intentionally us
 Run from repo root:
 
 ```bash
-./scripts/supabase.sh functions invoke sync_hubspot_meeting_activities --no-verify-jwt --body "{\"from\":\"2024-03-03\",\"to\":\"2026-03-03\",\"include_calls\":true,\"include_meetings\":true}"
-./scripts/supabase.sh functions invoke reconcile_zoom_attendee_hubspot_mappings --no-verify-jwt --body "{\"from\":\"2024-03-03\",\"to\":\"2026-03-03\",\"dry_run\":false}"
-./scripts/supabase.sh functions invoke sync_attendance_from_hubspot --no-verify-jwt --body "{\"days\":365,\"include_reconcile\":true,\"include_luma\":true}"
+./scripts/supabase.sh functions invoke sync_hubspot_meeting_activities --jwt "$SUPABASE_SERVICE_ROLE_KEY" --body "{\"from\":\"2024-03-03\",\"to\":\"2026-03-03\",\"include_calls\":true,\"include_meetings\":true}"
+./scripts/supabase.sh functions invoke reconcile_zoom_attendee_hubspot_mappings --jwt "$SUPABASE_SERVICE_ROLE_KEY" --body "{\"from\":\"2024-03-03\",\"to\":\"2026-03-03\",\"dry_run\":false}"
+./scripts/supabase.sh functions invoke sync_attendance_from_hubspot --jwt "$SUPABASE_SERVICE_ROLE_KEY" --body "{\"days\":365,\"include_reconcile\":true,\"include_luma\":true}"
 ```
 
 For a strict **last-year-only** redo:
 
 ```bash
-./scripts/supabase.sh functions invoke sync_hubspot_meeting_activities --no-verify-jwt --body "{\"from\":\"2025-03-03\",\"to\":\"2026-03-03\",\"include_calls\":true,\"include_meetings\":true}"
-./scripts/supabase.sh functions invoke reconcile_zoom_attendee_hubspot_mappings --no-verify-jwt --body "{\"from\":\"2025-03-03\",\"to\":\"2026-03-03\",\"dry_run\":false}"
+./scripts/supabase.sh functions invoke sync_hubspot_meeting_activities --jwt "$SUPABASE_SERVICE_ROLE_KEY" --body "{\"from\":\"2025-03-03\",\"to\":\"2026-03-03\",\"include_calls\":true,\"include_meetings\":true}"
+./scripts/supabase.sh functions invoke reconcile_zoom_attendee_hubspot_mappings --jwt "$SUPABASE_SERVICE_ROLE_KEY" --body "{\"from\":\"2025-03-03\",\"to\":\"2026-03-03\",\"dry_run\":false}"
 ```
 
 ### Quick verification query (conceptual)
