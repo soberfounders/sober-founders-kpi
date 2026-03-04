@@ -1,4 +1,10 @@
-﻿import { buildAliasMap, resolveCanonicalAttendeeName } from './attendeeCanonicalization';
+import { buildAliasMap, resolveCanonicalAttendeeName } from './attendeeCanonicalization';
+import {
+  classifyAdFunnel as classifyAdFunnelCanonical,
+  isPaidSocialHubspotContact,
+  isPhoenixHubspotContact,
+  leadTierFromRevenue as leadTierFromRevenueCanonical,
+} from './leadModel';
 
 const TUESDAY_MEETING_ID = '87199667045';
 const THURSDAY_MEETING_ID = '84242212480';
@@ -74,36 +80,16 @@ function dayTypeFromZoomMetric(row) {
 }
 
 function classifyAdFunnel(row) {
-  const explicit = String(row?.funnel_key || '').toLowerCase();
-  if (explicit === 'phoenix' || explicit === 'free') return explicit;
-
-  const blob = [
-    row?.campaign_name,
-    row?.adset_name,
-    row?.ad_name,
-    row?.ad_account_id,
-  ].join(' ').toLowerCase();
-
-  if (blob.includes('phoenix') || blob.includes('1034775818463907')) return 'phoenix';
-  return 'free';
+  const bucket = classifyAdFunnelCanonical(row, { defaultFunnel: 'free' });
+  return bucket === 'phoenix' ? 'phoenix' : 'free';
 }
 
 function classifyLeadFunnel(row) {
-  const blob = [
-    row?.hs_analytics_source_data_2,
-    row?.membership_s,
-    row?.campaign,
-  ].join(' ').toLowerCase();
-  return blob.includes('phoenix') ? 'phoenix' : 'free';
+  return isPhoenixHubspotContact(row) ? 'phoenix' : 'free';
 }
 
 function leadTierFromRevenue(value) {
-  if (value === null || value === undefined || value === '') return 'unknown';
-  const revenue = toNumber(value);
-  if (revenue >= 1_000_000) return 'great';
-  if (revenue >= 250_000) return 'qualified';
-  if (revenue >= 100_000) return 'ok';
-  return 'bad';
+  return leadTierFromRevenueCanonical(value);
 }
 
 function resolveHubspotRevenue(row) {
@@ -125,8 +111,7 @@ function resolveHubspotRevenue(row) {
 }
 
 function isPaidSocialLead(row) {
-  const source = String(row?.hs_analytics_source || '').toUpperCase();
-  return source === 'PAID_SOCIAL' || source.includes('PAID_SOCIAL');
+  return isPaidSocialHubspotContact(row);
 }
 
 function isLumaRegistrationLead(row) {

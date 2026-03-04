@@ -9,6 +9,11 @@ import {
 import { buildLeadAnalytics } from '../lib/leadAnalytics';
 import { buildGroupedLeadsSnapshot, buildDateRangeWindows, computeChangePct } from '../lib/leadsGroupAnalytics';
 import { buildAliasMap, resolveCanonicalAttendeeName } from '../lib/attendeeCanonicalization';
+import {
+  classifyAdFunnel as classifyAdFunnelModel,
+  isPaidSocialHubspotContact as isPaidSocialHubspotContactModel,
+  isPhoenixHubspotContact as isPhoenixHubspotContactModel,
+} from '../lib/leadModel';
 import { applyZoomAttributionOverride, getZoomAttributionOverride } from '../lib/zoomAttributionOverrides';
 import DrillDownModal from '../components/DrillDownModal';
 import SendToNotionModal from '../components/SendToNotionModal';
@@ -209,13 +214,11 @@ function hubspotSourceBucket(contact) {
 }
 
 function isPaidSocialHubspot(row) {
-  const blob = [row?.hs_analytics_source, row?.hs_latest_source, row?.original_traffic_source].join(' ').toUpperCase();
-  return blob.includes('PAID_SOCIAL');
+  return isPaidSocialHubspotContactModel(row);
 }
 
 function isPhoenixHubspot(row) {
-  const blob = [row?.hs_analytics_source_data_2, row?.hs_latest_source_data_2, row?.campaign, row?.campaign_source, row?.membership_s].join(' ').toLowerCase();
-  return blob.includes('phoenix');
+  return isPhoenixHubspotContactModel(row);
 }
 
 function hubspotRevenueValue(contact) {
@@ -2833,8 +2836,7 @@ export default function LeadsDashboard() {
       (rawAds || []).forEach((row) => {
         const dateKey = String(row?.date_day || '').slice(0, 10);
         if (!dateInRangeKey(dateKey, startKey, endKey)) return;
-        const funnel = String(row?.funnel_key || row?.campaign_name || '').toLowerCase();
-        const isPhoenix = funnel.includes('phoenix') || String(row?.campaign_name || '').toLowerCase().includes('phoenix');
+        const isPhoenix = classifyAdFunnelModel(row, { defaultFunnel: 'free' }) === 'phoenix';
         if (isPhoenix) return;
 
         const campaignName = String(row?.campaign_name || '').trim();

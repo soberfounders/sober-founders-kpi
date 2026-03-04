@@ -80,19 +80,22 @@ async function gatherSnapshot(supabase: any) {
         { data: kpiMetrics },
     ] = await Promise.all([
         // FB Ads — this week
-        supabase.from("raw_fb_ads_insights_daily").select("*")
+        supabase.from("raw_fb_ads_insights_daily")
+            .select("ad_id,adset_id,campaign_id,ad_name,adset_name,campaign_name,spend,impressions,clicks,leads,date_day,funnel_key")
             .gte("date_day", thisWeekStart),
         // FB Ads — last week
-        supabase.from("raw_fb_ads_insights_daily").select("*")
+        supabase.from("raw_fb_ads_insights_daily")
+            .select("ad_id,adset_id,campaign_id,ad_name,adset_name,campaign_name,spend,impressions,clicks,leads,date_day,funnel_key")
             .gte("date_day", lastWeekStart).lt("date_day", thisWeekStart),
         // FB Ads — 30 day for ad-level ranking
-        supabase.from("raw_fb_ads_insights_daily").select("*")
+        supabase.from("raw_fb_ads_insights_daily")
+            .select("ad_id,adset_id,campaign_id,ad_name,adset_name,campaign_name,spend,impressions,clicks,leads,date_day,funnel_key")
             .gte("date_day", thirtyDaysAgo),
         // HubSpot contacts — last 7 days
-        supabase.from("raw_hubspot_contacts").select("hubspot_contact_id,createdate,annual_revenue_in_dollars,membership_s,original_traffic_source,campaign,hs_analytics_source,firstname,lastname")
+        supabase.from("raw_hubspot_contacts").select("hubspot_contact_id,createdate,annual_revenue_in_dollars__official_,annual_revenue_in_dollars,membership_s,original_traffic_source,campaign,hs_analytics_source,firstname,lastname")
             .gte("createdate", sevenDaysAgo),
         // HubSpot contacts — 7-14 days ago (prev period)
-        supabase.from("raw_hubspot_contacts").select("hubspot_contact_id,createdate,annual_revenue_in_dollars,membership_s,original_traffic_source,campaign,hs_analytics_source")
+        supabase.from("raw_hubspot_contacts").select("hubspot_contact_id,createdate,annual_revenue_in_dollars__official_,annual_revenue_in_dollars,membership_s,original_traffic_source,campaign,hs_analytics_source")
             .gte("createdate", fourteenDaysAgo).lt("createdate", sevenDaysAgo),
         // Luma — this week
         supabase.from("raw_luma_registrations").select("*")
@@ -154,17 +157,25 @@ async function gatherSnapshot(supabase: any) {
     const bottomAds = [...rankedAds].reverse().slice(0, 5);
 
     // --- Lead quality distribution ---
+    const revenueForTier = (contact: any): number | null => {
+        const official = Number(contact?.annual_revenue_in_dollars__official_);
+        if (Number.isFinite(official)) return official;
+        const fallback = Number(contact?.annual_revenue_in_dollars);
+        if (Number.isFinite(fallback)) return fallback;
+        return null;
+    };
+
     const tierize = (revenue: number | null) => {
         if (revenue == null || revenue <= 0) return "unknown";
         if (revenue >= 1_000_000) return "great";
         if (revenue >= 250_000) return "qualified";
-        if (revenue >= 50_000) return "ok";
+        if (revenue >= 100_000) return "ok";
         return "bad";
     };
 
     const tierCount = (contacts: any[]) => {
         const tiers: Record<string, number> = { great: 0, qualified: 0, ok: 0, bad: 0, unknown: 0 };
-        for (const c of (contacts || [])) tiers[tierize(c.annual_revenue_in_dollars)]++;
+        for (const c of (contacts || [])) tiers[tierize(revenueForTier(c))]++;
         return tiers;
     };
 
@@ -193,8 +204,8 @@ async function gatherSnapshot(supabase: any) {
     // --- New leads for meeting prep ---
     const newLeads = (contacts7d || []).map((c: any) => ({
         name: `${c.firstname || ""} ${c.lastname || ""}`.trim() || "Unknown",
-        tier: tierize(c.annual_revenue_in_dollars),
-        revenue: c.annual_revenue_in_dollars,
+        tier: tierize(revenueForTier(c)),
+        revenue: revenueForTier(c),
         source: c.original_traffic_source || c.hs_analytics_source || "unknown",
         created: c.createdate,
     }));

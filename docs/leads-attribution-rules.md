@@ -2,6 +2,10 @@
 
 Purpose: Preserve business rules and debugging heuristics for Leads/Zoom/Lu.ma attribution so future work does not lose context.
 
+Canonical code reference for shared funnel/lead logic:
+
+- `dashboard/src/lib/leadModel.js`
+
 ## Source precedence (current business intent)
 
 1. HubSpot `hs_analytics_source` (Original Traffic Source) is source of truth when available.
