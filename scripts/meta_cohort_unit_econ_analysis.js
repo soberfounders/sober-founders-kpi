@@ -1,4 +1,4 @@
-﻿const fs = require('fs');
+const fs = require('fs');
 const path = require('path');
 
 const envPath = path.join(__dirname, '..', 'dashboard', '.env');
@@ -134,6 +134,76 @@ function parseCsvLine(line = '') {
 function addToMapNum(map, key, amount) {
   if (!key || !Number.isFinite(amount)) return;
   map.set(key, (map.get(key) || 0) + amount);
+}
+function normalizeFunnelKey(value) {
+  const key = String(value || '').trim().toLowerCase();
+  if (key === 'free' || key === 'phoenix' || key === 'donation') return key;
+  return key || 'unknown';
+}
+function summarizeMetaSpendScope(adsRows = []) {
+  const out = {
+    total: { rows: 0, spend: 0, leads: 0 },
+    lead_gen: { rows: 0, spend: 0, leads: 0 },
+    free: { rows: 0, spend: 0, leads: 0 },
+    phoenix: { rows: 0, spend: 0, leads: 0 },
+    other: { rows: 0, spend: 0, leads: 0 },
+    by_account: [],
+  };
+  const byAccount = new Map();
+
+  for (const row of adsRows || []) {
+    const spend = safeNum(row?.spend) || 0;
+    const leads = safeNum(row?.leads) || 0;
+    const funnelKey = normalizeFunnelKey(row?.funnel_key);
+    const bucket = funnelKey === 'phoenix'
+      ? 'phoenix'
+      : funnelKey === 'free'
+        ? 'free'
+        : 'other';
+    const accountId = String(row?.ad_account_id || '').trim() || 'unknown';
+
+    out.total.rows += 1;
+    out.total.spend += spend;
+    out.total.leads += leads;
+
+    out[bucket].rows += 1;
+    out[bucket].spend += spend;
+    out[bucket].leads += leads;
+    if (bucket === 'free' || bucket === 'phoenix') {
+      out.lead_gen.rows += 1;
+      out.lead_gen.spend += spend;
+      out.lead_gen.leads += leads;
+    }
+
+    if (!byAccount.has(accountId)) {
+      byAccount.set(accountId, {
+        ad_account_id: accountId,
+        rows: 0,
+        spend: 0,
+        leads: 0,
+        free_rows: 0,
+        free_spend: 0,
+        free_leads: 0,
+        phoenix_rows: 0,
+        phoenix_spend: 0,
+        phoenix_leads: 0,
+        other_rows: 0,
+        other_spend: 0,
+        other_leads: 0,
+      });
+    }
+    const acc = byAccount.get(accountId);
+    acc.rows += 1;
+    acc.spend += spend;
+    acc.leads += leads;
+    acc[`${bucket}_rows`] += 1;
+    acc[`${bucket}_spend`] += spend;
+    acc[`${bucket}_leads`] += leads;
+  }
+
+  out.by_account = [...byAccount.values()]
+    .sort((a, b) => (b.spend - a.spend) || String(a.ad_account_id).localeCompare(String(b.ad_account_id)));
+  return out;
 }
 function detectManualMetaBackfillCsvPath() {
   const candidates = [
@@ -389,7 +459,8 @@ function cdfFromLagsWithinHorizon(lags, horizonDays) {
     }
   }
 
-  const adsFree = adsRaw.filter((r) => String(r.funnel_key || '').toLowerCase() === 'free');
+  const metaSpendScope = summarizeMetaSpendScope(adsRaw);
+  const adsFree = adsRaw.filter((r) => normalizeFunnelKey(r.funnel_key) === 'free');
   const adsMinDate = adsFree.map((r)=>String(r.date_day||'')).filter(Boolean).sort()[0];
   const adsMaxDate = adsFree.map((r)=>String(r.date_day||'')).filter(Boolean).sort().slice(-1)[0];
   const adsMax = parseDate(`${adsMaxDate}T00:00:00.000Z`);
@@ -1498,8 +1569,16 @@ function cdfFromLagsWithinHorizon(lags, horizonDays) {
 
   const dataQuality = {
     counts: {
-      ads_rows: adsRaw.length,
+      ads_rows: metaSpendScope.total.rows,
       ads_free_rows: adsFree.length,
+      ads_phoenix_rows: metaSpendScope.phoenix.rows,
+      ads_other_rows: metaSpendScope.other.rows,
+      ads_lead_gen_rows: metaSpendScope.lead_gen.rows,
+      ads_meta_accounts: metaSpendScope.by_account.length,
+      ads_spend_total: metaSpendScope.total.spend,
+      ads_spend_lead_gen: metaSpendScope.lead_gen.spend,
+      ads_spend_free: metaSpendScope.free.spend,
+      ads_spend_phoenix: metaSpendScope.phoenix.spend,
       spend_blended_daily_rows: blendedSpendByDay.size,
       hubspot_contacts_raw_rows: contactsRaw.length,
       hubspot_contacts_deduped: contacts.length,
@@ -1532,7 +1611,7 @@ function cdfFromLagsWithinHorizon(lags, horizonDays) {
     },
     spend_backfill_manual_week_end: manualBackfill ? {
       csv_path: manualBackfill.csv_path,
-      assumption: 'Labels are week-end dates; each value allocated evenly across interval since prior label (first label assumed 7-day interval). Blank cells treated as unknown and not allocated. Manual spend is additive to live Meta free-funnel spend, including overlap during transition.',
+      assumption: 'Labels are week-end dates; each value allocated evenly across interval since prior label (first label assumed 7-day interval). Blank cells treated as unknown and not allocated. Manual spend is additive to live Meta free-funnel spend only (Phoenix remains separated in meta_spend_scope), including overlap during transition.',
       ...manualBackfill.stats,
       overlap_week_end_rows_with_live_ads_window: manualBackfill.week_end_rows
         .filter((r) => adsMinDate && r.week_end >= adsMinDate)
@@ -2223,8 +2302,9 @@ function cdfFromLagsWithinHorizon(lags, horizonDays) {
     methodology: {
       cohort_unit: 'weekly (Monday UTC) based on HubSpot contact createdate for Meta-paid, non-Phoenix contacts',
       spend_source: manualBackfill
-        ? 'raw_fb_ads_insights_daily filtered funnel_key=free + additive manual weekly free-funnel spend backfill (week-end labels allocated across intervals; blanks ignored as unknown)'
-        : 'raw_fb_ads_insights_daily filtered funnel_key=free',
+        ? 'Cohort CPA uses raw_fb_ads_insights_daily filtered funnel_key=free + additive manual weekly free-funnel spend backfill (week-end labels allocated across intervals; blanks ignored as unknown). Phoenix spend is intentionally excluded from cohort CPA and reported separately in meta_spend_scope.'
+        : 'Cohort CPA uses raw_fb_ads_insights_daily filtered funnel_key=free. Phoenix spend is intentionally excluded from cohort CPA and reported separately in meta_spend_scope.',
+      spend_segmentation: 'meta_spend_scope reports all Meta spend by funnel bucket (free, phoenix, other) and by ad account so account coverage can be audited independently of free-funnel cohort CPA.',
       showup_source: 'HubSpot call activities + contact associations (Tuesday/Thursday group sessions only)',
       luma_source: 'raw_luma_registrations approved rows (matched_hubspot_contact_id with email fallback)',
       preexisting_exclusion: 'Exclude contacts with first group show-up or Luma signup more than 14 days before lead createdate',
@@ -2235,6 +2315,7 @@ function cdfFromLagsWithinHorizon(lags, horizonDays) {
       manual_backfill_used: !!manualBackfill,
     },
     data_quality: dataQuality,
+    meta_spend_scope: metaSpendScope,
     lag_stats: lagStats,
     lag_hypotheses: lagHypotheses,
     metrics: results,
