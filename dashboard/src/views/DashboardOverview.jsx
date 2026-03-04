@@ -851,6 +851,8 @@ const DashboardOverview = () => {
 
   const aiManagers = useMemo(() => {
     const dateCandidates = [];
+    const todayDate = toUtcDayStart(new Date());
+    const todayTs = todayDate?.getTime?.() ?? Date.now();
     if (dashboard.latestDate) {
       const d = toUtcDayStart(dashboard.latestDate);
       if (d) dateCandidates.push(d);
@@ -869,9 +871,13 @@ const DashboardOverview = () => {
       if (d) dateCandidates.push(d);
     });
 
-    const referenceDate = dateCandidates.length
-      ? new Date(Math.max(...dateCandidates.map((d) => d.getTime())))
-      : toUtcDayStart(new Date());
+    const maxCandidateTs = dateCandidates.length
+      ? Math.max(...dateCandidates.map((d) => d.getTime()))
+      : null;
+    // Scheduled future activities can exist in HubSpot; cap reference windows at today.
+    const referenceDate = Number.isFinite(maxCandidateTs)
+      ? new Date(Math.min(maxCandidateTs, todayTs))
+      : (todayDate || new Date());
     const lastWeekEnd = referenceDate;
     const lastWeekStart = shiftUtcDays(lastWeekEnd, -6);
     const prevWeekEnd = shiftUtcDays(lastWeekStart, -1);
