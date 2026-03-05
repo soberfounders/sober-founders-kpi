@@ -955,6 +955,19 @@ const DashboardOverview = () => {
       lastMonthLabel: `${formatDateRange(attendanceMonthStart, attendanceMonthEnd)} (30d completed meetings)`,
       asOfLabel: formatDateShort(attendanceWindowEnd),
     };
+    const warningList = Array.isArray(warnings) ? warnings : [];
+    const leadsSourceWarnings = warningList.filter((warning) =>
+      warning.includes('HubSpot contacts') || warning.includes('Meta Ads')
+    );
+    const attendanceSourceWarnings = warningList.filter((warning) =>
+      warning.includes('HubSpot call/meeting')
+    );
+    const leadsDataUnavailable = leadsSourceWarnings.some((warning) =>
+      warning.includes('unavailable') || warning.includes('returned 0 rows')
+    );
+    const attendanceDataUnavailable = attendanceSourceWarnings.some((warning) =>
+      warning.includes('unavailable') || warning.includes('returned 0 rows')
+    );
 
     const parsedContacts = hubspotContacts
       .map((row) => ({ ...row, _createdAt: toUtcDayStart(row?.createdate) }))
@@ -1335,7 +1348,7 @@ const DashboardOverview = () => {
     const monthPhoenixGreatShare = ratioOrNull(leadsMonth.paidPhoenixQuality.great, monthPaidQuality.great);
     const monthFreeGreatShare = ratioOrNull(leadsMonth.paidFreeQuality.great, monthPaidQuality.great);
     const monthCpqlBetterThanCpgl = Number.isFinite(cpqlMonth) && Number.isFinite(cpglMonth) && cpglMonth > cpqlMonth;
-    const leadsBigPictureSummary = [
+    const leadsBigPictureSummaryComputed = [
       'This lead report weights quality first, so volume gains do not mask deterioration in fit.',
       `Over the last 30 days, paid-social produced ${formatInt(monthPaidQuality.great)} great ${pluralize(monthPaidQuality.great, 'lead')} and ${formatInt(monthPaidQuality.qualified)} qualified ${pluralize(monthPaidQuality.qualified, 'lead')}; CPQL is ${Number.isFinite(cpqlMonth) ? formatCurrency(cpqlMonth) : 'N/A'} and CPGL is ${Number.isFinite(cpglMonth) ? formatCurrency(cpglMonth) : 'N/A'}.`,
       Number.isFinite(monthPhoenixGreatShare)
@@ -1345,6 +1358,15 @@ const DashboardOverview = () => {
         ? 'Operationally: scale what is producing great leads, while using CPQL as the faster day-to-day guardrail because great-lead counts are lower and noisier.'
         : 'Operationally: monitor both CPQL and CPGL together; CPQL moves faster, but great-lead output is the quality check that prevents budget drift.',
     ].join(' ');
+    const leadsWeekSummaryFinal = leadsDataUnavailable
+      ? 'Lead KPI summary unavailable for this refresh because HubSpot contacts and/or Meta Ads source rows did not load. Verify Supabase environment, RLS policies, and ingestion sync health before interpreting quality metrics.'
+      : leadsWeekSummary;
+    const leadsMonthSummaryFinal = leadsDataUnavailable
+      ? 'Lead 30-day KPI summary unavailable for this refresh because HubSpot contacts and/or Meta Ads source rows did not load. Run source sync and confirm production data access before reviewing CPQL/CPGL.'
+      : leadsMonthSummary;
+    const leadsBigPictureSummary = leadsDataUnavailable
+      ? 'Leads AI Manager summary is temporarily unavailable because HubSpot contacts and/or Meta Ads source data did not load for this refresh. Fix source connectivity and permissions, then refresh so 30-day quality KPIs are recomputed from live data.'
+      : leadsBigPictureSummaryComputed;
 
     const repeatRateWeekDelta = comparePeriod(attendeesWeek.repeatRate, attendeesPrevWeek.repeatRate);
     const repeatRateMonthDelta = comparePeriod(attendeesMonth.repeatRate, attendeesPrevMonth.repeatRate);
@@ -1420,7 +1442,7 @@ const DashboardOverview = () => {
       ? `estimated Meta cost per new attendee at ${formatCurrency(monthFreeCostPerNewAttendee)}`
       : `returning attendee rate at ${pct(attendeesMonth.repeatRate)} (${formatInt(attendeesMonth.repeaters)} repeaters of ${formatInt(attendeesMonth.uniqueAttendees)} unique attendees)`;
 
-    const attendeesBigPictureSummary = [
+    const attendeesBigPictureSummaryComputed = [
       'Attendance reporting here is driven by HubSpot call/meeting attendance (not the legacy Zoom metric), which keeps the manager aligned with the current attendance pipeline.',
       `Over the last 30 days, completed free-group meetings generated ${formatInt(attendeesMonth.newAttendees)} net-new attendees, ${formatInt(attendeesMonth.attendanceParticipations)} total attendances, and ${formatAttendanceAvgVisits(attendeesMonth.avgVisits, attendeesMonth.uniqueAttendees)} average visits per attendee with ${attendeesMonthCostOrFallback}.`,
       `Raw calculation inputs (30d): net-new numerator ${formatInt(attendeesMonth.newAttendees)} first-seen attendees, total attendance numerator ${formatInt(attendeesMonth.attendanceParticipations)} attendee participations across ${formatInt(attendeesMonth.sessions)} completed sessions, avg visits numerator/denominator ${formatInt(attendeesMonth.attendanceParticipations)}/${formatInt(attendeesMonth.uniqueAttendees)}, Meta CPNA numerator/denominator ${formatCurrency(attendanceAdsMonth.freeSpend)}/${formatInt(attendeesMonth.newAttendees)}.`,
@@ -1429,6 +1451,15 @@ const DashboardOverview = () => {
         ? `${formatInt(unclassifiedLargeCalls)} high-attendance calls are still unclassified, which can understate free-group counts until titles are standardized.`
         : 'Classification coverage looks clean for high-attendance calls in the current window.',
     ].join(' ');
+    const attendeesWeekSummaryFinal = attendanceDataUnavailable
+      ? 'Attendance KPI summary unavailable for this refresh because HubSpot call/meeting activity and/or attendee associations did not load. Verify Supabase environment, RLS policies, and attendance sync jobs before interpreting KPI trends.'
+      : attendeesWeekSummary;
+    const attendeesMonthSummaryFinal = attendanceDataUnavailable
+      ? 'Attendance 30-day KPI summary unavailable for this refresh because HubSpot call/meeting activity and/or attendee associations did not load. Run attendance sync and confirm production data access before reviewing attendance metrics.'
+      : attendeesMonthSummary;
+    const attendeesBigPictureSummary = attendanceDataUnavailable
+      ? 'Attendance AI Manager summary is temporarily unavailable because HubSpot attendance source data did not load for this refresh. Fix source connectivity and permissions, then refresh so completed-meeting KPIs are recomputed from live HubSpot data.'
+      : attendeesBigPictureSummaryComputed;
 
     function seoManagerPeriodNarrative({ label, sessions, clicks, sessionsDelta, clicksDelta, ctr, position, impressions, engagement }) {
       const clicksDown = clicksDelta !== null && clicksDelta < -0.08;
@@ -1565,6 +1596,10 @@ const DashboardOverview = () => {
         phoenix_paid_lead_share: phoenixPaidShareMonth,
       },
       diagnostics: {
+        data_availability: {
+          source_ready: !leadsDataUnavailable,
+          source_warnings: leadsSourceWarnings,
+        },
         quality_coverage_rate_30d: monthPaidQuality.qualityCoverage,
       },
     };
@@ -1616,6 +1651,10 @@ const DashboardOverview = () => {
         cost_per_new_attendee: monthFreeCostPerNewAttendee,
       },
       diagnostics: {
+        data_availability: {
+          source_ready: !attendanceDataUnavailable,
+          source_warnings: attendanceSourceWarnings,
+        },
         lineage: {
           attendance_events_table: 'raw_hubspot_meeting_activities',
           attendance_associations_table: 'hubspot_activity_contact_associations',
@@ -1708,8 +1747,8 @@ const DashboardOverview = () => {
         sectionFocus: 'Lead quality, source mix, and acquisition efficiency across Phoenix Forum and feeder campaigns',
         analysisContext: leadsAnalysisContext,
         summaries: {
-          week: leadsWeekSummary,
-          month: leadsMonthSummary,
+          week: leadsWeekSummaryFinal,
+          month: leadsMonthSummaryFinal,
           bigPicture: leadsBigPictureSummary,
         },
         autonomousActions: [
@@ -1761,8 +1800,8 @@ const DashboardOverview = () => {
         sectionFocus: 'Acquisition efficiency and repeat behavior in free groups (feeder into Phoenix Forum)',
         analysisContext: attendanceAnalysisContext,
         summaries: {
-          week: attendeesWeekSummary,
-          month: attendeesMonthSummary,
+          week: attendeesWeekSummaryFinal,
+          month: attendeesMonthSummaryFinal,
           bigPicture: attendeesBigPictureSummary,
         },
         autonomousActions: [
@@ -1910,7 +1949,7 @@ const DashboardOverview = () => {
       periodMeta,
       managers,
     };
-  }, [dashboard, donationRows, fbAdsRows, hubspotActivities, hubspotActivityAssocs, hubspotContacts]);
+  }, [dashboard, donationRows, fbAdsRows, hubspotActivities, hubspotActivityAssocs, hubspotContacts, warnings]);
 
   const managerByKey = useMemo(() => {
     const out = new Map();
