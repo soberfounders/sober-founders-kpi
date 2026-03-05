@@ -17,7 +17,7 @@ import KPICard from '../components/KPICard';
 import CohortUnitEconomicsPreviewPanel from '../components/CohortUnitEconomicsPreviewPanel';
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis,
-  CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell,
+  CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, ComposedChart,
 } from 'recharts';
 
 const LOOKBACK_DAYS = LEADS_LOOKBACK_DAYS;
@@ -116,6 +116,31 @@ function addDaysKey(dateKey, days) {
   if (Number.isNaN(d.getTime())) return dateKey;
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+function dateKeyToUtcDate(dateKey) {
+  if (!dateKey) return null;
+  const d = new Date(`${dateKey}T00:00:00.000Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function daysBetweenDateKeys(laterDateKey, earlierDateKey) {
+  const later = dateKeyToUtcDate(laterDateKey);
+  const earlier = dateKeyToUtcDate(earlierDateKey);
+  if (!later || !earlier) return null;
+  return Math.floor((later.getTime() - earlier.getTime()) / 86400000);
+}
+
+function formatDateKeyShort(dateKey) {
+  const d = dateKeyToUtcDate(dateKey);
+  if (!d) return dateKey || 'N/A';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+}
+
+function formatWeekKeyLabel(weekKey) {
+  const d = dateKeyToUtcDate(weekKey);
+  if (!d) return weekKey || 'N/A';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
 function hubspotFullName(contact) {
@@ -3161,6 +3186,176 @@ export default function LeadsDashboard() {
     return [...analytics.adAttributionRows].sort((a, b) => (b.attributedShowUps - a.attributedShowUps) || (b.spend - a.spend)).slice(0, 15);
   }, [analytics]);
 
+  const liveFreshnessModule = useMemo(() => {
+    const todayKeyUtc = new Date().toISOString().slice(0, 10);
+    const latestDateKeyFromRows = (rows, dateGetter) => {
+      let latest = null;
+      (rows || []).forEach((row) => {
+        const key = parseDateKeyLoose(dateGetter(row));
+        if (!key) return;
+        if (!latest || key > latest) latest = key;
+      });
+      return latest;
+    };
+
+    const sourceRows = [
+      {
+        key: 'ads',
+        label: 'Meta Ads',
+        color: '#0f766e',
+        rowCount: (rawAds || []).length,
+        dateKey: latestDateKeyFromRows(rawAds, (row) => row?.date_day),
+      },
+      {
+        key: 'hubspot',
+        label: 'HubSpot Leads',
+        color: '#0284c7',
+        rowCount: (rawHubspot || []).length,
+        dateKey: latestDateKeyFromRows(rawHubspot, (row) => row?.createdate),
+      },
+      {
+        key: 'luma',
+        label: 'Lu.ma Registrations',
+        color: '#7c3aed',
+        rowCount: (rawLuma || []).length,
+        dateKey: latestDateKeyFromRows(rawLuma, (row) => row?.event_date || row?.event_start_at || row?.registered_at),
+      },
+      {
+        key: 'zoom',
+        label: 'Zoom KPI',
+        color: '#d97706',
+        rowCount: (rawZoom || []).length,
+        dateKey: latestDateKeyFromRows(rawZoom, (row) => row?.metadata?.start_time || row?.metric_date),
+      },
+    ].map((row) => {
+      const staleDays = row.dateKey ? daysBetweenDateKeys(todayKeyUtc, row.dateKey) : null;
+      let tone = 'unknown';
+      if (staleDays !== null) tone = staleDays <= 3 ? 'fresh' : staleDays <= 14 ? 'watch' : 'stale';
+      return { ...row, staleDays, tone };
+    });
+
+    const availableDateKeys = sourceRows
+      .map((row) => row.dateKey)
+      .filter(Boolean)
+      .sort((a, b) => String(a).localeCompare(String(b)));
+    const oldestDateKey = availableDateKeys.length > 0 ? availableDateKeys[0] : null;
+    const newestDateKey = availableDateKeys.length > 0 ? availableDateKeys[availableDateKeys.length - 1] : null;
+    const freshnessSpreadDays = newestDateKey && oldestDateKey
+      ? daysBetweenDateKeys(newestDateKey, oldestDateKey)
+      : null;
+
+    return {
+      sourceRows,
+      todayKeyUtc,
+      oldestDateKey,
+      newestDateKey,
+      freshnessSpreadDays,
+      staleSources: sourceRows.filter((row) => row.tone === 'stale'),
+      watchSources: sourceRows.filter((row) => row.tone === 'watch'),
+    };
+  }, [rawAds, rawHubspot, rawLuma, rawZoom]);
+
+  const recentMomentumModule = useMemo(() => {
+    const currentWindow = dateWindows?.current || null;
+    if (!currentWindow?.start || !currentWindow?.end) {
+      return { weeklyRows: [], latestWeek: null, previousWeek: null, summaryCards: [] };
+    }
+    const startKey = currentWindow.start;
+    const endKey = currentWindow.end;
+    const dateInRange = (dateKey) => !!dateKey && dateKey >= startKey && dateKey <= endKey;
+    const weekMap = new Map();
+    const ensureWeek = (weekKey) => {
+      if (!weekKey) return null;
+      if (!weekMap.has(weekKey)) {
+        weekMap.set(weekKey, {
+          weekKey,
+          label: formatWeekKeyLabel(weekKey),
+          metaLeads: 0,
+          paidHubspotLeads: 0,
+          lumaRegistrations: 0,
+          zoomAttendees: 0,
+          metaSpend: 0,
+        });
+      }
+      return weekMap.get(weekKey);
+    };
+
+    (rawAds || []).forEach((row) => {
+      const dateKey = parseDateKeyLoose(row?.date_day);
+      if (!dateInRange(dateKey)) return;
+      const weekKey = mondayKey(dateKey);
+      const agg = ensureWeek(weekKey);
+      if (!agg) return;
+      const leads = Number(row?.leads || 0);
+      const spend = Number(row?.spend || 0);
+      agg.metaLeads += Number.isFinite(leads) ? leads : 0;
+      agg.metaSpend += Number.isFinite(spend) ? spend : 0;
+    });
+
+    (rawHubspot || []).forEach((row) => {
+      const dateKey = parseDateKeyLoose(row?.createdate);
+      if (!dateInRange(dateKey)) return;
+      if (!isPaidSocialHubspot(row) || isPhoenixHubspot(row)) return;
+      const weekKey = mondayKey(dateKey);
+      const agg = ensureWeek(weekKey);
+      if (!agg) return;
+      agg.paidHubspotLeads += 1;
+    });
+
+    (rawLuma || []).forEach((row) => {
+      const approvalStatus = String(row?.approval_status || 'approved').toLowerCase();
+      if (approvalStatus && approvalStatus !== 'approved') return;
+      const dateKey = parseDateKeyLoose(row?.event_date || row?.event_start_at || row?.registered_at);
+      if (!dateInRange(dateKey)) return;
+      const weekKey = mondayKey(dateKey);
+      const agg = ensureWeek(weekKey);
+      if (!agg) return;
+      agg.lumaRegistrations += 1;
+    });
+
+    (rawZoom || []).forEach((row) => {
+      const dateKey = parseDateKeyLoose(row?.metadata?.start_time || row?.metric_date);
+      if (!dateInRange(dateKey)) return;
+      const weekKey = mondayKey(dateKey);
+      const agg = ensureWeek(weekKey);
+      if (!agg) return;
+      const attendees = Number(row?.metric_value || 0);
+      agg.zoomAttendees += Number.isFinite(attendees) ? attendees : 0;
+    });
+
+    const weeklyRows = Array.from(weekMap.values())
+      .sort((a, b) => String(a.weekKey).localeCompare(String(b.weekKey)))
+      .map((row) => ({
+        ...row,
+        cpl: row.metaLeads > 0 ? row.metaSpend / row.metaLeads : null,
+      }))
+      .slice(-12);
+
+    const latestWeek = weeklyRows[weeklyRows.length - 1] || null;
+    const previousWeek = weeklyRows.length > 1 ? weeklyRows[weeklyRows.length - 2] : null;
+    const card = (key, label, format = 'count', invertColor = false) => ({
+      key,
+      label,
+      format,
+      invertColor,
+      value: latestWeek ? latestWeek[key] : null,
+      changePct: previousWeek ? computeChangePct(latestWeek?.[key] || 0, previousWeek?.[key] || 0).pct : null,
+    });
+
+    return {
+      weeklyRows,
+      latestWeek,
+      previousWeek,
+      summaryCards: [
+        card('metaLeads', 'Latest Week Meta Leads'),
+        card('paidHubspotLeads', 'Latest Week Paid HubSpot Leads'),
+        card('lumaRegistrations', 'Latest Week Lu.ma Registrations'),
+        card('zoomAttendees', 'Latest Week Zoom Attendees'),
+        card('cpl', 'Latest Week Meta CPL', 'currency', true),
+      ],
+    };
+  }, [dateWindows, rawAds, rawHubspot, rawLuma, rawZoom]);
+
   function trendDirection(cur, prev) {
     if (!Number.isFinite(cur) || !Number.isFinite(prev) || prev === 0) return 'neutral';
     return cur > prev ? 'up' : cur < prev ? 'down' : 'neutral';
@@ -3185,6 +3380,19 @@ export default function LeadsDashboard() {
     if (v === null || v === undefined || v === '') return 'N/A';
     const n = Number(v);
     return Number.isFinite(n) ? fmt.pct(n) : 'N/A';
+  };
+  const freshnessToneStyle = {
+    fresh: { border: '#86efac', bg: '#f0fdf4', text: '#166534', chipBg: '#dcfce7' },
+    watch: { border: '#fcd34d', bg: '#fffbeb', text: '#92400e', chipBg: '#fef3c7' },
+    stale: { border: '#fecaca', bg: '#fef2f2', text: '#991b1b', chipBg: '#fee2e2' },
+    unknown: { border: '#e2e8f0', bg: '#f8fafc', text: '#334155', chipBg: '#e2e8f0' },
+  };
+  const freshnessStatusLabel = (row) => {
+    if (!row?.dateKey) return 'No data';
+    if (!Number.isFinite(row?.staleDays)) return 'Unknown';
+    if (row.staleDays <= 3) return 'Fresh';
+    if (row.staleDays <= 14) return `Lagging ${row.staleDays}d`;
+    return `Stale ${row.staleDays}d`;
   };
   const currentMissingHubspotCallSessions = zoomSourceModule?.current?.missingHubspotCallSessions || [];
   const currentActionableMissingHubspotCallSessions = currentMissingHubspotCallSessions.filter((r) => String(r?.actionRequired || '') === 'Yes');
@@ -3218,13 +3426,129 @@ export default function LeadsDashboard() {
 
       {/* ── Date Range Filter ── */}
       <div style={card}>
-        <h3 style={{ margin: '0 0 12px', fontSize: '16px', color: '#0f172a' }}>📅 Date Range</h3>
+        <h3 style={{ margin: '0 0 12px', fontSize: '16px', color: '#0f172a' }}>Date Range Window</h3>
         <DateRangeFilter
           rangeType={rangeType} setRangeType={setRangeType}
           customStart={customStart} setCustomStart={setCustomStart}
           customEnd={customEnd} setCustomEnd={setCustomEnd}
           windows={dateWindows}
         />
+        <p style={{ margin: '10px 0 0', fontSize: '12px', color: '#64748b' }}>
+          This controls the comparison window. Live source freshness and current momentum are shown below.
+        </p>
+      </div>
+
+      <div style={card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+          <div>
+            <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Live Freshness and Recent Momentum</h3>
+            <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>
+              Uses live tables loaded for this page. Historical member dates in drilldowns (for example sobriety or first show-up) are person attributes, not refresh timestamps.
+            </p>
+          </div>
+          <div style={{ ...subCard, minWidth: '230px', border: '1px solid #dbeafe', backgroundColor: '#eff6ff' }}>
+            <p style={{ margin: 0, fontSize: '11px', fontWeight: 700, color: '#1d4ed8' }}>Latest source refresh</p>
+            <p style={{ margin: '4px 0 0', fontSize: '14px', fontWeight: 800, color: '#1e3a8a' }}>
+              {formatDateKeyShort(liveFreshnessModule.newestDateKey)}
+            </p>
+            <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#1e3a8a' }}>
+              Spread across sources: {Number.isFinite(liveFreshnessModule.freshnessSpreadDays) ? `${fmt.int(liveFreshnessModule.freshnessSpreadDays)} day(s)` : 'N/A'}
+            </p>
+          </div>
+        </div>
+
+        <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+          {liveFreshnessModule.sourceRows.map((row) => {
+            const tone = freshnessToneStyle[row.tone] || freshnessToneStyle.unknown;
+            return (
+              <div key={row.key} style={{ ...subCard, border: `1px solid ${tone.border}`, backgroundColor: tone.bg }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#0f172a', fontWeight: 700 }}>{row.label}</p>
+                  <span style={{ fontSize: '10px', fontWeight: 700, color: tone.text, backgroundColor: tone.chipBg, borderRadius: '999px', padding: '2px 6px' }}>
+                    {freshnessStatusLabel(row)}
+                  </span>
+                </div>
+                <p style={{ margin: '6px 0 0', fontSize: '14px', fontWeight: 800, color: '#0f172a' }}>
+                  {formatDateKeyShort(row.dateKey)}
+                </p>
+                <p style={{ margin: '3px 0 0', fontSize: '11px', color: '#64748b' }}>
+                  Rows loaded: {fmt.int(row.rowCount || 0)}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+
+        {(liveFreshnessModule.staleSources.length > 0 || liveFreshnessModule.watchSources.length > 0) && (
+          <div style={{
+            marginTop: '10px',
+            borderRadius: '10px',
+            border: `1px solid ${liveFreshnessModule.staleSources.length > 0 ? '#fecaca' : '#fde68a'}`,
+            backgroundColor: liveFreshnessModule.staleSources.length > 0 ? '#fef2f2' : '#fffbeb',
+            padding: '10px 12px',
+          }}
+          >
+            <p style={{ margin: 0, fontSize: '11px', color: liveFreshnessModule.staleSources.length > 0 ? '#991b1b' : '#92400e', fontWeight: 700 }}>
+              {liveFreshnessModule.staleSources.length > 0
+                ? `Stale source(s): ${liveFreshnessModule.staleSources.map((row) => row.label).join(', ')}.`
+                : `Lagging source(s): ${liveFreshnessModule.watchSources.map((row) => row.label).join(', ')}.`}
+              {' '}Verify upstream sync jobs before making major budget changes.
+            </p>
+          </div>
+        )}
+
+        <div style={{ marginTop: '14px', ...subCard }}>
+          <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#64748b', fontWeight: 700 }}>
+            Weekly Momentum (up to last 12 weeks in selected window)
+          </p>
+          {recentMomentumModule.weeklyRows.length > 0 ? (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: '10px', marginBottom: '12px' }}>
+                {recentMomentumModule.summaryCards.map((metric) => (
+                  <div key={metric.key} style={{ ...subCard, borderLeft: metric.format === 'currency' ? '4px solid #dc2626' : '4px solid #0f766e' }}>
+                    <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 700 }}>{metric.label}</p>
+                    <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
+                      {metric.format === 'currency' ? fmtMaybeCurrency(metric.value) : fmt.int(metric.value || 0)}
+                      {metric.changePct !== null && metric.changePct !== undefined && <ChangeBadge changePct={metric.changePct} invertColor={!!metric.invertColor} />}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <div style={{ height: '300px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={recentMomentumModule.weeklyRows}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} />
+                    <YAxis yAxisId="left" allowDecimals={false} tick={{ fontSize: 11, fill: '#64748b' }} />
+                    <YAxis
+                      yAxisId="right"
+                      orientation="right"
+                      tick={{ fontSize: 11, fill: '#64748b' }}
+                      tickFormatter={(value) => {
+                        const n = Number(value);
+                        return Number.isFinite(n) ? `$${Math.round(n).toLocaleString()}` : '$0';
+                      }}
+                    />
+                    <Tooltip
+                      formatter={(value, name, item) => {
+                        if (item?.dataKey === 'cpl') return [fmtMaybeCurrency(value), name];
+                        return [fmt.int(value), name];
+                      }}
+                      labelFormatter={(label) => `Week of ${label}`}
+                    />
+                    <Legend />
+                    <Bar yAxisId="left" dataKey="metaLeads" name="Meta Leads" fill="#0f766e" radius={[4, 4, 0, 0]} />
+                    <Bar yAxisId="left" dataKey="paidHubspotLeads" name="Paid HubSpot Leads" fill="#0284c7" radius={[4, 4, 0, 0]} />
+                    <Line yAxisId="left" type="monotone" dataKey="zoomAttendees" name="Zoom Attendees" stroke="#7c3aed" strokeWidth={2} dot={false} />
+                    <Line yAxisId="right" type="monotone" dataKey="cpl" name="Meta CPL" stroke="#dc2626" strokeWidth={2} dot={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </>
+          ) : (
+            <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>No momentum rows available in this date range.</p>
+          )}
+        </div>
       </div>
 
       <CohortUnitEconomicsPreviewPanel supabaseUrl={supabaseUrl} supabaseKey={supabaseKey} placement="top" />
