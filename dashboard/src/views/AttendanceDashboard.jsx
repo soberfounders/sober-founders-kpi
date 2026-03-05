@@ -4134,15 +4134,16 @@ const AttendanceDashboard = () => {
       <div style={cardStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Brain size={18} color="#1d4ed8" />
-            <h3 style={{ fontSize: '20px' }}>Action Plan: Human + Autonomous</h3>
+            <Brain size={18} color="var(--color-dark-green)" />
+            <h3 style={{ fontSize: '20px', color: 'var(--color-text-primary)' }}>Action Plan: Human + Autonomous</h3>
           </div>
           <div
             style={{
               padding: '8px 10px',
               borderRadius: '999px',
-              backgroundColor: '#eff6ff',
-              color: '#1e3a8a',
+              backgroundColor: 'rgba(3,218,198,0.14)',
+              border: '1px solid var(--color-border-glow)',
+              color: 'var(--color-dark-green)',
               fontSize: '13px',
               fontWeight: 700,
             }}
@@ -4156,10 +4157,10 @@ const AttendanceDashboard = () => {
             (group) => {
               const GroupIcon = group.icon;
               return (
-                <div key={group.title} style={{ border: '1px solid var(--color-border)', borderRadius: '12px', padding: '12px' }}>
+                <div key={group.title} style={{ border: '1px solid var(--color-border)', borderRadius: '12px', padding: '12px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                    <GroupIcon size={16} color="#0f766e" />
-                    <h4 style={{ fontSize: '16px' }}>{group.title}</h4>
+                    <GroupIcon size={16} color="var(--color-dark-green)" />
+                    <h4 style={{ fontSize: '16px', color: 'var(--color-text-primary)' }}>{group.title}</h4>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {group.items.map((item) => {
@@ -4173,8 +4174,8 @@ const AttendanceDashboard = () => {
                         <div
                           key={item.id}
                           style={{
-                            border: '1px solid #e2e8f0',
-                            backgroundColor: isSkipped ? '#f8fafc' : ' #f8fafc',
+                            border: '1px solid var(--color-border)',
+                            backgroundColor: isSkipped ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.05)',
                             borderRadius: '10px',
                             padding: '10px',
                             display: 'grid',
@@ -4184,12 +4185,12 @@ const AttendanceDashboard = () => {
                           }}
                         >
                           <div>
-                            <p style={{ fontSize: '14px', fontWeight: 700 }}>{item.title}</p>
+                            <p style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{item.title}</p>
                             <p style={{ marginTop: '4px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>{item.detail}</p>
 
                             {isHumanGroup && (
                               <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
-                                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#334155', fontWeight: 600 }}>
+                                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
                                   <input
                                     type="checkbox"
                                     checked={addToDoChecked}
@@ -4218,9 +4219,9 @@ const AttendanceDashboard = () => {
                                   onClick={() => handleSkipHumanTask(item)}
                                   disabled={isSavingTodo}
                                   style={{
-                                    border: '1px solid #cbd5e1',
-                                    backgroundColor: isSkipped ? '#e2e8f0' : 'white',
-                                    color: '#334155',
+                                    border: '1px solid var(--color-border)',
+                                    backgroundColor: isSkipped ? 'rgba(148,163,184,0.2)' : 'rgba(255,255,255,0.08)',
+                                    color: 'var(--color-text-primary)',
                                     borderRadius: '8px',
                                     padding: '4px 8px',
                                     fontSize: '11px',
@@ -4243,7 +4244,7 @@ const AttendanceDashboard = () => {
                                   </span>
                                 )}
                                 {workflow.notionUrl ? (
-                                  <a href={workflow.notionUrl} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 700, textDecoration: 'underline' }}>
+                                  <a href={workflow.notionUrl} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: 'var(--color-dark-green)', fontWeight: 700, textDecoration: 'underline' }}>
                                     Open Notion Task
                                   </a>
                                 ) : null}
@@ -4256,7 +4257,7 @@ const AttendanceDashboard = () => {
                               checked={!!planState[item.id]}
                               onChange={(e) => setPlanState((prev) => ({ ...prev, [item.id]: e.target.checked }))}
                             />
-                            <span style={{ fontSize: '13px', fontWeight: 700 }}>Proceed</span>
+                            <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)' }}>Proceed</span>
                           </label>
                         </div>
                       );

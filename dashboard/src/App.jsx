@@ -9,7 +9,6 @@ import DataCleaning from './views/DataCleaning'; // Added import
 import AttendanceDashboard from './views/AttendanceDashboard'; // Added import
 import EmailMarketingDashboard from './views/EmailMarketingDashboard';
 import WebsiteTrafficDashboard from './views/WebsiteTrafficDashboard';
-import SEODashboard from './views/SEODashboard';
 import AIBriefingDashboard from './views/AIBriefingDashboard';
 import DonationsDashboard from './views/DonationsDashboard';
 import { hasSupabaseConfig, supabaseConfigError } from './lib/supabaseClient';
@@ -48,6 +47,7 @@ function tabRequiresSupabase(activeTab) {
     'Attendance',
     'Leads',
     'Email',
+    'Online Discovery',
     'Website Traffic',
     'SEO',
     'Donations',
@@ -128,10 +128,12 @@ function App() {
         return <EmailDashboard />;
       case 'Marketing':
         return <EmailMarketingDashboard />;
+      case 'Online Discovery':
+        return <WebsiteTrafficDashboard />;
       case 'Website Traffic':
         return <WebsiteTrafficDashboard />;
       case 'SEO':
-        return <SEODashboard />;
+        return <WebsiteTrafficDashboard />;
       case 'Donations':
         return <DonationsDashboard />;
       case "To-Do's":

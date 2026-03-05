@@ -50,11 +50,12 @@ function timeAgo(dateStr) {
 // ─── Styles ──────────────────────────────────────────────────
 
 const cardStyle = {
-  backgroundColor: 'white',
+  background: 'var(--color-card)',
+  backdropFilter: 'blur(16px)',
   border: '1px solid var(--color-border)',
   borderRadius: '16px',
   padding: '20px',
-  boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.08)',
+  boxShadow: 'var(--glass-shadow)',
 };
 
 const tabStyle = (active) => ({
@@ -63,10 +64,10 @@ const tabStyle = (active) => ({
   fontWeight: active ? 700 : 500,
   fontSize: '14px',
   cursor: 'pointer',
-  backgroundColor: active ? 'white' : '#f1f5f9',
-  color: active ? '#0f172a' : '#64748b',
+  backgroundColor: active ? 'var(--color-card)' : 'rgba(255,255,255,0.02)',
+  color: active ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
   border: active ? '1px solid var(--color-border)' : '1px solid transparent',
-  borderBottom: active ? '2px solid white' : '1px solid var(--color-border)',
+  borderBottom: active ? '2px solid var(--color-card)' : '1px solid var(--color-border)',
   marginBottom: '-1px',
   transition: 'all 0.15s ease',
 });
@@ -108,9 +109,9 @@ const btnStyle = (variant = 'primary') => ({
     color: '#64748b',
     border: '1px solid #e2e8f0',
   } : {
-    background: '#f1f5f9',
-    color: '#334155',
-    border: '1px solid #e2e8f0',
+    background: 'rgba(255,255,255,0.05)',
+    color: 'var(--color-text-primary)',
+    border: '1px solid var(--color-border)',
   }),
 });
 
@@ -682,7 +683,7 @@ export default function DataCleaning() {
                     borderBottom: '1px solid #f1f5f9',
                     cursor: 'pointer',
                     backgroundColor: mergeModalPair?.keep === identity.canonical_id ? '#dcfce7' :
-                                     mergeModalPair?.merge === identity.canonical_id ? '#fee2e2' : 'white',
+                      mergeModalPair?.merge === identity.canonical_id ? '#fee2e2' : 'white',
                     transition: 'background-color 0.15s',
                   }}
                   onClick={() => {

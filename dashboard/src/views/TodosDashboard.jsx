@@ -9,17 +9,17 @@ import {
 /* ── Status helpers ── */
 const STATUS_ORDER = ['Not started', 'In progress', 'Waiting on Others', 'Done'];
 const STATUS_COLORS = {
-  'not started': { bg: '#f1f5f9', text: '#64748b', border: '#e2e8f0' },
-  'in progress': { bg: '#dbeafe', text: '#2563eb', border: '#93c5fd' },
-  'waiting on others': { bg: '#fff7ed', text: '#c2410c', border: '#fed7aa' },
-  'done': { bg: '#f0fdf4', text: '#16a34a', border: '#bbf7d0' },
-  'completed': { bg: '#f0fdf4', text: '#16a34a', border: '#bbf7d0' },
-  'to do': { bg: '#f1f5f9', text: '#64748b', border: '#e2e8f0' },
+  'not started': { bg: 'rgba(255,255,255,0.05)', text: 'var(--color-text-secondary)', border: 'var(--color-border)' },
+  'in progress': { bg: 'rgba(59, 130, 246, 0.15)', text: '#93c5fd', border: 'rgba(59, 130, 246, 0.3)' },
+  'waiting on others': { bg: 'rgba(245, 158, 11, 0.15)', text: '#fbbf24', border: 'rgba(245, 158, 11, 0.3)' },
+  'done': { bg: 'rgba(16, 185, 129, 0.15)', text: '#34d399', border: 'rgba(16, 185, 129, 0.3)' },
+  'completed': { bg: 'rgba(16, 185, 129, 0.15)', text: '#34d399', border: 'rgba(16, 185, 129, 0.3)' },
+  'to do': { bg: 'rgba(255,255,255,0.05)', text: 'var(--color-text-secondary)', border: 'var(--color-border)' },
 };
 const PRIORITY_COLORS = {
-  'high': { bg: '#fef2f2', text: '#dc2626', icon: '🔴' },
-  'medium': { bg: '#fffbeb', text: '#d97706', icon: '🟡' },
-  'low': { bg: '#f0fdf4', text: '#16a34a', icon: '🟢' },
+  'high': { bg: 'rgba(239, 68, 68, 0.15)', text: '#f87171', icon: '🔴' },
+  'medium': { bg: 'rgba(245, 158, 11, 0.15)', text: '#fbbf24', icon: '🟡' },
+  'low': { bg: 'rgba(16, 185, 129, 0.15)', text: '#34d399', icon: '🟢' },
 };
 
 const getStatusStyle = (status) => STATUS_COLORS[status?.toLowerCase()] || STATUS_COLORS['to do'];
@@ -245,11 +245,12 @@ const TodosDashboard = () => {
   const analysis = useMemo(() => analyzeTaskList(todos), [todos]);
 
   const cardStyle = {
-    backgroundColor: 'white',
+    background: 'var(--color-card)',
+    backdropFilter: 'blur(16px)',
     borderRadius: '16px',
     border: '1px solid var(--color-border)',
     overflow: 'hidden',
-    boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
+    boxShadow: 'var(--glass-shadow)',
   };
 
   if (loading && todos.length === 0) {
@@ -278,8 +279,8 @@ const TodosDashboard = () => {
             style={{
               display: 'flex', alignItems: 'center', gap: '6px',
               padding: '8px 16px', borderRadius: '10px',
-              backgroundColor: syncing ? '#f1f5f9' : 'white',
-              color: 'var(--color-dark-green)',
+              backgroundColor: syncing ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)',
+              color: 'var(--color-text-primary)',
               border: '1px solid var(--color-border)',
               cursor: syncing ? 'wait' : 'pointer',
               fontSize: '13px', fontWeight: '600',
@@ -294,9 +295,9 @@ const TodosDashboard = () => {
             style={{
               display: 'flex', alignItems: 'center', gap: '6px',
               padding: '8px 16px', borderRadius: '10px',
-              backgroundColor: showAnalysis ? '#1a5632' : '#f0fdf4',
-              color: showAnalysis ? 'white' : '#1a5632',
-              border: `1px solid ${showAnalysis ? '#1a5632' : '#86efac'}`,
+              backgroundColor: showAnalysis ? 'var(--color-dark-green)' : 'rgba(255, 255, 255, 0.05)',
+              color: showAnalysis ? '#0a0f18' : 'var(--color-text-primary)',
+              border: `1px solid ${showAnalysis ? 'var(--color-dark-green)' : 'var(--color-border)'}`,
               cursor: 'pointer', fontSize: '13px', fontWeight: '600',
               transition: 'all 0.2s',
             }}
@@ -312,10 +313,10 @@ const TodosDashboard = () => {
       {analysis && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
           {[
-            { label: 'Total Tasks', value: analysis.stats.total, color: '#3b82f6', bg: '#eff6ff' },
-            { label: 'Open', value: analysis.stats.open, color: '#f59e0b', bg: '#fffbeb' },
-            { label: 'Overdue', value: analysis.stats.overdue, color: '#ef4444', bg: '#fef2f2' },
-            { label: 'Completed', value: analysis.stats.done, color: '#10b981', bg: '#f0fdf4' },
+            { label: 'Total Tasks', value: analysis.stats.total, color: '#60a5fa', bg: 'rgba(59, 130, 246, 0.1)' },
+            { label: 'Open', value: analysis.stats.open, color: '#fbbf24', bg: 'rgba(245, 158, 11, 0.1)' },
+            { label: 'Overdue', value: analysis.stats.overdue, color: '#f87171', bg: 'rgba(239, 68, 68, 0.1)' },
+            { label: 'Completed', value: analysis.stats.done, color: '#34d399', bg: 'rgba(16, 185, 129, 0.1)' },
           ].map(s => (
             <div key={s.label} style={{
               ...cardStyle, padding: '16px 20px',
@@ -323,7 +324,7 @@ const TodosDashboard = () => {
               backgroundColor: s.bg,
             }}>
               <p style={{ fontSize: '11px', fontWeight: '700', color: s.color, textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>{s.label}</p>
-              <p style={{ fontSize: '28px', fontWeight: '700', color: '#0f172a', margin: '4px 0 0 0' }}>{s.value}</p>
+              <p style={{ fontSize: '28px', fontWeight: '700', color: 'var(--color-text-primary)', margin: '4px 0 0 0' }}>{s.value}</p>
             </div>
           ))}
         </div>
@@ -333,64 +334,64 @@ const TodosDashboard = () => {
       {showAnalysis && analysis && (
         <div style={{
           ...cardStyle, padding: '24px',
-          background: 'linear-gradient(135deg, #f0fdf4 0%, #ecfeff 50%, #eff6ff 100%)',
-          border: '1px solid #86efac',
+          background: 'linear-gradient(135deg, rgba(3, 218, 198, 0.1) 0%, rgba(0, 230, 118, 0.05) 100%)',
+          border: '1px solid var(--color-border-glow)',
         }}>
-          <h4 style={{ fontSize: '16px', fontWeight: '700', color: '#0f172a', margin: '0 0 20px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Sparkles size={18} color="#1a5632" /> AI Task Analysis
+          <h4 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--color-text-primary)', margin: '0 0 20px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Sparkles size={18} color="var(--color-dark-green)" /> AI Task Analysis
           </h4>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
             {/* AI Can Handle */}
-            <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0' }}>
+            <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', padding: '16px', border: '1px solid var(--color-border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                <Bot size={18} color="#6366f1" />
-                <h5 style={{ fontSize: '14px', fontWeight: '700', color: '#4338ca', margin: 0 }}>AI Can Handle</h5>
+                <Bot size={18} color="#818cf8" />
+                <h5 style={{ fontSize: '14px', fontWeight: '700', color: '#818cf8', margin: 0 }}>AI Can Handle</h5>
               </div>
               {analysis.aiCanHandle.length > 0 ? (
                 <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   {analysis.aiCanHandle.slice(0, 5).map(t => (
-                    <li key={t.id} style={{ fontSize: '13px', color: '#334155' }}>{t.task_title}</li>
+                    <li key={t.id} style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>{t.task_title}</li>
                   ))}
                 </ul>
               ) : (
-                <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0 }}>No automatable tasks detected. Try adding tasks with keywords like "send," "schedule," or "review."</p>
+                <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: 0 }}>No automatable tasks detected. Try adding tasks with keywords like "send," "schedule," or "review."</p>
               )}
             </div>
 
             {/* Delegate */}
-            <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0' }}>
+            <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', padding: '16px', border: '1px solid var(--color-border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                <Users size={18} color="#0ea5e9" />
-                <h5 style={{ fontSize: '14px', fontWeight: '700', color: '#0369a1', margin: 0 }}>Delegate</h5>
+                <Users size={18} color="#38bdf8" />
+                <h5 style={{ fontSize: '14px', fontWeight: '700', color: '#38bdf8', margin: 0 }}>Delegate</h5>
               </div>
               {analysis.delegate.length > 0 ? (
                 <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   {analysis.delegate.slice(0, 5).map(t => (
-                    <li key={t.id} style={{ fontSize: '13px', color: '#334155' }}>{t.task_title}</li>
+                    <li key={t.id} style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>{t.task_title}</li>
                   ))}
                 </ul>
               ) : (
-                <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0 }}>No obvious delegation candidates found. Tasks with keywords like "research," "data entry," or "setup" would appear here.</p>
+                <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: 0 }}>No obvious delegation candidates found. Tasks with keywords like "research," "data entry," or "setup" would appear here.</p>
               )}
             </div>
 
             {/* Next Steps */}
-            <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0' }}>
+            <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', padding: '16px', border: '1px solid var(--color-border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                <Zap size={18} color="#f59e0b" />
-                <h5 style={{ fontSize: '14px', fontWeight: '700', color: '#b45309', margin: 0 }}>Next Steps</h5>
+                <Zap size={18} color="#fbbf24" />
+                <h5 style={{ fontSize: '14px', fontWeight: '700', color: '#fbbf24', margin: 0 }}>Next Steps</h5>
               </div>
               {analysis.nextSteps.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {analysis.nextSteps.map((step, i) => (
                     <div key={i}>
-                      <p style={{ fontSize: '13px', fontWeight: '600', color: '#0f172a', margin: '0 0 4px 0' }}>{step.message}</p>
+                      <p style={{ fontSize: '13px', fontWeight: '600', color: 'var(--color-text-primary)', margin: '0 0 4px 0' }}>{step.message}</p>
                       <ul style={{ margin: 0, paddingLeft: '18px' }}>
                         {step.items.map(t => (
-                          <li key={t.id} style={{ fontSize: '12px', color: '#64748b' }}>
+                          <li key={t.id} style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
                             {t.task_title}
-                            {t.due_date && <span style={{ marginLeft: '6px', color: new Date(t.due_date) < new Date() ? '#ef4444' : '#94a3b8' }}>
+                            {t.due_date && <span style={{ marginLeft: '6px', color: new Date(t.due_date) < new Date() ? '#f87171' : 'var(--color-text-muted)' }}>
                               ({new Date(t.due_date).toLocaleDateString()})
                             </span>}
                           </li>
@@ -400,19 +401,19 @@ const TodosDashboard = () => {
                   ))}
                 </div>
               ) : (
-                <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0 }}>You're all caught up! No urgent next steps.</p>
+                <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: 0 }}>You're all caught up! No urgent next steps.</p>
               )}
             </div>
 
             {/* Suggestions */}
-            <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0' }}>
+            <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', padding: '16px', border: '1px solid var(--color-border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                <Lightbulb size={18} color="#10b981" />
-                <h5 style={{ fontSize: '14px', fontWeight: '700', color: '#047857', margin: 0 }}>Suggestions</h5>
+                <Lightbulb size={18} color="#34d399" />
+                <h5 style={{ fontSize: '14px', fontWeight: '700', color: '#34d399', margin: 0 }}>Suggestions</h5>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {analysis.suggestions.map((s, i) => (
-                  <p key={i} style={{ fontSize: '13px', color: '#334155', margin: 0, lineHeight: '1.5' }}>{s}</p>
+                  <p key={i} style={{ fontSize: '13px', color: 'var(--color-text-primary)', margin: 0, lineHeight: '1.5' }}>{s}</p>
                 ))}
               </div>
             </div>
@@ -431,10 +432,9 @@ const TodosDashboard = () => {
             value={newTodo}
             onChange={(e) => setNewTodo(e.target.value)}
             placeholder="What needs to be done? (Synced to Notion)"
+            className="neo-input"
             style={{
-              width: '100%', padding: '12px 16px', borderRadius: '10px',
-              border: '1px solid #e2e8f0', fontSize: '15px', outline: 'none',
-              transition: 'border-color 0.2s',
+              width: '100%',
             }}
           />
         </div>
@@ -444,7 +444,7 @@ const TodosDashboard = () => {
           style={{
             display: 'flex', alignItems: 'center', gap: '8px',
             padding: '12px 24px', borderRadius: '10px',
-            backgroundColor: 'var(--color-dark-green)', color: 'white',
+            backgroundColor: 'var(--color-dark-green)', color: '#0a0f18',
             border: 'none', cursor: 'pointer', fontSize: '15px', fontWeight: '600',
             transition: 'all 0.2s',
             opacity: (isAdding || !newTodo.trim()) ? 0.7 : 1,
@@ -457,7 +457,7 @@ const TodosDashboard = () => {
 
       {/* ═══ Filter Tabs ═══ */}
       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-        <Filter size={14} color="#94a3b8" />
+        <Filter size={14} color="var(--color-text-secondary)" />
         {['All', 'Not started', 'In progress', 'Waiting', 'Done'].map(f => {
           const count = f === 'All' ? null :
             f === 'Not started' ? todos.filter(t => { const s = t.status?.toLowerCase() || ''; return !t.status || s === 'not started' || s === 'no status' || s === 'to do'; }).length :
@@ -470,9 +470,9 @@ const TodosDashboard = () => {
               onClick={() => setFilter(f)}
               style={{
                 padding: '6px 16px', borderRadius: '20px',
-                backgroundColor: filter === f ? '#1a5632' : '#f8fafc',
-                color: filter === f ? 'white' : '#64748b',
-                border: `1px solid ${filter === f ? '#1a5632' : '#e2e8f0'}`,
+                backgroundColor: filter === f ? 'var(--color-dark-green)' : 'rgba(255,255,255,0.05)',
+                color: filter === f ? '#0a0f18' : 'var(--color-text-secondary)',
+                border: `1px solid ${filter === f ? 'var(--color-dark-green)' : 'var(--color-border)'}`,
                 cursor: 'pointer', fontSize: '13px', fontWeight: '600',
                 transition: 'all 0.2s',
               }}
@@ -486,7 +486,7 @@ const TodosDashboard = () => {
       <div style={cardStyle}>
         {/* Header Row */}
         <div style={{
-          padding: '16px 24px', backgroundColor: '#f8fafc',
+          padding: '16px 24px', backgroundColor: 'rgba(0,0,0,0.2)',
           borderBottom: '1px solid var(--color-border)',
           display: 'grid', gridTemplateColumns: '40px 1fr 100px 120px 120px 40px',
           fontWeight: '600', fontSize: '13px', color: 'var(--color-text-secondary)',
@@ -513,10 +513,10 @@ const TodosDashboard = () => {
                 display: 'grid', gridTemplateColumns: '40px 1fr 100px 120px 120px 40px',
                 alignItems: 'center', fontSize: '14px',
                 transition: 'background-color 0.15s',
-                backgroundColor: todo.status?.toLowerCase() === 'done' ? '#fafbfc' : 'transparent',
+                backgroundColor: todo.status?.toLowerCase() === 'done' ? 'rgba(0,0,0,0.1)' : 'transparent',
               }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = todo.status?.toLowerCase() === 'done' ? '#fafbfc' : 'transparent'}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = todo.status?.toLowerCase() === 'done' ? 'rgba(0,0,0,0.1)' : 'transparent'}
               >
                 {/* Status Icon */}
                 <div onClick={() => handleUpdateStatus(todo)} style={{ cursor: 'pointer', display: 'flex' }} title="Toggle Status">
@@ -538,7 +538,8 @@ const TodosDashboard = () => {
                       autoFocus
                       style={{
                         width: '100%', padding: '4px 8px', borderRadius: '6px',
-                        border: '1px solid #3b82f6', fontSize: '14px', fontWeight: '500',
+                        backgroundColor: 'rgba(255,255,255,0.1)', color: 'var(--color-text-primary)',
+                        border: '1px solid var(--color-dark-green)', fontSize: '14px', fontWeight: '500',
                         outline: 'none',
                       }}
                     />
@@ -568,7 +569,7 @@ const TodosDashboard = () => {
                       {priorityStyle.icon} {todo.priority}
                     </span>
                   ) : (
-                    <span style={{ fontSize: '12px', color: '#cbd5e1' }}>—</span>
+                    <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>—</span>
                   )}
                 </div>
 
@@ -593,7 +594,7 @@ const TodosDashboard = () => {
                   {todo.due_date ? (
                     <span style={{
                       color: new Date(todo.due_date) < new Date() && todo.status?.toLowerCase() !== 'done'
-                        ? '#ef4444' : 'var(--color-text-secondary)',
+                        ? '#f87171' : 'var(--color-text-secondary)',
                       fontWeight: new Date(todo.due_date) < new Date() && todo.status?.toLowerCase() !== 'done' ? '600' : '400',
                     }}>
                       {new Date(todo.due_date).toLocaleDateString()}
@@ -604,7 +605,7 @@ const TodosDashboard = () => {
                 {/* External Link */}
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <a href={todo.url} target="_blank" rel="noreferrer"
-                    style={{ color: '#94a3b8', transition: 'color 0.2s' }}
+                    style={{ color: 'var(--color-text-secondary)', transition: 'color 0.2s' }}
                     title="Open in Notion"
                   >
                     <ExternalLink size={16} />

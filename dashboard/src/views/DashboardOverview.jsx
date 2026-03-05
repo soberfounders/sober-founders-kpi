@@ -2526,10 +2526,14 @@ const DashboardOverview = () => {
           <div style={{ height: '300px' }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={dashboard.trendData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="label" tick={{ fill: '#64748b', fontSize: 12 }} />
-                <YAxis tick={{ fill: '#64748b', fontSize: 12 }} />
-                <Tooltip />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                <XAxis dataKey="label" tick={{ fill: 'var(--color-text-secondary)', fontSize: 12 }} />
+                <YAxis tick={{ fill: 'var(--color-text-secondary)', fontSize: 12 }} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: 'var(--color-card)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)' }}
+                  itemStyle={{ color: 'var(--color-text-primary)' }}
+                  labelStyle={{ color: 'var(--color-text-secondary)' }}
+                />
                 <Legend />
                 <Line type="monotone" dataKey="sessions" name="GA Sessions" stroke="#0f766e" strokeWidth={3} dot={false} />
                 <Line type="monotone" dataKey="clicks" name="GSC Clicks" stroke="#2563eb" strokeWidth={2} dot={false} />

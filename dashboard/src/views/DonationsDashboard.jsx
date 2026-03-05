@@ -68,26 +68,27 @@ function SummaryCard({ icon: Icon, label, value, note }) {
             width: '28px',
             height: '28px',
             borderRadius: '8px',
-            backgroundColor: '#ecfeff',
+            backgroundColor: 'rgba(3,218,198,0.14)',
+            border: '1px solid var(--color-border-glow)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#0f766e',
+            color: 'var(--color-dark-green)',
           }}
         >
           <Icon size={16} />
         </div>
         <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>{label}</p>
       </div>
-      <p style={{ marginTop: '8px', fontSize: '24px', fontWeight: 700, color: '#0f172a' }}>{value}</p>
-      <p style={{ marginTop: '6px', fontSize: '12px', color: '#64748b' }}>{note}</p>
+      <p style={{ marginTop: '8px', fontSize: '24px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{value}</p>
+      <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>{note}</p>
     </div>
   );
 }
 
 function EmptyState({ message }) {
   return (
-    <div style={{ ...baseCardStyle, borderStyle: 'dashed', color: '#475569' }}>
+    <div style={{ ...baseCardStyle, borderStyle: 'dashed', color: 'var(--color-text-secondary)' }}>
       <p style={{ fontSize: '14px' }}>{message}</p>
     </div>
   );
@@ -393,14 +394,19 @@ function DonationsDashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '16px' }}>
         <div style={baseCardStyle}>
           <h3 style={{ fontSize: '18px', marginBottom: '6px' }}>12-month donation trend</h3>
-          <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '12px' }}>Total and recurring donation amount by month.</p>
+          <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '12px' }}>Total and recurring donation amount by month.</p>
           <div style={{ width: '100%', height: '320px' }}>
             <ResponsiveContainer>
               <LineChart data={monthlyTrend}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="label" />
-                <YAxis tickFormatter={(v) => `$${Number(v).toLocaleString()}`} />
-                <Tooltip formatter={(value) => formatCurrency(value)} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
+                <XAxis dataKey="label" tick={{ fill: 'var(--color-text-secondary)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={(v) => `$${Number(v).toLocaleString()}`} tick={{ fill: 'var(--color-text-secondary)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <Tooltip
+                  formatter={(value) => formatCurrency(value)}
+                  contentStyle={{ backgroundColor: 'var(--color-card)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)' }}
+                  itemStyle={{ color: 'var(--color-text-primary)' }}
+                  labelStyle={{ color: 'var(--color-text-secondary)' }}
+                />
                 <Legend />
                 <Line type="monotone" dataKey="amount" name="Total amount" stroke="#0f766e" strokeWidth={2.2} dot={false} />
                 <Line type="monotone" dataKey="recurringAmount" name="Recurring amount" stroke="#1d4ed8" strokeWidth={2} dot={false} />
@@ -536,7 +542,7 @@ function DonationsDashboard() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
           <div>
             <h3 style={{ fontSize: '18px', marginBottom: '4px' }}>Donor roster</h3>
-            <p style={{ fontSize: '12px', color: '#64748b' }}>Top donors ranked by total donated — enriched with health status and commitment data ({summary.activeSupporters.toLocaleString()} supporter profiles loaded).</p>
+            <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Top donors ranked by total donated — enriched with health status and commitment data ({summary.activeSupporters.toLocaleString()} supporter profiles loaded).</p>
           </div>
         </div>
         <div style={{ overflowX: 'auto' }}>
@@ -549,9 +555,9 @@ function DonationsDashboard() {
                     style={{
                       textAlign: h === 'Total Donated' || h === 'Commitment' || h === 'Gifts' ? 'right' : 'left',
                       fontSize: '11px',
-                      color: '#64748b',
+                      color: 'var(--color-text-secondary)',
                       padding: '8px 10px',
-                      borderBottom: '2px solid #e2e8f0',
+                      borderBottom: '1px solid var(--color-border)',
                       whiteSpace: 'nowrap',
                       textTransform: 'uppercase',
                       letterSpacing: '0.04em',
@@ -564,22 +570,22 @@ function DonationsDashboard() {
             </thead>
             <tbody>
               {topDonors.map((row, idx) => (
-                <tr key={row.key} style={{ backgroundColor: idx % 2 === 0 ? 'transparent' : '#f8fafc' }}>
-                  <td style={{ fontSize: '12px', padding: '10px', borderBottom: '1px solid #f1f5f9', color: '#94a3b8', fontWeight: 600 }}>{idx + 1}</td>
-                  <td style={{ fontSize: '12px', fontWeight: 700, padding: '10px', borderBottom: '1px solid #f1f5f9' }}>
+                <tr key={row.key} style={{ backgroundColor: idx % 2 === 0 ? 'rgba(255,255,255,0.01)' : 'rgba(0,0,0,0.12)' }}>
+                  <td style={{ fontSize: '12px', padding: '10px', borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)', fontWeight: 600 }}>{idx + 1}</td>
+                  <td style={{ fontSize: '12px', fontWeight: 700, padding: '10px', borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}>
                     <div style={{ display: 'grid', gap: '1px' }}>
                       <span>{row.donor_name}</span>
                       {!!row.donor_company_name && (
-                        <span style={{ fontSize: '11px', fontWeight: 500, color: '#64748b' }}>{row.donor_company_name}</span>
+                        <span style={{ fontSize: '11px', fontWeight: 500, color: 'var(--color-text-secondary)' }}>{row.donor_company_name}</span>
                       )}
                     </div>
                   </td>
-                  <td style={{ fontSize: '11px', padding: '10px', borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
+                  <td style={{ fontSize: '11px', padding: '10px', borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
                     {row.donor_city || row.donor_region
                       ? [row.donor_city, row.donor_region].filter(Boolean).join(', ')
                       : '—'}
                   </td>
-                  <td style={{ fontSize: '12px', padding: '10px', borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{ fontSize: '12px', padding: '10px', borderBottom: '1px solid var(--color-border)' }}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                       <span
                         style={{
@@ -595,7 +601,7 @@ function DonationsDashboard() {
                           color:
                             row.health_status === 'active_recurring' ? '#15803d' :
                               row.health_status === 'lapsed_recurring' ? '#b91c1c' :
-                                row.health_status === 'at_risk' ? '#b45309' : '#475569',
+                                row.health_status === 'at_risk' ? '#b45309' : 'var(--color-text-secondary)',
                         }}
                       >
                         {String(row.health_status).replaceAll('_', ' ')}
@@ -607,12 +613,12 @@ function DonationsDashboard() {
                       )}
                     </div>
                   </td>
-                  <td style={{ fontSize: '12px', fontWeight: 700, textAlign: 'right', padding: '10px', borderBottom: '1px solid #f1f5f9' }}>{formatCurrency(row.totalAmount)}</td>
-                  <td style={{ fontSize: '12px', textAlign: 'right', padding: '10px', borderBottom: '1px solid #f1f5f9', color: row.commitment_amount > 0 ? '#0f766e' : '#94a3b8' }}>
+                  <td style={{ fontSize: '12px', fontWeight: 700, textAlign: 'right', padding: '10px', borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}>{formatCurrency(row.totalAmount)}</td>
+                  <td style={{ fontSize: '12px', textAlign: 'right', padding: '10px', borderBottom: '1px solid var(--color-border)', color: row.commitment_amount > 0 ? 'var(--color-dark-green)' : 'var(--color-text-muted)' }}>
                     {row.commitment_amount > 0 ? formatCurrency(row.commitment_amount) : '—'}
                   </td>
-                  <td style={{ fontSize: '12px', textAlign: 'right', padding: '10px', borderBottom: '1px solid #f1f5f9' }}>{row.gifts}</td>
-                  <td style={{ fontSize: '12px', padding: '10px', borderBottom: '1px solid #f1f5f9' }}>{formatDate(row.lastGiftAt)}</td>
+                  <td style={{ fontSize: '12px', textAlign: 'right', padding: '10px', borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}>{row.gifts}</td>
+                  <td style={{ fontSize: '12px', padding: '10px', borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}>{formatDate(row.lastGiftAt)}</td>
                 </tr>
               ))}
             </tbody>
@@ -622,23 +628,23 @@ function DonationsDashboard() {
 
       <div style={baseCardStyle}>
         <h3 style={{ fontSize: '18px', marginBottom: '6px' }}>Recent donations</h3>
-        <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '12px' }}>Most recent donation transactions loaded from Supabase.</p>
+        <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '12px' }}>Most recent donation transactions loaded from Supabase.</p>
         <div style={{ display: 'grid', gap: '8px', maxHeight: '520px', overflowY: 'auto' }}>
           {recentTransactions.map((row) => (
-            <div key={`${row.source_system}-${row.row_id || row.source_event_id}`} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px' }}>
+            <div key={`${row.source_system}-${row.row_id || row.source_event_id}`} style={{ border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
                 <div>
                   <p style={{ fontSize: '13px', fontWeight: 700 }}>{row.donor_name || 'Unknown donor'}</p>
-                  <p style={{ marginTop: '2px', fontSize: '12px', color: '#64748b' }}>
+                  <p style={{ marginTop: '2px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
                     {row.donor_email || 'No email'} | {formatDate(row.donated_at)}
                   </p>
-                  <p style={{ marginTop: '3px', fontSize: '12px', color: '#475569' }}>
+                  <p style={{ marginTop: '3px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
                     {row.campaign_name || 'Unattributed'} | {row.payment_method || 'Unknown'} | {row.source_system}
                   </p>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <p style={{ fontWeight: 700 }}>{formatCurrency(row.amount)}</p>
-                  <p style={{ marginTop: '2px', fontSize: '11px', color: '#64748b' }}>Recurring: {row.is_recurring ? 'Yes' : 'No'}</p>
+                  <p style={{ marginTop: '2px', fontSize: '11px', color: 'var(--color-text-secondary)' }}>Recurring: {row.is_recurring ? 'Yes' : 'No'}</p>
                 </div>
               </div>
             </div>
