@@ -227,8 +227,8 @@ function isPaidSocialHubspotContact(row) {
     row?.original_traffic_source,
     row?.hs_analytics_source,
     row?.hs_latest_source,
-  ].join(' ').toUpperCase();
-  return text.includes('PAID_SOCIAL');
+  ].join(' ').toLowerCase();
+  return /paid[\s_-]*social/.test(text);
 }
 
 function isPhoenixHubspotContact(row) {
@@ -633,7 +633,6 @@ const DashboardOverview = () => {
       supabase
         .from('raw_hubspot_meeting_activities')
         .select('hubspot_activity_id,activity_type,hs_timestamp,created_at_hubspot,title')
-        .in('activity_type', ['call', 'meeting'])
         .or(`hs_timestamp.gte.${startDate},created_at_hubspot.gte.${startDate}`)
         .order('hs_timestamp', { ascending: true }),
     ]);
@@ -658,9 +657,21 @@ const DashboardOverview = () => {
     if (hubspotActivitiesRes.error) {
       nextWarnings.push(`HubSpot call/meeting activities unavailable for Attendance manager: ${hubspotActivitiesRes.error.message}`);
     }
+    if (!hubspotContactsRes.error && (hubspotContactsRes.data || []).length === 0) {
+      nextWarnings.push('HubSpot contacts query returned 0 rows for the configured lookback window. Verify Vercel Supabase environment variables and RLS policies.');
+    }
+    if (!fbAdsRes.error && (fbAdsRes.data || []).length === 0) {
+      nextWarnings.push('Meta Ads query returned 0 rows for the configured lookback window. Verify Supabase project/env alignment for production.');
+    }
 
     let assocRows = [];
-    const activityRows = hubspotActivitiesRes.data || [];
+    const activityRows = (hubspotActivitiesRes.data || []).filter((row) => {
+      const type = String(row?.activity_type || '').toLowerCase();
+      return type === 'call' || type === 'meeting';
+    });
+    if (!hubspotActivitiesRes.error && activityRows.length === 0) {
+      nextWarnings.push('HubSpot call/meeting query returned 0 rows for the configured lookback window. Verify activity_type values, RLS, and production project configuration.');
+    }
     if (!hubspotActivitiesRes.error && activityRows.length > 0) {
       const recentActivityIds = Array.from(new Set(
         activityRows.map((row) => Number(row?.hubspot_activity_id)).filter((id) => Number.isFinite(id))
@@ -671,14 +682,18 @@ const DashboardOverview = () => {
         const assocRes = await supabase
           .from('hubspot_activity_contact_associations')
           .select('hubspot_activity_id,activity_type,hubspot_contact_id,contact_email,contact_firstname,contact_lastname')
-          .in('hubspot_activity_id', chunk)
-          .in('activity_type', ['call', 'meeting']);
+          .in('hubspot_activity_id', chunk);
         if (assocRes.error) {
           nextWarnings.push(`HubSpot call/meeting associations unavailable for Attendance manager: ${assocRes.error.message}`);
           assocChunks.length = 0;
           break;
         }
-        assocChunks.push(...(assocRes.data || []));
+        assocChunks.push(
+          ...(assocRes.data || []).filter((assoc) => {
+            const type = String(assoc?.activity_type || '').toLowerCase();
+            return type === 'call' || type === 'meeting';
+          })
+        );
       }
       assocRows = assocChunks;
     }
