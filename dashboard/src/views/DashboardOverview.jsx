@@ -526,6 +526,10 @@ function managerFallbackSummaryBullets(manager) {
     .slice(0, 5);
 }
 
+function managerAnalysisContextSignature(manager) {
+  return JSON.stringify(manager?.analysisContext || {});
+}
+
 function actionCompletionMessage(action, payload) {
   const result = payload || {};
   const isNotionTask = action?.kind === 'create_notion_task';
@@ -2009,6 +2013,7 @@ const DashboardOverview = () => {
   async function requestModuleAnalysis(manager, forceRefresh = false) {
     if (!manager?.key) return;
     const key = manager.key;
+    const contextSignature = managerAnalysisContextSignature(manager);
     const fallbackSummary = managerFallbackSummaryBullets(manager);
     const fallbackHumanActions = (manager.humanActions || []).slice(0, 3);
     const actionCatalog = (manager.autonomousActions || [])
@@ -2024,6 +2029,7 @@ const DashboardOverview = () => {
         ...(prev[key] || {}),
         status: 'loading',
         error: '',
+        contextSignature,
         requestedAt: Date.now(),
       },
     }));
@@ -2039,6 +2045,7 @@ const DashboardOverview = () => {
           fromCache: false,
           aiModel: 'local-fallback',
           isMock: true,
+          contextSignature,
           data: {
             summary: fallbackSummary,
             autonomous_actions: actionCatalog.slice(0, 3),
@@ -2091,6 +2098,7 @@ const DashboardOverview = () => {
           fromCache: !!data?.from_cache,
           aiModel: String(data?.ai_model || ''),
           isMock: !!data?.is_mock,
+          contextSignature,
           data: {
             summary,
             autonomous_actions: autonomousActions,
@@ -2105,20 +2113,24 @@ const DashboardOverview = () => {
           ...(prev[key] || {}),
           status: 'error',
           error: err?.message || 'AI module analysis failed.',
+          contextSignature,
         },
       }));
     }
   }
 
   useEffect(() => {
+    if (loading) return;
     (aiManagers?.managers || []).forEach((manager) => {
       const state = moduleAnalysisState[manager.key];
-      if (!state) {
+      const contextSignature = managerAnalysisContextSignature(manager);
+      const hasMatchingContext = state?.contextSignature === contextSignature;
+      if (!state || !hasMatchingContext) {
         requestModuleAnalysis(manager, false);
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiManagers?.managers?.length]);
+  }, [loading, aiManagers]);
 
   async function runAutonomousAction(action) {
     if (!action?.id) return;
