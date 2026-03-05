@@ -1083,29 +1083,6 @@ function computeAnalytics(
     const start = safeDate(activity.hs_timestamp || activity.created_at_hubspot);
     if (!start) return null;
 
-<<<<<<< HEAD
-    const timing = etGroupTimingFromDate(start);
-    const titleType =
-      title.includes('tactic tuesday') ? 'Tuesday' :
-        (title.includes('mastermind on zoom') || title.includes('all are welcome')) ? 'Thursday' :
-          (title.includes("entrepreneur's big book") || title.includes('big book')) ? 'Thursday' :
-            (title.includes('sober founders mastermind') && !title.includes('intro')) ? 'Thursday' :
-              null;
-
-    // Primary rule: near expected ET session windows.
-    if (timing?.isNearScheduled && timing?.dayType) return timing.dayType;
-
-    // Fallback: when timing signal is weak, keep title-matched sessions only if attendee count is group-sized.
-    if (titleType && attendeeCount >= MIN_GROUP_ATTENDEES) return titleType;
-
-    // Secondary fallback: Tue/Thu ET weekday with meaningful attendance.
-    if (timing?.dayType && attendeeCount >= MIN_GROUP_ATTENDEES) {
-      return timing.dayType;
-    }
-
-    // Final fallback for explicit titles.
-    if (titleType) return titleType;
-=======
     const activityType = String(activity?.activity_type || '').toLowerCase();
     const schedule = etScheduleInfo(start);
     const titleSignal = inferGroupTypeFromTitle(activity?.title || '', schedule?.dayType || null);
@@ -1129,7 +1106,6 @@ function computeAnalytics(
       || (isCallActivity && inFallbackWindow)
     );
     if (!includeCandidate) return null;
->>>>>>> fa7a036 (feat: AI Trend Detection Engine - kpi_goals table, vw_kpi_trend view with z-score/consecutive decline/goal tracking, TrendIntelligencePanel component, enhanced ai-briefing prompts with 8-week statistical context)
 
     const weekKey = etWeekStartKey(start);
     if (!weekKey) return null;
@@ -1205,13 +1181,9 @@ function computeAnalytics(
 
     const start = safeDate(activity.hs_timestamp || activity.created_at_hubspot);
     if (!start) return;
-<<<<<<< HEAD
-    const timing = etGroupTimingFromDate(start);
-=======
     const candidateSignals = getSessionCandidateSignals(activity, assocs.length);
     if (!candidateSignals) return;
     const type = candidateSignals.type;
->>>>>>> fa7a036 (feat: AI Trend Detection Engine - kpi_goals table, vw_kpi_trend view with z-score/consecutive decline/goal tracking, TrendIntelligencePanel component, enhanced ai-briefing prompts with 8-week statistical context)
 
     const dateLabel = start.toISOString().slice(0, 10);
     const dateFormatted = formatDateMMDDYY(start);
@@ -1278,10 +1250,6 @@ function computeAnalytics(
       sourceCount: assocs.length,
       mismatch: false,
       dataSource: 'hubspot',
-<<<<<<< HEAD
-      minutesFromExpected: Number(timing?.minutesFromExpected ?? Number.POSITIVE_INFINITY),
-      isNearScheduled: !!timing?.isNearScheduled,
-=======
       weekKey: candidateSignals.weekKey,
       inPrimaryWindow: candidateSignals.inPrimaryWindow,
       inFallbackWindow: candidateSignals.inFallbackWindow,
@@ -1290,56 +1258,11 @@ function computeAnalytics(
       likelyOneToOneTitle: candidateSignals.likelyOneToOneTitle,
       minutesFromExpected: candidateSignals.minutesFromExpected,
       isCallActivity: candidateSignals.isCallActivity,
->>>>>>> fa7a036 (feat: AI Trend Detection Engine - kpi_goals table, vw_kpi_trend view with z-score/consecutive decline/goal tracking, TrendIntelligencePanel component, enhanced ai-briefing prompts with 8-week statistical context)
     });
   });
 
   sessions = sessions.sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
 
-<<<<<<< HEAD
-  // Keep one canonical Tue/Thu session per date:
-  // prefer expected ET session time, otherwise the session with most attendees.
-  const sessionsByGroupDate = new Map();
-  const isNearScheduled = (session) => Number.isFinite(Number(session?.minutesFromExpected))
-    && Number(session.minutesFromExpected) <= GROUP_CALL_TIME_TOLERANCE_MINUTES;
-  const compareSessionCandidates = (candidate, existing) => {
-    const candidateNear = isNearScheduled(candidate);
-    const existingNear = isNearScheduled(existing);
-    if (candidateNear !== existingNear) return candidateNear ? 1 : -1;
-
-    if (candidateNear && existingNear) {
-      const candidateDiff = Number(candidate?.minutesFromExpected || Number.POSITIVE_INFINITY);
-      const existingDiff = Number(existing?.minutesFromExpected || Number.POSITIVE_INFINITY);
-      if (candidateDiff !== existingDiff) return candidateDiff < existingDiff ? 1 : -1;
-    }
-
-    const candidateCount = Number(candidate?.derivedCount || 0);
-    const existingCount = Number(existing?.derivedCount || 0);
-    if (candidateCount !== existingCount) return candidateCount > existingCount ? 1 : -1;
-
-    const candidateSourceCount = Number(candidate?.sourceCount || 0);
-    const existingSourceCount = Number(existing?.sourceCount || 0);
-    if (candidateSourceCount !== existingSourceCount) return candidateSourceCount > existingSourceCount ? 1 : -1;
-
-    return 0;
-  };
-
-  sessions.forEach((session) => {
-    const key = `${session.type}|${session.dateLabel}`;
-    if (EXPECTED_ZERO_GROUP_SESSION_KEYS.has(key)) return;
-    if (Number(session?.derivedCount || 0) < MIN_GROUP_ATTENDEES) return;
-    const existing = sessionsByGroupDate.get(key);
-    if (!existing || compareSessionCandidates(session, existing) > 0) {
-      sessionsByGroupDate.set(key, session);
-    }
-  });
-
-  sessions = Array.from(sessionsByGroupDate.values())
-    .map((session) => ({
-      ...session,
-      dataSource: 'hubspot_canonical',
-    }))
-=======
   const hubspotSessionsByGroupWeek = new Map();
   sessions.forEach((session) => {
     const key = `${session.type}|${session.weekKey || session.dateLabel}`;
@@ -1458,7 +1381,6 @@ function computeAnalytics(
   }
 
   sessions = Array.from(sessionsByGroupWeek.values())
->>>>>>> fa7a036 (feat: AI Trend Detection Engine - kpi_goals table, vw_kpi_trend view with z-score/consecutive decline/goal tracking, TrendIntelligencePanel component, enhanced ai-briefing prompts with 8-week statistical context)
     .sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
 
   sessions = sessions.filter((session) => Number(session?.derivedCount || 0) >= MIN_GROUP_ATTENDEES);
