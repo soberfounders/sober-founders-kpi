@@ -11,6 +11,13 @@
  *   Group 2 – Phoenix Forum Leads (funnel_key === 'phoenix')
  */
 
+import {
+    classifyAdFunnel as classifyAdFunnelCanonical,
+    isPaidSocialHubspotContact as isPaidSocialHubspotContactCanonical,
+    isPhoenixHubspotContact as isPhoenixHubspotContactCanonical,
+    leadTierFromRevenue as leadTierFromRevenueCanonical,
+} from './leadModel';
+
 export const TUESDAY_MEETING_ID = '87199667045';
 export const THURSDAY_MEETING_ID = '84242212480';
 
@@ -211,13 +218,7 @@ export function buildDateRangeWindows(rangeType, customStart, customEnd, todayKe
  * @returns {'bad'|'ok'|'qualified'|'great'|'unknown'}
  */
 export function leadTierFromRevenue(revenueValue) {
-    if (revenueValue === null || revenueValue === undefined || revenueValue === '') return 'unknown';
-    const n = Number(revenueValue);
-    if (!Number.isFinite(n)) return 'unknown';
-    if (n >= 1_000_000) return 'great';
-    if (n >= 250_000 && n < 1_000_000) return 'qualified';
-    if (n >= 100_000 && n < 250_000) return 'ok';
-    return 'bad';
+    return leadTierFromRevenueCanonical(revenueValue);
 }
 
 // ---------------------------------------------------------------------------
@@ -369,23 +370,11 @@ function resolveHubspotSobrietyDate(contact) {
 }
 
 function isPaidSocialHubspotContact(row) {
-    const sourceBlob = [
-        row?.hs_analytics_source,
-        row?.hs_latest_source,
-        row?.original_traffic_source,
-    ].join(' ').toUpperCase();
-    return sourceBlob.includes('PAID_SOCIAL');
+    return isPaidSocialHubspotContactCanonical(row);
 }
 
 function isPhoenixHubspotContact(row) {
-    const blob = [
-        row?.hs_analytics_source_data_2,
-        row?.hs_latest_source_data_2,
-        row?.campaign,
-        row?.campaign_source,
-        row?.membership_s,
-    ].join(' ').toLowerCase();
-    return blob.includes('phoenix');
+    return isPhoenixHubspotContactCanonical(row);
 }
 
 /**
@@ -822,10 +811,8 @@ function sumAds(adsRows, startKey, endKey, funnelFilter) {
         const dateKey = parseDateKey(row?.date_day);
         if (!dateKey || !dateInRange(dateKey, startKey, endKey)) continue;
 
-        // funnel filtering: 'phoenix' => funnel_key==='phoenix', 'free' => anything else
-        const funnel = String(row?.funnel_key || row?.campaign_name || '').toLowerCase();
-        const isPhoenix = funnel.includes('phoenix') ||
-            String(row?.campaign_name || '').toLowerCase().includes('phoenix');
+        // funnel filtering: 'phoenix' => phoenix bucket, 'free' => non-phoenix buckets
+        const isPhoenix = classifyAdFunnelCanonical(row, { defaultFunnel: 'free' }) === 'phoenix';
         if (funnelFilter === 'phoenix' && !isPhoenix) continue;
         if (funnelFilter === 'free' && isPhoenix) continue;
 

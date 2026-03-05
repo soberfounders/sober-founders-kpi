@@ -1,14 +1,19 @@
 # Lead Intelligence Framework
 
-This dashboard implementation standardizes lead-gen reporting around a single funnel:
+This dashboard implementation standardizes lead-gen reporting around **separated funnels**:
+
+- **Free funnel**
+- **Phoenix funnel**
+
+Core pipeline:
 
 1. Impressions (Meta Ads)
 2. Clicks (Meta Ads)
 3. Leads Captured (HubSpot PAID_SOCIAL)
 4. Luma Registrations
 5. Net New Show-Ups (Zoom Tue/Thu only)
-6. Qualified Leads (`$250K-$1M` revenue)
-7. Great Leads (`>$1M` revenue)
+6. Qualified Leads
+7. Great Leads
 
 ## Source Mapping
 
@@ -17,6 +22,24 @@ This dashboard implementation standardizes lead-gen reporting around a single fu
 - `kpi_metrics` (`Zoom Meeting Attendees`) provides attendee names by meeting for net-new detection.
 - `attendee_aliases` (if available) improves Zoom name normalization during sync.
 - `manage_attendee_aliases` (edge function) is the write/read path for alias merges when browser RLS blocks direct table writes.
+
+## Canonical Logic Location (Do Not Duplicate)
+
+Business definitions should be edited in:
+
+- `dashboard/src/lib/leadModel.js`
+
+This module is the source of truth for:
+
+- funnel normalization/classification (`free`, `phoenix`, `donation`, `unknown`)
+- paid-social and phoenix HubSpot classification
+- lead revenue tier thresholds
+- revenue field precedence (official first, fallback second)
+- sobriety date parsing and year-gating helpers
+
+Related maintenance instructions:
+
+- `docs/data-platform-maintenance-playbook.md`
 
 ## Metric Definitions
 
@@ -34,6 +57,21 @@ Conversion rates:
 - `Registration -> Show-Up = Show-Ups / Registrations`
 - `Show-Up -> Qualified = Qualified Leads / Show-Ups`
 - `Show-Up -> Great = Great Leads / Show-Ups`
+
+## Lead Quality Definitions (Canonical)
+
+Revenue tiers:
+
+- `bad`: `< $100K`
+- `ok`: `$100K - $249,999`
+- `qualified`: `$250K - $999,999`
+- `great`: `>= $1M`
+
+For Dashboard Overview quality metrics, qualified/great also require:
+
+- sobriety duration `>= 1 year` at the lead date.
+
+This is intentional so CPQL/CPGL reflect high-fit, sobriety-qualified leads.
 
 ## Net-New Show-Up Rules
 
@@ -114,9 +152,14 @@ If `raw_luma_registrations` is missing/unavailable, the dashboard falls back to:
   - `supabase functions deploy manage_attendee_aliases`
 - Run `deno run -A scripts/check_lead_analytics_readiness.ts` after schema changes or environment updates.
 
-## Recommended Next Schema Improvements
+## Schema + Performance Maintenance
 
-1. Add direct Luma registration table (`raw_luma_registrations`) with `email`, `registered_at`, `event_id`.
-2. Persist deterministic ad identifiers in HubSpot (`ad_id`, `campaign_id`, `adset_id`) at lead capture time.
-3. Store canonical attendee email in Zoom sync metadata for stronger lead-to-show-up matching.
-4. Add a materialized daily funnel fact table for faster historical analysis at scale.
+Latest targeted index migration:
+
+- `supabase/migrations/20260304052707_optimize_analytics_query_indexes.sql`
+
+This migration optimizes known hot query paths on KPI, ads, HubSpot activities, and AI briefing history tables.
+
+For future schema/perf changes, follow:
+
+- `docs/data-platform-maintenance-playbook.md`

@@ -225,6 +225,16 @@ function buildAiRequestPayload(data, { metaDiagnostics, metrics, weeklySignoff, 
       great_member_definition: data?.methodology?.great_member_definition || null,
       ideal_member_definition: data?.methodology?.ideal_member_definition || null,
     },
+    meta_spend_scope: data?.meta_spend_scope ? {
+      total: data.meta_spend_scope.total || null,
+      lead_gen: data.meta_spend_scope.lead_gen || null,
+      free: data.meta_spend_scope.free || null,
+      phoenix: data.meta_spend_scope.phoenix || null,
+      other: data.meta_spend_scope.other || null,
+      by_account: Array.isArray(data.meta_spend_scope.by_account)
+        ? data.meta_spend_scope.by_account.slice(0, 10)
+        : [],
+    } : null,
     weekly_signoff: weeklySignoff || null,
     data_quality: {
       counts: data?.data_quality?.counts || {},
@@ -559,6 +569,7 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
   const metaAiAnalysis = metaDiagnostics?.ai_analysis || null;
   const cplTrend = metaDiagnostics?.cpl_trend_last_12_weeks || [];
   const freeEventsSummary = data.free_events_summary || null;
+  const metaSpendScope = data.meta_spend_scope || null;
   const weeklySignoff = data.weekly_signoff || null;
   const numberAudit = data.number_audit || { counts: {}, checks: [] };
   const diagnosticCards = [...metaCards, ...campaignCards];
@@ -1710,6 +1721,28 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
         </div>
       </div>
 
+      {metaSpendScope && (
+        <div style={{ ...subCard, marginBottom: '14px', backgroundColor: '#fff', border: '1px solid #dbeafe' }}>
+          <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#1e3a8a' }}>
+            Meta Spend Scope (all ad accounts, separated by funnel)
+          </p>
+          <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#334155', lineHeight: 1.4 }}>
+            Total Meta spend: <strong>{currency(metaSpendScope?.total?.spend)}</strong> ({int(metaSpendScope?.total?.rows)} rows) ·
+            Lead-gen (Free + Phoenix): <strong>{currency(metaSpendScope?.lead_gen?.spend)}</strong> ·
+            Free: <strong>{currency(metaSpendScope?.free?.spend)}</strong> ·
+            Phoenix: <strong>{currency(metaSpendScope?.phoenix?.spend)}</strong> ·
+            Other: <strong>{currency(metaSpendScope?.other?.spend)}</strong>
+          </p>
+          {Array.isArray(metaSpendScope?.by_account) && metaSpendScope.by_account.length > 0 && (
+            <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#475569', lineHeight: 1.4 }}>
+              Accounts: {metaSpendScope.by_account
+                .map((a) => `${a.ad_account_id}: ${currency(a.spend)} (free ${currency(a.free_spend)}, phoenix ${currency(a.phoenix_spend)})`)
+                .join(' · ')}
+            </p>
+          )}
+        </div>
+      )}
+
       {freeEventsSummary && (
         <div style={{ ...subCard, marginBottom: '14px', backgroundColor: '#fff' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', flexWrap: 'wrap', marginBottom: '8px' }}>
@@ -1727,7 +1760,7 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
           </div>
           <div style={{ marginBottom: '8px', border: '1px solid #dbeafe', backgroundColor: '#f8fbff', color: '#1e3a8a', borderRadius: '10px', padding: '8px 10px' }}>
             <p style={{ margin: 0, fontSize: '11px', lineHeight: 1.35 }}>
-              These are cohort metrics for paid Meta free-funnel HubSpot contacts (non-Phoenix). "Net New Show Ups" here means first group show-ups in the cohort window, not the attendance bar chart's all-source new attendees.
+              These are cohort metrics for paid Meta free-funnel HubSpot contacts (non-Phoenix). Phoenix spend is tracked separately above and excluded from these cohort CPA cards. "Net New Show Ups" here means first group show-ups in the cohort window, not the attendance bar chart's all-source new attendees.
             </p>
             {freeEventsWindowCurrentParsed?.inclusiveEndKey && (
               <p style={{ margin: '4px 0 0', fontSize: '11px', lineHeight: 1.35 }}>

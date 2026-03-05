@@ -6,6 +6,15 @@ import {
   HUBSPOT_CONTACT_LOOKBACK_DAYS,
   USE_DUMMY_DONATIONS,
 } from '../lib/env';
+import {
+  classifyAdFunnel as classifyAdFunnelModel,
+  isPaidSocialHubspotContact as isPaidSocialHubspotContactModel,
+  isPhoenixHubspotContact as isPhoenixHubspotContactModel,
+  resolveHubspotOfficialRevenue,
+  resolveHubspotRevenue,
+  parseHubspotSobrietyDateUtc,
+  isSoberAtLeastYearsOnDate as isSoberAtLeastYearsOnDateModel,
+} from '../lib/leadModel';
 import SendToNotionModal from '../components/SendToNotionModal';
 import {
   ResponsiveContainer,
@@ -218,27 +227,12 @@ function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
 }
 
-function isPhoenixText(value) {
-  return String(value || '').toLowerCase().includes('phoenix');
-}
-
 function isPaidSocialHubspotContact(row) {
-  const text = [
-    row?.original_traffic_source,
-    row?.hs_analytics_source,
-    row?.hs_latest_source,
-  ].join(' ').toUpperCase();
-  return text.includes('PAID_SOCIAL');
+  return isPaidSocialHubspotContactModel(row);
 }
 
 function isPhoenixHubspotContact(row) {
-  const text = [
-    row?.campaign,
-    row?.campaign_source,
-    row?.membership_s,
-    row?.hs_analytics_source_data_2,
-  ].join(' ').toLowerCase();
-  return text.includes('phoenix');
+  return isPhoenixHubspotContactModel(row);
 }
 
 function classifyGroupCall(activity, attendeeCount) {
@@ -335,48 +329,19 @@ function buildNotionTaskProperties(taskName) {
 }
 
 function hubspotOfficialRevenue(row) {
-  const candidates = [
-    row?.annual_revenue_in_dollars__official_,
-    // Legacy alias fallback if older cached rows included this name.
-    row?.annual_revenue_in_usd_official,
-  ];
-  for (const value of candidates) {
-    const n = Number(value);
-    if (Number.isFinite(n)) return n;
-  }
-  return null;
+  return resolveHubspotOfficialRevenue(row);
 }
 
 function hubspotPreferredRevenue(row) {
-  const official = hubspotOfficialRevenue(row);
-  if (Number.isFinite(official)) return official;
-  const fallback = Number(row?.annual_revenue_in_dollars);
-  if (Number.isFinite(fallback)) return fallback;
-  return null;
+  return resolveHubspotRevenue(row);
 }
 
 function hubspotSobrietyDateUtc(row) {
-  const raw = row?.sobriety_date ?? row?.sobriety_date__official_ ?? null;
-  const d = parseMaybeDate(raw);
-  if (!d) return null;
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-}
-
-function addUtcYears(date, years) {
-  if (!date) return null;
-  const out = new Date(Date.UTC(date.getUTCFullYear() + years, date.getUTCMonth(), date.getUTCDate()));
-  if (out.getUTCMonth() !== date.getUTCMonth()) {
-    return new Date(Date.UTC(date.getUTCFullYear() + years, date.getUTCMonth() + 1, 0));
-  }
-  return out;
+  return parseHubspotSobrietyDateUtc(row);
 }
 
 function isSoberOverOneYearAtLead(row, leadDate) {
-  const leadDay = toUtcDayStart(leadDate);
-  const sobriety = hubspotSobrietyDateUtc(row);
-  if (!leadDay || !sobriety) return false;
-  const anniversary = addUtcYears(sobriety, 1);
-  return !!anniversary && anniversary.getTime() <= leadDay.getTime();
+  return isSoberAtLeastYearsOnDateModel(row, leadDate, 1);
 }
 
 function leadQualityFlags(row) {
@@ -851,6 +816,8 @@ const DashboardOverview = () => {
 
   const aiManagers = useMemo(() => {
     const dateCandidates = [];
+    const todayDate = toUtcDayStart(new Date());
+    const todayTs = todayDate?.getTime?.() ?? Date.now();
     if (dashboard.latestDate) {
       const d = toUtcDayStart(dashboard.latestDate);
       if (d) dateCandidates.push(d);
@@ -869,9 +836,13 @@ const DashboardOverview = () => {
       if (d) dateCandidates.push(d);
     });
 
-    const referenceDate = dateCandidates.length
-      ? new Date(Math.max(...dateCandidates.map((d) => d.getTime())))
-      : toUtcDayStart(new Date());
+    const maxCandidateTs = dateCandidates.length
+      ? Math.max(...dateCandidates.map((d) => d.getTime()))
+      : null;
+    // Scheduled future activities can exist in HubSpot; cap reference windows at today.
+    const referenceDate = Number.isFinite(maxCandidateTs)
+      ? new Date(Math.min(maxCandidateTs, todayTs))
+      : (todayDate || new Date());
     const lastWeekEnd = referenceDate;
     const lastWeekStart = shiftUtcDays(lastWeekEnd, -6);
     const prevWeekEnd = shiftUtcDays(lastWeekStart, -1);
@@ -914,11 +885,15 @@ const DashboardOverview = () => {
     const parsedAds = fbAdsRows
       .map((row) => {
         const date = toUtcDayStart(row?.date_day);
-        const funnelKey = String(row?.funnel_key || '').trim().toLowerCase();
-        const text = `${row?.funnel_key || ''} ${row?.campaign_name || ''}`.toLowerCase();
-        const isPhoenix = funnelKey === 'phoenix' || (funnelKey === '' && (isPhoenixText(text) || text.includes('forum')));
-        const isDonation = funnelKey === 'donation' || (funnelKey === '' && text.includes('donat'));
-        const isFreeGroup = funnelKey === 'free' || (!funnelKey && !isPhoenix && !isDonation);
+        const explicitFunnelKey = String(row?.funnel_key || '').trim().toLowerCase();
+        const funnelKey = classifyAdFunnelModel(row, {
+          // Preserve historical behavior:
+          // empty funnel_key without phoenix/donation hints should be counted as free.
+          defaultFunnel: explicitFunnelKey ? 'unknown' : 'free',
+        });
+        const isPhoenix = funnelKey === 'phoenix';
+        const isDonation = funnelKey === 'donation';
+        const isFreeGroup = funnelKey === 'free';
         return {
           ...row,
           _date: date,
