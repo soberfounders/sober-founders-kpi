@@ -314,6 +314,58 @@ function MetricCell({ label, value, changePct, onClick, invertColor, formatFn = 
   );
 }
 
+function ExecutiveKpiCard({ label, value, note, changePct, format = 'count', invertColor = false, color = '#0f766e' }) {
+  const formatter = format === 'currency' ? fmt.currency : format === 'percent' ? fmt.pct : fmt.int;
+  return (
+    <div
+      style={{
+        background: 'linear-gradient(180deg,#ffffff 0%,#f8fafc 100%)',
+        border: '1px solid #e2e8f0',
+        borderRadius: '16px',
+        padding: '16px',
+        boxShadow: '0 8px 24px rgba(15,23,42,0.06)',
+      }}
+    >
+      <p style={{ margin: 0, fontSize: '11px', letterSpacing: '0.06em', textTransform: 'uppercase', color: '#475569', fontWeight: 700 }}>
+        {label}
+      </p>
+      <p style={{ margin: '10px 0 0', fontSize: '30px', lineHeight: 1.1, color: '#0f172a', fontWeight: 800 }}>
+        {formatter(value)}
+        {(changePct !== null && changePct !== undefined) && <ChangeBadge changePct={changePct} invertColor={invertColor} />}
+      </p>
+      <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span style={{ width: '10px', height: '10px', borderRadius: '999px', backgroundColor: color }} />
+        <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>{note}</p>
+      </div>
+    </div>
+  );
+}
+
+function ProgressGapBar({ label, current, target, format = 'count', color = '#0f766e' }) {
+  const formatter = format === 'currency' ? fmt.currency : format === 'percent' ? fmt.pct : fmt.int;
+  const safeCurrent = Number.isFinite(Number(current)) ? Number(current) : 0;
+  const safeTarget = Number.isFinite(Number(target)) ? Number(target) : null;
+  const pct = safeTarget && safeTarget > 0 ? Math.min(100, (safeCurrent / safeTarget) * 100) : null;
+  const gap = safeTarget !== null ? Math.max(0, safeTarget - safeCurrent) : null;
+
+  return (
+    <div style={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+        <p style={{ margin: 0, fontSize: '12px', color: '#334155', fontWeight: 700 }}>{label}</p>
+        <p style={{ margin: 0, fontSize: '12px', color: '#475569' }}>
+          Current {formatter(safeCurrent)}{safeTarget !== null ? ` / Target ${formatter(safeTarget)}` : ''}
+        </p>
+      </div>
+      <div style={{ marginTop: '8px', height: '10px', borderRadius: '999px', backgroundColor: '#e2e8f0', overflow: 'hidden' }}>
+        <div style={{ width: `${pct || 0}%`, height: '100%', backgroundColor: color }} />
+      </div>
+      <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#64748b' }}>
+        {gap === null ? 'No prior efficiency baseline in comparison window.' : gap > 0 ? `Gap: ${formatter(gap)}` : 'On or above target.'}
+      </p>
+    </div>
+  );
+}
+
 // ─── Category bar ─────────────────────────────────────────────────────────────
 const TIER_COLORS = { great: '#16a34a', qualified: '#2563eb', ok: '#d97706', bad: '#dc2626', unknown: '#94a3b8' };
 const TIER_LABELS = { great: 'Great ≥$1M', qualified: 'Qualified $250k–$999,999', ok: 'OK $100k–$249k', bad: 'Bad <$100k', unknown: 'Unknown' };
@@ -3414,6 +3466,78 @@ export default function LeadsDashboard() {
     return computeChangePct(curRow.count || 0, prevRow.count || 0).pct;
   };
 
+  const overviewCurrentCombined = groupedData?.current?.free?.combined || null;
+  const overviewPreviousCombined = groupedData?.previous?.free?.combined || null;
+  const overviewCurrentCategorization = overviewCurrentCombined?.categorization || {};
+  const overviewPreviousCategorization = overviewPreviousCombined?.categorization || {};
+  const overviewCurrentSpend = Number(overviewCurrentCombined?.spend || 0);
+
+  const getChangePct = (currentValue, previousValue) => {
+    if (previousValue === null || previousValue === undefined) return null;
+    return computeChangePct(Number(currentValue || 0), Number(previousValue || 0)).pct;
+  };
+
+  const overviewKpiCards = [
+    {
+      key: 'ad_spend',
+      label: 'Ad Spend',
+      value: overviewCurrentSpend,
+      previous: Number(overviewPreviousCombined?.spend || 0),
+      format: 'currency',
+      invertColor: true,
+      note: 'Group 1 Free Meta spend for selected window',
+      color: '#dc2626',
+    },
+    {
+      key: 'total_leads',
+      label: 'Total Leads',
+      value: Number(overviewCurrentCombined?.metaLeads || 0),
+      previous: Number(overviewPreviousCombined?.metaLeads || 0),
+      format: 'count',
+      note: 'Meta leads matched to selected window',
+      color: '#0f766e',
+    },
+    {
+      key: 'qualified_leads',
+      label: 'Qualified Leads ($250K-$999K)',
+      value: Number(overviewCurrentCategorization?.qualified || 0),
+      previous: Number(overviewPreviousCategorization?.qualified || 0),
+      format: 'count',
+      note: 'Revenue tier from HubSpot contact data',
+      color: '#2563eb',
+    },
+    {
+      key: 'great_leads',
+      label: 'Great Leads ($1M+)',
+      value: Number(overviewCurrentCategorization?.great || 0),
+      previous: Number(overviewPreviousCategorization?.great || 0),
+      format: 'count',
+      note: 'Top revenue tier in selected range',
+      color: '#16a34a',
+    },
+  ];
+
+  const qualityMixRows = [
+    { key: 'great', label: 'Great ($1M+)', value: Number(overviewCurrentCategorization?.great || 0), color: '#16a34a' },
+    { key: 'qualified', label: 'Qualified ($250K-$999K)', value: Number(overviewCurrentCategorization?.qualified || 0), color: '#2563eb' },
+    { key: 'ok', label: 'OK ($100K-$249K)', value: Number(overviewCurrentCategorization?.ok || 0), color: '#d97706' },
+    { key: 'bad', label: 'Bad (<$100K)', value: Number(overviewCurrentCategorization?.bad || 0), color: '#dc2626' },
+    { key: 'unknown', label: 'Unknown', value: Number(overviewCurrentCategorization?.unknown || 0), color: '#94a3b8' },
+  ];
+  const qualityMixTotal = qualityMixRows.reduce((sum, row) => sum + row.value, 0);
+
+  const costCardLookup = new Map((leadsDecisionModule?.costCards || []).map((row) => [row.key, row]));
+  const previousCpql = Number(costCardLookup.get('costPerGoodLeadQualified')?.previous);
+  const previousCpgl = Number(costCardLookup.get('costPerGreatLead1m')?.previous);
+  const qualifiedTargetAtPriorEfficiency = Number.isFinite(previousCpql) && previousCpql > 0 ? overviewCurrentSpend / previousCpql : null;
+  const greatTargetAtPriorEfficiency = Number.isFinite(previousCpgl) && previousCpgl > 0 ? overviewCurrentSpend / previousCpgl : null;
+
+  const executiveRecommendations = [
+    ...(paidDecisionInsights?.moves || []),
+    ...(paidDecisionInsights?.warnings || []),
+    ...(leadsDecisionModule?.similarityBullets || []),
+  ].filter(Boolean).slice(0, 8);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Errors */}
@@ -3425,6 +3549,187 @@ export default function LeadsDashboard() {
       )}
 
       {/* ── Date Range Filter ── */}
+      <div style={{ ...card, background: 'linear-gradient(140deg,#f8fafc 0%,#eef2ff 55%,#ecfeff 100%)', border: '1px solid #dbeafe' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '14px', flexWrap: 'wrap' }}>
+          <div>
+            <p style={{ margin: 0, fontSize: '11px', color: '#475569', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 800 }}>
+              Leads Command Center
+            </p>
+            <h2 style={{ margin: '8px 0 0', fontSize: '26px', lineHeight: 1.2, color: '#0f172a' }}>
+              Recent performance and priority actions
+            </h2>
+            <p style={{ margin: '10px 0 0', fontSize: '13px', color: '#475569', maxWidth: '820px', lineHeight: 1.55 }}>
+              Live view from Meta Ads, HubSpot, Lu.ma, and attendance sources already wired in this module. As-of date updates automatically from the latest loaded source row.
+            </p>
+          </div>
+          <div style={{ ...subCard, minWidth: '260px', border: '1px solid #cbd5e1', backgroundColor: '#fff' }}>
+            <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>As of</p>
+            <p style={{ margin: '4px 0 0', fontSize: '20px', fontWeight: 800, color: '#0f172a' }}>
+              {formatDateKeyShort(liveFreshnessModule.newestDateKey)}
+            </p>
+            <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#64748b' }}>
+              Current window: {dateWindows?.current?.start || 'N/A'} to {dateWindows?.current?.end || 'N/A'}
+            </p>
+            <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>
+              Prior window: {dateWindows?.previous?.start || 'N/A'} to {dateWindows?.previous?.end || 'N/A'}
+            </p>
+          </div>
+        </div>
+        <div style={{ marginTop: '14px', ...subCard, border: '1px solid #dbeafe', backgroundColor: '#f8fafc' }}>
+          <DateRangeFilter
+            rangeType={rangeType} setRangeType={setRangeType}
+            customStart={customStart} setCustomStart={setCustomStart}
+            customEnd={customEnd} setCustomEnd={setCustomEnd}
+            windows={dateWindows}
+          />
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: '14px' }}>
+        {overviewKpiCards.map((item) => (
+          <ExecutiveKpiCard
+            key={item.key}
+            label={item.label}
+            value={item.value}
+            note={item.note}
+            format={item.format}
+            color={item.color}
+            invertColor={!!item.invertColor}
+            changePct={getChangePct(item.value, item.previous)}
+          />
+        ))}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(360px,1fr))', gap: '14px' }}>
+        <div style={card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div>
+              <p style={{ margin: 0, fontSize: '11px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
+                What Happened
+              </p>
+              <h3 style={{ margin: '6px 0 0', fontSize: '17px', color: '#0f172a' }}>Weekly trend: lead volume and CPL</h3>
+            </div>
+            <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>Last {Math.max(0, recentMomentumModule.weeklyRows.length)} weeks</p>
+          </div>
+          {recentMomentumModule.weeklyRows.length > 0 ? (
+            <div style={{ marginTop: '12px', height: '310px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={recentMomentumModule.weeklyRows}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 11, fill: '#64748b' }} allowDecimals={false} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={(v) => fmt.currency(v)} />
+                  <Tooltip
+                    formatter={(value, name, item) => item?.dataKey === 'cpl' ? [fmtMaybeCurrency(value), name] : [fmt.int(value), name]}
+                    labelFormatter={(label) => `Week of ${label}`}
+                  />
+                  <Legend />
+                  <Bar yAxisId="left" dataKey="metaLeads" name="Meta Leads" fill="#0f766e" radius={[4, 4, 0, 0]} />
+                  <Line yAxisId="left" dataKey="paidHubspotLeads" name="Paid HubSpot Leads" type="monotone" stroke="#2563eb" strokeWidth={2} dot={false} />
+                  <Line yAxisId="right" dataKey="cpl" name="Meta CPL" type="monotone" stroke="#dc2626" strokeWidth={2.5} dot={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <p style={{ margin: '12px 0 0', fontSize: '12px', color: '#64748b' }}>No trend data in this date range.</p>
+          )}
+        </div>
+
+        <div style={card}>
+          <p style={{ margin: 0, fontSize: '11px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
+            Lead Quality
+          </p>
+          <h3 style={{ margin: '6px 0 0', fontSize: '17px', color: '#0f172a' }}>Current lead mix by revenue tier</h3>
+          <div style={{ marginTop: '12px', height: '230px' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={qualityMixRows.filter((row) => row.value > 0)} dataKey="value" nameKey="label" outerRadius={90}>
+                  {qualityMixRows.filter((row) => row.value > 0).map((row) => <Cell key={`quality-${row.key}`} fill={row.color} />)}
+                </Pie>
+                <Tooltip formatter={(value) => fmt.int(value)} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+            {qualityMixRows.map((row) => (
+              <div key={row.key} style={{ ...subCard, border: '1px solid #e2e8f0', backgroundColor: '#fff' }}>
+                <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 700 }}>{row.label}</p>
+                <p style={{ margin: '5px 0 0', fontSize: '15px', color: '#0f172a', fontWeight: 800 }}>{fmt.int(row.value)}</p>
+                <p style={{ margin: '3px 0 0', fontSize: '11px', color: '#64748b' }}>
+                  {qualityMixTotal > 0 ? fmt.pct(row.value / qualityMixTotal) : '0.0%'}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(360px,1fr))', gap: '14px' }}>
+        <div style={card}>
+          <p style={{ margin: 0, fontSize: '11px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
+            What Needs To Happen
+          </p>
+          <h3 style={{ margin: '6px 0 0', fontSize: '17px', color: '#0f172a' }}>Gap to prior-period efficiency at current spend</h3>
+          <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#64748b' }}>
+            Targets are calculated from prior period CPQL/CPGL and current spend, using existing live metrics only.
+          </p>
+          <div style={{ marginTop: '12px', display: 'grid', gap: '10px' }}>
+            <ProgressGapBar
+              label="Qualified Leads Target ($250K-$999K)"
+              current={overviewCurrentCategorization?.qualified || 0}
+              target={qualifiedTargetAtPriorEfficiency}
+              color="#2563eb"
+            />
+            <ProgressGapBar
+              label="Great Leads Target ($1M+)"
+              current={overviewCurrentCategorization?.great || 0}
+              target={greatTargetAtPriorEfficiency}
+              color="#16a34a"
+            />
+          </div>
+        </div>
+
+        <div style={card}>
+          <p style={{ margin: 0, fontSize: '11px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
+            Recommendations
+          </p>
+          <h3 style={{ margin: '6px 0 0', fontSize: '17px', color: '#0f172a' }}>Priority actions and risk checks</h3>
+          <div style={{ marginTop: '10px', display: 'grid', gap: '7px' }}>
+            {executiveRecommendations.length > 0 ? executiveRecommendations.map((line, idx) => (
+              <p key={`exec-rec-${idx}`} style={{ margin: 0, fontSize: '12px', color: '#334155', lineHeight: 1.45 }}>
+                {idx + 1}. {line}
+              </p>
+            )) : (
+              <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>No recommendations available in this window.</p>
+            )}
+          </div>
+          <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+            {liveFreshnessModule.sourceRows.map((row) => {
+              const tone = freshnessToneStyle[row.tone] || freshnessToneStyle.unknown;
+              return (
+                <div key={`freshness-chip-${row.key}`} style={{ border: `1px solid ${tone.border}`, backgroundColor: tone.bg, borderRadius: '10px', padding: '8px' }}>
+                  <p style={{ margin: 0, fontSize: '11px', color: '#0f172a', fontWeight: 700 }}>{row.label}</p>
+                  <p style={{ margin: '4px 0 0', fontSize: '11px', color: tone.text }}>{freshnessStatusLabel(row)}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <details style={card}>
+        <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <div>
+            <span style={{ fontWeight: 700, fontSize: '15px', color: '#0f172a' }}>Detailed Data Explorer</span>
+            <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748b' }}>
+              Full drilldowns, validation tables, and legacy views. Expand when you need row-level detail.
+            </p>
+          </div>
+          <span style={{ padding: '4px 8px', borderRadius: '999px', backgroundColor: '#e2e8f0', color: '#334155', fontSize: '10px', fontWeight: 700 }}>
+            Expand
+          </span>
+        </summary>
+        <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div style={card}>
         <h3 style={{ margin: '0 0 12px', fontSize: '16px', color: '#0f172a' }}>Date Range Window</h3>
         <DateRangeFilter
@@ -4904,6 +5209,9 @@ export default function LeadsDashboard() {
       </details>
 
       {/* ── Drill-down Modal ── */}
+        </div>
+      </details>
+
       <DrillDownModal
         isOpen={!!modal}
         onClose={() => setModal(null)}
