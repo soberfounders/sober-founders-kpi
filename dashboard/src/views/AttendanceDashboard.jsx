@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-/* -- DATA SOURCE: HubSpot call/meeting activities only. Do not add Zoom data as a fallback or supplement. See audit performed 2026-02-23. */
+/* Data source priority: weekly attendance snapshots + HubSpot call/meeting activities for enrichment and gap fill. */
 import { supabase } from '../lib/supabaseClient';
 import {
   ANTHROPIC_API_KEY,
@@ -48,6 +48,8 @@ const GROUP_CALL_ET_MINUTES = {
 const GROUP_CALL_TIME_TOLERANCE_MINUTES = 120;
 const MIN_GROUP_ATTENDEES = 3;
 const EXPECTED_ZERO_GROUP_SESSION_KEYS = new Set(['Thursday|2025-12-25']);
+const GROUP_CALL_TIME_FALLBACK_TOLERANCE_MINUTES = 240;
+const GROUP_CALL_MIN_ATTENDEE_SIGNAL = 5;
 
 function normalizeName(name = '') {
   return name.toLowerCase().trim().replace(/\s+/g, ' ');
@@ -624,7 +626,25 @@ const etTimePartsFormatter = new Intl.DateTimeFormat('en-US', {
   minute: '2-digit',
 });
 
-function etGroupTypeFromDate(dateLike) {
+const etDatePartsFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: ET_TIMEZONE,
+  weekday: 'short',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+const ET_WEEKDAY_TO_INDEX = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+};
+
+function etScheduleInfo(dateLike) {
   const d = safeDate(dateLike);
   if (!d) return null;
 
@@ -640,8 +660,114 @@ function etGroupTypeFromDate(dateLike) {
   const minuteOfDay = hour * 60 + minute;
   const expectedMinute = GROUP_CALL_ET_MINUTES[dayType];
   const minutesFromExpected = Math.abs(minuteOfDay - expectedMinute);
-  if (minutesFromExpected <= GROUP_CALL_TIME_TOLERANCE_MINUTES) return dayType;
-  return null;
+  return {
+    dayType,
+    minuteOfDay,
+    minutesFromExpected,
+    inPrimaryWindow: minutesFromExpected <= GROUP_CALL_TIME_TOLERANCE_MINUTES,
+    inFallbackWindow: minutesFromExpected <= GROUP_CALL_TIME_FALLBACK_TOLERANCE_MINUTES,
+  };
+}
+
+function etWeekStartKey(dateLike) {
+  const d = safeDate(dateLike);
+  if (!d) return '';
+
+  const parts = etDatePartsFormatter.formatToParts(d);
+  const year = Number(parts.find((p) => p.type === 'year')?.value || NaN);
+  const month = Number(parts.find((p) => p.type === 'month')?.value || NaN);
+  const day = Number(parts.find((p) => p.type === 'day')?.value || NaN);
+  const weekdayShort = parts.find((p) => p.type === 'weekday')?.value || '';
+
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return '';
+  const weekdayIndex = ET_WEEKDAY_TO_INDEX[weekdayShort];
+  if (weekdayIndex === undefined) return '';
+
+  const backToMonday = (weekdayIndex + 6) % 7;
+  const mondayUtc = new Date(Date.UTC(year, month - 1, day) - (backToMonday * 86400000));
+  return mondayUtc.toISOString().slice(0, 10);
+}
+
+function inferGroupTypeFromTitle(titleRaw = '', scheduledDayType = null) {
+  const title = String(titleRaw || '').toLowerCase();
+  const likelyOneToOne = (
+    title.includes('intro meeting')
+    || title.includes('meeting with')
+    || title.includes('sober founder interview')
+    || title === 'lunch'
+    || title.startsWith('canceled:')
+    || title.startsWith('not canceled:')
+  );
+
+  if (title.includes('tactic tuesday')) {
+    return { type: 'Tuesday', strongSignal: true, likelyOneToOne: false };
+  }
+  if (
+    title.includes('all are welcome')
+    || title.includes("entrepreneur's big book")
+    || title.includes('big book')
+  ) {
+    return { type: 'Thursday', strongSignal: true, likelyOneToOne: false };
+  }
+  if (title.includes('mastermind') && !title.includes('intro')) {
+    return { type: scheduledDayType || 'Thursday', strongSignal: true, likelyOneToOne: false };
+  }
+
+  return { type: null, strongSignal: false, likelyOneToOne };
+}
+
+function sessionCandidateStrength(session = {}) {
+  const sourceCount = Number(session?.sourceCount || 0);
+  const derivedCount = Number(session?.derivedCount || 0);
+  const minutesFromExpected = Number.isFinite(Number(session?.minutesFromExpected))
+    ? Number(session.minutesFromExpected)
+    : 999;
+
+  return (
+    (session?.isCallActivity ? 500000 : 0)
+    + (session?.hasAttendanceSignal ? 200000 : 0)
+    + (session?.inPrimaryWindow ? 120000 : 0)
+    + (session?.inFallbackWindow ? 40000 : 0)
+    + (session?.strongTitleSignal ? 30000 : 0)
+    + (sourceCount * 5000)
+    + (derivedCount * 500)
+    - (minutesFromExpected * 10)
+  );
+}
+
+function pickStrongerSessionCandidate(existing, candidate) {
+  if (!existing) return candidate || null;
+  if (!candidate) return existing;
+
+  const existingScore = sessionCandidateStrength(existing);
+  const candidateScore = sessionCandidateStrength(candidate);
+  if (candidateScore !== existingScore) return candidateScore > existingScore ? candidate : existing;
+
+  const existingTs = existing?.date?.getTime?.() || 0;
+  const candidateTs = candidate?.date?.getTime?.() || 0;
+  if (candidateTs !== existingTs) return candidateTs > existingTs ? candidate : existing;
+  return existing;
+}
+
+function listMissingWeekKeys(sessions = [], dayType = 'Tuesday') {
+  const weekKeys = (sessions || [])
+    .filter((s) => s?.type === dayType && s?.weekKey)
+    .map((s) => s.weekKey)
+    .sort();
+  if (!weekKeys.length) return [];
+
+  const uniqueWeekKeys = Array.from(new Set(weekKeys));
+  const first = safeDate(`${uniqueWeekKeys[0]}T00:00:00.000Z`);
+  const last = safeDate(`${uniqueWeekKeys[uniqueWeekKeys.length - 1]}T00:00:00.000Z`);
+  if (!first || !last) return [];
+
+  const existing = new Set(uniqueWeekKeys);
+  const missing = [];
+  for (let cursor = new Date(first); cursor <= last; cursor = new Date(cursor.getTime() + (7 * 86400000))) {
+    const key = cursor.toISOString().slice(0, 10);
+    if (!existing.has(key)) missing.push(key);
+  }
+  return missing;
 }
 
 function etWeekdayGroupFromDate(dateLike) {
@@ -936,31 +1062,35 @@ function buildMonthlyAverageSeries(sessions = [], groupType = 'Tuesday') {
 }
 
 /**
- * HUBSPOT-ONLY: Build sessions from HubSpot meeting activity logs
- * (raw_hubspot_meeting_activities + hubspot_activity_contact_associations).
- * 
- * -- DATA SOURCE: HubSpot call/meeting activities only. Do not add Zoom data as a fallback or supplement.
- * Audited 2026-02-23.
+ * Build attendance sessions from:
+ * 1) weekly attendance snapshots (kpi_metrics) as canonical historical baseline
+ * 2) HubSpot call/meeting activity logs for enrichment and uncovered weeks
  */
-function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs = [], hubspotContactMap = new Map()) {
+function computeAnalytics(
+  aliases,
+  hubspotActivities = [],
+  hubspotContactAssocs = [],
+  hubspotContactMap = new Map(),
+  attendanceMetricRows = [],
+) {
   const aliasMap = new Map(
     (aliases || []).map((a) => [normalizeName(a.original_name), a.target_name?.trim() || a.original_name]),
   );
   const activityAssocKey = (activityId, activityType) => `${String(activityType || '').toLowerCase()}:${String(activityId || '')}`;
 
   // ── Helpers to classify session type from HubSpot activity title or day/size heuristic ──
-  function getSessionType(activity, attendeeCount) {
-    const title = (activity.title || '').toLowerCase();
+  function getSessionCandidateSignals(activity, attendeeCount) {
     const start = safeDate(activity.hs_timestamp || activity.created_at_hubspot);
     if (!start) return null;
 
+<<<<<<< HEAD
     const timing = etGroupTimingFromDate(start);
     const titleType =
       title.includes('tactic tuesday') ? 'Tuesday' :
-      (title.includes('mastermind on zoom') || title.includes('all are welcome')) ? 'Thursday' :
-      (title.includes("entrepreneur's big book") || title.includes('big book')) ? 'Thursday' :
-      (title.includes('sober founders mastermind') && !title.includes('intro')) ? 'Thursday' :
-      null;
+        (title.includes('mastermind on zoom') || title.includes('all are welcome')) ? 'Thursday' :
+          (title.includes("entrepreneur's big book") || title.includes('big book')) ? 'Thursday' :
+            (title.includes('sober founders mastermind') && !title.includes('intro')) ? 'Thursday' :
+              null;
 
     // Primary rule: near expected ET session windows.
     if (timing?.isNearScheduled && timing?.dayType) return timing.dayType;
@@ -975,8 +1105,84 @@ function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs 
 
     // Final fallback for explicit titles.
     if (titleType) return titleType;
+=======
+    const activityType = String(activity?.activity_type || '').toLowerCase();
+    const schedule = etScheduleInfo(start);
+    const titleSignal = inferGroupTypeFromTitle(activity?.title || '', schedule?.dayType || null);
+    const type = titleSignal.type || schedule?.dayType || null;
+    if (!type) return null;
 
+    const scheduleAligned = !!schedule && schedule.dayType === type;
+    const inPrimaryWindow = !!(scheduleAligned && schedule.inPrimaryWindow);
+    const inFallbackWindow = !!(scheduleAligned && schedule.inFallbackWindow);
+    const hasAttendanceSignal = attendeeCount >= GROUP_CALL_MIN_ATTENDEE_SIGNAL;
+    const isCallActivity = activityType === 'call';
+
+    if (titleSignal.likelyOneToOne && !titleSignal.strongSignal && !hasAttendanceSignal && !isCallActivity) {
+      return null;
+    }
+
+    const includeCandidate = (
+      titleSignal.strongSignal
+      || hasAttendanceSignal
+      || inPrimaryWindow
+      || (isCallActivity && inFallbackWindow)
+    );
+    if (!includeCandidate) return null;
+>>>>>>> fa7a036 (feat: AI Trend Detection Engine - kpi_goals table, vw_kpi_trend view with z-score/consecutive decline/goal tracking, TrendIntelligencePanel component, enhanced ai-briefing prompts with 8-week statistical context)
+
+    const weekKey = etWeekStartKey(start);
+    if (!weekKey) return null;
+
+    return {
+      type,
+      weekKey,
+      inPrimaryWindow,
+      inFallbackWindow,
+      hasAttendanceSignal,
+      strongTitleSignal: titleSignal.strongSignal,
+      likelyOneToOneTitle: titleSignal.likelyOneToOne,
+      minutesFromExpected: scheduleAligned ? schedule.minutesFromExpected : null,
+      isCallActivity,
+    };
+  }
+
+  function metricDayType(metricRow = {}) {
+    const metricName = String(metricRow?.metric_name || '').toLowerCase();
+    if (metricName.includes('tuesday')) return 'Tuesday';
+    if (metricName.includes('thursday')) return 'Thursday';
     return null;
+  }
+
+  function metricSessionStart(metricRow = {}, dayType = null) {
+    const metadataStart = safeDate(metricRow?.metadata?.start_time);
+    if (metadataStart) return metadataStart;
+
+    const metricDate = safeDate(metricRow?.metric_date);
+    if (!metricDate || !dayType) return metricDate;
+
+    const targetDay = dayType === 'Tuesday' ? 2 : 4;
+    const currentDay = metricDate.getUTCDay();
+    const dayOffset = (targetDay - currentDay + 7) % 7;
+    const out = new Date(metricDate);
+    out.setUTCDate(out.getUTCDate() + dayOffset);
+    return out;
+  }
+
+  function metricAttendeeNames(metricRow = {}) {
+    const raw = metricRow?.metadata?.attendees;
+    if (!Array.isArray(raw)) return [];
+    const seen = new Set();
+    const out = [];
+    raw.forEach((nameRaw) => {
+      const name = String(nameRaw || '').trim();
+      if (!name) return;
+      const key = normalizeName(name);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      out.push(name);
+    });
+    return out;
   }
 
   // ── 1. Build sessions from HubSpot call/meeting activities (authoritative source) ──
@@ -997,12 +1203,15 @@ function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs 
     const activityType = String(activity?.activity_type || '').toLowerCase();
     const assocs = assocsByActivity.get(activityAssocKey(activityId, activityType)) || [];
 
-    const type = getSessionType(activity, assocs.length);
-    if (!type) return;
-
     const start = safeDate(activity.hs_timestamp || activity.created_at_hubspot);
     if (!start) return;
+<<<<<<< HEAD
     const timing = etGroupTimingFromDate(start);
+=======
+    const candidateSignals = getSessionCandidateSignals(activity, assocs.length);
+    if (!candidateSignals) return;
+    const type = candidateSignals.type;
+>>>>>>> fa7a036 (feat: AI Trend Detection Engine - kpi_goals table, vw_kpi_trend view with z-score/consecutive decline/goal tracking, TrendIntelligencePanel component, enhanced ai-briefing prompts with 8-week statistical context)
 
     const dateLabel = start.toISOString().slice(0, 10);
     const dateFormatted = formatDateMMDDYY(start);
@@ -1069,13 +1278,25 @@ function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs 
       sourceCount: assocs.length,
       mismatch: false,
       dataSource: 'hubspot',
+<<<<<<< HEAD
       minutesFromExpected: Number(timing?.minutesFromExpected ?? Number.POSITIVE_INFINITY),
       isNearScheduled: !!timing?.isNearScheduled,
+=======
+      weekKey: candidateSignals.weekKey,
+      inPrimaryWindow: candidateSignals.inPrimaryWindow,
+      inFallbackWindow: candidateSignals.inFallbackWindow,
+      hasAttendanceSignal: candidateSignals.hasAttendanceSignal,
+      strongTitleSignal: candidateSignals.strongTitleSignal,
+      likelyOneToOneTitle: candidateSignals.likelyOneToOneTitle,
+      minutesFromExpected: candidateSignals.minutesFromExpected,
+      isCallActivity: candidateSignals.isCallActivity,
+>>>>>>> fa7a036 (feat: AI Trend Detection Engine - kpi_goals table, vw_kpi_trend view with z-score/consecutive decline/goal tracking, TrendIntelligencePanel component, enhanced ai-briefing prompts with 8-week statistical context)
     });
   });
 
   sessions = sessions.sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
 
+<<<<<<< HEAD
   // Keep one canonical Tue/Thu session per date:
   // prefer expected ET session time, otherwise the session with most attendees.
   const sessionsByGroupDate = new Map();
@@ -1118,6 +1339,126 @@ function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs 
       ...session,
       dataSource: 'hubspot_canonical',
     }))
+=======
+  const hubspotSessionsByGroupWeek = new Map();
+  sessions.forEach((session) => {
+    const key = `${session.type}|${session.weekKey || session.dateLabel}`;
+    const existing = hubspotSessionsByGroupWeek.get(key);
+    hubspotSessionsByGroupWeek.set(key, pickStrongerSessionCandidate(existing, session));
+  });
+  const canonicalHubspotSessions = Array.from(hubspotSessionsByGroupWeek.values())
+    .sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
+
+  const metricSessions = (attendanceMetricRows || []).map((metricRow) => {
+    const type = metricDayType(metricRow);
+    if (!type) return null;
+
+    const start = metricSessionStart(metricRow, type);
+    if (!start) return null;
+    const weekKey = etWeekStartKey(start);
+    if (!weekKey) return null;
+
+    const dateLabel = start.toISOString().slice(0, 10);
+    const dateFormatted = formatDateMMDDYY(start);
+    const resolvedAttendees = metricAttendeeNames(metricRow)
+      .map((name) => resolveAliasTarget(name, aliasMap) || name);
+    const attendeeObjects = resolvedAttendees.map((name) => ({
+      name,
+      hubspotContactId: null,
+      hubspotEmail: '',
+      hubspotName: 'Not Found',
+      hubspotMatched: false,
+      identityMappingSource: 'kpi_metrics_snapshot',
+      identityMappingConfidence: 'None',
+      identityMappingNote: 'Historical weekly attendance snapshot fallback',
+      hubspotSource: 'Not Found',
+      hubspotUrl: null,
+    }));
+    const derivedCount = resolvedAttendees.length > 0
+      ? resolvedAttendees.length
+      : Number(metricRow?.metric_value || 0);
+
+    return {
+      id: `kpi-${type}-${dateLabel}-${String(metricRow?.id || metricRow?.metric_date || '')}`,
+      type,
+      date: start,
+      dateLabel,
+      dateFormatted,
+      meetingId: String(metricRow?.metadata?.meeting_id || ''),
+      startTimeIso: metricRow?.metadata?.start_time || metricRow?.metric_date || null,
+      title: String(metricRow?.metadata?.meeting_topic || `${type} Group Call`).trim(),
+      attendees: resolvedAttendees,
+      attendeeObjects,
+      derivedCount: Number.isFinite(derivedCount) ? derivedCount : 0,
+      sourceCount: Number(metricRow?.metric_value || resolvedAttendees.length || 0),
+      mismatch: false,
+      dataSource: 'kpi_metrics_snapshot',
+      weekKey,
+      inPrimaryWindow: true,
+      inFallbackWindow: true,
+      hasAttendanceSignal: Number(metricRow?.metric_value || 0) > 0,
+      strongTitleSignal: true,
+      likelyOneToOneTitle: false,
+      minutesFromExpected: 0,
+      isCallActivity: false,
+    };
+  }).filter(Boolean);
+
+  // Canonical weekly source priority:
+  // 1) kpi_metrics historical snapshots (complete baseline)
+  // 2) HubSpot activity associations fill weeks not present in snapshots.
+  const sessionsByGroupWeek = new Map();
+  metricSessions.forEach((session) => {
+    const key = `${session.type}|${session.weekKey || session.dateLabel}`;
+    const existing = sessionsByGroupWeek.get(key);
+    sessionsByGroupWeek.set(key, pickStrongerSessionCandidate(existing, session));
+  });
+  canonicalHubspotSessions.forEach((session) => {
+    const key = `${session.type}|${session.weekKey || session.dateLabel}`;
+    if (sessionsByGroupWeek.has(key)) return;
+    // Guardrail: prevent single-attendee/noisy fallback rows from replacing missing weekly coverage.
+    if (Number(session?.sourceCount || 0) <= 1 && !session?.strongTitleSignal && !session?.hasAttendanceSignal) {
+      return;
+    }
+    const existing = sessionsByGroupWeek.get(key);
+    sessionsByGroupWeek.set(key, pickStrongerSessionCandidate(existing, session));
+  });
+
+  // Known holiday exception: Thursday 2025-12-25 had no group attendance.
+  const holidayWeekKey = '2025-12-22';
+  const holidayKey = `Thursday|${holidayWeekKey}`;
+  if (!sessionsByGroupWeek.has(holidayKey)) {
+    const holidayDate = safeDate('2025-12-25T16:00:00.000Z');
+    if (holidayDate) {
+      sessionsByGroupWeek.set(holidayKey, {
+        id: 'holiday-thursday-2025-12-25',
+        type: 'Thursday',
+        date: holidayDate,
+        dateLabel: holidayDate.toISOString().slice(0, 10),
+        dateFormatted: formatDateMMDDYY(holidayDate),
+        meetingId: '',
+        startTimeIso: holidayDate.toISOString(),
+        title: 'Christmas Holiday (No Group Session)',
+        attendees: [],
+        attendeeObjects: [],
+        derivedCount: 0,
+        sourceCount: 0,
+        mismatch: false,
+        dataSource: 'holiday_exception',
+        weekKey: holidayWeekKey,
+        inPrimaryWindow: true,
+        inFallbackWindow: true,
+        hasAttendanceSignal: false,
+        strongTitleSignal: false,
+        likelyOneToOneTitle: false,
+        minutesFromExpected: 0,
+        isCallActivity: false,
+      });
+    }
+  }
+
+  sessions = Array.from(sessionsByGroupWeek.values())
+>>>>>>> fa7a036 (feat: AI Trend Detection Engine - kpi_goals table, vw_kpi_trend view with z-score/consecutive decline/goal tracking, TrendIntelligencePanel component, enhanced ai-briefing prompts with 8-week statistical context)
     .sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
 
   sessions = sessions.filter((session) => Number(session?.derivedCount || 0) >= MIN_GROUP_ATTENDEES);
@@ -1364,6 +1705,8 @@ function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs 
     total: s.derivedCount,
     newNames: s.newNames
   }));
+  const missingTuesdayWeeks = listMissingWeekKeys(sessions, 'Tuesday');
+  const missingThursdayWeeks = listMissingWeekKeys(sessions, 'Thursday');
 
   // Welcome New: keep top-of-page focused to 2 Tuesday + 2 Thursday sessions.
   const welcomeNewSessionsTue = sessions
@@ -1412,6 +1755,8 @@ function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs 
       atRiskRepeaters: atRiskBreakdown.repeatMissedTwoInRow,
       lowRecentShowRatePeople,
       sessionsMissingMarkedAttendees: sessionsMissingMarkedAttendees.length,
+      missingTuesdayWeeks: missingTuesdayWeeks.length,
+      missingThursdayWeeks: missingThursdayWeeks.length,
     },
     trendDataTue,
     trendDataThu,
@@ -1431,6 +1776,10 @@ function computeAnalytics(aliases, hubspotActivities = [], hubspotContactAssocs 
     welcomeNewSessionsTue,
     welcomeNewSessionsThu,
     sessionsMissingMarkedAttendees,
+    scheduleCoverage: {
+      missingTuesdayWeeks,
+      missingThursdayWeeks,
+    },
     duplicateCandidatesByName,
   };
 }
@@ -1690,9 +2039,10 @@ const AttendanceDashboard = () => {
   const [rawHubspotContacts, setRawHubspotContacts] = useState([]);
   const [rawLumaRegistrations, setRawLumaRegistrations] = useState([]);
   const [attendeeHubspotMappings, setAttendeeHubspotMappings] = useState([]);
-  // HubSpot-first data source: group call/meeting activities + their contact associations
+  // Attendance source inputs: HubSpot activity rows + historical weekly snapshot rows.
   const [hubspotActivities, setHubspotActivities] = useState([]);
   const [hubspotContactAssocs, setHubspotContactAssocs] = useState([]);
+  const [attendanceMetricRows, setAttendanceMetricRows] = useState([]);
   const [identityWarning, setIdentityWarning] = useState('');
   const [planState, setPlanState] = useState({});
   const [selectedSessionKey, setSelectedSessionKey] = useState('');
@@ -1732,8 +2082,8 @@ const AttendanceDashboard = () => {
   }, [rawHubspotContacts]);
 
   const analytics = useMemo(
-    () => computeAnalytics(aliases, hubspotActivities, hubspotContactAssocs, hubspotContactMap),
-    [aliases, hubspotActivities, hubspotContactAssocs, hubspotContactMap],
+    () => computeAnalytics(aliases, hubspotActivities, hubspotContactAssocs, hubspotContactMap, attendanceMetricRows),
+    [aliases, hubspotActivities, hubspotContactAssocs, hubspotContactMap, attendanceMetricRows],
   );
   const attendanceHubspotResolver = useMemo(
     () => buildAttendanceHubspotResolver({
@@ -1758,6 +2108,23 @@ const AttendanceDashboard = () => {
       .join(', ');
     const extraCount = gaps.length > 4 ? ` (+${gaps.length - 4} more)` : '';
     return `Incomplete HubSpot attendance data for ${examples}${extraCount}. Sync is running, but attendee rows are missing because the host did not mark attendees in the HubSpot call/meeting record. Mark attendees in HubSpot, then click Sync Now.`;
+  }, [analytics]);
+  const scheduleCoverageWarning = useMemo(() => {
+    const tueMissing = analytics?.scheduleCoverage?.missingTuesdayWeeks || [];
+    const thuMissing = analytics?.scheduleCoverage?.missingThursdayWeeks || [];
+    if (!tueMissing.length && !thuMissing.length) return '';
+
+    const fmtExamples = (rows) => rows
+      .slice(0, 3)
+      .map((weekKey) => formatDateMMDDYY(weekKey))
+      .join(', ');
+    const tueText = tueMissing.length
+      ? `Tuesday missing weeks: ${tueMissing.length}${fmtExamples(tueMissing) ? ` (${fmtExamples(tueMissing)})` : ''}`
+      : '';
+    const thuText = thuMissing.length
+      ? `Thursday missing weeks: ${thuMissing.length}${fmtExamples(thuMissing) ? ` (${fmtExamples(thuMissing)})` : ''}`
+      : '';
+    return [tueText, thuText].filter(Boolean).join(' | ');
   }, [analytics]);
 
   useEffect(() => {
@@ -1887,10 +2254,10 @@ const AttendanceDashboard = () => {
         || (a.isNew && b.isNew ? a.displayName.localeCompare(b.displayName) : 0)
         || (!a.isNew && !b.isNew
           ? (
-              a.groupVisitsIncludingThisSession - b.groupVisitsIncludingThisSession
-              || a.totalVisitsIncludingThisSession - b.totalVisitsIncludingThisSession
-              || a.displayName.localeCompare(b.displayName)
-            )
+            a.groupVisitsIncludingThisSession - b.groupVisitsIncludingThisSession
+            || a.totalVisitsIncludingThisSession - b.totalVisitsIncludingThisSession
+            || a.displayName.localeCompare(b.displayName)
+          )
           : 0)
         || a.displayName.localeCompare(b.displayName)
       );
@@ -1911,15 +2278,15 @@ const AttendanceDashboard = () => {
     if (!person) return null;
     const personIdentity = person?.hubspotContactId
       ? {
-          matched: true,
-          hubspotContactId: person.hubspotContactId,
-          hubspotName: person.hubspotName || person.name,
-          hubspotEmail: person.hubspotEmail || 'Not Found',
-          hubspotUrl: person.hubspotUrl || buildHubspotContactUrl(person.hubspotContactId),
-          identityMappingSource: person.identityMappingSource || 'hubspot_call_activity',
-          identityMappingConfidence: person.identityMappingConfidence || 'High',
-          hubspotSource: person.hubspotSource || 'Not Found',
-        }
+        matched: true,
+        hubspotContactId: person.hubspotContactId,
+        hubspotName: person.hubspotName || person.name,
+        hubspotEmail: person.hubspotEmail || 'Not Found',
+        hubspotUrl: person.hubspotUrl || buildHubspotContactUrl(person.hubspotContactId),
+        identityMappingSource: person.identityMappingSource || 'hubspot_call_activity',
+        identityMappingConfidence: person.identityMappingConfidence || 'High',
+        hubspotSource: person.hubspotSource || 'Not Found',
+      }
       : attendanceHubspotResolver.resolveAttendee(person.name, null);
 
     const attendedSessions = (person.sessionIndexes || [])
@@ -1975,13 +2342,13 @@ const AttendanceDashboard = () => {
     return (analytics.atRiskPeople || []).map((person) => {
       const identity = person?.hubspotContactId
         ? {
-            matched: true,
-            hubspotContactId: person.hubspotContactId,
-            hubspotName: person.hubspotName || person.name,
-            hubspotEmail: person.hubspotEmail || 'Not Found',
-            hubspotUrl: person.hubspotUrl || buildHubspotContactUrl(person.hubspotContactId),
-            identityMappingSource: person.identityMappingSource || 'hubspot_call_activity',
-          }
+          matched: true,
+          hubspotContactId: person.hubspotContactId,
+          hubspotName: person.hubspotName || person.name,
+          hubspotEmail: person.hubspotEmail || 'Not Found',
+          hubspotUrl: person.hubspotUrl || buildHubspotContactUrl(person.hubspotContactId),
+          identityMappingSource: person.identityMappingSource || 'hubspot_call_activity',
+        }
         : attendanceHubspotResolver.resolveAttendee(person.name, null);
       return {
         ...person,
@@ -2387,6 +2754,7 @@ const AttendanceDashboard = () => {
       hubspotContactsResult,
       lumaResult,
       attendeeMappingsResult,
+      attendanceMetricsResult,
     ] = await Promise.all([
       selectAllRows((from, to) => (
         supabase
@@ -2421,6 +2789,15 @@ const AttendanceDashboard = () => {
           .order('session_date', { ascending: false })
           .range(from, to)
       ), { pageSize: 1000, maxPages: 120 }),
+      selectAllRows((from, to) => (
+        supabase
+          .from('kpi_metrics')
+          .select('id,metric_name,metric_date,metric_value,metadata')
+          .in('metric_name', ['Zoom Net Attendees - Tuesday', 'Zoom Net Attendees - Thursday'])
+          .gte('metric_date', identityStartIso)
+          .order('metric_date', { ascending: false })
+          .range(from, to)
+      ), { pageSize: 1000, maxPages: 120 }),
     ]);
 
     const hsActivityRows = hsActivitiesResult.data || [];
@@ -2429,6 +2806,13 @@ const AttendanceDashboard = () => {
       setHubspotActivities([]);
     } else {
       setHubspotActivities(hsActivityRows);
+    }
+
+    if (attendanceMetricsResult.error) {
+      identityWarnings.push(`Historical attendance snapshots unavailable: ${attendanceMetricsResult.error.message || 'read failed'}`);
+      setAttendanceMetricRows([]);
+    } else {
+      setAttendanceMetricRows(attendanceMetricsResult.data || []);
     }
 
     let hsAssocRows = [];
@@ -2685,7 +3069,7 @@ const AttendanceDashboard = () => {
       supabase.functions.invoke('sync-metrics', {
         method: 'GET',
         queryString: { trigger_refresh: 'true' },
-      }).catch(() => {});
+      }).catch(() => { });
     } catch (todoErr) {
       setHumanTaskWorkflow((prev) => ({
         ...prev,
@@ -2887,6 +3271,16 @@ const AttendanceDashboard = () => {
         </div>
       )}
 
+      {scheduleCoverageWarning && (
+        <div style={{ ...cardStyle, borderLeft: '4px solid #f59e0b', backgroundColor: '#fffbeb' }}>
+          <p style={{ color: '#92400e', fontWeight: 700 }}>Weekly Schedule Gap Audit</p>
+          <p style={{ marginTop: '6px', color: '#92400e' }}>{scheduleCoverageWarning}</p>
+          <p style={{ marginTop: '6px', color: '#92400e', fontSize: '12px' }}>
+            The dashboard now anchors sessions to Tuesday 12pm ET and Thursday 11am ET windows and flags missing source weeks immediately.
+          </p>
+        </div>
+      )}
+
       {(syncNowState.status === 'success' || syncNowState.status === 'error') && (
         <div
           style={{
@@ -2923,7 +3317,7 @@ const AttendanceDashboard = () => {
             Accurate attendee counts, repeat behavior, and execution plan — Tuesday and Thursday tracked independently.
           </p>
           <p style={{ marginTop: '6px', opacity: 0.85, fontSize: '12px' }}>
-            Data source: {hubspotActivities.length} verified HubSpot group sessions · {hubspotContactAssocs.length} attendee associations · {rawHubspotContacts.length} HubSpot contacts enriched
+            Data source: {analytics?.sessions?.length || 0} selected Tue/Thu sessions · {attendanceMetricRows.length} weekly attendance snapshots · {hubspotActivities.length} HubSpot activities · {hubspotContactAssocs.length} attendee associations · {rawHubspotContacts.length} HubSpot contacts enriched
           </p>
           {syncNowState.lastRunAtIso && (
             <p style={{ marginTop: '4px', opacity: 0.85, fontSize: '12px' }}>

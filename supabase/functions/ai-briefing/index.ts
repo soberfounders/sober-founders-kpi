@@ -49,6 +49,76 @@ function changePct(curr: number, prev: number): string {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Trend Intelligence — 8-week rolling stats + goal gap              */
+/* ------------------------------------------------------------------ */
+
+async function gatherTrendSnapshot(supabase: any) {
+    const { data: rows, error } = await supabase
+        .from("vw_kpi_trend")
+        .select("kpi_key,kpi_name,funnel_key,week_start,value,z_score,wow_pct,consecutive_declines,goal_value,goal_status,pct_to_goal,rolling_avg_8w,trailing_8w_values")
+        .order("week_start", { ascending: false })
+        .limit(400);
+
+    if (error || !rows?.length) return { anomalies: [], decliners: [], offTrack: [], goalSummary: null };
+
+    // Deduplicate: keep the latest row per kpi_key + funnel_key
+    const latestMap = new Map<string, any>();
+    for (const r of rows) {
+        const key = `${r.kpi_key}::${r.funnel_key}`;
+        if (!latestMap.has(key)) latestMap.set(key, r);
+    }
+    const latest = Array.from(latestMap.values());
+
+    const anomalies = latest
+        .filter(r => r.z_score !== null && Math.abs(Number(r.z_score)) >= 1.5)
+        .sort((a, b) => Math.abs(Number(b.z_score)) - Math.abs(Number(a.z_score)))
+        .slice(0, 6)
+        .map(r => ({
+            kpi: r.kpi_name, funnel: r.funnel_key,
+            value: Number(r.value), z_score: Number(r.z_score),
+            direction: Number(r.z_score) > 0 ? "spike" : "drop",
+            wow_pct: r.wow_pct,
+        }));
+
+    const decliners = latest
+        .filter(r => Number(r.consecutive_declines) >= 2)
+        .sort((a, b) => Number(b.consecutive_declines) - Number(a.consecutive_declines))
+        .slice(0, 5)
+        .map(r => ({
+            kpi: r.kpi_name, funnel: r.funnel_key,
+            value: Number(r.value), weeks: Number(r.consecutive_declines),
+            wow_pct: r.wow_pct, goal_status: r.goal_status,
+        }));
+
+    const withGoals = latest.filter(r => r.goal_status !== "no_goal");
+    const offTrack = withGoals
+        .filter(r => r.goal_status === "off_track")
+        .sort((a, b) => Number(a.pct_to_goal ?? 0) - Number(b.pct_to_goal ?? 0))
+        .slice(0, 6)
+        .map(r => ({
+            kpi: r.kpi_name, funnel: r.funnel_key,
+            value: Number(r.value), goal: Number(r.goal_value),
+            pct_to_goal: Number(r.pct_to_goal),
+        }));
+
+    const onTrack = withGoals.filter(r => r.goal_status === "on_track").length;
+    const nearGoal = withGoals.filter(r => r.goal_status === "near_goal").length;
+
+    return {
+        anomalies,
+        decliners,
+        offTrack,
+        goalSummary: {
+            total_with_goals: withGoals.length,
+            on_track: onTrack,
+            near_goal: nearGoal,
+            off_track: offTrack.length,
+            health_pct: withGoals.length > 0 ? Math.round((onTrack / withGoals.length) * 100) : null,
+        },
+    };
+}
+
+/* ------------------------------------------------------------------ */
 /*  Data Gathering — queries all KPI tables                           */
 /* ------------------------------------------------------------------ */
 
@@ -199,6 +269,9 @@ async function gatherSnapshot(supabase: any) {
         created: c.createdate,
     }));
 
+    // Gather trend intelligence in parallel with the main snapshot
+    const trends = await gatherTrendSnapshot(supabase);
+
     return {
         dateRange: { start: thisWeekStart, end: isoDate(now) },
         prevRange: { start: lastWeekStart, end: thisWeekStart },
@@ -243,6 +316,7 @@ async function gatherSnapshot(supabase: any) {
             openRate: fmtPct(latestCampaign.human_open_rate ? Number(latestCampaign.human_open_rate) * 100 : null),
             ctr: fmtPct(latestCampaign.ctr ? Number(latestCampaign.ctr) * 100 : null),
         } : null,
+        trends,
     };
 }
 
@@ -275,11 +349,13 @@ function buildWeeklyStrategyPrompt(snapshot: any): string {
         "3. 📣 Ad Performance — Which ads are winning/losing? Any fatigue signals?",
         "4. 🗓️ Attendance & Registrations — Show-up trends, Tuesday vs Thursday",
         "5. ✅ Open Items — Overdue tasks, high-priority items needing attention",
-        "6. 🔮 This Week's Focus — Top 3 things the team should focus on",
+        "6. 📉 Trend Alerts — Statistical anomalies (z-score ≥ 1.5), consecutive weekly declines (≥ 2 weeks), and KPIs critically off-goal (>15% below target). Flag each with 🚨 (z-score anomaly), 📉 (consecutive decline), or 🔴 (off-track vs goal).",
+        "7. 🔮 This Week's Focus — Top 3 priorities based on the trend alerts and performance data",
         "",
         "Rules:",
         "- Be specific. Reference actual numbers, ad names, and trends.",
-        "- Flag anomalies (any metric > 25% change from last period).",
+        "- TREND ALERTS are your highest-priority section. If a metric has been declining 3+ weeks, this is a CRITICAL signal.",
+        "- Z-score anomalies indicate statistically unusual deviations (≥1.5σ from 8-week mean).",
         "- Action items must be assignable with clear next steps.",
         "- If data is sparse, acknowledge the limitation.",
         "",
@@ -310,15 +386,17 @@ function buildMeetingPrepPrompt(snapshot: any, meetingDay: string): string {
         "Required sections:",
         "1. 👋 New Leads This Week — List new leads with name, revenue tier, and source",
         "2. 📊 Quick Numbers — Key metrics since last session (leads, spend, registrations)",
-        "3. 🗣️ Suggested Discussion Topics — Based on what's changing in the data",
-        "4. ⚡ Open Action Items — Any overdue or urgent tasks from Notion",
-        "5. 🔮 Predicted Attendance — Estimate based on registrations and historical show-up rates",
+        "3. 📉 Trend Watch — Any KPI with ≥2 consecutive declines or z-score anomaly that the group should know about",
+        "4. 🗣️ Suggested Discussion Topics — Based on what's changing in the data",
+        "5. ⚡ Open Action Items — Any overdue or urgent tasks from Notion",
+        "6. 🔮 Predicted Attendance — Estimate based on registrations and historical show-up rates",
         "",
         "Rules:",
         "- Keep it scannable. The facilitator will reference this during the meeting.",
         "- Include specific lead names and tiers in the New Leads section.",
         "- Predicted attendance should factor in registration count and historical rates.",
         "- Discussion topics should be data-driven, not generic.",
+        "- Trend Watch section: use trends.decliners and trends.anomalies from the snapshot.",
         "",
         "DATA SNAPSHOT:",
         JSON.stringify(snapshot),
@@ -350,7 +428,8 @@ function buildBudgetAllocationPrompt(snapshot: any): string {
         "3. 🚨 Underperformers — Ads that should be paused or reduced",
         "4. 🔄 Reallocation Plan — Specific dollar amounts to move from X to Y",
         "5. ⚠️ Fatigue Signals — Ads showing declining CTR or rising CPL trends",
-        "6. 📈 Projected Impact — Model expected Great Lead lift from proposed changes",
+        "6. 🎯 Goal Gap Analysis — Which cost KPIs are off-target vs our CPL/CPQL goals? (from trends.offTrack)",
+        "7. 📈 Projected Impact — Model expected Great Lead lift from proposed changes",
         "",
         "Rules:",
         "- CPQL/CPGL matters more than CPL. Rising CPL with stable quality is a warning, not an emergency.",
@@ -358,6 +437,7 @@ function buildBudgetAllocationPrompt(snapshot: any): string {
         "- Model the projected impact: 'Moving $X should yield ~N additional qualified leads based on the winner's CPL of $Y.'",
         "- Flag ads where CTR has dropped > 15% as potential creative fatigue.",
         "- If an ad with high CPL has good downstream quality signals, note this explicitly.",
+        "- In Goal Gap Analysis, reference the specific target values from trends.offTrack (e.g., 'CPL goal is $50, current is $72').",
         "",
         "DATA SNAPSHOT:",
         JSON.stringify(snapshot),
