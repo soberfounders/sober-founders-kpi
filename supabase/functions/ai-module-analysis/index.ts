@@ -188,7 +188,11 @@ serve(async (req: Request) => {
     const cachedGeneratedAtMs = Date.parse(String(cachedRow?.generated_at || ""));
     const hasFreshCached = Number.isFinite(cachedGeneratedAtMs) && (nowMs - cachedGeneratedAtMs) <= ttlMs;
 
-    if (!forceRefresh && cachedRow && hasFreshCached) {
+    const contextHashMatches = cachedRow?.context_hash
+      ? cachedRow.context_hash === contextHash
+      : false;
+
+    if (!forceRefresh && cachedRow && hasFreshCached && contextHashMatches) {
       return new Response(JSON.stringify({
         ok: true,
         from_cache: true,
@@ -197,7 +201,7 @@ serve(async (req: Request) => {
         ai_model: cachedRow.ai_model,
         is_mock: !!cachedRow.is_mock,
         context_hash: cachedRow.context_hash || null,
-        context_hash_matches: cachedRow.context_hash ? cachedRow.context_hash === contextHash : null,
+        context_hash_matches: contextHashMatches,
         analysis: {
           summary: Array.isArray(cachedRow.summary) ? cachedRow.summary : [],
           autonomous_actions: Array.isArray(cachedRow.autonomous_actions) ? cachedRow.autonomous_actions : [],
