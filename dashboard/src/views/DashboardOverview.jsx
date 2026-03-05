@@ -249,10 +249,10 @@ function classifyGroupCall(activity, attendeeCount) {
   const timing = etGroupTimingFromDate(start);
   const titleType =
     title.includes('tactic tuesday') ? 'Tuesday' :
-    (title.includes('mastermind on zoom') || title.includes('all are welcome')) ? 'Thursday' :
-    (title.includes("entrepreneur's big book") || title.includes('big book')) ? 'Thursday' :
-    (title.includes('sober founders mastermind') && !title.includes('intro')) ? 'Thursday' :
-    null;
+      (title.includes('mastermind on zoom') || title.includes('all are welcome')) ? 'Thursday' :
+        (title.includes("entrepreneur's big book") || title.includes('big book')) ? 'Thursday' :
+          (title.includes('sober founders mastermind') && !title.includes('intro')) ? 'Thursday' :
+            null;
 
   if (timing?.isNearScheduled && timing?.dayType) return timing.dayType;
   if (titleType && attendeeCount >= MIN_GROUP_ATTENDEES) return titleType;
@@ -531,11 +531,13 @@ function actionCompletionMessage(action, payload) {
 }
 
 const baseCardStyle = {
-  backgroundColor: 'white',
+  background: 'var(--color-card)',
+  backdropFilter: 'blur(16px)',
+  WebkitBackdropFilter: 'blur(16px)',
   border: '1px solid var(--color-border)',
   borderRadius: '16px',
   padding: '18px',
-  boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.08)',
+  boxShadow: 'var(--glass-shadow)',
 };
 
 const DashboardOverview = () => {
@@ -595,10 +597,10 @@ const DashboardOverview = () => {
       USE_DUMMY_DONATIONS
         ? Promise.resolve({ data: DUMMY_DONATION_ROWS, error: null, isDummy: true })
         : supabase
-            .from('donation_transactions_unified')
-            .select('source_system,amount,currency,is_recurring,status,campaign_name,donated_at')
-            .gte('donated_at', `${startDate}T00:00:00.000Z`)
-            .order('donated_at', { ascending: true }),
+          .from('donation_transactions_unified')
+          .select('source_system,amount,currency,is_recurring,status,campaign_name,donated_at')
+          .gte('donated_at', `${startDate}T00:00:00.000Z`)
+          .order('donated_at', { ascending: true }),
       supabase
         .from('raw_hubspot_meeting_activities')
         .select('hubspot_activity_id,activity_type,hs_timestamp,created_at_hubspot,title')
@@ -1653,29 +1655,10 @@ const DashboardOverview = () => {
             id: 'attendees-sync-hubspot-calls',
             action_key: 'attendance_sync_hubspot_calls',
             label: 'Sync HubSpot attendance',
-            description: 'Refresh HubSpot call/meeting attendance source + mappings.',
+            description: 'Refresh HubSpot call/meeting attendance activities + contact associations.',
             kind: 'invoke_function',
             functionName: 'sync_hubspot_meeting_activities',
             body: { days: 45, include_calls: true, include_meetings: true },
-            reloadAfter: true,
-          },
-          {
-            id: 'attendees-reconcile-mappings',
-            action_key: 'attendance_reconcile_mappings',
-            label: 'Reconcile mappings',
-            description: 'Refresh attendee/contact mappings for better attribution and dedupe.',
-            kind: 'invoke_function',
-            functionName: 'reconcile_zoom_attendee_hubspot_mappings',
-            body: { dry_run: false, days: 45 },
-            reloadAfter: true,
-          },
-          {
-            id: 'attendees-sync-luma',
-            action_key: 'attendance_sync_luma_registrations',
-            label: 'Sync registrations',
-            description: 'Refresh Luma registrations to support funnel and attendance context.',
-            kind: 'invoke_function',
-            functionName: 'sync_luma_registrations',
             reloadAfter: true,
           },
         ],
@@ -1878,12 +1861,12 @@ const DashboardOverview = () => {
         : [];
       const autonomousActions = Array.isArray(data?.analysis?.autonomous_actions)
         ? data.analysis.autonomous_actions
-            .map((item) => ({
-              action_key: String(item?.action_key || '').trim(),
-              description: String(item?.description || '').trim(),
-            }))
-            .filter((item) => item.action_key && item.description)
-            .slice(0, 3)
+          .map((item) => ({
+            action_key: String(item?.action_key || '').trim(),
+            description: String(item?.description || '').trim(),
+          }))
+          .filter((item) => item.action_key && item.description)
+          .slice(0, 3)
         : [];
       const humanActions = Array.isArray(data?.analysis?.human_actions)
         ? data.analysis.human_actions.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 3)
@@ -2005,16 +1988,23 @@ const DashboardOverview = () => {
       <div
         style={{
           ...baseCardStyle,
-          background: 'linear-gradient(120deg, #0f766e 0%, #155e75 45%, #1e3a8a 100%)',
-          border: 'none',
-          color: 'white',
+          background: 'linear-gradient(135deg, rgba(3, 218, 198, 0.15) 0%, rgba(0, 230, 118, 0.05) 100%)',
+          border: '1px solid var(--color-border-glow)',
+          boxShadow: '0 8px 32px var(--color-brand-glow), inset 0 0 20px rgba(3, 218, 198, 0.1)',
+          color: 'var(--color-text-primary)',
+          position: 'relative',
+          overflow: 'hidden',
         }}
       >
-        <p style={{ fontSize: '13px', opacity: 0.9, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Executive Focus</p>
-        <h2 style={{ fontSize: '30px', marginTop: '6px' }}>What Matters Most This Week</h2>
-        <p style={{ marginTop: '8px', opacity: 0.95 }}>
-          Prioritized scorecard across traffic, organic search, engagement quality, and community retention.
-        </p>
+        <div style={{ position: 'relative', zIndex: 2 }}>
+          <p style={{ fontSize: '12px', color: 'var(--color-dark-green)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 600 }}>Executive Focus</p>
+          <h2 style={{ fontSize: '32px', marginTop: '6px', textShadow: '0 0 15px rgba(3, 218, 198, 0.3)' }}>What Matters Most This Week</h2>
+          <p style={{ marginTop: '8px', color: 'var(--color-text-secondary)', fontSize: '15px' }}>
+            Prioritized scorecard across traffic, organic search, engagement quality, and community retention.
+          </p>
+        </div>
+        {/* Decorative elements */}
+        <div style={{ position: 'absolute', top: '-50%', right: '-10%', width: '300px', height: '300px', background: 'radial-gradient(circle, rgba(3, 218, 198, 0.1) 0%, transparent 70%)', filter: 'blur(40px)', zIndex: 1 }} />
       </div>
 
       {!dashboard.hasGscData && (
@@ -2112,11 +2102,10 @@ const DashboardOverview = () => {
             return (
               <div
                 key={manager.key}
+                className="glass-panel"
                 style={{
-                  border: `1px solid ${manager.accent.border}`,
-                  borderRadius: '14px',
+                  border: `1px solid var(--color-border)`,
                   overflow: 'hidden',
-                  backgroundColor: '#fff',
                   display: 'flex',
                   flexDirection: 'column',
                 }}
@@ -2124,8 +2113,8 @@ const DashboardOverview = () => {
                 <div
                   style={{
                     padding: '14px 14px 12px',
-                    background: manager.accent.bg,
-                    borderBottom: '1px solid rgba(0,0,0,0.04)',
+                    background: 'rgba(0, 0, 0, 0.2)',
+                    borderBottom: '1px solid var(--color-border)',
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'flex-start' }}>
@@ -2135,8 +2124,9 @@ const DashboardOverview = () => {
                           width: '34px',
                           height: '34px',
                           borderRadius: '10px',
-                          backgroundColor: manager.accent.pillBg,
-                          color: manager.accent.pillText,
+                          background: 'rgba(3, 218, 198, 0.1)',
+                          border: '1px solid var(--color-border-glow)',
+                          color: 'var(--color-dark-green)',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -2146,15 +2136,16 @@ const DashboardOverview = () => {
                         <Icon size={18} />
                       </div>
                       <div>
-                        <p style={{ fontWeight: 700 }}>{manager.title}</p>
-                        <p style={{ marginTop: '2px', fontSize: '12px', color: '#475569' }}>{manager.sectionFocus}</p>
+                        <p style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>{manager.title}</p>
+                        <p style={{ marginTop: '2px', fontSize: '12px', color: 'var(--color-text-muted)' }}>{manager.sectionFocus}</p>
                       </div>
                     </div>
                     <div style={{ display: 'grid', gap: '6px', justifyItems: 'end' }}>
                       <span
                         style={{
-                          backgroundColor: manager.accent.pillBg,
-                          color: manager.accent.pillText,
+                          background: 'rgba(3, 218, 198, 0.15)',
+                          color: 'var(--color-dark-green)',
+                          border: '1px solid var(--color-border-glow)',
                           borderRadius: '999px',
                           padding: '5px 9px',
                           fontSize: '11px',
@@ -2165,14 +2156,11 @@ const DashboardOverview = () => {
                         AI Manager
                       </span>
                       <button
+                        className="btn-glass"
                         type="button"
                         onClick={() => requestModuleAnalysis(manager, true)}
                         disabled={analysis?.status === 'loading'}
                         style={{
-                          border: '1px solid rgba(100,116,139,0.4)',
-                          backgroundColor: 'rgba(255,255,255,0.9)',
-                          color: '#0f172a',
-                          borderRadius: '8px',
                           padding: '6px 9px',
                           fontSize: '11px',
                           fontWeight: 700,
@@ -2187,34 +2175,34 @@ const DashboardOverview = () => {
                       </button>
                     </div>
                   </div>
-                  <p style={{ marginTop: '10px', fontSize: '12px', color: '#334155' }}>{manager.scopeLabel}</p>
-                  <p style={{ marginTop: '6px', fontSize: '11px', color: '#475569' }}>{analysisStatusLabel}</p>
+                  <p style={{ marginTop: '10px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>{manager.scopeLabel}</p>
+                  <p style={{ marginTop: '6px', fontSize: '11px', color: 'var(--color-text-muted)' }}>{analysisStatusLabel}</p>
                   {analysis?.status === 'error' && (
-                    <p style={{ marginTop: '6px', fontSize: '11px', color: '#b91c1c' }}>
+                    <p style={{ marginTop: '6px', fontSize: '11px', color: '#ff5252' }}>
                       Analysis failed: {analysis.error}
                     </p>
                   )}
                   {manager.diagnostics && (
-                    <div style={{ marginTop: '8px', padding: '8px 10px', backgroundColor: 'rgba(255,255,255,0.75)', borderRadius: '10px', border: '1px solid rgba(148,163,184,0.4)' }}>
-                      <p style={{ fontSize: '12px', color: '#475569' }}>{manager.diagnostics}</p>
+                    <div style={{ marginTop: '8px', padding: '8px 10px', backgroundColor: 'rgba(255,152,0,0.1)', borderRadius: '10px', border: '1px solid rgba(255,152,0,0.3)' }}>
+                      <p style={{ fontSize: '12px', color: 'var(--color-orange)' }}>{manager.diagnostics}</p>
                     </div>
                   )}
                 </div>
 
                 <div style={{ padding: '14px', display: 'grid', gap: '14px', flex: 1 }}>
                   <div style={{ display: 'grid', gap: '10px' }}>
-                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', backgroundColor: '#f8fafc' }}>
-                      <p style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b' }}>
+                    <div style={{ border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px', backgroundColor: 'rgba(0, 0, 0, 0.2)' }}>
+                      <p style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-dark-green)', fontWeight: 600 }}>
                         Module Summary (AI-Generated)
                       </p>
                       <ul style={{ marginTop: '6px', paddingLeft: '18px', display: 'grid', gap: '6px' }}>
                         {summaryBullets.map((bullet, idx) => (
-                          <li key={`${manager.key}-summary-${idx}`} style={{ fontSize: '13px', lineHeight: 1.45, color: '#0f172a' }}>
+                          <li key={`${manager.key}-summary-${idx}`} style={{ fontSize: '13px', lineHeight: 1.45, color: 'var(--color-text-primary)' }}>
                             {bullet}
                           </li>
                         ))}
                         {summaryBullets.length === 0 && (
-                          <li style={{ fontSize: '13px', lineHeight: 1.45, color: '#64748b' }}>
+                          <li style={{ fontSize: '13px', lineHeight: 1.45, color: 'var(--color-text-muted)' }}>
                             No summary generated yet for this module.
                           </li>
                         )}
@@ -2224,10 +2212,10 @@ const DashboardOverview = () => {
 
                   <div style={{ display: 'grid', gap: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Bot size={14} color="#334155" />
-                      <p style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>Autonomous Actions</p>
+                      <Bot size={14} color="var(--color-text-primary)" />
+                      <p style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>Autonomous Actions</p>
                     </div>
-                    <p style={{ fontSize: '11px', color: '#64748b' }}>
+                    <p style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
                       AI-selected actions that can run immediately. Click Do This to execute.
                     </p>
                     {autonomousActions.map((action) => {
@@ -2236,31 +2224,24 @@ const DashboardOverview = () => {
                       const isSuccess = state.status === 'success';
                       const isError = state.status === 'error';
                       return (
-                        <div key={action.id} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', backgroundColor: '#fff' }}>
+                        <div key={action.id} style={{ border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px', backgroundColor: 'rgba(255, 255, 255, 0.03)' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center' }}>
                             <div>
-                              <p style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>{action.label}</p>
-                              <p style={{ marginTop: '3px', fontSize: '12px', color: '#64748b' }}>
+                              <p style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{action.label}</p>
+                              <p style={{ marginTop: '3px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
                                 {action.aiDescription || action.description}
                               </p>
                             </div>
                             <button
                               type="button"
+                              className="btn-primary"
                               onClick={() => runAutonomousAction(action)}
                               disabled={isRunning || loading}
                               style={{
-                                border: 'none',
-                                borderRadius: '9px',
-                                padding: '8px 10px',
-                                backgroundColor: isRunning ? '#86efac' : '#16a34a',
-                                color: 'white',
-                                fontSize: '12px',
-                                fontWeight: 700,
+                                padding: '6px 12px',
+                                fontSize: '11px',
                                 cursor: isRunning || loading ? 'not-allowed' : 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                whiteSpace: 'nowrap',
+                                opacity: (isRunning || loading) ? 0.6 : 1,
                               }}
                             >
                               {isRunning ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Sparkles size={13} />}
@@ -2268,7 +2249,7 @@ const DashboardOverview = () => {
                             </button>
                           </div>
                           {(isSuccess || isError) && (
-                            <p style={{ marginTop: '6px', fontSize: '12px', color: isError ? '#b91c1c' : '#166534' }}>
+                            <p style={{ marginTop: '6px', fontSize: '12px', color: isError ? '#ff5252' : '#00e676' }}>
                               {isError ? state.error : (state.message || 'Done')}
                             </p>
                           )}
@@ -2276,8 +2257,8 @@ const DashboardOverview = () => {
                       );
                     })}
                     {autonomousActions.length === 0 && (
-                      <div style={{ border: '1px dashed #cbd5e1', borderRadius: '10px', padding: '10px', backgroundColor: '#fff' }}>
-                        <p style={{ fontSize: '12px', color: '#64748b' }}>
+                      <div style={{ border: '1px dashed var(--color-border)', borderRadius: '10px', padding: '10px', backgroundColor: 'rgba(0, 0, 0, 0.2)' }}>
+                        <p style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
                           No runnable autonomous actions available for this module yet.
                         </p>
                       </div>
@@ -2286,25 +2267,20 @@ const DashboardOverview = () => {
 
                   <div style={{ display: 'grid', gap: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Sparkles size={14} color="#334155" />
-                      <p style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>For You to Do</p>
+                      <Sparkles size={14} color="var(--color-orange)" />
+                      <p style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>For You to Do</p>
                     </div>
                     {humanActions.map((item) => (
-                      <div key={`${manager.key}-${item}`} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', backgroundColor: '#fff', display: 'grid', gap: '8px' }}>
-                        <p style={{ fontSize: '13px', color: '#0f172a', lineHeight: 1.4 }}>{item}</p>
+                      <div key={`${manager.key}-${item}`} style={{ border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px', backgroundColor: 'rgba(255, 255, 255, 0.03)', display: 'grid', gap: '8px' }}>
+                        <p style={{ fontSize: '13px', color: 'var(--color-text-primary)', lineHeight: 1.4 }}>{item}</p>
                         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                           <button
+                            className="btn-glass"
                             type="button"
                             onClick={() => setNotionModal({ open: true, taskName: item })}
                             style={{
-                              border: '1px solid #cbd5e1',
-                              backgroundColor: '#f8fafc',
-                              color: '#0f172a',
-                              borderRadius: '8px',
-                              padding: '7px 10px',
-                              fontSize: '12px',
-                              fontWeight: 700,
-                              cursor: 'pointer',
+                              padding: '6px 10px',
+                              fontSize: '11px',
                             }}
                           >
                             Send to Notion
@@ -2313,8 +2289,8 @@ const DashboardOverview = () => {
                       </div>
                     ))}
                     {humanActions.length === 0 && (
-                      <div style={{ border: '1px dashed #cbd5e1', borderRadius: '10px', padding: '10px', backgroundColor: '#fff' }}>
-                        <p style={{ fontSize: '12px', color: '#64748b' }}>
+                      <div style={{ border: '1px dashed var(--color-border)', borderRadius: '10px', padding: '10px', backgroundColor: 'rgba(0,0,0,0.2)' }}>
+                        <p style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
                           No human-only suggestions generated yet.
                         </p>
                       </div>
@@ -2378,25 +2354,25 @@ const DashboardOverview = () => {
         <div style={baseCardStyle}>
           <h3 style={{ fontSize: '18px', marginBottom: '12px' }}>Search Quality</h3>
           <div style={{ display: 'grid', gap: '12px' }}>
-            <div style={{ backgroundColor: '#f8fafc', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '12px' }}>
+            <div className="glass-panel" style={{ borderRadius: '12px', padding: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Search size={16} color="#2563eb" />
+                <Search size={16} color="var(--color-dark-green)" />
                 <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Impressions (7d)</p>
               </div>
               <p style={{ marginTop: '6px', fontSize: '24px', fontWeight: 700 }}>{formatInt(dashboard.cards.impressions7d)}</p>
             </div>
-            <div style={{ backgroundColor: '#f8fafc', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '12px' }}>
+            <div className="glass-panel" style={{ borderRadius: '12px', padding: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Globe size={16} color="#0f766e" />
+                <Globe size={16} color="var(--color-orange)" />
                 <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Average Position (7d)</p>
               </div>
               <p style={{ marginTop: '6px', fontSize: '24px', fontWeight: 700 }}>
                 {dashboard.cards.position7d ? dashboard.cards.position7d.toFixed(1) : 'N/A'}
               </p>
             </div>
-            <div style={{ backgroundColor: '#f8fafc', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '12px' }}>
+            <div className="glass-panel" style={{ borderRadius: '12px', padding: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Users size={16} color="#1d4ed8" />
+                <Users size={16} color="var(--color-brand-glow)" />
                 <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Organic CTR (7d)</p>
               </div>
               <p style={{ marginTop: '6px', fontSize: '24px', fontWeight: 700 }}>{pct(dashboard.cards.ctr7d)}</p>
@@ -2458,7 +2434,7 @@ const DashboardOverview = () => {
         <h3 style={{ fontSize: '18px', marginBottom: '10px' }}>Data Coverage</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
           {dashboard.sourceCoverage.map((source) => (
-            <div key={source.source} style={{ backgroundColor: '#f8fafc', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px' }}>
+            <div key={source.source} className="glass-panel" style={{ borderRadius: '10px', padding: '10px' }}>
               <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>{source.source}</p>
               <p style={{ marginTop: '6px', fontWeight: 700 }}>{source.count} rows</p>
               <p style={{ marginTop: '2px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>

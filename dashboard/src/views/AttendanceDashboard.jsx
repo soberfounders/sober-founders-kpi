@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-/* Data source priority: weekly attendance snapshots + HubSpot call/meeting activities for enrichment and gap fill. */
+/* Data source priority: HubSpot call/meeting activities + associations only. */
 import { supabase } from '../lib/supabaseClient';
 import {
   ANTHROPIC_API_KEY,
@@ -10,7 +10,6 @@ import {
   OPENAI_API_KEY,
 } from '../lib/env';
 import { resolveCanonicalAttendeeName } from '../lib/attendeeCanonicalization';
-import { getZoomAttributionOverride } from '../lib/zoomAttributionOverrides';
 import {
   ResponsiveContainer,
   LineChart,
@@ -37,8 +36,6 @@ import {
   Sparkles,
 } from 'lucide-react';
 
-const TUE_MEETING_ID = '87199667045';
-const THU_MEETING_ID = '84242212480';
 const RECENT_WINDOW = 8;
 const ET_TIMEZONE = 'America/New_York';
 const GROUP_CALL_ET_MINUTES = {
@@ -59,11 +56,22 @@ function normalizeEmail(email = '') {
   return String(email || '').trim().toLowerCase();
 }
 
-function parseAdditionalEmails(value = '') {
-  return String(value || '')
-    .split(',')
-    .map((v) => normalizeEmail(v))
-    .filter(Boolean);
+function canonicalizeAttendanceDisplayName(rawName = '', aliasMap = new Map()) {
+  const aliased = resolveAliasTarget(rawName, aliasMap);
+  const canonical = resolveCanonicalAttendeeName(aliased || rawName, aliasMap);
+  return String(canonical || aliased || rawName || '').trim();
+}
+
+function buildAttendanceIdentityKey(rawName = '', attendeeObj = {}, aliasMap = new Map()) {
+  const contactId = Number(attendeeObj?.hubspotContactId ?? attendeeObj?.hubspot_contact_id);
+  if (Number.isFinite(contactId) && contactId > 0) return `hubspot:${contactId}`;
+
+  const fallbackName = attendeeObj?.hubspotName && attendeeObj.hubspotName !== 'Not Found'
+    ? attendeeObj.hubspotName
+    : (attendeeObj?.name || rawName);
+  const canonicalName = canonicalizeAttendanceDisplayName(fallbackName, aliasMap);
+  const normalized = normalizeName(canonicalName);
+  return normalized ? `name:${normalized}` : '';
 }
 
 function fullNameFromHubspot(row = {}) {
@@ -817,7 +825,7 @@ function exportAttendanceCSV(sessions) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `zoom_attendance_export_${formatDateMMDDYY(new Date())}.csv`;
+  a.download = `hubspot_attendance_export_${formatDateMMDDYY(new Date())}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -827,18 +835,6 @@ function isMissingTableError(error) {
   const msg = String(error.message || '').toLowerCase();
   const code = String(error.code || '').toUpperCase();
   return code === 'PGRST205' || msg.includes('could not find the table');
-}
-
-function dayTypeFromMetric(metric) {
-  const meetingId = metric?.metadata?.meeting_id ? String(metric.metadata.meeting_id) : '';
-  if (meetingId === TUE_MEETING_ID) return 'Tuesday';
-  if (meetingId === THU_MEETING_ID) return 'Thursday';
-  const d = safeDate(metric?.metadata?.start_time || metric?.metric_date);
-  if (!d) return 'Other';
-  const day = d.getUTCDay();
-  if (day === 2) return 'Tuesday';
-  if (day === 4) return 'Thursday';
-  return 'Other';
 }
 
 function buildPlan(analytics) {
@@ -1062,16 +1058,13 @@ function buildMonthlyAverageSeries(sessions = [], groupType = 'Tuesday') {
 }
 
 /**
- * Build attendance sessions from:
- * 1) weekly attendance snapshots (kpi_metrics) as canonical historical baseline
- * 2) HubSpot call/meeting activity logs for enrichment and uncovered weeks
+ * Build attendance sessions from HubSpot call/meeting activity logs + contact associations.
  */
 function computeAnalytics(
   aliases,
   hubspotActivities = [],
   hubspotContactAssocs = [],
   hubspotContactMap = new Map(),
-  attendanceMetricRows = [],
 ) {
   const aliasMap = new Map(
     (aliases || []).map((a) => [normalizeName(a.original_name), a.target_name?.trim() || a.original_name]),
@@ -1123,44 +1116,6 @@ function computeAnalytics(
     };
   }
 
-  function metricDayType(metricRow = {}) {
-    const metricName = String(metricRow?.metric_name || '').toLowerCase();
-    if (metricName.includes('tuesday')) return 'Tuesday';
-    if (metricName.includes('thursday')) return 'Thursday';
-    return null;
-  }
-
-  function metricSessionStart(metricRow = {}, dayType = null) {
-    const metadataStart = safeDate(metricRow?.metadata?.start_time);
-    if (metadataStart) return metadataStart;
-
-    const metricDate = safeDate(metricRow?.metric_date);
-    if (!metricDate || !dayType) return metricDate;
-
-    const targetDay = dayType === 'Tuesday' ? 2 : 4;
-    const currentDay = metricDate.getUTCDay();
-    const dayOffset = (targetDay - currentDay + 7) % 7;
-    const out = new Date(metricDate);
-    out.setUTCDate(out.getUTCDate() + dayOffset);
-    return out;
-  }
-
-  function metricAttendeeNames(metricRow = {}) {
-    const raw = metricRow?.metadata?.attendees;
-    if (!Array.isArray(raw)) return [];
-    const seen = new Set();
-    const out = [];
-    raw.forEach((nameRaw) => {
-      const name = String(nameRaw || '').trim();
-      if (!name) return;
-      const key = normalizeName(name);
-      if (!key || seen.has(key)) return;
-      seen.add(key);
-      out.push(name);
-    });
-    return out;
-  }
-
   // ── 1. Build sessions from HubSpot call/meeting activities (authoritative source) ──
   const assocsByActivity = new Map();
   (hubspotContactAssocs || []).forEach(assoc => {
@@ -1200,9 +1155,9 @@ function computeAnalytics(
         const lastName = String(a.contact_lastname || enriched?.lastname || '').trim();
         const fullName = [firstName, lastName].filter(Boolean).join(' ');
 
-        // Safeguard filter: Exclude "iPad", "iPhone", or single-character noise (Bug 2 fix)
-        // Only exclude if NOT matched to a real contact, as per requirement
-        if (!contactId && isLikelyDeviceName(fullName || a.contact_email || '')) return false;
+        // HubSpot-only attendance rule:
+        // only keep attendees with an explicit HubSpot contact id from call associations.
+        if (!contactId) return false;
 
         // Anti-Duplicate for matched contacts
         if (contactId) {
@@ -1272,77 +1227,9 @@ function computeAnalytics(
   const canonicalHubspotSessions = Array.from(hubspotSessionsByGroupWeek.values())
     .sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
 
-  const metricSessions = (attendanceMetricRows || []).map((metricRow) => {
-    const type = metricDayType(metricRow);
-    if (!type) return null;
-
-    const start = metricSessionStart(metricRow, type);
-    if (!start) return null;
-    const weekKey = etWeekStartKey(start);
-    if (!weekKey) return null;
-
-    const dateLabel = start.toISOString().slice(0, 10);
-    const dateFormatted = formatDateMMDDYY(start);
-    const resolvedAttendees = metricAttendeeNames(metricRow)
-      .map((name) => resolveAliasTarget(name, aliasMap) || name);
-    const attendeeObjects = resolvedAttendees.map((name) => ({
-      name,
-      hubspotContactId: null,
-      hubspotEmail: '',
-      hubspotName: 'Not Found',
-      hubspotMatched: false,
-      identityMappingSource: 'kpi_metrics_snapshot',
-      identityMappingConfidence: 'None',
-      identityMappingNote: 'Historical weekly attendance snapshot fallback',
-      hubspotSource: 'Not Found',
-      hubspotUrl: null,
-    }));
-    const derivedCount = resolvedAttendees.length > 0
-      ? resolvedAttendees.length
-      : Number(metricRow?.metric_value || 0);
-
-    return {
-      id: `kpi-${type}-${dateLabel}-${String(metricRow?.id || metricRow?.metric_date || '')}`,
-      type,
-      date: start,
-      dateLabel,
-      dateFormatted,
-      meetingId: String(metricRow?.metadata?.meeting_id || ''),
-      startTimeIso: metricRow?.metadata?.start_time || metricRow?.metric_date || null,
-      title: String(metricRow?.metadata?.meeting_topic || `${type} Group Call`).trim(),
-      attendees: resolvedAttendees,
-      attendeeObjects,
-      derivedCount: Number.isFinite(derivedCount) ? derivedCount : 0,
-      sourceCount: Number(metricRow?.metric_value || resolvedAttendees.length || 0),
-      mismatch: false,
-      dataSource: 'kpi_metrics_snapshot',
-      weekKey,
-      inPrimaryWindow: true,
-      inFallbackWindow: true,
-      hasAttendanceSignal: Number(metricRow?.metric_value || 0) > 0,
-      strongTitleSignal: true,
-      likelyOneToOneTitle: false,
-      minutesFromExpected: 0,
-      isCallActivity: false,
-    };
-  }).filter(Boolean);
-
-  // Canonical weekly source priority:
-  // 1) kpi_metrics historical snapshots (complete baseline)
-  // 2) HubSpot activity associations fill weeks not present in snapshots.
   const sessionsByGroupWeek = new Map();
-  metricSessions.forEach((session) => {
-    const key = `${session.type}|${session.weekKey || session.dateLabel}`;
-    const existing = sessionsByGroupWeek.get(key);
-    sessionsByGroupWeek.set(key, pickStrongerSessionCandidate(existing, session));
-  });
   canonicalHubspotSessions.forEach((session) => {
     const key = `${session.type}|${session.weekKey || session.dateLabel}`;
-    if (sessionsByGroupWeek.has(key)) return;
-    // Guardrail: prevent single-attendee/noisy fallback rows from replacing missing weekly coverage.
-    if (Number(session?.sourceCount || 0) <= 1 && !session?.strongTitleSignal && !session?.hasAttendanceSignal) {
-      return;
-    }
     const existing = sessionsByGroupWeek.get(key);
     sessionsByGroupWeek.set(key, pickStrongerSessionCandidate(existing, session));
   });
@@ -1411,6 +1298,63 @@ function computeAnalytics(
   });
   sessions = sessions.sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
 
+  // Normalize attendee identity keys across all source types so first-time/repeat
+  // logic stays consistent between historical snapshots and HubSpot call rows.
+  sessions = sessions.map((session) => {
+    const seedObjects = (Array.isArray(session?.attendeeObjects) && session.attendeeObjects.length > 0)
+      ? session.attendeeObjects
+      : (Array.isArray(session?.attendees) ? session.attendees.map((name) => ({ name })) : []);
+    const mergedByIdentity = new Map();
+
+    seedObjects.forEach((rawObj, idx) => {
+      const rawName = String(rawObj?.name || session?.attendees?.[idx] || '').trim();
+      if (!rawName) return;
+      const canonicalName = canonicalizeAttendanceDisplayName(rawName, aliasMap);
+      const preferredName = (
+        rawObj?.hubspotName
+        && rawObj.hubspotName !== 'Not Found'
+      )
+        ? String(rawObj.hubspotName).trim()
+        : canonicalName;
+      const identityKey = buildAttendanceIdentityKey(preferredName, rawObj || {}, aliasMap);
+      if (!identityKey) return;
+
+      const normalized = {
+        ...rawObj,
+        name: preferredName,
+        hubspotContactId: Number.isFinite(Number(rawObj?.hubspotContactId))
+          ? Number(rawObj.hubspotContactId)
+          : null,
+        hubspotMatched: !!rawObj?.hubspotMatched || Number.isFinite(Number(rawObj?.hubspotContactId)),
+        identityKey,
+      };
+
+      const existing = mergedByIdentity.get(identityKey);
+      if (!existing) {
+        mergedByIdentity.set(identityKey, normalized);
+        return;
+      }
+      const existingHasHubspot = Number.isFinite(Number(existing?.hubspotContactId));
+      const candidateHasHubspot = Number.isFinite(Number(normalized?.hubspotContactId));
+      if (candidateHasHubspot && !existingHasHubspot) {
+        mergedByIdentity.set(identityKey, { ...existing, ...normalized });
+        return;
+      }
+      const existingQuality = Number(existing?.hubspotMatched) + Number(Boolean(existing?.hubspotEmail && existing.hubspotEmail !== 'Not Found'));
+      const candidateQuality = Number(normalized?.hubspotMatched) + Number(Boolean(normalized?.hubspotEmail && normalized.hubspotEmail !== 'Not Found'));
+      if (candidateQuality > existingQuality || String(normalized?.name || '').length > String(existing?.name || '').length) {
+        mergedByIdentity.set(identityKey, { ...existing, ...normalized });
+      }
+    });
+
+    const attendeeObjects = Array.from(mergedByIdentity.values());
+    return {
+      ...session,
+      attendeeObjects,
+      attendees: attendeeObjects.map((row) => row.name),
+    };
+  });
+
   // Attendance charts and KPIs should only reflect sessions that already occurred.
   const nowTs = Date.now();
   sessions = sessions.filter((s) => (s?.date?.getTime?.() || 0) <= nowTs);
@@ -1426,22 +1370,36 @@ function computeAnalytics(
   sessions = sessions.map(session => {
     const seenPeople = session.type === 'Tuesday' ? seenTuesday : seenThursday;
     const newNames = [];
-    session.attendees.forEach(name => {
-      const key = normalizeName(name);
-      if (!seenPeople.has(key)) {
-        seenPeople.add(key);
-        newNames.push(name);
+    const newIdentityKeys = [];
+    const attendeeEntries = (Array.isArray(session?.attendeeObjects) && session.attendeeObjects.length > 0)
+      ? session.attendeeObjects
+      : (Array.isArray(session?.attendees) ? session.attendees.map((name) => ({ name })) : []);
+    attendeeEntries.forEach((attendee) => {
+      const displayName = String(attendee?.name || '').trim();
+      if (!displayName) return;
+      const identityKey = attendee?.identityKey || buildAttendanceIdentityKey(displayName, attendee, aliasMap);
+      if (!identityKey) return;
+      if (!seenPeople.has(identityKey)) {
+        seenPeople.add(identityKey);
+        newNames.push(displayName);
+        newIdentityKeys.push(identityKey);
       }
     });
 
     const newCount = newNames.length;
-    const repeatCount = session.derivedCount - newCount;
+    const repeatCount = Math.max(Number(session.derivedCount || 0) - newCount, 0);
 
     // Update Group Running Stats
     const gs = groupStats[session.type];
     if (gs) {
       gs.visits += session.derivedCount;
-      session.attendees.forEach(a => gs.unique.add(normalizeName(a)));
+      attendeeEntries.forEach((attendee) => {
+        const displayName = String(attendee?.name || '').trim();
+        if (!displayName) return;
+        const identityKey = attendee?.identityKey || buildAttendanceIdentityKey(displayName, attendee, aliasMap);
+        if (!identityKey) return;
+        gs.unique.add(identityKey);
+      });
 
       const uniqueCount = gs.unique.size;
       const avg = uniqueCount > 0 ? gs.visits / uniqueCount : 0;
@@ -1456,6 +1414,7 @@ function computeAnalytics(
     return {
       ...session,
       newNames,
+      newIdentityKeys,
       newCount,
       repeatCount
     };
@@ -1470,14 +1429,21 @@ function computeAnalytics(
     if (session.mismatch) mismatches += 1;
     totalAppearances += session.derivedCount;
 
-    const attendeeObjByName = new Map(
-      (session.attendeeObjects || []).map((obj) => [normalizeName(obj?.name || ''), obj]),
-    );
+    const attendeeEntries = (Array.isArray(session?.attendeeObjects) && session.attendeeObjects.length > 0)
+      ? session.attendeeObjects
+      : (Array.isArray(session?.attendees) ? session.attendees.map((name) => ({ name })) : []);
 
-    session.attendees.forEach((name) => {
-      if (!people.has(name)) {
-        people.set(name, {
+    attendeeEntries.forEach((attendeeObj) => {
+      const rawName = String(attendeeObj?.name || '').trim();
+      if (!rawName) return;
+      const identityKey = attendeeObj?.identityKey || buildAttendanceIdentityKey(rawName, attendeeObj, aliasMap);
+      if (!identityKey) return;
+      const name = canonicalizeAttendanceDisplayName(rawName, aliasMap);
+
+      if (!people.has(identityKey)) {
+        people.set(identityKey, {
           name,
+          identityKey,
           visits: 0,
           tueVisits: 0,
           thuVisits: 0,
@@ -1497,13 +1463,20 @@ function computeAnalytics(
         });
       }
 
-      const p = people.get(name);
-      const attendeeObj = attendeeObjByName.get(normalizeName(name));
+      const p = people.get(identityKey);
       p.visits += 1;
       if (session.type === 'Tuesday') p.tueVisits += 1;
       if (session.type === 'Thursday') p.thuVisits += 1;
       p.sessionIndexes.push(idx);
       p.lastSeen = session.dateLabel;
+
+      // Prefer richer display names when we learn them later.
+      if (
+        hasLikelyFirstLastName(name)
+        && (!hasLikelyFirstLastName(p.name) || String(name).length > String(p.name || '').length)
+      ) {
+        p.name = name;
+      }
 
       if (attendeeObj?.hubspotContactId) {
         const currentIds = new Set(Array.isArray(p.hubspotContactIdsSeen) ? p.hubspotContactIdsSeen : []);
@@ -1706,11 +1679,9 @@ function computeAnalytics(
   };
 }
 
-function buildAttendanceHubspotResolver({ rawHubspot = [], rawLuma = [], attendeeHubspotMappings = [] }) {
-  const hubspotById = new Map();
+function buildAttendanceHubspotResolver({ rawHubspot = [] }) {
   const hubspotByExactName = new Map();
   const hubspotByFirstLastInitial = new Map();
-  const hubspotByEmail = new Map();
 
   const addIndexRow = (map, key, row) => {
     if (!key) return;
@@ -1748,54 +1719,12 @@ function buildAttendanceHubspotResolver({ rawHubspot = [], rawLuma = [], attende
   };
 
   (rawHubspot || []).forEach((row) => {
-    const id = Number(row?.hubspot_contact_id);
-    if (Number.isFinite(id)) hubspotById.set(id, row);
-
     const full = fullNameFromHubspot(row);
     const nameKey = normalizeName(full);
     if (nameKey) addIndexRow(hubspotByExactName, nameKey, row);
 
     const initKey = buildInitialKey(full);
     if (initKey) addIndexRow(hubspotByFirstLastInitial, initKey, row);
-
-    const primaryEmail = normalizeEmail(row?.email);
-    if (primaryEmail) addIndexRow(hubspotByEmail, primaryEmail, row);
-    parseAdditionalEmails(row?.hs_additional_emails).forEach((email) => addIndexRow(hubspotByEmail, email, row));
-  });
-
-  const lumaByName = new Map();
-  const lumaByEmail = new Map();
-  const pickBestLuma = (existing, candidate) => {
-    if (!existing) return candidate;
-    const score = (row) => {
-      let s = 0;
-      if (row?.matched_hubspot_contact_id) s += 5;
-      if (row?.matched_hubspot_email) s += 4;
-      if (row?.matched_hubspot) s += 3;
-      if (row?.matched_zoom) s += 2;
-      if (row?.guest_email) s += 1;
-      return s;
-    };
-    return score(candidate) > score(existing) ? candidate : existing;
-  };
-
-  (rawLuma || []).forEach((row) => {
-    const approval = String(row?.approval_status || 'approved').toLowerCase();
-    if (approval && approval !== 'approved') return;
-    const nameKey = normalizeName(row?.guest_name || '');
-    const emailKey = normalizeEmail(row?.guest_email || '');
-    if (nameKey) lumaByName.set(nameKey, pickBestLuma(lumaByName.get(nameKey), row));
-    if (emailKey) lumaByEmail.set(emailKey, pickBestLuma(lumaByEmail.get(emailKey), row));
-  });
-
-  const attendeeMappingsBySessionAndName = new Map();
-  (attendeeHubspotMappings || []).forEach((row) => {
-    const dateKey = String(row?.session_date || '').slice(0, 10);
-    const meetingId = String(row?.meeting_id || '');
-    const nameKey = normalizeName(row?.zoom_attendee_canonical_name || row?.zoom_attendee_raw_name || '');
-    if (!dateKey || !nameKey) return;
-    const key = `${dateKey}|${meetingId}|${nameKey}`;
-    attendeeMappingsBySessionAndName.set(key, row);
   });
 
   const resolveFromHubspotRow = (contact, source, note = '') => {
@@ -1832,50 +1761,6 @@ function buildAttendanceHubspotResolver({ rawHubspot = [], rawLuma = [], attende
       };
     }
 
-    const manualOverride = getZoomAttributionOverride(attendeeName);
-    if (manualOverride) {
-      const manualContactId = Number(manualOverride?.hubspotContactId);
-      const manualContact = Number.isFinite(manualContactId) ? (hubspotById.get(manualContactId) || null) : null;
-      const luma = lumaByName.get(nameKey) || null;
-      const bestEmail = normalizeEmail(manualContact?.email) || normalizeEmail(luma?.guest_email) || normalizeEmail(luma?.matched_hubspot_email) || 'Not Found';
-      return {
-        matched: !!manualOverride?.hubspotContactId || !!manualContact,
-        hubspotContactId: Number.isFinite(manualContactId) ? manualContactId : (Number(manualContact?.hubspot_contact_id) || null),
-        hubspotName: manualOverride?.canonicalHubspotName || (manualContact ? fullNameFromHubspot(manualContact) : '') || String(attendeeName || '').trim() || 'Not Found',
-        hubspotEmail: bestEmail,
-        hubspotUrl: buildHubspotContactUrl(manualContactId, manualOverride?.hubspotUrl || ''),
-        identityMappingSource: 'manual_override',
-        identityMappingConfidence: 'High',
-        identityMappingNote: manualOverride?.note || 'User-confirmed HubSpot mapping override',
-        hubspotSource: manualOverride?.originalTrafficSource || manualContact?.hs_analytics_source || 'Not Found',
-        missingIdentityReason: '',
-      };
-    }
-
-    const sessionDateKey = session?.dateLabel || '';
-    const sessionMeetingId = String(session?.meetingId || '');
-    const sessionMapKey = sessionDateKey ? `${sessionDateKey}|${sessionMeetingId}|${nameKey}` : '';
-    const sessionMap = sessionMapKey ? attendeeMappingsBySessionAndName.get(sessionMapKey) : null;
-    if (sessionMap) {
-      const mappedId = Number(sessionMap?.hubspot_contact_id);
-      const mappedContact = Number.isFinite(mappedId) ? (hubspotById.get(mappedId) || null) : null;
-      if (mappedContact) {
-        return resolveFromHubspotRow(mappedContact, 'hubspot_meeting_activity', sessionMap?.mapping_reason || sessionMap?.match_note || '');
-      }
-      return {
-        matched: true,
-        hubspotContactId: Number.isFinite(mappedId) ? mappedId : null,
-        hubspotName: String(sessionMap?.hubspot_name || '').trim() || 'Not Found',
-        hubspotEmail: normalizeEmail(sessionMap?.hubspot_email) || 'Not Found',
-        hubspotUrl: buildHubspotContactUrl(mappedId),
-        identityMappingSource: 'hubspot_meeting_activity',
-        identityMappingConfidence: 'High',
-        identityMappingNote: sessionMap?.mapping_reason || sessionMap?.match_note || '',
-        hubspotSource: 'Not Found',
-        missingIdentityReason: '',
-      };
-    }
-
     const exactMatch = pickBestHubspot(hubspotByExactName.get(nameKey) || []);
     if (exactMatch) {
       return resolveFromHubspotRow(exactMatch, 'hubspot_exact_name', 'Exact normalized full-name match in raw HubSpot cache');
@@ -1885,34 +1770,6 @@ function buildAttendanceHubspotResolver({ rawHubspot = [], rawLuma = [], attende
     const initialCandidates = hubspotByFirstLastInitial.get(initKey) || [];
     if (initKey && initialCandidates.length === 1) {
       return resolveFromHubspotRow(initialCandidates[0], 'hubspot_first_last_initial', 'Unique first name + last initial match in raw HubSpot cache');
-    }
-
-    const lumaEvidence = lumaByName.get(nameKey) || null;
-    if (lumaEvidence) {
-      const matchedId = Number(lumaEvidence?.matched_hubspot_contact_id);
-      const matchedContact = Number.isFinite(matchedId) ? (hubspotById.get(matchedId) || null) : null;
-      if (matchedContact) {
-        return resolveFromHubspotRow(matchedContact, 'luma_matched_hubspot_bridge', 'Mapped through Lu.ma matched_hubspot contact');
-      }
-
-      const lumaEmail = normalizeEmail(lumaEvidence?.matched_hubspot_email || lumaEvidence?.guest_email);
-      const emailContact = pickBestHubspot(hubspotByEmail.get(lumaEmail) || []);
-      if (emailContact) {
-        return resolveFromHubspotRow(emailContact, 'luma_email_bridge', 'Matched through Lu.ma registration email to raw HubSpot cache');
-      }
-
-      return {
-        matched: false,
-        hubspotContactId: Number.isFinite(matchedId) ? matchedId : null,
-        hubspotName: String(lumaEvidence?.matched_hubspot_name || '').trim() || 'Not Found',
-        hubspotEmail: lumaEmail || 'Not Found',
-        hubspotUrl: buildHubspotContactUrl(matchedId),
-        identityMappingSource: 'luma_unresolved_bridge',
-        identityMappingConfidence: 'Medium',
-        identityMappingNote: 'Lu.ma registration exists for this attendee name but HubSpot cache row is missing (likely sync coverage gap)',
-        hubspotSource: 'Not Found',
-        missingIdentityReason: 'Lu.ma attendee found, but matching HubSpot contact is missing from raw_hubspot_contacts cache',
-      };
     }
 
     return {
@@ -1926,8 +1783,8 @@ function buildAttendanceHubspotResolver({ rawHubspot = [], rawLuma = [], attende
       identityMappingNote: '',
       hubspotSource: 'Not Found',
       missingIdentityReason: initialCandidates.length > 1
-        ? 'Ambiguous HubSpot candidates by first name + last initial; needs HubSpot meeting activity mapping or manual cleanup'
-        : 'No HubSpot or Lu.ma identity bridge found for attendee name',
+        ? 'Ambiguous HubSpot candidates by first name + last initial; needs contact cleanup in HubSpot.'
+        : 'No HubSpot contact match by name in raw_hubspot_contacts cache',
     };
   };
 
@@ -1935,8 +1792,6 @@ function buildAttendanceHubspotResolver({ rawHubspot = [], rawLuma = [], attende
     resolveAttendee,
     stats: {
       hubspotContactsCached: rawHubspot.length,
-      lumaRegistrationsCached: rawLuma.length,
-      meetingActivityMappingsCached: attendeeHubspotMappings.length,
     },
   };
 }
@@ -1959,12 +1814,9 @@ const AttendanceDashboard = () => {
   const [aliasWarning, setAliasWarning] = useState('');
   const [aliases, setAliases] = useState([]);
   const [rawHubspotContacts, setRawHubspotContacts] = useState([]);
-  const [rawLumaRegistrations, setRawLumaRegistrations] = useState([]);
-  const [attendeeHubspotMappings, setAttendeeHubspotMappings] = useState([]);
-  // Attendance source inputs: HubSpot activity rows + historical weekly snapshot rows.
+  // Attendance source inputs: HubSpot activity rows + HubSpot contact associations.
   const [hubspotActivities, setHubspotActivities] = useState([]);
   const [hubspotContactAssocs, setHubspotContactAssocs] = useState([]);
-  const [attendanceMetricRows, setAttendanceMetricRows] = useState([]);
   const [identityWarning, setIdentityWarning] = useState('');
   const [planState, setPlanState] = useState({});
   const [selectedSessionKey, setSelectedSessionKey] = useState('');
@@ -2003,17 +1855,20 @@ const AttendanceDashboard = () => {
     return m;
   }, [rawHubspotContacts]);
 
-  const analytics = useMemo(
-    () => computeAnalytics(aliases, hubspotActivities, hubspotContactAssocs, hubspotContactMap, attendanceMetricRows),
-    [aliases, hubspotActivities, hubspotContactAssocs, hubspotContactMap, attendanceMetricRows],
-  );
   const attendanceHubspotResolver = useMemo(
     () => buildAttendanceHubspotResolver({
       rawHubspot: rawHubspotContacts,
-      rawLuma: rawLumaRegistrations,
-      attendeeHubspotMappings,
     }),
-    [rawHubspotContacts, rawLumaRegistrations, attendeeHubspotMappings],
+    [rawHubspotContacts],
+  );
+  const analytics = useMemo(
+    () => computeAnalytics(
+      aliases,
+      hubspotActivities,
+      hubspotContactAssocs,
+      hubspotContactMap,
+    ),
+    [aliases, hubspotActivities, hubspotContactAssocs, hubspotContactMap],
   );
   const planItems = useMemo(() => buildPlan(analytics?.stats), [analytics]);
   const hostAttendanceDataWarning = useMemo(() => {
@@ -2086,36 +1941,45 @@ const AttendanceDashboard = () => {
     if (selectedIndex < 0) return null;
 
     const session = sessions[selectedIndex];
-    const totalVisitsByName = new Map();
-    const groupVisitsByName = new Map();
+    const sessionAttendeeEntries = (s) => {
+      if (Array.isArray(s?.attendeeObjects) && s.attendeeObjects.length > 0) return s.attendeeObjects;
+      return (s?.attendees || []).map((name) => ({
+        name,
+        identityKey: `name:${normalizeName(name)}`,
+      }));
+    };
+    const totalVisitsByIdentity = new Map();
+    const groupVisitsByIdentity = new Map();
 
     sessions.slice(0, selectedIndex + 1).forEach((s) => {
-      (s.attendees || []).forEach((name) => {
-        totalVisitsByName.set(name, (totalVisitsByName.get(name) || 0) + 1);
+      sessionAttendeeEntries(s).forEach((attendee) => {
+        const displayName = String(attendee?.name || '').trim();
+        if (!displayName) return;
+        const identityKey = attendee?.identityKey || buildAttendanceIdentityKey(displayName, attendee);
+        if (!identityKey) return;
+        totalVisitsByIdentity.set(identityKey, (totalVisitsByIdentity.get(identityKey) || 0) + 1);
         if (s.type === session.type) {
-          groupVisitsByName.set(name, (groupVisitsByName.get(name) || 0) + 1);
+          groupVisitsByIdentity.set(identityKey, (groupVisitsByIdentity.get(identityKey) || 0) + 1);
         }
       });
     });
 
-    const newSet = new Set(session.newNames || []);
+    const newIdentitySet = new Set(session.newIdentityKeys || []);
     const visitsByName = new Map(
       (analytics.people || []).map((p) => [normalizeName(p.name), Number(p.visits || 0)]),
     );
     const allKnownNames = (analytics.people || []).map((p) => p.name).filter(Boolean);
-    const inSessionSet = new Set((session.attendees || []).map((n) => normalizeName(n)));
+    const sessionEntries = sessionAttendeeEntries(session);
+    const inSessionSet = new Set(sessionEntries.map((entry) => normalizeName(entry?.name || '')));
     // Build attendee objects map for fast lookup (name → hubspot pre-resolved data)
-    const attendeeObjByName = new Map();
-    (session.attendeeObjects || []).forEach(obj => {
-      attendeeObjByName.set(normalizeName(obj.name || ''), obj);
-    });
-
-    const attendeeRows = (session.attendees || [])
-      .map((name) => {
-        // For HubSpot-sourced sessions, use the pre-resolved data directly.
-        // For Zoom-only sessions, fall back to the resolver (name matching).
-        const preResolved = attendeeObjByName.get(normalizeName(name));
-        const hubspotIdentity = preResolved
+    const attendeeRows = sessionEntries
+      .map((entry) => {
+        const name = String(entry?.name || '').trim();
+        if (!name) return null;
+        // Use pre-resolved HubSpot association identity whenever available.
+        // Fallback resolver is name-only for unresolved historical rows.
+        const preResolved = entry && Object.keys(entry).length > 0 ? entry : null;
+        const hubspotIdentity = preResolved?.hubspotContactId
           ? { matched: true, ...preResolved }
           : attendanceHubspotResolver.resolveAttendee(name, session);
         const resolvedHubspotContactId = Number(hubspotIdentity?.hubspotContactId);
@@ -2125,6 +1989,7 @@ const AttendanceDashboard = () => {
         const revenue = resolveHubspotRevenueValue(hubspotContact);
         const sobrietyDate = resolveHubspotSobrietyValue(hubspotContact) || null;
         const sobrietyInfo = sobrietyMilestoneInfo(sobrietyDate, new Date());
+        const identityKey = entry?.identityKey || buildAttendanceIdentityKey(name, hubspotIdentity || entry);
 
         const rawCandidates = findSessionPriorityDuplicates(name, allKnownNames, inSessionSet);
         const dedupe = new Set();
@@ -2148,10 +2013,10 @@ const AttendanceDashboard = () => {
         return {
           name,
           displayName: hubspotIdentity?.hubspotName && hubspotIdentity.hubspotName !== 'Not Found' ? hubspotIdentity.hubspotName : name,
-          isNew: newSet.has(name),
-          groupVisitsIncludingThisSession: groupVisitsByName.get(name) || 0,
-          totalVisitsIncludingThisSession: totalVisitsByName.get(name) || 0,
-          hubspotMatched: preResolved ? true : !!hubspotIdentity?.matched,
+          isNew: !!identityKey && newIdentitySet.has(identityKey),
+          groupVisitsIncludingThisSession: identityKey ? (groupVisitsByIdentity.get(identityKey) || 0) : 0,
+          totalVisitsIncludingThisSession: identityKey ? (totalVisitsByIdentity.get(identityKey) || 0) : 0,
+          hubspotMatched: !!hubspotIdentity?.matched || Number.isFinite(Number(hubspotIdentity?.hubspotContactId)),
           hubspotContactId: hubspotIdentity?.hubspotContactId || null,
           hubspotName: hubspotIdentity?.hubspotName || 'Not Found',
           hubspotEmail: hubspotIdentity?.hubspotEmail || 'Not Found',
@@ -2160,8 +2025,10 @@ const AttendanceDashboard = () => {
           identityMappingSource: hubspotIdentity?.identityMappingSource || 'none',
           identityMappingConfidence: hubspotIdentity?.identityMappingConfidence || 'Low',
           identityMappingNote: hubspotIdentity?.identityMappingNote || '',
-          missingIdentityReason: preResolved ? '' : (hubspotIdentity?.missingIdentityReason || ''),
-          dataSource: session.dataSource || 'zoom',
+          missingIdentityReason: (hubspotIdentity?.matched || Number.isFinite(Number(hubspotIdentity?.hubspotContactId)))
+            ? ''
+            : (hubspotIdentity?.missingIdentityReason || ''),
+          dataSource: session.dataSource || 'hubspot',
           revenue,
           sobrietyDate,
           sobrietyDurationLabel: sobrietyInfo?.durationLabel || '',
@@ -2171,6 +2038,7 @@ const AttendanceDashboard = () => {
           duplicateActions,
         };
       })
+      .filter(Boolean)
       .sort((a, b) =>
         Number(b.isNew) - Number(a.isNew)
         || (a.isNew && b.isNew ? a.displayName.localeCompare(b.displayName) : 0)
@@ -2222,6 +2090,8 @@ const AttendanceDashboard = () => {
         derivedCount: Number(session.derivedCount || 0),
         attendees: Array.isArray(session.attendees) ? session.attendees : [],
         newNames: Array.isArray(session.newNames) ? session.newNames : [],
+        attendeeObjects: Array.isArray(session.attendeeObjects) ? session.attendeeObjects : [],
+        newIdentityKeys: Array.isArray(session.newIdentityKeys) ? session.newIdentityKeys : [],
       }))
       .sort((a, b) => a.dateLabel.localeCompare(b.dateLabel));
 
@@ -2242,12 +2112,24 @@ const AttendanceDashboard = () => {
       : attendedSessions[attendedSessions.length - 1].sessionKey;
     const selectedSession = attendedSessions.find((session) => session.sessionKey === activeSessionKey) || null;
 
-    const otherAttendees = (selectedSession?.attendees || [])
-      .filter((name) => normalizeName(name) !== normalizeName(person.name))
-      .map((name) => ({
-        name,
-        isNew: (selectedSession?.newNames || []).includes(name),
-      }))
+    const selectedNewIdentitySet = new Set(selectedSession?.newIdentityKeys || []);
+    const selectedEntries = (selectedSession?.attendeeObjects || []).length > 0
+      ? (selectedSession?.attendeeObjects || [])
+      : (selectedSession?.attendees || []).map((name) => ({ name, identityKey: `name:${normalizeName(name)}` }));
+    const personIdentityKey = person?.identityKey || `name:${normalizeName(person.name || '')}`;
+    const otherAttendees = selectedEntries
+      .filter((entry) => {
+        const entryIdentityKey = entry?.identityKey || `name:${normalizeName(entry?.name || '')}`;
+        return entryIdentityKey !== personIdentityKey;
+      })
+      .map((entry) => {
+        const name = String(entry?.name || '').trim();
+        const identityKey = entry?.identityKey || `name:${normalizeName(name)}`;
+        return {
+          name,
+          isNew: selectedNewIdentitySet.has(identityKey),
+        };
+      })
       .sort((a, b) => a.name.localeCompare(b.name));
 
     return {
@@ -2594,7 +2476,7 @@ const AttendanceDashboard = () => {
       let syncData = null;
       const primary = await supabase.functions.invoke('sync_attendance_from_hubspot', {
         method: 'POST',
-        body: { days: ATTENDANCE_BACKFILL_DAYS, include_reconcile: true, include_luma: true },
+        body: { days: ATTENDANCE_BACKFILL_DAYS },
       });
 
       if (!primary.error) {
@@ -2606,18 +2488,11 @@ const AttendanceDashboard = () => {
         });
         if (fallbackHubspot.error) throw fallbackHubspot.error;
 
-        const fallbackReconcile = await supabase.functions.invoke('reconcile_zoom_attendee_hubspot_mappings', {
-          method: 'POST',
-          body: { days: ATTENDANCE_BACKFILL_DAYS, dry_run: false },
-        });
-
         syncData = {
-          ok: !fallbackReconcile.error,
+          ok: true,
           fallback: true,
           host_data_warning_summary: '',
-          non_fatal_step_errors: fallbackReconcile.error
-            ? [{ step: 'hubspot_attendance_reconcile', error: fallbackReconcile.error.message || 'reconcile failed' }]
-            : [],
+          non_fatal_step_errors: [],
         };
       }
 
@@ -2674,9 +2549,6 @@ const AttendanceDashboard = () => {
     const [
       hsActivitiesResult,
       hubspotContactsResult,
-      lumaResult,
-      attendeeMappingsResult,
-      attendanceMetricsResult,
     ] = await Promise.all([
       selectAllRows((from, to) => (
         supabase
@@ -2695,31 +2567,6 @@ const AttendanceDashboard = () => {
           .order('createdate', { ascending: false })
           .range(from, to)
       ), { pageSize: 1000, maxPages: 120 }),
-      selectAllRows((from, to) => (
-        supabase
-          .from('raw_luma_registrations')
-          .select('event_date,guest_name,guest_email,approval_status,is_thursday,matched_zoom,matched_hubspot,matched_hubspot_contact_id,matched_hubspot_name,matched_hubspot_email')
-          .gte('event_date', identityStartDate)
-          .order('event_date', { ascending: false })
-          .range(from, to)
-      ), { pageSize: 1000, maxPages: 120 }),
-      selectAllRows((from, to) => (
-        supabase
-          .from('zoom_attendee_hubspot_mappings')
-          .select('session_date,meeting_id,zoom_attendee_raw_name,zoom_attendee_canonical_name,hubspot_contact_id,hubspot_name,hubspot_email,mapping_source,mapping_reason,mapping_confidence,match_note,hubspot_activity_id')
-          .gte('session_date', identityStartDate)
-          .order('session_date', { ascending: false })
-          .range(from, to)
-      ), { pageSize: 1000, maxPages: 120 }),
-      selectAllRows((from, to) => (
-        supabase
-          .from('kpi_metrics')
-          .select('id,metric_name,metric_date,metric_value,metadata')
-          .in('metric_name', ['Zoom Net Attendees - Tuesday', 'Zoom Net Attendees - Thursday'])
-          .gte('metric_date', identityStartIso)
-          .order('metric_date', { ascending: false })
-          .range(from, to)
-      ), { pageSize: 1000, maxPages: 120 }),
     ]);
 
     const hsActivityRows = hsActivitiesResult.data || [];
@@ -2728,13 +2575,6 @@ const AttendanceDashboard = () => {
       setHubspotActivities([]);
     } else {
       setHubspotActivities(hsActivityRows);
-    }
-
-    if (attendanceMetricsResult.error) {
-      identityWarnings.push(`Historical attendance snapshots unavailable: ${attendanceMetricsResult.error.message || 'read failed'}`);
-      setAttendanceMetricRows([]);
-    } else {
-      setAttendanceMetricRows(attendanceMetricsResult.data || []);
     }
 
     let hsAssocRows = [];
@@ -2834,18 +2674,6 @@ const AttendanceDashboard = () => {
     }
 
     setRawHubspotContacts(hubspotContactsData);
-
-    if (lumaResult.error) {
-      setRawLumaRegistrations([]);
-    } else {
-      setRawLumaRegistrations(lumaResult.data || []);
-    }
-
-    if (attendeeMappingsResult.error) {
-      setAttendeeHubspotMappings([]);
-    } else {
-      setAttendeeHubspotMappings(attendeeMappingsResult.data || []);
-    }
 
     if (identityWarnings.length > 0) {
       setIdentityWarning(identityWarnings.join(' | '));
@@ -3178,7 +3006,7 @@ const AttendanceDashboard = () => {
           <p style={{ color: '#92400e', fontWeight: 700 }}>Identity Mapping Warning</p>
           <p style={{ marginTop: '6px', color: '#92400e' }}>{identityWarning}</p>
           <p style={{ marginTop: '6px', color: '#92400e', fontSize: '12px' }}>
-            Attendance counts remain valid. HubSpot contact/email enrichment is partial until caches and mapping tables are synced.
+            Attendance counts remain valid. HubSpot contact/email enrichment is partial until contact caches and associations finish syncing.
           </p>
         </div>
       )}
@@ -3239,7 +3067,7 @@ const AttendanceDashboard = () => {
             Accurate attendee counts, repeat behavior, and execution plan — Tuesday and Thursday tracked independently.
           </p>
           <p style={{ marginTop: '6px', opacity: 0.85, fontSize: '12px' }}>
-            Data source: {analytics?.sessions?.length || 0} selected Tue/Thu sessions · {attendanceMetricRows.length} weekly attendance snapshots · {hubspotActivities.length} HubSpot activities · {hubspotContactAssocs.length} attendee associations · {rawHubspotContacts.length} HubSpot contacts enriched
+            Data source: {analytics?.sessions?.length || 0} selected Tue/Thu sessions · {hubspotActivities.length} HubSpot activities · {hubspotContactAssocs.length} attendee associations · {rawHubspotContacts.length} HubSpot contacts enriched
           </p>
           {syncNowState.lastRunAtIso && (
             <p style={{ marginTop: '4px', opacity: 0.85, fontSize: '12px' }}>

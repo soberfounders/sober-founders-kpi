@@ -23,17 +23,6 @@ function dateDaysAgo(days: number) {
   return isoDateOnly(d);
 }
 
-function readBoolFlag(url: URL, body: any, key: string, defaultValue: boolean) {
-  const qs = url.searchParams.get(key);
-  if (qs !== null) return String(qs).toLowerCase() !== "false";
-  if (body && Object.prototype.hasOwnProperty.call(body, key)) {
-    const raw = body[key];
-    if (typeof raw === "boolean") return raw;
-    return String(raw).toLowerCase() !== "false";
-  }
-  return defaultValue;
-}
-
 function safeDate(value: any): Date | null {
   if (!value) return null;
   const d = new Date(value);
@@ -266,8 +255,6 @@ serve(async (req: Request) => {
     const toRaw = String(url.searchParams.get("to") || reqBody?.to || "").trim();
     const fromDate = /^\d{4}-\d{2}-\d{2}$/.test(fromRaw) ? fromRaw : "";
     const toDate = /^\d{4}-\d{2}-\d{2}$/.test(toRaw) ? toRaw : "";
-    const includeReconcile = readBoolFlag(url, reqBody, "include_reconcile", true);
-    const includeLuma = readBoolFlag(url, reqBody, "include_luma", true);
 
     const stepResults: any[] = [];
     const stepErrors: any[] = [];
@@ -306,32 +293,6 @@ serve(async (req: Request) => {
       },
       true,
     );
-
-    if (includeReconcile) {
-      const reconcileBody: Record<string, any> = { dry_run: false };
-      if (fromDate) reconcileBody.from = fromDate;
-      else reconcileBody.days = days;
-      if (toDate) reconcileBody.to = toDate;
-
-      await runStep(
-        "hubspot_attendance_reconcile",
-        "reconcile_zoom_attendee_hubspot_mappings",
-        {
-          method: "POST",
-          body: reconcileBody,
-        },
-        false,
-      );
-    }
-
-    if (includeLuma) {
-      await runStep(
-        "luma_context_sync",
-        "sync_luma_registrations",
-        { method: "POST" },
-        false,
-      );
-    }
 
     const recentFromDate = fromDate || dateDaysAgo(Math.min(days, 730));
     const { data: activities, error: activitiesError } = await supabase
@@ -499,14 +460,14 @@ serve(async (req: Request) => {
       days,
       from: fromDate || null,
       to: toDate || null,
-      include_reconcile: includeReconcile,
-      include_luma: includeLuma,
+      include_reconcile: false,
+      include_luma: false,
       steps: stepResults,
       non_fatal_step_errors: stepErrors,
       grouped_sessions_checked: canonicalSessions.length,
       host_data_warnings: hostDataWarnings,
       host_data_warning_summary: hostDataWarningSummary,
-      note: "Attendance sync source-of-truth is HubSpot call/meeting records and their contact associations (not legacy Zoom participants).",
+      note: "Attendance sync source-of-truth is HubSpot call/meeting records and their contact associations only.",
     }), {
       headers: { ...corsHeaders, "content-type": "application/json" },
     });
