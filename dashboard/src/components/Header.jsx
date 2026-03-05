@@ -31,28 +31,26 @@ const Header = ({ activeTab, onMenuClick, isMobile = false }) => {
   };
 
   return (
-    <header style={{
+    <header className="glass-panel" style={{
       height: isMobile ? '64px' : '70px',
-      backgroundColor: 'white',
-      borderBottom: '1px solid var(--color-border)',
+      margin: isMobile ? '12px 12px 0 12px' : '24px 40px 0 40px',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
       padding: isMobile ? '0 12px' : '0 24px',
       gap: '12px',
+      zIndex: 50,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
         <button
+          className="btn-glass"
           type="button"
           onClick={onMenuClick}
           aria-label="Toggle sidebar menu"
           style={{
             width: '36px',
             height: '36px',
-            borderRadius: '10px',
-            border: '1px solid var(--color-border)',
-            backgroundColor: '#fff',
-            color: 'var(--color-text-secondary)',
+            padding: 0,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -90,19 +88,15 @@ const Header = ({ activeTab, onMenuClick, isMobile = false }) => {
             display: 'flex',
             alignItems: 'center',
           }}>
-            <Search size={18} style={{ position: 'absolute', left: '12px', color: '#94a3b8' }} />
+            <Search size={18} style={{ position: 'absolute', left: '14px', color: 'var(--color-text-muted)' }} />
             <input
+              className="neo-input"
               type="text"
               placeholder="Search KPIs..."
               style={{
-                padding: '10px 12px 10px 40px',
+                paddingLeft: '40px',
+                width: '280px',
                 borderRadius: '20px',
-                border: '1px solid #e2e8f0',
-                backgroundColor: '#f8fafc',
-                fontSize: '14px',
-                width: '240px',
-                outline: 'none',
-                transition: 'border-color 0.2s',
               }}
             />
           </div>
@@ -111,45 +105,38 @@ const Header = ({ activeTab, onMenuClick, isMobile = false }) => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button
             type="button"
+            className="btn-primary"
             onClick={triggerRefresh}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: isMobile ? '8px' : '6px 16px',
+              padding: isMobile ? '8px' : '8px 18px',
               borderRadius: '20px',
-              backgroundColor: 'var(--color-dark-green)',
-              color: 'white',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: '500',
+              fontSize: '13px',
             }}
           >
-            <Bell size={18} />
+            <Bell size={16} />
             {!isMobile && <span>Refresh Data</span>}
           </button>
           {!isMobile && (
             <>
-              <button style={{ padding: '8px', borderRadius: '50%', color: '#64748b', border: 'none', background: 'none' }}><Settings size={20} /></button>
+              <button className="btn-glass" style={{ width: '36px', height: '36px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%' }}>
+                <Settings size={18} />
+              </button>
               <div style={{
                 width: '1px',
                 height: '24px',
-                backgroundColor: '#e2e8f0',
+                backgroundColor: 'var(--color-border)',
                 margin: '0 8px',
               }}
               />
-              <button style={{
+              <button className="btn-glass" style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                padding: '6px 12px',
+                padding: '6px 14px',
                 borderRadius: '20px',
-                backgroundColor: '#f1f5f9',
-                border: '1px solid #e2e8f0',
               }}>
-                <User size={18} />
-                <span style={{ fontSize: '14px', fontWeight: '500' }}>Profile</span>
+                <User size={16} />
+                <span style={{ fontSize: '13px', fontWeight: '600' }}>Admin</span>
               </button>
             </>
           )}

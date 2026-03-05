@@ -20,11 +20,13 @@ const priorityStyles = {
 };
 
 const baseCardStyle = {
-    backgroundColor: 'white',
+    background: 'var(--color-card)',
+    backdropFilter: 'blur(16px)',
+    WebkitBackdropFilter: 'blur(16px)',
     border: '1px solid var(--color-border)',
     borderRadius: '16px',
     padding: '20px',
-    boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.08)',
+    boxShadow: 'var(--glass-shadow)',
 };
 
 function AIBriefingDashboard() {

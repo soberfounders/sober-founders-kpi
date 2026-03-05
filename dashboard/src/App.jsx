@@ -16,16 +16,10 @@ import { hasSupabaseConfig, supabaseConfigError } from './lib/supabaseClient';
 
 function PlaceholderView({ tab }) {
   return (
-    <div style={{
-      backgroundColor: 'white',
-      border: '1px solid var(--color-border)',
-      borderRadius: '16px',
-      padding: '24px',
-      maxWidth: '760px',
-    }}>
-      <p style={{ fontSize: '12px', textTransform: 'uppercase', color: 'var(--color-text-secondary)' }}>Module Placeholder</p>
-      <h3 style={{ marginTop: '8px', fontSize: '22px', color: 'var(--color-text-primary)' }}>{tab}</h3>
-      <p style={{ marginTop: '10px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+    <div className="glass-panel page-transition-enter" style={{ padding: '32px', maxWidth: '760px', margin: '0 auto' }}>
+      <p style={{ fontSize: '12px', textTransform: 'uppercase', color: 'var(--color-dark-green)', fontWeight: 600, letterSpacing: '0.05em' }}>Module Placeholder</p>
+      <h3 style={{ marginTop: '8px', fontSize: '24px', color: 'var(--color-text-primary)' }}>{tab}</h3>
+      <p style={{ marginTop: '12px', color: 'var(--color-text-secondary)', lineHeight: 1.6, fontSize: '15px' }}>
         This section does not have an implemented view yet. It is intentionally shown as a placeholder to avoid falling
         back to the Dashboard tab content.
       </p>
@@ -35,19 +29,13 @@ function PlaceholderView({ tab }) {
 
 function SupabaseEnvRequiredView() {
   return (
-    <div style={{
-      backgroundColor: 'white',
-      border: '1px solid var(--color-border)',
-      borderRadius: '16px',
-      padding: '24px',
-      maxWidth: '920px',
-    }}>
-      <p style={{ fontSize: '12px', textTransform: 'uppercase', color: 'var(--color-text-secondary)' }}>Configuration Required</p>
-      <h3 style={{ marginTop: '8px', fontSize: '22px', color: 'var(--color-text-primary)' }}>Supabase Environment Variables Missing</h3>
-      <p style={{ marginTop: '10px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+    <div className="glass-panel page-transition-enter" style={{ padding: '32px', maxWidth: '920px', margin: '0 auto', border: '1px solid rgba(255,152,0,0.3)', boxShadow: '0 8px 32px rgba(255,152,0,0.1)' }}>
+      <p style={{ fontSize: '12px', textTransform: 'uppercase', color: 'var(--color-orange)', fontWeight: 600, letterSpacing: '0.05em' }}>Configuration Required</p>
+      <h3 style={{ marginTop: '8px', fontSize: '24px', color: 'var(--color-text-primary)' }}>Supabase Environment Variables Missing</h3>
+      <p style={{ marginTop: '12px', color: 'var(--color-text-secondary)', lineHeight: 1.6, fontSize: '15px' }}>
         {supabaseConfigError || 'Set Supabase env vars in your deployment to load live KPI data.'}
       </p>
-      <div style={{ marginTop: '12px', fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
+      <div style={{ marginTop: '16px', fontSize: '14px', color: 'var(--color-text-muted)', lineHeight: 1.6, background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '8px' }}>
         <p><strong>Required:</strong> `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`</p>
       </div>
     </div>
@@ -168,7 +156,7 @@ function App() {
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
+    <div className="app-container">
       <Sidebar
         activeTab={activeTab}
         setActiveTab={handleSetActiveTab}
@@ -178,10 +166,12 @@ function App() {
         onToggleCollapse={() => setIsSidebarCollapsed((previous) => !previous)}
         onClose={() => setIsMobileMenuOpen(false)}
       />
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div className="main-content">
         <Header activeTab={activeTab} onMenuClick={handleMenuToggle} isMobile={isMobile} />
-        <main style={{ flex: 1, minWidth: 0, padding: isMobile ? '12px' : '24px', overflowY: 'auto' }}>
-          {renderView()}
+        <main style={{ flex: 1, minWidth: 0, padding: isMobile ? '12px' : '32px 40px', overflowY: 'auto' }}>
+          <div className="page-transition-enter">
+            {renderView()}
+          </div>
         </main>
       </div>
     </div>

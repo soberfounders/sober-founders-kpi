@@ -45,8 +45,8 @@ const Sidebar = ({
   isMobile = false,
   isOpen = true,
   isCollapsed = false,
-  onToggleCollapse = () => {},
-  onClose = () => {},
+  onToggleCollapse = () => { },
+  onClose = () => { },
 }) => {
   const showLabels = isMobile || !isCollapsed;
   const sidebarWidth = isMobile ? 280 : (isCollapsed ? 88 : 260);
@@ -54,10 +54,13 @@ const Sidebar = ({
   const sidebarStyle = {
     width: `${sidebarWidth}px`,
     backgroundColor: 'var(--color-sidebar)',
+    backdropFilter: 'blur(20px)',
+    WebkitBackdropFilter: 'blur(20px)',
     borderRight: '1px solid var(--color-border)',
     display: 'flex',
     flexDirection: 'column',
-    transition: 'width 0.2s ease, transform 0.25s ease',
+    transition: 'width 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)',
+    zIndex: 100,
     ...(isMobile ? {
       position: 'fixed',
       top: 0,
@@ -65,7 +68,7 @@ const Sidebar = ({
       bottom: 0,
       zIndex: 1001,
       transform: isOpen ? 'translateX(0)' : 'translateX(-100%)',
-      boxShadow: '0 20px 40px rgba(15, 23, 42, 0.2)',
+      boxShadow: '0 20px 60px rgba(0, 0, 0, 0.7)',
       pointerEvents: isOpen ? 'auto' : 'none',
     } : {}),
   };
@@ -106,17 +109,16 @@ const Sidebar = ({
               <div style={{ minWidth: 0 }}>
                 <h1 style={{
                   color: 'var(--color-dark-green)',
+                  textShadow: '0 0 15px var(--color-brand-glow)',
                   fontSize: '24px',
-                  letterSpacing: '-0.5px',
+                  letterSpacing: '0.02em',
                 }}>
                   Sober Founders
                 </h1>
                 <p className="tagline" style={{
-                  fontSize: '12px',
+                  fontSize: '11px',
                   color: 'var(--color-text-secondary)',
                   marginTop: '4px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '1px',
                 }}>
                   KPI Dashboard
                 </p>
@@ -126,28 +128,28 @@ const Sidebar = ({
                 width: '40px',
                 height: '40px',
                 borderRadius: '12px',
-                backgroundColor: '#ecfeff',
+                background: 'linear-gradient(135deg, rgba(3, 218, 198, 0.2) 0%, rgba(3, 218, 198, 0.05) 100%)',
+                border: '1px solid var(--color-border-glow)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: 'var(--color-dark-green)',
                 fontWeight: 700,
+                textShadow: '0 0 10px var(--color-brand-glow)',
               }}>
                 SF
               </div>
             )}
 
             <button
+              className="btn-glass"
               type="button"
               onClick={isMobile ? onClose : onToggleCollapse}
               aria-label={isMobile ? 'Close navigation menu' : (isCollapsed ? 'Expand sidebar' : 'Collapse sidebar')}
               style={{
                 width: '32px',
                 height: '32px',
-                borderRadius: '8px',
-                border: '1px solid var(--color-border)',
-                backgroundColor: '#fff',
-                color: 'var(--color-text-secondary)',
+                padding: 0,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -178,12 +180,15 @@ const Sidebar = ({
                       justifyContent: showLabels ? 'flex-start' : 'center',
                       gap: showLabels ? '12px' : 0,
                       padding: showLabels ? '12px 16px' : '12px',
-                      borderRadius: '8px',
-                      color: isActive ? 'white' : 'var(--color-text-secondary)',
-                      backgroundColor: isActive ? 'var(--color-dark-green)' : 'transparent',
+                      borderRadius: '10px',
+                      color: isActive ? '#0a0f18' : 'var(--color-text-secondary)',
+                      background: isActive
+                        ? 'linear-gradient(135deg, var(--color-dark-green) 0%, var(--color-light-green) 100%)'
+                        : 'transparent',
+                      boxShadow: isActive ? '0 4px 15px var(--color-brand-glow)' : 'none',
                       fontSize: '14px',
-                      fontWeight: isActive ? '600' : '500',
-                      transition: 'background-color 0.2s, color 0.2s',
+                      fontWeight: isActive ? '700' : '500',
+                      transition: 'all 0.2s',
                       textAlign: 'left',
                     }}
                   >
@@ -203,14 +208,17 @@ const Sidebar = ({
             justifyContent: showLabels ? 'flex-start' : 'center',
             gap: '12px',
             padding: '12px',
-            backgroundColor: '#f1f5f9',
+            background: 'rgba(255, 255, 255, 0.03)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
             borderRadius: '12px',
+            boxShadow: 'inset 0 0 20px rgba(0, 0, 0, 0.1)',
           }}>
             <div style={{
               width: '32px',
               height: '32px',
               borderRadius: '50%',
-              backgroundColor: 'var(--color-orange)',
+              background: 'linear-gradient(135deg, var(--color-orange) 0%, #ff5722 100%)',
+              boxShadow: '0 2px 10px rgba(255, 152, 0, 0.3)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -222,8 +230,8 @@ const Sidebar = ({
             </div>
             {showLabels && (
               <div>
-                <p style={{ fontSize: '13px', fontWeight: '600' }}>Admin Account</p>
-                <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Premium Access</p>
+                <p style={{ fontSize: '14px', fontWeight: '600', color: 'var(--color-text-primary)' }}>Admin Account</p>
+                <p style={{ fontSize: '11px', color: 'var(--color-dark-green)' }}>Premium Access</p>
               </div>
             )}
           </div>
