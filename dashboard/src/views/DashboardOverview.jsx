@@ -1672,6 +1672,22 @@ const DashboardOverview = () => {
             body: { days: 45, include_calls: true, include_meetings: true },
             reloadAfter: true,
           },
+          {
+            id: 'attendance-create-retention-task',
+            action_key: 'attendance_create_retention_playbook_task',
+            label: 'Create retention playbook task',
+            description: 'Auto-create a Notion task to build/update the attendance retention playbook.',
+            kind: 'create_notion_task',
+            taskName: 'Build attendance retention playbook: first-time follow-up, repeat cadence, and owner assignments',
+          },
+          {
+            id: 'attendance-create-data-hygiene-task',
+            action_key: 'attendance_create_data_hygiene_task',
+            label: 'Create data hygiene task',
+            description: 'Auto-create a Notion task for HubSpot call title standardization and attendance QA.',
+            kind: 'create_notion_task',
+            taskName: 'Attendance data hygiene checklist: HubSpot call title standards, missing sessions, and classification QA',
+          },
         ],
         humanActions: [
           'Follow up all first-time free-group attendees within 24 hours and invite them to the next session.',
@@ -1807,6 +1823,90 @@ const DashboardOverview = () => {
     const isRemoteFeatureEnabled = REMOTE_AI_MODULE_ANALYSIS_ENABLED && hasSupabaseConfig;
     return isLocalHost || !isRemoteFeatureEnabled;
   }, []);
+
+  const executiveSynthesis = useMemo(() => {
+    const managers = aiManagers?.managers || [];
+    const managerSnapshots = managers.map((manager) => {
+      const analysis = moduleAnalysisState[manager.key] || {};
+      const analysisData = analysis?.data || {};
+      const summaryBullets = Array.isArray(analysisData?.summary) && analysisData.summary.length > 0
+        ? analysisData.summary
+        : managerFallbackSummaryBullets(manager);
+      const aiAutonomous = Array.isArray(analysisData?.autonomous_actions)
+        ? analysisData.autonomous_actions
+          .map((item) => ({
+            action_key: String(item?.action_key || '').trim(),
+            description: String(item?.description || '').trim(),
+          }))
+          .filter((item) => item.action_key && item.description)
+        : [];
+      const fallbackAutonomous = (manager.autonomousActions || []).map((action) => ({
+        action_key: String(action?.action_key || '').trim(),
+        description: String(action?.description || '').trim(),
+      })).filter((item) => item.action_key && item.description);
+
+      const autonomousMap = new Map();
+      aiAutonomous.forEach((row) => autonomousMap.set(row.action_key, row));
+      fallbackAutonomous.forEach((row) => {
+        if (!autonomousMap.has(row.action_key)) autonomousMap.set(row.action_key, row);
+      });
+      const actionCatalogByKey = new Map(
+        (manager.autonomousActions || [])
+          .filter((action) => action?.action_key)
+          .map((action) => [String(action.action_key).trim(), action]),
+      );
+
+      return {
+        manager,
+        summaryBullets: summaryBullets.slice(0, 3),
+        humanActions: (Array.isArray(analysisData?.human_actions) && analysisData.human_actions.length > 0
+          ? analysisData.human_actions
+          : (manager.humanActions || [])
+        )
+          .map((item) => String(item || '').trim())
+          .filter(Boolean)
+          .slice(0, 3),
+        autonomousActions: Array.from(autonomousMap.values())
+          .map((row) => {
+            const action = actionCatalogByKey.get(String(row.action_key || '').trim());
+            if (!action) return null;
+            return {
+              ...action,
+              moduleKey: manager.key,
+              aiDescription: String(row?.description || action.description || '').trim(),
+            };
+          })
+          .filter(Boolean)
+          .slice(0, 3),
+      };
+    });
+
+    const priorityFocus = (dashboard?.priorityRows || [])
+      .filter((row) => row?.status === 'critical' || row?.status === 'watch')
+      .slice(0, 6)
+      .map((row) => `${row.area}: ${row.metric} is ${row.status}. Current ${row.value} vs target ${row.target}.`);
+    const keySignals = managerSnapshots
+      .flatMap((snapshot) => snapshot.summaryBullets.map((bullet) => `${snapshot.manager.title}: ${bullet}`))
+      .slice(0, 8);
+    const fixNow = [
+      ...(warnings || []).map((warning) => `Data warning: ${warning}`),
+      ...managerSnapshots
+        .map((snapshot) => snapshot.manager?.diagnostics)
+        .filter(Boolean)
+        .map((diagnostic) => `Diagnostic: ${diagnostic}`),
+    ].slice(0, 6);
+    const improvementLevers = managerSnapshots
+      .flatMap((snapshot) => snapshot.humanActions.map((item) => `${snapshot.manager.title}: ${item}`))
+      .slice(0, 8);
+
+    return {
+      managerSnapshots,
+      keySignals,
+      priorityFocus,
+      fixNow,
+      improvementLevers,
+    };
+  }, [aiManagers, moduleAnalysisState, dashboard, warnings]);
 
   async function requestModuleAnalysis(manager, forceRefresh = false) {
     if (!manager?.key) return;
@@ -2045,6 +2145,78 @@ const DashboardOverview = () => {
       )}
 
       <div style={baseCardStyle}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+          <div>
+            <h3 style={{ fontSize: '20px' }}>Executive Summary (All KPI Sections)</h3>
+            <p style={{ marginTop: '6px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
+              Synthesized insights from Leads, Attendance, SEO, and Donations AI Managers with top focus and remediation signals.
+            </p>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Reference date</p>
+            <p style={{ fontWeight: 700 }}>{aiManagers.periodMeta.asOfLabel}</p>
+          </div>
+        </div>
+
+        <div style={{ marginTop: '14px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: '12px' }}>
+          {[
+            { title: 'Need To Know', rows: executiveSynthesis.keySignals, tone: '#0f766e' },
+            { title: 'Focus This Week', rows: executiveSynthesis.priorityFocus, tone: '#2563eb' },
+            { title: 'Pay Attention / Fix', rows: executiveSynthesis.fixNow, tone: '#dc2626' },
+            { title: 'Improve The Nonprofit', rows: executiveSynthesis.improvementLevers, tone: '#d97706' },
+          ].map((group) => (
+            <div key={group.title} style={{ border: '1px solid var(--color-border)', borderRadius: '12px', padding: '12px', backgroundColor: 'rgba(0,0,0,0.18)' }}>
+              <p style={{ fontSize: '12px', fontWeight: 700, color: group.tone, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{group.title}</p>
+              <ul style={{ marginTop: '8px', paddingLeft: '18px', display: 'grid', gap: '6px' }}>
+                {(group.rows || []).slice(0, 6).map((row, idx) => (
+                  <li key={`${group.title}-${idx}`} style={{ fontSize: '12px', lineHeight: 1.45, color: 'var(--color-text-primary)' }}>{row}</li>
+                ))}
+                {(!group.rows || group.rows.length === 0) && (
+                  <li style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>No items generated yet.</li>
+                )}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ marginTop: '14px', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '12px' }}>
+          <p style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-dark-green)' }}>
+            AI Manager Quick Summary + 3 Do This Actions
+          </p>
+          <div style={{ marginTop: '10px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(290px,1fr))', gap: '10px' }}>
+            {executiveSynthesis.managerSnapshots.map((snapshot) => (
+              <div key={`quick-${snapshot.manager.key}`} style={{ border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px', backgroundColor: 'rgba(255,255,255,0.03)' }}>
+                <p style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{snapshot.manager.title}</p>
+                <ul style={{ marginTop: '6px', paddingLeft: '18px', display: 'grid', gap: '5px' }}>
+                  {snapshot.summaryBullets.slice(0, 2).map((item, idx) => (
+                    <li key={`quick-summary-${snapshot.manager.key}-${idx}`} style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>{item}</li>
+                  ))}
+                </ul>
+                <div style={{ marginTop: '10px', display: 'grid', gap: '6px' }}>
+                  {snapshot.autonomousActions.slice(0, 3).map((action, idx) => (
+                    <div key={`quick-action-${snapshot.manager.key}-${action.action_key}-${idx}`} style={{ border: '1px solid var(--color-border)', borderRadius: '8px', padding: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                        <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{action.aiDescription || action.description}</p>
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          onClick={() => runAutonomousAction(action)}
+                          disabled={actionState[action.id]?.status === 'running' || loading}
+                          style={{ padding: '5px 8px', fontSize: '10px', whiteSpace: 'nowrap' }}
+                        >
+                          {actionState[action.id]?.status === 'running' ? 'Running...' : 'Do This'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={baseCardStyle}>
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '12px', marginBottom: '16px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -2077,16 +2249,20 @@ const DashboardOverview = () => {
                 .filter((action) => action?.action_key)
                 .map((action) => [action.action_key, action]),
             );
-            const fallbackAutonomous = (manager.autonomousActions || []).slice(0, 3).map((action) => ({
+            const aiAutonomous = Array.isArray(analysisData?.autonomous_actions)
+              ? analysisData.autonomous_actions
+              : [];
+            const fallbackAutonomous = (manager.autonomousActions || []).map((action) => ({
               action_key: action.action_key,
               description: action.description,
             }));
-            const chosenAutonomous = Array.isArray(analysisData?.autonomous_actions) && analysisData.autonomous_actions.length > 0
-              ? analysisData.autonomous_actions
-              : fallbackAutonomous;
+            const chosenAutonomous = [...aiAutonomous, ...fallbackAutonomous];
+            const seenActionKeys = new Set();
             const autonomousActions = chosenAutonomous
               .map((item) => {
                 const actionKey = String(item?.action_key || '').trim();
+                if (!actionKey || seenActionKeys.has(actionKey)) return null;
+                seenActionKeys.add(actionKey);
                 const action = actionCatalogByKey.get(actionKey);
                 if (!action) return null;
                 return {
