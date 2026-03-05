@@ -1,13 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Clock3, DollarSign, Repeat2, Users } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, Brain, Clock3, DollarSign, Repeat2, Sparkles, Users } from 'lucide-react';
 import {
   CartesianGrid,
-  Cell,
   Legend,
   Line,
   LineChart,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -106,17 +103,6 @@ function monthLabelFromKey(key) {
   return d.toLocaleDateString(undefined, { month: 'short', year: '2-digit', timeZone: 'UTC' });
 }
 
-function PaymentsTooltip({ active, payload }) {
-  if (!active || !payload || !payload.length) return null;
-  const row = payload[0]?.payload || {};
-  return (
-    <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '8px 10px' }}>
-      <p style={{ fontWeight: 700, fontSize: '12px' }}>{row.name}</p>
-      <p style={{ fontSize: '12px' }}>Amount: {formatCurrency(row.amount)}</p>
-      <p style={{ fontSize: '12px' }}>Transactions: {safeNumber(row.count).toLocaleString()}</p>
-    </div>
-  );
-}
 
 function DonationsDashboard() {
   const [loading, setLoading] = useState(true);
@@ -124,6 +110,10 @@ function DonationsDashboard() {
   const [warnings, setWarnings] = useState([]);
   const [rows, setRows] = useState([]);
   const [supporterProfiles, setSupporterProfiles] = useState([]);
+  const [donorHealth, setDonorHealth] = useState([]);
+  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
 
   useEffect(() => {
     let isMounted = true;
@@ -140,7 +130,7 @@ function DonationsDashboard() {
         return;
       }
 
-      const [txRes, supportersRes] = await Promise.all([
+      const [txRes, supportersRes, healthRes] = await Promise.all([
         supabase
           .from('donation_transactions_unified')
           .select('row_id,source_system,source_event_id,donor_name,donor_email,amount,currency,eligible_amount,payment_method,status,is_recurring,campaign_name,receipt_url,donor_city,donor_region,donor_country,source_file,donated_at,created_at,payload')
@@ -151,6 +141,9 @@ function DonationsDashboard() {
           .select('donor_email,donor_name,donor_company_name,commitment_amount,last_payment_at,manual_lists,donor_city,donor_region,donor_country')
           .order('last_payment_at', { ascending: false })
           .limit(5000),
+        supabase
+          .from('vw_donor_health')
+          .select('*'),
       ]);
 
       if (!isMounted) return;
@@ -168,6 +161,7 @@ function DonationsDashboard() {
 
       setRows(txRes.data || []);
       setSupporterProfiles(supportersRes.data || []);
+      setDonorHealth(healthRes.data || []);
       setWarnings(nextWarnings);
       setLoading(false);
     }
@@ -207,6 +201,13 @@ function DonationsDashboard() {
       .filter((row) => row.donatedAt >= thisMonthStart)
       .reduce((acc, row) => acc + row.amount, 0);
 
+    const healthStats = {
+      activeRecurring: (donorHealth || []).filter(h => h.donor_status === 'active_recurring').length,
+      lapsedRecurring: (donorHealth || []).filter(h => h.donor_status === 'lapsed_recurring').length,
+      atRisk: (donorHealth || []).filter(h => h.donor_status === 'at_risk').length,
+      upgradeCandidates: (donorHealth || []).filter(h => h.is_upgrade_candidate).length,
+    };
+
     return {
       totalAmount,
       giftCount: transactions.length,
@@ -217,8 +218,9 @@ function DonationsDashboard() {
       monthToDateAmount,
       latestGiftAt: transactions[0]?.donatedAt || null,
       activeSupporters: supporterProfiles.length,
+      healthStats,
     };
-  }, [transactions, supporterProfiles]);
+  }, [transactions, supporterProfiles, donorHealth]);
 
   const monthlyTrend = useMemo(() => {
     const now = new Date();
@@ -247,17 +249,6 @@ function DonationsDashboard() {
     return buckets;
   }, [transactions]);
 
-  const paymentMethodRows = useMemo(() => {
-    const byMethod = new Map();
-    transactions.forEach((row) => {
-      const key = row.payment_method || 'Unknown';
-      const existing = byMethod.get(key) || { name: key, amount: 0, count: 0 };
-      existing.amount += row.amount;
-      existing.count += 1;
-      byMethod.set(key, existing);
-    });
-    return Array.from(byMethod.values()).sort((a, b) => b.amount - a.amount);
-  }, [transactions]);
 
   const supporterProfileByEmail = useMemo(() => {
     const out = new Map();
@@ -273,22 +264,38 @@ function DonationsDashboard() {
 
   const topDonors = useMemo(() => {
     const byDonor = new Map();
+    const healthByEmail = new Map();
+    (donorHealth || []).forEach(h => {
+      const email = String(h.donor_email || '').trim().toLowerCase();
+      if (email) healthByEmail.set(email, h);
+    });
+
     transactions.forEach((row) => {
       const key = donorKey(row);
       const donorEmail = String(row?.donor_email || '').trim().toLowerCase();
       const profile = donorEmail ? supporterProfileByEmail.get(donorEmail) : null;
+      const hData = donorEmail ? healthByEmail.get(donorEmail) : null;
+
       const existing = byDonor.get(key) || {
         key,
         donor_name: profile?.donor_name || row.donor_name || 'Unknown donor',
         donor_email: row.donor_email || '',
         donor_company_name: profile?.donor_company_name || '',
+        donor_city: profile?.donor_city || '',
+        donor_region: profile?.donor_region || '',
+        commitment_amount: safeNumber(profile?.commitment_amount),
         totalAmount: 0,
         gifts: 0,
         recurringGifts: 0,
         lastGiftAt: row.donatedAt,
+        health_status: hData?.donor_status || 'unknown',
+        is_upgrade_candidate: !!hData?.is_upgrade_candidate,
       };
       if (profile?.donor_name) existing.donor_name = profile.donor_name;
       if (profile?.donor_company_name) existing.donor_company_name = profile.donor_company_name;
+      if (profile?.donor_city) existing.donor_city = profile.donor_city;
+      if (profile?.donor_region) existing.donor_region = profile.donor_region;
+      if (profile?.commitment_amount) existing.commitment_amount = safeNumber(profile.commitment_amount);
       existing.totalAmount += row.amount;
       existing.gifts += 1;
       if (row.is_recurring) existing.recurringGifts += 1;
@@ -297,20 +304,29 @@ function DonationsDashboard() {
     });
     return Array.from(byDonor.values())
       .sort((a, b) => b.totalAmount - a.totalAmount)
-      .slice(0, 12);
-  }, [transactions, supporterProfileByEmail]);
+      .slice(0, 15);
+  }, [transactions, supporterProfileByEmail, donorHealth]);
 
   const recentTransactions = useMemo(() => transactions.slice(0, 15), [transactions]);
 
-  const topSupporters = useMemo(() => {
-    return [...(supporterProfiles || [])]
-      .map((row) => ({
-        ...row,
-        commitment_amount: safeNumber(row.commitment_amount),
-      }))
-      .sort((a, b) => b.commitment_amount - a.commitment_amount)
-      .slice(0, 8);
-  }, [supporterProfiles]);
+  const invokeDonorAgent = useCallback(async () => {
+    if (!hasSupabaseConfig || aiLoading) return;
+    setAiLoading(true);
+    setAiError('');
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('donor-intelligence-agent', {
+        method: 'POST',
+        body: {},
+      });
+      if (fnError) throw fnError;
+      setAiAnalysis(data);
+    } catch (err) {
+      console.error('Donor Agent Error:', err);
+      setAiError(err?.message || 'Failed to run donor intelligence agent.');
+    } finally {
+      setAiLoading(false);
+    }
+  }, [aiLoading]);
 
   if (loading) {
     return <EmptyState message="Loading donations data..." />;
@@ -390,137 +406,241 @@ function DonationsDashboard() {
             </ResponsiveContainer>
           </div>
         </div>
-
-        <div style={baseCardStyle}>
-          <h3 style={{ fontSize: '18px', marginBottom: '6px' }}>Payment method mix</h3>
-          <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '12px' }}>Share by amount and transaction count.</p>
-          <div style={{ width: '100%', height: '320px' }}>
-            <ResponsiveContainer>
-              <PieChart>
-                <Pie
-                  data={paymentMethodRows}
-                  dataKey="amount"
-                  nameKey="name"
-                  innerRadius={62}
-                  outerRadius={105}
-                  paddingAngle={2}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                >
-                  {paymentMethodRows.map((entry, idx) => (
-                    <Cell key={`${entry.name}-${idx}`} fill={chartPalette[idx % chartPalette.length]} />
-                  ))}
-                </Pie>
-                <Tooltip content={<PaymentsTooltip />} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '16px' }}>
-        <div style={baseCardStyle}>
-          <h3 style={{ fontSize: '18px', marginBottom: '6px' }}>Supporter commitment snapshot</h3>
-          <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '12px' }}>
-            From Zeffy supporter export ({summary.activeSupporters.toLocaleString()} profiles loaded).
-          </p>
-          <div style={{ display: 'grid', gap: '8px', maxHeight: '300px', overflowY: 'auto' }}>
-            {topSupporters.length ? (
-              topSupporters.map((row) => (
-                <div key={row.donor_email} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                    <div>
-                      <p style={{ fontSize: '13px', fontWeight: 700 }}>{row.donor_name || row.donor_email}</p>
-                      <p style={{ marginTop: '2px', fontSize: '12px', color: '#64748b' }}>
-                        {row.donor_email || 'No email'} | {row.donor_city || '-'}, {row.donor_region || '-'}
-                      </p>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <p style={{ fontWeight: 700 }}>{formatCurrency(row.commitment_amount)}</p>
-                      <p style={{ marginTop: '2px', fontSize: '11px', color: '#64748b' }}>Last payment: {formatDate(row.last_payment_at)}</p>
-                    </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px' }}>
+        <SummaryCard
+          icon={Users}
+          label="Active Recurring"
+          value={summary.healthStats.activeRecurring}
+          note="Recurring + Gift in last 35d"
+        />
+        <SummaryCard
+          icon={AlertTriangle}
+          label="Lapsed Recurring"
+          value={summary.healthStats.lapsedRecurring}
+          note="Overdue recurring donors"
+        />
+        <SummaryCard
+          icon={Clock3}
+          label="At Risk"
+          value={summary.healthStats.atRisk}
+          note="Passive churn risk"
+        />
+        <SummaryCard
+          icon={DollarSign}
+          label="Upgrade Candidates"
+          value={summary.healthStats.upgradeCandidates}
+          note="High Net Worth / Low Giving"
+        />
+      </div>
+
+      {/* Donor Intelligence Agent */}
+      <div style={{
+        ...baseCardStyle,
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+        color: 'white',
+        border: '1px solid #334155',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+              <Brain size={20} style={{ color: '#818cf8' }} />
+              <h3 style={{ fontSize: '18px', margin: 0 }}>Donor Intelligence Agent</h3>
+            </div>
+            <p style={{ fontSize: '13px', color: '#94a3b8', maxWidth: '600px' }}>
+              AI-powered analysis of donor health, churn risk, and upgrade opportunities. Generates personalized outreach templates and reports to Slack.
+            </p>
+          </div>
+          <button
+            onClick={invokeDonorAgent}
+            disabled={aiLoading}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '10px 20px',
+              borderRadius: '10px',
+              border: 'none',
+              background: aiLoading
+                ? 'linear-gradient(135deg, #334155 0%, #475569 100%)'
+                : 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+              color: 'white',
+              fontWeight: 600,
+              fontSize: '13px',
+              cursor: aiLoading ? 'wait' : 'pointer',
+              transition: 'all 0.2s ease',
+              boxShadow: aiLoading ? 'none' : '0 4px 14px rgba(99,102,241,0.35)',
+            }}
+          >
+            <Sparkles size={15} />
+            {aiLoading ? 'Analyzing\u2026' : 'Analyze Now'}
+          </button>
+        </div>
+
+        {aiError && (
+          <div style={{
+            marginTop: '12px',
+            padding: '10px 14px',
+            borderRadius: '8px',
+            backgroundColor: 'rgba(239,68,68,0.15)',
+            border: '1px solid rgba(239,68,68,0.3)',
+            color: '#fca5a5',
+            fontSize: '13px',
+          }}>
+            ⚠ {aiError}
+          </div>
+        )}
+
+        {aiAnalysis && (
+          <div style={{ marginTop: '16px', display: 'grid', gap: '14px' }}>
+            <div style={{
+              padding: '14px',
+              borderRadius: '10px',
+              backgroundColor: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.1)',
+            }}>
+              <p style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#818cf8', marginBottom: '6px' }}>AI Summary</p>
+              <p style={{ fontSize: '14px', lineHeight: '1.6', color: '#e2e8f0' }}>{aiAnalysis.summary}</p>
+              <div style={{ marginTop: '8px', display: 'flex', gap: '12px', flexWrap: 'wrap', fontSize: '11px', color: '#94a3b8' }}>
+                <span>Model: {aiAnalysis.model}</span>
+                {aiAnalysis.slack_delivered !== undefined && (
+                  <span>Slack: {aiAnalysis.slack_delivered ? '✅ Delivered' : '⏭ Skipped'}</span>
+                )}
+              </div>
+            </div>
+
+            {aiAnalysis.health_stats && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
+                {Object.entries(aiAnalysis.health_stats).map(([key, val]) => (
+                  <div key={key} style={{
+                    padding: '10px',
+                    borderRadius: '8px',
+                    backgroundColor: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    textAlign: 'center',
+                  }}>
+                    <p style={{ fontSize: '20px', fontWeight: 700, color: '#e2e8f0' }}>{val}</p>
+                    <p style={{ fontSize: '10px', textTransform: 'uppercase', color: '#94a3b8', marginTop: '2px' }}>{String(key).replaceAll('_', ' ')}</p>
                   </div>
-                </div>
-              ))
-            ) : (
-              <p style={{ fontSize: '13px', color: '#64748b' }}>No supporter snapshot rows loaded yet.</p>
+                ))}
+              </div>
             )}
           </div>
+        )}
+      </div>
+
+      <div style={baseCardStyle}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+          <div>
+            <h3 style={{ fontSize: '18px', marginBottom: '4px' }}>Donor roster</h3>
+            <p style={{ fontSize: '12px', color: '#64748b' }}>Top donors ranked by total donated — enriched with health status and commitment data ({summary.activeSupporters.toLocaleString()} supporter profiles loaded).</p>
+          </div>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                {['#', 'Donor', 'Location', 'Status', 'Total Donated', 'Commitment', 'Gifts', 'Last Gift'].map((h) => (
+                  <th
+                    key={h}
+                    style={{
+                      textAlign: h === 'Total Donated' || h === 'Commitment' || h === 'Gifts' ? 'right' : 'left',
+                      fontSize: '11px',
+                      color: '#64748b',
+                      padding: '8px 10px',
+                      borderBottom: '2px solid #e2e8f0',
+                      whiteSpace: 'nowrap',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                    }}
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {topDonors.map((row, idx) => (
+                <tr key={row.key} style={{ backgroundColor: idx % 2 === 0 ? 'transparent' : '#f8fafc' }}>
+                  <td style={{ fontSize: '12px', padding: '10px', borderBottom: '1px solid #f1f5f9', color: '#94a3b8', fontWeight: 600 }}>{idx + 1}</td>
+                  <td style={{ fontSize: '12px', fontWeight: 700, padding: '10px', borderBottom: '1px solid #f1f5f9' }}>
+                    <div style={{ display: 'grid', gap: '1px' }}>
+                      <span>{row.donor_name}</span>
+                      {!!row.donor_company_name && (
+                        <span style={{ fontSize: '11px', fontWeight: 500, color: '#64748b' }}>{row.donor_company_name}</span>
+                      )}
+                    </div>
+                  </td>
+                  <td style={{ fontSize: '11px', padding: '10px', borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
+                    {row.donor_city || row.donor_region
+                      ? [row.donor_city, row.donor_region].filter(Boolean).join(', ')
+                      : '—'}
+                  </td>
+                  <td style={{ fontSize: '12px', padding: '10px', borderBottom: '1px solid #f1f5f9' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                      <span
+                        style={{
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontSize: '10px',
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                          backgroundColor:
+                            row.health_status === 'active_recurring' ? '#dcfce7' :
+                              row.health_status === 'lapsed_recurring' ? '#fee2e2' :
+                                row.health_status === 'at_risk' ? '#fef3c7' : '#f1f5f9',
+                          color:
+                            row.health_status === 'active_recurring' ? '#15803d' :
+                              row.health_status === 'lapsed_recurring' ? '#b91c1c' :
+                                row.health_status === 'at_risk' ? '#b45309' : '#475569',
+                        }}
+                      >
+                        {String(row.health_status).replaceAll('_', ' ')}
+                      </span>
+                      {row.is_upgrade_candidate && (
+                        <span style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', backgroundColor: '#e0f2fe', color: '#0369a1' }}>
+                          UPGRADE
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td style={{ fontSize: '12px', fontWeight: 700, textAlign: 'right', padding: '10px', borderBottom: '1px solid #f1f5f9' }}>{formatCurrency(row.totalAmount)}</td>
+                  <td style={{ fontSize: '12px', textAlign: 'right', padding: '10px', borderBottom: '1px solid #f1f5f9', color: row.commitment_amount > 0 ? '#0f766e' : '#94a3b8' }}>
+                    {row.commitment_amount > 0 ? formatCurrency(row.commitment_amount) : '—'}
+                  </td>
+                  <td style={{ fontSize: '12px', textAlign: 'right', padding: '10px', borderBottom: '1px solid #f1f5f9' }}>{row.gifts}</td>
+                  <td style={{ fontSize: '12px', padding: '10px', borderBottom: '1px solid #f1f5f9' }}>{formatDate(row.lastGiftAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '16px' }}>
-        <div style={baseCardStyle}>
-          <h3 style={{ fontSize: '18px', marginBottom: '6px' }}>Top donors leaderboard</h3>
-          <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '12px' }}>Ranked by total donated amount.</p>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  {['Rank', 'Donor', 'Company Name', 'Total Donated', 'Gift Count', 'Recurring Gifts', 'Last Gift'].map((h) => (
-                    <th
-                      key={h}
-                      style={{
-                        textAlign: 'left',
-                        fontSize: '12px',
-                        color: '#64748b',
-                        padding: '10px',
-                        borderBottom: '1px solid #e2e8f0',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {topDonors.map((row, idx) => (
-                  <tr key={row.key}>
-                    <td style={{ fontSize: '12px', padding: '10px', borderBottom: '1px solid #f1f5f9' }}>#{idx + 1}</td>
-                    <td style={{ fontSize: '12px', fontWeight: 700, padding: '10px', borderBottom: '1px solid #f1f5f9' }}>
-                      <div style={{ display: 'grid', gap: '2px' }}>
-                        <span>{row.donor_name}</span>
-                        {!!row.donor_company_name && (
-                          <span style={{ fontSize: '11px', fontWeight: 500, color: '#64748b' }}>{row.donor_company_name}</span>
-                        )}
-                      </div>
-                    </td>
-                    <td style={{ fontSize: '12px', padding: '10px', borderBottom: '1px solid #f1f5f9' }}>{row.donor_company_name || '-'}</td>
-                    <td style={{ fontSize: '12px', fontWeight: 700, textAlign: 'right', padding: '10px', borderBottom: '1px solid #f1f5f9' }}>{formatCurrency(row.totalAmount)}</td>
-                    <td style={{ fontSize: '12px', textAlign: 'right', padding: '10px', borderBottom: '1px solid #f1f5f9' }}>{row.gifts}</td>
-                    <td style={{ fontSize: '12px', textAlign: 'right', padding: '10px', borderBottom: '1px solid #f1f5f9' }}>{row.recurringGifts}</td>
-                    <td style={{ fontSize: '12px', padding: '10px', borderBottom: '1px solid #f1f5f9' }}>{formatDate(row.lastGiftAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div style={baseCardStyle}>
-          <h3 style={{ fontSize: '18px', marginBottom: '6px' }}>Recent donations</h3>
-          <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '12px' }}>Most recent donation transactions loaded from Supabase.</p>
-          <div style={{ display: 'grid', gap: '8px', maxHeight: '520px', overflowY: 'auto' }}>
-            {recentTransactions.map((row) => (
-              <div key={`${row.source_system}-${row.row_id || row.source_event_id}`} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                  <div>
-                    <p style={{ fontSize: '13px', fontWeight: 700 }}>{row.donor_name || 'Unknown donor'}</p>
-                    <p style={{ marginTop: '2px', fontSize: '12px', color: '#64748b' }}>
-                      {row.donor_email || 'No email'} | {formatDate(row.donated_at)}
-                    </p>
-                    <p style={{ marginTop: '3px', fontSize: '12px', color: '#475569' }}>
-                      {row.campaign_name || 'Unattributed'} | {row.payment_method || 'Unknown'} | {row.source_system}
-                    </p>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <p style={{ fontWeight: 700 }}>{formatCurrency(row.amount)}</p>
-                    <p style={{ marginTop: '2px', fontSize: '11px', color: '#64748b' }}>Recurring: {row.is_recurring ? 'Yes' : 'No'}</p>
-                  </div>
+      <div style={baseCardStyle}>
+        <h3 style={{ fontSize: '18px', marginBottom: '6px' }}>Recent donations</h3>
+        <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '12px' }}>Most recent donation transactions loaded from Supabase.</p>
+        <div style={{ display: 'grid', gap: '8px', maxHeight: '520px', overflowY: 'auto' }}>
+          {recentTransactions.map((row) => (
+            <div key={`${row.source_system}-${row.row_id || row.source_event_id}`} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                <div>
+                  <p style={{ fontSize: '13px', fontWeight: 700 }}>{row.donor_name || 'Unknown donor'}</p>
+                  <p style={{ marginTop: '2px', fontSize: '12px', color: '#64748b' }}>
+                    {row.donor_email || 'No email'} | {formatDate(row.donated_at)}
+                  </p>
+                  <p style={{ marginTop: '3px', fontSize: '12px', color: '#475569' }}>
+                    {row.campaign_name || 'Unattributed'} | {row.payment_method || 'Unknown'} | {row.source_system}
+                  </p>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <p style={{ fontWeight: 700 }}>{formatCurrency(row.amount)}</p>
+                  <p style={{ marginTop: '2px', fontSize: '11px', color: '#64748b' }}>Recurring: {row.is_recurring ? 'Yes' : 'No'}</p>
                 </div>
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
