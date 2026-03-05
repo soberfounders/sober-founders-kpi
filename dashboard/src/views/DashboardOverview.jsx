@@ -319,6 +319,28 @@ function ratioOrNull(numerator, denominator) {
   return n / d;
 }
 
+function formatAttendanceAvgVisits(avgVisits, uniqueAttendees) {
+  const visits = Number(avgVisits);
+  const unique = Number(uniqueAttendees);
+  if (Number.isFinite(unique) && unique > 0 && Number.isFinite(visits)) {
+    return visits.toFixed(2);
+  }
+  return '0.00 (No attendance recorded)';
+}
+
+function formatAttendanceCpna(cpna, freeSpend, newAttendees) {
+  if (Number.isFinite(cpna)) return formatCurrency(cpna);
+  const spend = Number(freeSpend);
+  const netNew = Number(newAttendees);
+  if (Number.isFinite(spend) && spend > 0 && (!Number.isFinite(netNew) || netNew <= 0)) {
+    return `Unavailable (${formatCurrency(spend)} spend / ${formatInt(netNew)} net-new)`;
+  }
+  if (!Number.isFinite(spend) || spend <= 0) {
+    return 'Unavailable (Meta free-group spend not connected)';
+  }
+  return 'Unavailable';
+}
+
 function attendeeAssocKey(assoc) {
   const id = Number(assoc?.hubspot_contact_id);
   if (Number.isFinite(id)) return `id:${id}`;
@@ -900,6 +922,20 @@ const DashboardOverview = () => {
       lastMonthLabel: `${formatDateRange(monthStart, monthEnd)} (30d)`,
       asOfLabel: formatDateShort(referenceDate),
     };
+    const attendanceWindowEnd = todayUtcDay || referenceDate;
+    const attendanceWeekEnd = attendanceWindowEnd;
+    const attendanceWeekStart = shiftUtcDays(attendanceWeekEnd, -6);
+    const attendancePrevWeekEnd = shiftUtcDays(attendanceWeekStart, -1);
+    const attendancePrevWeekStart = shiftUtcDays(attendancePrevWeekEnd, -6);
+    const attendanceMonthEnd = attendanceWindowEnd;
+    const attendanceMonthStart = shiftUtcDays(attendanceMonthEnd, -29);
+    const attendancePrevMonthEnd = shiftUtcDays(attendanceMonthStart, -1);
+    const attendancePrevMonthStart = shiftUtcDays(attendancePrevMonthEnd, -29);
+    const attendancePeriodMeta = {
+      lastWeekLabel: formatDateRange(attendanceWeekStart, attendanceWeekEnd),
+      lastMonthLabel: `${formatDateRange(attendanceMonthStart, attendanceMonthEnd)} (30d completed meetings)`,
+      asOfLabel: formatDateShort(attendanceWindowEnd),
+    };
 
     const parsedContacts = hubspotContacts
       .map((row) => ({ ...row, _createdAt: toUtcDayStart(row?.createdate) }))
@@ -985,8 +1021,11 @@ const DashboardOverview = () => {
       .map((activity) => {
         const id = Number(activity?.hubspot_activity_id);
         const activityType = String(activity?.activity_type || '').toLowerCase();
-        const startedAt = toUtcDayStart(activity?.hs_timestamp || activity?.created_at_hubspot);
+        const startedAtInstant = parseMaybeDate(activity?.hs_timestamp || activity?.created_at_hubspot);
+        const startedAt = toUtcDayStart(startedAtInstant);
         if (!startedAt || !Number.isFinite(id)) return null;
+        // Exclude upcoming sessions from attendance metrics; keep window strictly completed meetings.
+        if (startedAtInstant && startedAtInstant.getTime() > Date.now()) return null;
         const timing = etGroupTimingFromDate(activity?.hs_timestamp || activity?.created_at_hubspot);
         const assocs = assocByActivityId.get(activityAssocKey(id, activityType)) || [];
         const attendeeKeys = Array.from(new Set(
@@ -1089,6 +1128,8 @@ const DashboardOverview = () => {
 
       const uniqueAttendees = visitCounts.size;
       const repeaters = Array.from(visitCounts.values()).filter((count) => count > 1).length;
+      const avgVisits = uniqueAttendees > 0 ? attendanceParticipations / uniqueAttendees : 0;
+      const repeatRate = uniqueAttendees > 0 ? repeaters / uniqueAttendees : 0;
       return {
         sessions: events.length,
         tuesdaySessions,
@@ -1096,8 +1137,9 @@ const DashboardOverview = () => {
         attendanceParticipations,
         uniqueAttendees,
         newAttendees,
-        avgVisits: ratioOrNull(attendanceParticipations, uniqueAttendees),
-        repeatRate: ratioOrNull(repeaters, uniqueAttendees),
+        repeaters,
+        avgVisits,
+        repeatRate,
       };
     };
 
@@ -1127,16 +1169,20 @@ const DashboardOverview = () => {
     const adsMonth = adStats(monthStart, monthEnd);
     const adsPrevMonth = adStats(prevMonthStart, prevMonthEnd);
 
-    const attendeesWeek = freeGroupAttendanceStats(lastWeekStart, lastWeekEnd);
-    const attendeesPrevWeek = freeGroupAttendanceStats(prevWeekStart, prevWeekEnd);
-    const attendeesMonth = freeGroupAttendanceStats(monthStart, monthEnd);
-    const attendeesPrevMonth = freeGroupAttendanceStats(prevMonthStart, prevMonthEnd);
-    const phoenixCallsMonth = phoenixCallStats(monthStart, monthEnd);
+    const attendeesWeek = freeGroupAttendanceStats(attendanceWeekStart, attendanceWeekEnd);
+    const attendeesPrevWeek = freeGroupAttendanceStats(attendancePrevWeekStart, attendancePrevWeekEnd);
+    const attendeesMonth = freeGroupAttendanceStats(attendanceMonthStart, attendanceMonthEnd);
+    const attendeesPrevMonth = freeGroupAttendanceStats(attendancePrevMonthStart, attendancePrevMonthEnd);
+    const phoenixCallsMonth = phoenixCallStats(attendanceMonthStart, attendanceMonthEnd);
+    const attendanceAdsWeek = adStats(attendanceWeekStart, attendanceWeekEnd);
+    const attendanceAdsPrevWeek = adStats(attendancePrevWeekStart, attendancePrevWeekEnd);
+    const attendanceAdsMonth = adStats(attendanceMonthStart, attendanceMonthEnd);
+    const attendanceAdsPrevMonth = adStats(attendancePrevMonthStart, attendancePrevMonthEnd);
 
-    const weekFreeCostPerNewAttendee = ratioOrNull(adsWeek.freeSpend, attendeesWeek.newAttendees);
-    const prevWeekFreeCostPerNewAttendee = ratioOrNull(adsPrevWeek.freeSpend, attendeesPrevWeek.newAttendees);
-    const monthFreeCostPerNewAttendee = ratioOrNull(adsMonth.freeSpend, attendeesMonth.newAttendees);
-    const prevMonthFreeCostPerNewAttendee = ratioOrNull(adsPrevMonth.freeSpend, attendeesPrevMonth.newAttendees);
+    const weekFreeCostPerNewAttendee = ratioOrNull(attendanceAdsWeek.freeSpend, attendeesWeek.newAttendees);
+    const prevWeekFreeCostPerNewAttendee = ratioOrNull(attendanceAdsPrevWeek.freeSpend, attendeesPrevWeek.newAttendees);
+    const monthFreeCostPerNewAttendee = ratioOrNull(attendanceAdsMonth.freeSpend, attendeesMonth.newAttendees);
+    const prevMonthFreeCostPerNewAttendee = ratioOrNull(attendanceAdsPrevMonth.freeSpend, attendeesPrevMonth.newAttendees);
 
     const newAttendeeWeekDelta = comparePeriod(attendeesWeek.newAttendees, attendeesPrevWeek.newAttendees);
     const avgVisitsWeekDelta = comparePeriod(attendeesWeek.avgVisits, attendeesPrevWeek.avgVisits);
@@ -1286,7 +1332,6 @@ const DashboardOverview = () => {
 
     function attendeesManagerPeriodNarrative({ label, current, previous, currentAds, previousAds, cpna, cpnaDelta, newDelta, avgVisitsDelta, repeatDelta }) {
       const newDeltaAbs = safeNum(current.newAttendees) - safeNum(previous.newAttendees);
-      const avgVisitsDeltaAbs = (Number.isFinite(current.avgVisits) ? current.avgVisits : 0) - (Number.isFinite(previous.avgVisits) ? previous.avgVisits : 0);
       const spendDeltaAbs = safeNum(currentAds.freeSpend) - safeNum(previousAds.freeSpend);
       const cpnaWorsening = cpnaDelta !== null && cpnaDelta > 0.15;
       const cpnaImproving = cpnaDelta !== null && cpnaDelta < -0.1;
@@ -1317,16 +1362,22 @@ const DashboardOverview = () => {
       const scheduleNote = scheduleGap
         ? `Schedule signal note: one of the expected Tue/Thu sessions is missing in this reporting window, which can materially skew comparisons (sync delay or call-title classification issue).`
         : '';
+      const avgVisitsText = formatAttendanceAvgVisits(current.avgVisits, current.uniqueAttendees);
+      const cpnaText = formatAttendanceCpna(cpna, currentAds.freeSpend, current.newAttendees);
+      const cpnaDeltaText = Number.isFinite(cpna) ? ` (${changeLabel(cpnaDelta, { positiveIsGood: false })})` : '';
+      const cpnaFallback = !Number.isFinite(cpna)
+        ? ` Returning attendee rate is ${pct(current.repeatRate)} (${formatInt(current.repeaters)} repeaters of ${formatInt(current.uniqueAttendees)} unique attendees).`
+        : '';
 
-      return `${diagnosis} ${recommendation} Supporting signal (${label}): free groups recorded ${formatInt(current.newAttendees)} net-new ${pluralize(current.newAttendees, 'attendee')} (${changeLabel(newDelta)}), ${formatInt(current.attendanceParticipations)} total attendances, ${Number.isFinite(current.avgVisits) ? current.avgVisits.toFixed(2) : 'N/A'} average visits per attendee (${changeLabel(avgVisitsDelta)}), and repeat participation ${pct(current.repeatRate)} (${changeLabel(repeatDelta)}). Estimated Meta cost per new attendee was ${Number.isFinite(cpna) ? formatCurrency(cpna) : 'N/A'}${Number.isFinite(cpna) ? ` (${changeLabel(cpnaDelta, { positiveIsGood: false })})` : ''}.${scheduleNote ? ` ${scheduleNote}` : ''}`;
+      return `${diagnosis} ${recommendation} Supporting signal (${label}): free groups recorded ${formatInt(current.newAttendees)} net-new ${pluralize(current.newAttendees, 'attendee')} (${changeLabel(newDelta)}), ${formatInt(current.attendanceParticipations)} total attendances, ${avgVisitsText} average visits per attendee (${changeLabel(avgVisitsDelta)}), and repeat participation ${pct(current.repeatRate)} (${changeLabel(repeatDelta)}). Estimated Meta cost per new attendee was ${cpnaText}${cpnaDeltaText}.${cpnaFallback}${scheduleNote ? ` ${scheduleNote}` : ''}`;
     }
 
     const attendeesWeekSummary = attendeesManagerPeriodNarrative({
-      label: `the last 7 days (${periodMeta.lastWeekLabel})`,
+      label: `the last 7 days (${attendancePeriodMeta.lastWeekLabel})`,
       current: attendeesWeek,
       previous: attendeesPrevWeek,
-      currentAds: adsWeek,
-      previousAds: adsPrevWeek,
+      currentAds: attendanceAdsWeek,
+      previousAds: attendanceAdsPrevWeek,
       cpna: weekFreeCostPerNewAttendee,
       cpnaDelta: cpnaWeekDelta,
       newDelta: newAttendeeWeekDelta,
@@ -1335,21 +1386,25 @@ const DashboardOverview = () => {
     });
 
     const attendeesMonthSummary = attendeesManagerPeriodNarrative({
-      label: `the last 30 days (${periodMeta.lastMonthLabel})`,
+      label: `the last 30 days (${attendancePeriodMeta.lastMonthLabel})`,
       current: attendeesMonth,
       previous: attendeesPrevMonth,
-      currentAds: adsMonth,
-      previousAds: adsPrevMonth,
+      currentAds: attendanceAdsMonth,
+      previousAds: attendanceAdsPrevMonth,
       cpna: monthFreeCostPerNewAttendee,
       cpnaDelta: cpnaMonthDelta,
       newDelta: newAttendeeMonthDelta,
       avgVisitsDelta: avgVisitsMonthDelta,
       repeatDelta: repeatRateMonthDelta,
     });
+    const attendeesMonthCostOrFallback = Number.isFinite(monthFreeCostPerNewAttendee)
+      ? `estimated Meta cost per new attendee at ${formatCurrency(monthFreeCostPerNewAttendee)}`
+      : `returning attendee rate at ${pct(attendeesMonth.repeatRate)} (${formatInt(attendeesMonth.repeaters)} repeaters of ${formatInt(attendeesMonth.uniqueAttendees)} unique attendees)`;
 
     const attendeesBigPictureSummary = [
       'Attendance reporting here is driven by HubSpot call/meeting attendance (not the legacy Zoom metric), which keeps the manager aligned with the current attendance pipeline.',
-      `Over the last 30 days, free groups generated ${formatInt(attendeesMonth.newAttendees)} net-new attendees, ${formatInt(attendeesMonth.attendanceParticipations)} total attendances, and ${Number.isFinite(attendeesMonth.avgVisits) ? attendeesMonth.avgVisits.toFixed(2) : 'N/A'} average visits per attendee with estimated Meta cost per new attendee at ${Number.isFinite(monthFreeCostPerNewAttendee) ? formatCurrency(monthFreeCostPerNewAttendee) : 'N/A'}.`,
+      `Over the last 30 days, completed free-group meetings generated ${formatInt(attendeesMonth.newAttendees)} net-new attendees, ${formatInt(attendeesMonth.attendanceParticipations)} total attendances, and ${formatAttendanceAvgVisits(attendeesMonth.avgVisits, attendeesMonth.uniqueAttendees)} average visits per attendee with ${attendeesMonthCostOrFallback}.`,
+      `Raw calculation inputs (30d): net-new numerator ${formatInt(attendeesMonth.newAttendees)} first-seen attendees, total attendance numerator ${formatInt(attendeesMonth.attendanceParticipations)} attendee participations across ${formatInt(attendeesMonth.sessions)} completed sessions, avg visits numerator/denominator ${formatInt(attendeesMonth.attendanceParticipations)}/${formatInt(attendeesMonth.uniqueAttendees)}, Meta CPNA numerator/denominator ${formatCurrency(attendanceAdsMonth.freeSpend)}/${formatInt(attendeesMonth.newAttendees)}.`,
       `${phoenixCallsMonth.sessions > 0 ? `Phoenix Forum-tagged calls in the same period: ${formatInt(phoenixCallsMonth.sessions)} sessions and ${formatInt(phoenixCallsMonth.attendanceParticipations)} attendances.` : 'Phoenix Forum-tagged call titles were not detected in the last 30 days from HubSpot call/meeting activity.'}`,
       unclassifiedLargeCalls > 0
         ? `${formatInt(unclassifiedLargeCalls)} high-attendance calls are still unclassified, which can understate free-group counts until titles are standardized.`
@@ -1497,10 +1552,10 @@ const DashboardOverview = () => {
 
     const attendanceAnalysisContext = {
       module_key: 'attendance',
-      as_of: periodMeta.asOfLabel,
+      as_of: attendancePeriodMeta.asOfLabel,
       windows: {
-        last_7_days: periodMeta.lastWeekLabel,
-        last_30_days: periodMeta.lastMonthLabel,
+        last_7_days: attendancePeriodMeta.lastWeekLabel,
+        last_30_days: attendancePeriodMeta.lastMonthLabel,
       },
       current_7d: {
         sessions: attendeesWeek.sessions,
@@ -1508,9 +1563,11 @@ const DashboardOverview = () => {
         thursday_sessions: attendeesWeek.thursdaySessions,
         new_attendees: attendeesWeek.newAttendees,
         attendance_participations: attendeesWeek.attendanceParticipations,
+        unique_attendees: attendeesWeek.uniqueAttendees,
+        repeaters: attendeesWeek.repeaters,
         avg_visits: attendeesWeek.avgVisits,
         repeat_rate: attendeesWeek.repeatRate,
-        free_group_ad_spend: adsWeek.freeSpend,
+        free_group_ad_spend: attendanceAdsWeek.freeSpend,
         cost_per_new_attendee: weekFreeCostPerNewAttendee,
       },
       previous_7d: {
@@ -1519,21 +1576,41 @@ const DashboardOverview = () => {
         thursday_sessions: attendeesPrevWeek.thursdaySessions,
         new_attendees: attendeesPrevWeek.newAttendees,
         attendance_participations: attendeesPrevWeek.attendanceParticipations,
+        unique_attendees: attendeesPrevWeek.uniqueAttendees,
+        repeaters: attendeesPrevWeek.repeaters,
         avg_visits: attendeesPrevWeek.avgVisits,
         repeat_rate: attendeesPrevWeek.repeatRate,
-        free_group_ad_spend: adsPrevWeek.freeSpend,
+        free_group_ad_spend: attendanceAdsPrevWeek.freeSpend,
         cost_per_new_attendee: prevWeekFreeCostPerNewAttendee,
       },
       current_30d: {
         sessions: attendeesMonth.sessions,
+        tuesday_sessions: attendeesMonth.tuesdaySessions,
+        thursday_sessions: attendeesMonth.thursdaySessions,
         new_attendees: attendeesMonth.newAttendees,
         attendance_participations: attendeesMonth.attendanceParticipations,
+        unique_attendees: attendeesMonth.uniqueAttendees,
+        repeaters: attendeesMonth.repeaters,
         avg_visits: attendeesMonth.avgVisits,
         repeat_rate: attendeesMonth.repeatRate,
-        free_group_ad_spend: adsMonth.freeSpend,
+        free_group_ad_spend: attendanceAdsMonth.freeSpend,
         cost_per_new_attendee: monthFreeCostPerNewAttendee,
       },
       diagnostics: {
+        lineage: {
+          attendance_events_table: 'raw_hubspot_meeting_activities',
+          attendance_associations_table: 'hubspot_activity_contact_associations',
+          spend_table: 'raw_fb_ads_insights_daily',
+          include_filter: 'completed Tuesday/Thursday free-group calls only',
+        },
+        raw_counts_30d: {
+          net_new_numerator: attendeesMonth.newAttendees,
+          total_attendance_numerator: attendeesMonth.attendanceParticipations,
+          average_visits_numerator: attendeesMonth.attendanceParticipations,
+          average_visits_denominator: attendeesMonth.uniqueAttendees,
+          cpna_numerator_spend: attendanceAdsMonth.freeSpend,
+          cpna_denominator_net_new: attendeesMonth.newAttendees,
+        },
         unclassified_large_calls: unclassifiedLargeCalls,
         phoenix_sessions_30d: phoenixCallsMonth.sessions,
       },
@@ -1588,6 +1665,14 @@ const DashboardOverview = () => {
       },
       data_rows_loaded: parsedDonations.length,
     };
+    const attendanceDiagnostics = [
+      `Lineage: net-new, total attendances, and avg visits come from raw_hubspot_meeting_activities joined to hubspot_activity_contact_associations (completed Tue/Thu free-group calls only).`,
+      `Meta cost per new attendee uses raw_fb_ads_insights_daily free-group spend (${formatCurrency(attendanceAdsMonth.freeSpend)}) / net-new (${formatInt(attendeesMonth.newAttendees)}).`,
+      `30d raw counts: net-new=${formatInt(attendeesMonth.newAttendees)}, total attendances=${formatInt(attendeesMonth.attendanceParticipations)}, avg visits=${formatInt(attendeesMonth.attendanceParticipations)}/${formatInt(attendeesMonth.uniqueAttendees)}.`,
+      unclassifiedLargeCalls > 0
+        ? `${formatInt(unclassifiedLargeCalls)} high-attendance HubSpot calls are unclassified and may affect free-group reporting until titles are standardized.`
+        : '',
+    ].filter(Boolean).join(' ');
 
     const managers = [
       {
@@ -1694,9 +1779,7 @@ const DashboardOverview = () => {
           'Standardize HubSpot call titles (Tuesday / Thursday / Phoenix Forum) so attendance classification stays accurate.',
           'Review free-group session format to increase repeat attendance and average visits per attendee.',
         ],
-        diagnostics: unclassifiedLargeCalls > 0
-          ? `${formatInt(unclassifiedLargeCalls)} high-attendance HubSpot calls are unclassified and may affect free-group reporting until titles are standardized.`
-          : null,
+        diagnostics: attendanceDiagnostics,
       },
       {
         key: 'seo',

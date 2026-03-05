@@ -12,13 +12,10 @@ import {
   Pie,
   Cell,
   Legend,
-  BarChart,
-  Bar,
 } from 'recharts';
 import {
   AlertTriangle,
   Bot,
-  Globe,
   RefreshCcw,
   Search,
   Sparkles,
@@ -768,85 +765,60 @@ export default function WebsiteTrafficDashboard() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.3fr) minmax(0, 1fr)', gap: '16px' }}>
-        <div style={cardStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-            <Globe size={17} color="#93c5fd" />
-            <h3 style={{ fontSize: '18px' }}>Top Organic Sources (30d)</h3>
-          </div>
-          <div style={{ height: '300px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={analytics.organicSources}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                <XAxis dataKey="source" tick={{ fill: 'var(--color-text-secondary)', fontSize: 11 }} />
-                <YAxis tick={{ fill: 'var(--color-text-secondary)', fontSize: 12 }} />
-                <Tooltip
-                  formatter={(value) => formatInt(value)}
-                  contentStyle={{ backgroundColor: 'var(--color-card)', border: '1px solid var(--color-border)', borderRadius: '10px' }}
-                  labelStyle={{ color: 'var(--color-text-primary)' }}
-                  itemStyle={{ color: 'var(--color-text-primary)' }}
-                />
-                <Bar dataKey="sessions" fill="#38bdf8" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+      <div style={{ ...cardStyle, borderLeft: '4px solid #93c5fd' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Search size={17} color="#93c5fd" />
+          <h3 style={{ fontSize: '18px' }}>SEO Priority Queue</h3>
         </div>
+        <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+          Keyword snapshot {analytics.keywordSnapshotDate || 'N/A'} | Page quick wins {analytics.prioritizedPages.length}
+        </p>
 
-        <div style={{ ...cardStyle, borderLeft: '4px solid #93c5fd' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Search size={17} color="#93c5fd" />
-            <h3 style={{ fontSize: '18px' }}>SEO Priority Queue</h3>
-          </div>
-          <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-            Keyword snapshot {analytics.keywordSnapshotDate || 'N/A'} | Page quick wins {analytics.prioritizedPages.length}
-          </p>
+        <div style={{ marginTop: '12px', display: 'grid', gap: '10px', maxHeight: '300px', overflowY: 'auto' }}>
+          {analytics.keywordOpportunities.map((op) => (
+            <div
+              key={`${op.type}-${op.query}-${op.page}`}
+              style={{
+                border: '1px solid var(--color-border)',
+                backgroundColor: 'rgba(255,255,255,0.04)',
+                borderRadius: '10px',
+                padding: '10px',
+              }}
+            >
+              <p style={{ fontSize: '12px', fontWeight: 700, color: '#93c5fd', textTransform: 'uppercase' }}>{op.type}</p>
+              <p style={{ marginTop: '4px', fontWeight: 700 }}>{op.query}</p>
+              <p style={{ marginTop: '3px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                Clicks {formatInt(op.clicks)} | Impr {formatInt(op.impressions)} | CTR {formatPct(op.ctr)} | Pos {op.position.toFixed(1)}
+              </p>
+              <p style={{ marginTop: '5px', fontSize: '12px', color: 'var(--color-text-primary)' }}>{op.action}</p>
+            </div>
+          ))}
 
-          <div style={{ marginTop: '12px', display: 'grid', gap: '10px', maxHeight: '300px', overflowY: 'auto' }}>
-            {analytics.keywordOpportunities.map((op) => (
-              <div
-                key={`${op.type}-${op.query}-${op.page}`}
-                style={{
-                  border: '1px solid var(--color-border)',
-                  backgroundColor: 'rgba(255,255,255,0.04)',
-                  borderRadius: '10px',
-                  padding: '10px',
-                }}
-              >
-                <p style={{ fontSize: '12px', fontWeight: 700, color: '#93c5fd', textTransform: 'uppercase' }}>{op.type}</p>
-                <p style={{ marginTop: '4px', fontWeight: 700 }}>{op.query}</p>
-                <p style={{ marginTop: '3px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-                  Clicks {formatInt(op.clicks)} | Impr {formatInt(op.impressions)} | CTR {formatPct(op.ctr)} | Pos {op.position.toFixed(1)}
-                </p>
-                <p style={{ marginTop: '5px', fontSize: '12px', color: 'var(--color-text-primary)' }}>{op.action}</p>
-              </div>
-            ))}
+          {analytics.keywordOpportunities.length === 0 && (
+            <div style={{ color: 'var(--color-text-secondary)', fontSize: '14px' }}>
+              No keyword opportunities detected yet. Sync Search Console keyword data first.
+            </div>
+          )}
 
-            {analytics.keywordOpportunities.length === 0 && (
-              <div style={{ color: 'var(--color-text-secondary)', fontSize: '14px' }}>
-                No keyword opportunities detected yet. Sync Search Console keyword data first.
-              </div>
-            )}
-
-            {analytics.prioritizedPages.slice(0, 3).map((row, idx) => (
-              <div
-                key={`page-opportunity-${idx}`}
-                style={{
-                  border: '1px solid var(--color-border)',
-                  backgroundColor: 'rgba(3,218,198,0.08)',
-                  borderRadius: '10px',
-                  padding: '10px',
-                }}
-              >
-                <p style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-dark-green)', textTransform: 'uppercase' }}>
-                  Page Quick Win {row?.impact_label ? `(${row.impact_label})` : ''}
-                </p>
-                <p style={{ marginTop: '4px', fontWeight: 700 }}>{row?.query || 'Untitled Opportunity'}</p>
-                <p style={{ marginTop: '3px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-                  {row?.recommended_action || 'Review and optimize this page for better organic performance.'}
-                </p>
-              </div>
-            ))}
-          </div>
+          {analytics.prioritizedPages.slice(0, 3).map((row, idx) => (
+            <div
+              key={`page-opportunity-${idx}`}
+              style={{
+                border: '1px solid var(--color-border)',
+                backgroundColor: 'rgba(3,218,198,0.08)',
+                borderRadius: '10px',
+                padding: '10px',
+              }}
+            >
+              <p style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-dark-green)', textTransform: 'uppercase' }}>
+                Page Quick Win {row?.impact_label ? `(${row.impact_label})` : ''}
+              </p>
+              <p style={{ marginTop: '4px', fontWeight: 700 }}>{row?.query || 'Untitled Opportunity'}</p>
+              <p style={{ marginTop: '3px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                {row?.recommended_action || 'Review and optimize this page for better organic performance.'}
+              </p>
+            </div>
+          ))}
         </div>
       </div>
 
