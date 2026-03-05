@@ -285,6 +285,13 @@ function toUtcDayStart(input) {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 }
 
+function hubspotActivityFreshnessDay(row, todayUtcDay = null) {
+  const createdAtDay = toUtcDayStart(row?.created_at_hubspot);
+  const scheduledDay = toUtcDayStart(row?.hs_timestamp);
+  if (scheduledDay && todayUtcDay && scheduledDay <= todayUtcDay) return scheduledDay;
+  return createdAtDay || scheduledDay;
+}
+
 function formatDateShort(input) {
   const d = toUtcDayStart(input);
   if (!d) return 'N/A';
@@ -852,6 +859,7 @@ const DashboardOverview = () => {
   }, [metrics]);
 
   const aiManagers = useMemo(() => {
+    const todayUtcDay = toUtcDayStart(new Date());
     const dateCandidates = [];
     if (dashboard.latestDate) {
       const d = toUtcDayStart(dashboard.latestDate);
@@ -867,13 +875,16 @@ const DashboardOverview = () => {
       if (d) dateCandidates.push(d);
     });
     hubspotActivities.forEach((row) => {
-      const d = toUtcDayStart(row?.hs_timestamp || row?.created_at_hubspot);
+      const d = hubspotActivityFreshnessDay(row, todayUtcDay);
       if (d) dateCandidates.push(d);
     });
 
-    const referenceDate = dateCandidates.length
+    const referenceDateRaw = dateCandidates.length
       ? new Date(Math.max(...dateCandidates.map((d) => d.getTime())))
-      : toUtcDayStart(new Date());
+      : todayUtcDay;
+    const referenceDate = (todayUtcDay && referenceDateRaw && referenceDateRaw > todayUtcDay)
+      ? todayUtcDay
+      : referenceDateRaw;
     const lastWeekEnd = referenceDate;
     const lastWeekStart = shiftUtcDays(lastWeekEnd, -6);
     const prevWeekEnd = shiftUtcDays(lastWeekStart, -1);
