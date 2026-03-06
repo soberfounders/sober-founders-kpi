@@ -25,6 +25,12 @@ function mondayKeyUtc(date: Date) {
   return isoDateOnly(d);
 }
 
+function addDays(dateKey: string, days: number) {
+  const d = new Date(`${dateKey}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return isoDateOnly(d);
+}
+
 async function invokeEdgeFunction(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -135,6 +141,7 @@ serve(async (req: Request) => {
       url.searchParams.get("week_start") ||
       parsedBody?.week_start ||
       mondayKeyUtc(new Date());
+    const priorWeekStart = addDays(weekStart, -7);
     const hubspotDaysRaw =
       Number(url.searchParams.get("hubspot_days") || parsedBody?.hubspot_days || 45);
     const hubspotDays =
@@ -189,6 +196,11 @@ serve(async (req: Request) => {
       runStep('facebook_ads', 'sync_fb_ads', {
         method: 'GET',
         query: { week_start: weekStart },
+      }),
+      // Keep prior-week ad days fresh in case a Fri/Sat/Sun sync was missed.
+      runStep('facebook_ads_prior_week_backfill', 'sync_fb_ads', {
+        method: 'GET',
+        query: { week_start: priorWeekStart },
       }),
       runStep('generic_metrics', 'sync-metrics', {
         method: 'GET',
