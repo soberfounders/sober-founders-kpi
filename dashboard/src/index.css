@@ -209,3 +209,9 @@ button:active {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-dark-green);
 }
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

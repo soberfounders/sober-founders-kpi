@@ -14,6 +14,7 @@ import {
   Globe,
   Bot,
   Gift,
+  FileText,
   ChevronLeft,
   ChevronRight,
   X,
@@ -22,6 +23,7 @@ import { motion } from 'framer-motion';
 
 const sidebarItems = [
   { id: 'Dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { id: 'Manager Reports', icon: FileText, label: 'Manager Reports' },
   { id: 'Attendance', icon: Calendar, label: 'Attendance' },
   { id: 'Leads', icon: Users, label: 'Leads' },
   { id: 'Email', icon: Mail, label: 'Email' },

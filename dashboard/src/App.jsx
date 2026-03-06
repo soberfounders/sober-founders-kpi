@@ -11,6 +11,8 @@ import EmailMarketingDashboard from './views/EmailMarketingDashboard';
 import WebsiteTrafficDashboard from './views/WebsiteTrafficDashboard';
 import AIBriefingDashboard from './views/AIBriefingDashboard';
 import DonationsDashboard from './views/DonationsDashboard';
+import ManagerReportsIndex from './views/ManagerReportsIndex';
+import ManagerReportDetail from './views/ManagerReportDetail';
 import { hasSupabaseConfig, supabaseConfigError } from './lib/supabaseClient';
 
 function PlaceholderView({ tab }) {
@@ -44,6 +46,7 @@ function SupabaseEnvRequiredView() {
 function tabRequiresSupabase(activeTab) {
   return [
     'Dashboard',
+    'Manager Reports',
     'Attendance',
     'Leads',
     'Email',
@@ -59,9 +62,27 @@ function tabRequiresSupabase(activeTab) {
 }
 
 const MOBILE_BREAKPOINT = 1024;
+const MANAGER_REPORTS_BASE_PATH = '/manager-reports';
+
+function parseManagerReportsRoute(pathname = '/') {
+  const clean = String(pathname || '/').replace(/\/+$/, '') || '/';
+  if (clean === MANAGER_REPORTS_BASE_PATH) {
+    return { isManagerReports: true, managerKey: '' };
+  }
+  if (clean.startsWith(`${MANAGER_REPORTS_BASE_PATH}/`)) {
+    const managerKey = clean.slice(`${MANAGER_REPORTS_BASE_PATH}/`.length).trim().toLowerCase();
+    return { isManagerReports: true, managerKey };
+  }
+  return { isManagerReports: false, managerKey: '' };
+}
 
 function App() {
-  const [activeTab, setActiveTab] = useState('Dashboard');
+  const [managerReportsRoute, setManagerReportsRoute] = useState(
+    () => parseManagerReportsRoute(typeof window !== 'undefined' ? window.location.pathname : '/'),
+  );
+  const [activeTab, setActiveTab] = useState(
+    () => (managerReportsRoute.isManagerReports ? 'Manager Reports' : 'Dashboard'),
+  );
   const [isMobile, setIsMobile] = useState(
     () => (typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false),
   );
@@ -103,7 +124,41 @@ function App() {
     };
   }, [isMobile, isMobileMenuOpen]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handlePopState = () => {
+      const nextRoute = parseManagerReportsRoute(window.location.pathname);
+      setManagerReportsRoute(nextRoute);
+      setActiveTab((prev) => {
+        if (nextRoute.isManagerReports) return 'Manager Reports';
+        return prev === 'Manager Reports' ? 'Dashboard' : prev;
+      });
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const navigateToPath = (path) => {
+    if (typeof window === 'undefined') return;
+    window.history.pushState({}, '', path);
+    const nextRoute = parseManagerReportsRoute(path);
+    setManagerReportsRoute(nextRoute);
+    if (nextRoute.isManagerReports) {
+      setActiveTab('Manager Reports');
+    }
+  };
+
   const handleSetActiveTab = (tab) => {
+    if (tab === 'Manager Reports') {
+      navigateToPath(MANAGER_REPORTS_BASE_PATH);
+      if (isMobile) setIsMobileMenuOpen(false);
+      return;
+    }
+
+    if (managerReportsRoute.isManagerReports) {
+      navigateToPath('/');
+    }
+
     setActiveTab(tab);
     if (isMobile) setIsMobileMenuOpen(false);
   };
@@ -117,6 +172,25 @@ function App() {
   };
 
   const renderView = () => {
+    if (managerReportsRoute.isManagerReports) {
+      if (!hasSupabaseConfig && tabRequiresSupabase('Manager Reports')) {
+        return <SupabaseEnvRequiredView />;
+      }
+      if (managerReportsRoute.managerKey) {
+        return (
+          <ManagerReportDetail
+            managerKey={managerReportsRoute.managerKey}
+            onBack={() => navigateToPath(MANAGER_REPORTS_BASE_PATH)}
+          />
+        );
+      }
+      return (
+        <ManagerReportsIndex
+          onOpenManager={(managerKey) => navigateToPath(`${MANAGER_REPORTS_BASE_PATH}/${managerKey}`)}
+        />
+      );
+    }
+
     if (!hasSupabaseConfig && tabRequiresSupabase(activeTab)) {
       return <SupabaseEnvRequiredView />;
     }
