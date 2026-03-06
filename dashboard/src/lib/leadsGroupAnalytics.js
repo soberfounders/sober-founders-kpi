@@ -260,6 +260,12 @@ function contactCreatedTs(row) {
     return Number.isFinite(ts) ? ts : 0;
 }
 
+function pickNewerContact(current, candidate) {
+    if (!current) return candidate;
+    if (!candidate) return current;
+    return contactCreatedTs(candidate) > contactCreatedTs(current) ? candidate : current;
+}
+
 function contactDataScore(row) {
     const official = resolveHubspotOfficialRevenue(row);
     const fallback = row?.annual_revenue_in_dollars;
@@ -908,19 +914,38 @@ function buildLeadRows(ads, hubspotInRange, lumaRows, funnelFilter) {
     if (targetCount === 0) return [];
 
     const dedup = new Map();
+    const keyByEmail = new Map();
     for (const row of hubspotInRange || []) {
         if (!isPaidSocialHubspotContact(row)) continue;
         const isPhoenix = isPhoenixHubspotContact(row);
         if (funnelFilter === 'phoenix' && !isPhoenix) continue;
         if (funnelFilter === 'free' && isPhoenix) continue;
 
-        const email = normalizeEmail(row?.email);
-        const id = row?.hubspot_contact_id;
-        const key = id ? `id:${id}` : (email ? `email:${email}` : null);
+        const primaryEmail = normalizeEmail(row?.email);
+        const extraEmails = parseEmailList(row?.hs_additional_emails);
+        const identityEmails = Array.from(new Set([primaryEmail, ...extraEmails].filter(Boolean)));
+        const existingKeys = Array.from(new Set(identityEmails.map((email) => keyByEmail.get(email)).filter(Boolean)));
+        const id = Number(row?.hubspot_contact_id);
+        const fallbackEmail = identityEmails[0] || '';
+        const fallbackId = Number.isFinite(id) ? `id:${id}` : null;
+        const key = existingKeys[0] || (fallbackEmail ? `email:${fallbackEmail}` : fallbackId);
         if (!key) continue;
 
-        const current = dedup.get(key);
-        if (!current || contactCreatedTs(row) > contactCreatedTs(current)) dedup.set(key, row);
+        for (let i = 1; i < existingKeys.length; i += 1) {
+            const oldKey = existingKeys[i];
+            if (oldKey === key) continue;
+            const oldRow = dedup.get(oldKey);
+            if (oldRow) {
+                dedup.set(key, pickNewerContact(dedup.get(key), oldRow));
+                dedup.delete(oldKey);
+            }
+            keyByEmail.forEach((mappedKey, email) => {
+                if (mappedKey === oldKey) keyByEmail.set(email, key);
+            });
+        }
+
+        dedup.set(key, pickNewerContact(dedup.get(key), row));
+        identityEmails.forEach((email) => keyByEmail.set(email, key));
     }
 
     const contacts = Array.from(dedup.values())

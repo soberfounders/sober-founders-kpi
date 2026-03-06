@@ -108,6 +108,21 @@ function parseEmailList(value) {
     .filter(Boolean);
 }
 
+function hubspotIdentityEmails(contact) {
+  return Array.from(new Set([
+    normalizeEmailKey(contact?.email),
+    ...parseEmailList(contact?.hs_additional_emails),
+  ].filter(Boolean)));
+}
+
+function hubspotIdentityKey(contact) {
+  const emails = hubspotIdentityEmails(contact);
+  if (emails.length > 0) return `email:${emails[0]}`;
+  const id = Number(contact?.hubspot_contact_id);
+  if (Number.isFinite(id)) return `id:${id}`;
+  return null;
+}
+
 function normalizePersonNameKey(value = '') {
   return String(value || '')
     .toLowerCase()
@@ -144,6 +159,53 @@ function daysBetweenDateKeys(laterDateKey, earlierDateKey) {
   const earlier = dateKeyToUtcDate(earlierDateKey);
   if (!later || !earlier) return null;
   return Math.floor((later.getTime() - earlier.getTime()) / 86400000);
+}
+
+function parseSobrietyDateKey(value) {
+  const text = String(value || '').trim();
+  if (!text || text.toLowerCase() === 'not found') return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+
+  const mmddyyyy = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (mmddyyyy) {
+    const mm = String(mmddyyyy[1]).padStart(2, '0');
+    const dd = String(mmddyyyy[2]).padStart(2, '0');
+    const yyyy = mmddyyyy[3];
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  return parseDateKeyLoose(text);
+}
+
+function summarizeLeadQualificationAndQuality(leadRows, asOfDateKey) {
+  const rows = Array.isArray(leadRows) ? leadRows : [];
+  const qualityCounts = { bad: 0, ok: 0, good: 0, great: 0, unknown: 0 };
+  let qualified = 0;
+
+  for (const row of rows) {
+    const revenue = Number(row?.revenue);
+    const hasRevenue = Number.isFinite(revenue);
+    const sobrietyDateKey = parseSobrietyDateKey(row?.sobrietyDate);
+    const sobrietyDays = sobrietyDateKey && asOfDateKey ? daysBetweenDateKeys(asOfDateKey, sobrietyDateKey) : null;
+    const hasOneYearSobriety = Number.isFinite(sobrietyDays) && sobrietyDays >= 365;
+
+    if (hasRevenue && revenue >= 250000 && hasOneYearSobriety) qualified += 1;
+
+    if (!hasRevenue) qualityCounts.unknown += 1;
+    else if (revenue >= 1000000) qualityCounts.great += 1;
+    else if (revenue >= 250000) qualityCounts.good += 1;
+    else if (revenue >= 100000) qualityCounts.ok += 1;
+    else qualityCounts.bad += 1;
+  }
+
+  const total = rows.length;
+  const nonQualified = Math.max(0, total - qualified);
+  return {
+    total,
+    qualified,
+    nonQualified,
+    qualityCounts,
+  };
 }
 
 function formatDateKeyShort(dateKey) {
@@ -382,8 +444,8 @@ function ProgressGapBar({ label, current, target, format = 'count', color = '#0f
 }
 
 // ─── Category bar ─────────────────────────────────────────────────────────────
-const TIER_COLORS = { great: '#16a34a', qualified: '#2563eb', ok: '#d97706', bad: '#dc2626', unknown: '#94a3b8' };
-const TIER_LABELS = { great: 'Great ≥$1M', qualified: 'Qualified $250k–$999,999', ok: 'OK $100k–$249k', bad: 'Bad <$100k', unknown: 'Unknown' };
+const TIER_COLORS = { great: '#16a34a', qualified: '#2563eb', ok: '#b45309', bad: '#dc2626', unknown: '#94a3b8' };
+const TIER_LABELS = { great: 'Great >=$1M', qualified: 'Good $250k-$999,999', ok: 'OK $100k-$249k', bad: 'Bad <$100k', unknown: 'Unknown' };
 
 function CategoryRow({ cat, total }) {
   if (!cat) return null;
@@ -2514,40 +2576,106 @@ export default function LeadsDashboard() {
         })
         .sort((a, b) => hubspotContactCreatedTs(a) - hubspotContactCreatedTs(b));
 
-      const metaById = new Map();
+      const metaByIdentity = new Map();
+      const metaIdentityByContactId = new Map();
+      const metaIdentityByEmail = new Map();
       baseContacts.forEach((contact) => {
         const id = Number(contact?.hubspot_contact_id);
-        if (!Number.isFinite(id)) return;
-        if (metaById.has(id)) return;
-        metaById.set(id, {
-          hubspotContactId: id,
-          hubspotName: hubspotFullName(contact) || 'Not Found',
-          hubspotPrimaryEmail: normalizeEmailKey(contact?.email) || 'Not Found',
-          hubspotSecondaryEmails: parseEmailList(contact?.hs_additional_emails),
-          hubspotCreatedDate: parseDateKeyLoose(contact?.createdate) || 'Not Found',
-          originalTrafficSource: contact?.hs_analytics_source || 'Not Found',
-          originalTrafficSourceDetail1: contact?.hs_analytics_source_data_1 || 'Not Found',
-          originalTrafficSourceDetail2: contact?.hs_analytics_source_data_2 || contact?.campaign || 'Not Found',
-          sourceBucket: hubspotSourceBucket(contact),
-          revenue: hubspotRevenueValue(contact),
-          meta_lead: true,
-          luma_registered: false,
-          zoom_attended: false,
-          lumaMatchConfidence: 'unmatched',
-          lumaMatchReason: '',
-          lumaMatchSource: '',
-          zoomMatchConfidence: 'unmatched',
-          zoomMatchReason: '',
-          zoomMatchSource: '',
-          lumaRegistrationCount: 0,
-          zoomAttendanceCount: 0,
-          hubspotCallLinked: false,
-          hubspotCallMatchCount: 0,
-          lumaRows: [],
-          zoomRows: [],
+        const identityEmails = hubspotIdentityEmails(contact);
+        const existingIdentityKeys = Array.from(new Set(identityEmails.map((email) => metaIdentityByEmail.get(email)).filter(Boolean)));
+        const fallbackIdentity = hubspotIdentityKey(contact);
+        const identityKey = existingIdentityKeys[0] || fallbackIdentity;
+        if (!identityKey) return;
+
+        let record = metaByIdentity.get(identityKey);
+        if (!record) {
+          record = {
+            hubspotContactId: Number.isFinite(id) ? id : null,
+            hubspotName: hubspotFullName(contact) || 'Not Found',
+            hubspotPrimaryEmail: normalizeEmailKey(contact?.email) || 'Not Found',
+            hubspotSecondaryEmails: parseEmailList(contact?.hs_additional_emails),
+            hubspotCreatedDate: parseDateKeyLoose(contact?.createdate) || 'Not Found',
+            originalTrafficSource: contact?.hs_analytics_source || 'Not Found',
+            originalTrafficSourceDetail1: contact?.hs_analytics_source_data_1 || 'Not Found',
+            originalTrafficSourceDetail2: contact?.hs_analytics_source_data_2 || contact?.campaign || 'Not Found',
+            sourceBucket: hubspotSourceBucket(contact),
+            revenue: hubspotRevenueValue(contact),
+            meta_lead: true,
+            luma_registered: false,
+            zoom_attended: false,
+            lumaMatchConfidence: 'unmatched',
+            lumaMatchReason: '',
+            lumaMatchSource: '',
+            zoomMatchConfidence: 'unmatched',
+            zoomMatchReason: '',
+            zoomMatchSource: '',
+            lumaRegistrationCount: 0,
+            zoomAttendanceCount: 0,
+            hubspotCallLinked: false,
+            hubspotCallMatchCount: 0,
+            lumaRows: [],
+            zoomRows: [],
+            _createdTs: hubspotContactCreatedTs(contact),
+          };
+          metaByIdentity.set(identityKey, record);
+        } else {
+          const candidateTs = hubspotContactCreatedTs(contact);
+          if (candidateTs >= (record._createdTs || 0)) {
+            record._createdTs = candidateTs;
+            record.hubspotContactId = Number.isFinite(id) ? id : record.hubspotContactId;
+            record.hubspotName = hubspotFullName(contact) || record.hubspotName;
+            record.hubspotPrimaryEmail = normalizeEmailKey(contact?.email) || record.hubspotPrimaryEmail;
+            record.hubspotCreatedDate = parseDateKeyLoose(contact?.createdate) || record.hubspotCreatedDate;
+            record.originalTrafficSource = contact?.hs_analytics_source || record.originalTrafficSource;
+            record.originalTrafficSourceDetail1 = contact?.hs_analytics_source_data_1 || record.originalTrafficSourceDetail1;
+            record.originalTrafficSourceDetail2 = contact?.hs_analytics_source_data_2 || contact?.campaign || record.originalTrafficSourceDetail2;
+            record.sourceBucket = hubspotSourceBucket(contact) || record.sourceBucket;
+            record.revenue = hubspotRevenueValue(contact);
+          }
+          record.hubspotSecondaryEmails = Array.from(new Set([
+            ...(Array.isArray(record.hubspotSecondaryEmails) ? record.hubspotSecondaryEmails : []),
+            ...parseEmailList(contact?.hs_additional_emails),
+          ])).filter(Boolean);
+        }
+
+        for (let i = 1; i < existingIdentityKeys.length; i += 1) {
+          const oldIdentityKey = existingIdentityKeys[i];
+          if (oldIdentityKey === identityKey) continue;
+          const oldRecord = metaByIdentity.get(oldIdentityKey);
+          if (!oldRecord) continue;
+
+          if ((oldRecord._createdTs || 0) > (record._createdTs || 0)) {
+            record._createdTs = oldRecord._createdTs;
+            record.hubspotContactId = oldRecord.hubspotContactId;
+            record.hubspotName = oldRecord.hubspotName;
+            record.hubspotPrimaryEmail = oldRecord.hubspotPrimaryEmail;
+            record.hubspotCreatedDate = oldRecord.hubspotCreatedDate;
+            record.originalTrafficSource = oldRecord.originalTrafficSource;
+            record.originalTrafficSourceDetail1 = oldRecord.originalTrafficSourceDetail1;
+            record.originalTrafficSourceDetail2 = oldRecord.originalTrafficSourceDetail2;
+            record.sourceBucket = oldRecord.sourceBucket;
+            record.revenue = oldRecord.revenue;
+          }
+          record.hubspotSecondaryEmails = Array.from(new Set([
+            ...(Array.isArray(record.hubspotSecondaryEmails) ? record.hubspotSecondaryEmails : []),
+            ...(Array.isArray(oldRecord.hubspotSecondaryEmails) ? oldRecord.hubspotSecondaryEmails : []),
+          ])).filter(Boolean);
+
+          metaByIdentity.delete(oldIdentityKey);
+          metaIdentityByContactId.forEach((mappedKey, contactId) => {
+            if (mappedKey === oldIdentityKey) metaIdentityByContactId.set(contactId, identityKey);
+          });
+          metaIdentityByEmail.forEach((mappedKey, email) => {
+            if (mappedKey === oldIdentityKey) metaIdentityByEmail.set(email, identityKey);
+          });
+        }
+
+        if (Number.isFinite(id)) metaIdentityByContactId.set(id, identityKey);
+        identityEmails.forEach((email) => {
+          metaIdentityByEmail.set(email, identityKey);
         });
       });
-      const metaIdSet = new Set(Array.from(metaById.keys()));
+      const metaIdentitySet = new Set(Array.from(metaByIdentity.keys()));
 
       const lumaRowsDetailed = [];
       const unmatchedLumaRows = [];
@@ -2582,12 +2710,13 @@ export default function LeadsDashboard() {
           return;
         }
 
-        if (!metaIdSet.has(matchedId)) {
+        const matchedIdentityKey = Number.isFinite(matchedId) ? metaIdentityByContactId.get(matchedId) : null;
+        if (!matchedIdentityKey || !metaIdentitySet.has(matchedIdentityKey)) {
           lumaMatchedNonMetaRows.push({ ...detailRow, missingReason: 'Matched HubSpot contact is not a Meta paid lead in selected date range' });
           return;
         }
 
-        const record = metaById.get(matchedId);
+        const record = metaByIdentity.get(matchedIdentityKey);
         record.luma_registered = true;
         record.lumaRegistrationCount += 1;
         record.lumaRows.push(detailRow);
@@ -2638,12 +2767,13 @@ export default function LeadsDashboard() {
           unmatchedZoomRows.push({ ...detailRow, missingReason: detailRow.matchReason || 'No HubSpot contact match for Zoom attendee' });
           return;
         }
-        if (!metaIdSet.has(matchedId)) {
+        const matchedIdentityKey = Number.isFinite(matchedId) ? metaIdentityByContactId.get(matchedId) : null;
+        if (!matchedIdentityKey || !metaIdentitySet.has(matchedIdentityKey)) {
           zoomMatchedNonMetaRows.push({ ...detailRow, missingReason: 'Matched HubSpot contact is not a Meta paid lead in selected date range' });
           return;
         }
 
-        const record = metaById.get(matchedId);
+        const record = metaByIdentity.get(matchedIdentityKey);
         record.zoom_attended = true;
         record.zoomAttendanceCount += 1;
         if (detailRow.hubspotCallLinked === 'Yes') {
@@ -2659,7 +2789,7 @@ export default function LeadsDashboard() {
         }
       });
 
-      const unifiedLeadRecords = Array.from(metaById.values()).map((record) => ({
+      const unifiedLeadRecords = Array.from(metaByIdentity.values()).map((record) => ({
         ...record,
         luma_registered_label: record.luma_registered ? 'Yes' : 'No',
         zoom_attended_label: record.zoom_attended ? 'Yes' : 'No',
@@ -2668,6 +2798,7 @@ export default function LeadsDashboard() {
         lumaMatchConfidence: record.lumaMatchConfidence || 'unmatched',
         zoomMatchConfidence: record.zoomMatchConfidence || 'unmatched',
         revenue: Number.isFinite(Number(record.revenue)) ? Number(record.revenue) : 'Not Found',
+        _createdTs: undefined,
       })).sort((a, b) => {
         if (a.zoomAttendanceCount !== b.zoomAttendanceCount) return b.zoomAttendanceCount - a.zoomAttendanceCount;
         if (a.lumaRegistrationCount !== b.lumaRegistrationCount) return b.lumaRegistrationCount - a.lumaRegistrationCount;
@@ -3359,6 +3490,7 @@ export default function LeadsDashboard() {
       agg.metaSpend += Number.isFinite(spend) ? spend : 0;
     });
 
+    const paidLeadSeenByWeekIdentity = new Set();
     (rawHubspot || []).forEach((row) => {
       const dateKey = parseDateKeyLoose(row?.createdate);
       if (!dateInRange(dateKey)) return;
@@ -3366,6 +3498,11 @@ export default function LeadsDashboard() {
       const weekKey = mondayKey(dateKey);
       const agg = ensureWeek(weekKey);
       if (!agg) return;
+      const identityKey = hubspotIdentityKey(row);
+      if (!identityKey) return;
+      const dedupeKey = `${weekKey}|${identityKey}`;
+      if (paidLeadSeenByWeekIdentity.has(dedupeKey)) return;
+      paidLeadSeenByWeekIdentity.add(dedupeKey);
       agg.paidHubspotLeads += 1;
     });
 
@@ -3483,8 +3620,6 @@ export default function LeadsDashboard() {
 
   const overviewCurrentCombined = groupedData?.current?.free?.combined || null;
   const overviewPreviousCombined = groupedData?.previous?.free?.combined || null;
-  const overviewCurrentCategorization = overviewCurrentCombined?.categorization || {};
-  const overviewPreviousCategorization = overviewPreviousCombined?.categorization || {};
   const overviewCurrentFreeSpend = Number(overviewCurrentCombined?.spend || 0);
   const overviewPreviousFreeSpend = Number(overviewPreviousCombined?.spend || 0);
   const overviewCurrentPhoenixSpend = Number(groupedData?.current?.phoenix?.spend || 0);
@@ -3536,6 +3671,22 @@ export default function LeadsDashboard() {
     };
   }, [rawAds, dateWindows?.current?.start, dateWindows?.current?.end]);
 
+  const qualificationCurrent = summarizeLeadQualificationAndQuality(
+    overviewCurrentCombined?.leadRows || [],
+    dateWindows?.current?.end || null,
+  );
+  const qualificationPrevious = summarizeLeadQualificationAndQuality(
+    overviewPreviousCombined?.leadRows || [],
+    dateWindows?.previous?.end || null,
+  );
+  const currentLeadsForQualification = Number(overviewCurrentCombined?.metaLeads || qualificationCurrent.total || 0);
+  const qualifiedLeadRate = currentLeadsForQualification > 0 ? (qualificationCurrent.qualified / currentLeadsForQualification) : null;
+  const estimatedCostPerLead = currentLeadsForQualification > 0 ? (overviewCurrentFreeSpend / currentLeadsForQualification) : null;
+  const estimatedCostPerQualifiedLead = qualificationCurrent.qualified > 0 ? (overviewCurrentFreeSpend / qualificationCurrent.qualified) : null;
+  const estimatedNonQualifiedSpend = Number.isFinite(estimatedCostPerLead)
+    ? estimatedCostPerLead * qualificationCurrent.nonQualified
+    : null;
+
   const getChangePct = (currentValue, previousValue) => {
     if (previousValue === null || previousValue === undefined) return null;
     return computeChangePct(Number(currentValue || 0), Number(previousValue || 0)).pct;
@@ -3574,27 +3725,36 @@ export default function LeadsDashboard() {
     },
     {
       key: 'total_leads',
-      label: 'Total Leads',
+      label: 'Free Group Leads',
       value: Number(overviewCurrentCombined?.metaLeads || 0),
       previous: Number(overviewPreviousCombined?.metaLeads || 0),
       format: 'count',
-      note: 'Meta leads matched to selected window',
+      note: 'Free Group Meta leads matched to selected window',
       color: '#0f766e',
     },
     {
       key: 'qualified_leads',
-      label: 'Qualified Leads ($250K-$999K)',
-      value: Number(overviewCurrentCategorization?.qualified || 0),
-      previous: Number(overviewPreviousCategorization?.qualified || 0),
+      label: 'Free Group Qualified Leads',
+      value: Number(qualificationCurrent?.qualified || 0),
+      previous: dateWindows?.previous ? Number(qualificationPrevious?.qualified || 0) : null,
       format: 'count',
-      note: 'Revenue tier from HubSpot contact data',
+      note: 'Gold-standard rule: revenue >= $250K and sobriety >= 1 year',
       color: '#2563eb',
     },
     {
+      key: 'non_qualified_leads',
+      label: 'Free Group Non-Qualified Leads',
+      value: Number(qualificationCurrent?.nonQualified || 0),
+      previous: dateWindows?.previous ? Number(qualificationPrevious?.nonQualified || 0) : null,
+      format: 'count',
+      note: 'Free Group leads not meeting qualified rule',
+      color: '#64748b',
+    },
+    {
       key: 'great_leads',
-      label: 'Great Leads ($1M+)',
-      value: Number(overviewCurrentCategorization?.great || 0),
-      previous: Number(overviewPreviousCategorization?.great || 0),
+      label: 'Free Group Great Leads ($1M+)',
+      value: Number(qualificationCurrent?.qualityCounts?.great || 0),
+      previous: dateWindows?.previous ? Number(qualificationPrevious?.qualityCounts?.great || 0) : null,
       format: 'count',
       note: 'Top revenue tier in selected range',
       color: '#16a34a',
@@ -3602,13 +3762,17 @@ export default function LeadsDashboard() {
   ];
 
   const qualityMixRows = [
-    { key: 'great', label: 'Great ($1M+)', value: Number(overviewCurrentCategorization?.great || 0), color: '#16a34a' },
-    { key: 'qualified', label: 'Qualified ($250K-$999K)', value: Number(overviewCurrentCategorization?.qualified || 0), color: '#2563eb' },
-    { key: 'ok', label: 'OK ($100K-$249K)', value: Number(overviewCurrentCategorization?.ok || 0), color: '#d97706' },
-    { key: 'bad', label: 'Bad (<$100K)', value: Number(overviewCurrentCategorization?.bad || 0), color: '#dc2626' },
-    { key: 'unknown', label: 'Unknown', value: Number(overviewCurrentCategorization?.unknown || 0), color: '#94a3b8' },
+    { key: 'bad', label: 'Bad (<$100K)', value: Number(qualificationCurrent?.qualityCounts?.bad || 0), color: '#dc2626' },
+    { key: 'ok', label: 'OK ($100K-$249K)', value: Number(qualificationCurrent?.qualityCounts?.ok || 0), color: '#b45309' },
+    { key: 'good', label: 'Good ($250K-$999K)', value: Number(qualificationCurrent?.qualityCounts?.good || 0), color: '#2563eb' },
+    { key: 'great', label: 'Great ($1M+)', value: Number(qualificationCurrent?.qualityCounts?.great || 0), color: '#16a34a' },
+  ];
+  const qualificationPieRows = [
+    { key: 'qualified', label: 'Qualified', value: Number(qualificationCurrent?.qualified || 0), color: '#2563eb' },
+    { key: 'nonQualified', label: 'Non-Qualified', value: Number(qualificationCurrent?.nonQualified || 0), color: '#94a3b8' },
   ];
   const qualityMixTotal = qualityMixRows.reduce((sum, row) => sum + row.value, 0);
+  const qualityUnknownCount = Number(qualificationCurrent?.qualityCounts?.unknown || 0);
 
   const costCardLookup = new Map((leadsDecisionModule?.costCards || []).map((row) => [row.key, row]));
   const previousCpql = Number(costCardLookup.get('costPerGoodLeadQualified')?.previous);
@@ -3758,29 +3922,74 @@ export default function LeadsDashboard() {
 
         <div style={card}>
           <p style={{ margin: 0, fontSize: '11px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
-            Lead Quality
+            Qualification And Quality
           </p>
-          <h3 style={{ margin: '6px 0 0', fontSize: '17px', color: '#0f172a' }}>Current lead mix by revenue tier</h3>
-          <div style={{ marginTop: '12px', height: '230px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={qualityMixRows.filter((row) => row.value > 0)} dataKey="value" nameKey="label" outerRadius={90}>
-                  {qualityMixRows.filter((row) => row.value > 0).map((row) => <Cell key={`quality-${row.key}`} fill={row.color} />)}
-                </Pie>
-                <Tooltip formatter={(value) => fmt.int(value)} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-            {qualityMixRows.map((row) => (
-              <div key={row.key} style={{ ...subCard, border: '1px solid #e2e8f0', backgroundColor: '#fff' }}>
-                <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 700 }}>{row.label}</p>
-                <p style={{ margin: '5px 0 0', fontSize: '15px', color: '#0f172a', fontWeight: 800 }}>{fmt.int(row.value)}</p>
-                <p style={{ margin: '3px 0 0', fontSize: '11px', color: '#64748b' }}>
-                  {qualityMixTotal > 0 ? fmt.pct(row.value / qualityMixTotal) : '0.0%'}
+          <h3 style={{ margin: '6px 0 0', fontSize: '17px', color: '#0f172a' }}>Free Group Qualified vs Non-Qualified and quality tiers</h3>
+          <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#64748b' }}>
+            Qualified = revenue {'>='} $250K and sobriety {'>='} 1 year. Cost metrics below use Free Groups ad spend in the selected window.
+          </p>
+          <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: '10px' }}>
+            <div style={{ ...subCard, border: '1px solid #dbeafe', backgroundColor: '#f8fbff' }}>
+              <p style={{ margin: 0, fontSize: '11px', color: '#1d4ed8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Free Group Qualified vs Non-Qualified
+              </p>
+              <div style={{ marginTop: '8px', height: '200px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={qualificationPieRows.filter((row) => row.value > 0)} dataKey="value" nameKey="label" outerRadius={78}>
+                      {qualificationPieRows.filter((row) => row.value > 0).map((row) => <Cell key={`qualification-${row.key}`} fill={row.color} />)}
+                    </Pie>
+                    <Tooltip formatter={(value) => fmt.int(value)} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div style={{ display: 'grid', gap: '5px' }}>
+                <p style={{ margin: 0, fontSize: '12px', color: '#334155' }}>
+                  Free Group Qualified Leads: <strong>{fmt.int(qualificationCurrent.qualified)}</strong>
+                </p>
+                <p style={{ margin: 0, fontSize: '12px', color: '#334155' }}>
+                  Free Group Non-Qualified Leads: <strong>{fmt.int(qualificationCurrent.nonQualified)}</strong>
+                </p>
+                <p style={{ margin: 0, fontSize: '12px', color: '#334155' }}>
+                  Qualified Rate: <strong>{qualifiedLeadRate !== null ? fmt.pct(qualifiedLeadRate) : 'N/A'}</strong>
+                </p>
+                <p style={{ margin: 0, fontSize: '12px', color: '#334155' }}>
+                  Cost / Qualified Lead: <strong>{fmtMaybeCurrency(estimatedCostPerQualifiedLead)}</strong>
+                </p>
+                <p style={{ margin: 0, fontSize: '12px', color: '#991b1b', fontWeight: 700 }}>
+                  Estimated Non-Qualified Spend: {fmtMaybeCurrency(estimatedNonQualifiedSpend)}
                 </p>
               </div>
-            ))}
+            </div>
+
+            <div style={{ ...subCard, border: '1px solid #e2e8f0', backgroundColor: '#fff' }}>
+              <p style={{ margin: 0, fontSize: '11px', color: '#334155', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Free Group Lead Quality Breakdown
+              </p>
+              <div style={{ marginTop: '8px', height: '200px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={qualityMixRows.filter((row) => row.value > 0)} dataKey="value" nameKey="label" outerRadius={78}>
+                      {qualityMixRows.filter((row) => row.value > 0).map((row) => <Cell key={`quality-${row.key}`} fill={row.color} />)}
+                    </Pie>
+                    <Tooltip formatter={(value) => fmt.int(value)} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div style={{ display: 'grid', gap: '6px' }}>
+                {qualityMixRows.map((row) => (
+                  <div key={row.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '12px', color: '#475569' }}>{row.label}</span>
+                    <span style={{ fontSize: '12px', color: row.color, fontWeight: 800 }}>
+                      {fmt.int(row.value)} ({qualityMixTotal > 0 ? fmt.pct(row.value / qualityMixTotal) : '0.0%'})
+                    </span>
+                  </div>
+                ))}
+                <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#64748b' }}>
+                  Unclassified revenue rows: {fmt.int(qualityUnknownCount)}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -3796,14 +4005,14 @@ export default function LeadsDashboard() {
           </p>
           <div style={{ marginTop: '12px', display: 'grid', gap: '10px' }}>
             <ProgressGapBar
-              label="Qualified Leads Target ($250K-$999K)"
-              current={overviewCurrentCategorization?.qualified || 0}
+              label="Good Leads Target ($250K-$999K)"
+              current={qualificationCurrent?.qualityCounts?.good || 0}
               target={qualifiedTargetAtPriorEfficiency}
               color="#2563eb"
             />
             <ProgressGapBar
               label="Great Leads Target ($1M+)"
-              current={overviewCurrentCategorization?.great || 0}
+              current={qualificationCurrent?.qualityCounts?.great || 0}
               target={greatTargetAtPriorEfficiency}
               color="#16a34a"
             />
@@ -5345,3 +5554,4 @@ export default function LeadsDashboard() {
     </div>
   );
 }
+

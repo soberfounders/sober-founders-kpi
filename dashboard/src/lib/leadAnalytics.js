@@ -145,6 +145,27 @@ function getLeadName(row) {
   return emailPrefix.replace(/[._-]+/g, ' ').trim();
 }
 
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function parseEmailList(value) {
+  return String(value || '')
+    .split(',')
+    .map((part) => normalizeEmail(part))
+    .filter(Boolean);
+}
+
+function hubspotIdentityKey(row) {
+  const primary = normalizeEmail(row?.email);
+  if (primary) return `email:${primary}`;
+  const extras = parseEmailList(row?.hs_additional_emails);
+  if (extras.length > 0) return `email:${extras[0]}`;
+  const id = Number(row?.hubspot_contact_id);
+  if (Number.isFinite(id)) return `id:${id}`;
+  return null;
+}
+
 function pickPrimaryDate(rows, fallbackKey) {
   const keys = rows
     .map((row) => parseDateKey(row?.date_day || row?.metric_date || row?.createdate))
@@ -290,8 +311,25 @@ function matchLeadToShowup(leadName, createdDateKey, showupIndex) {
 }
 
 function buildPaidLeads(hubspotRows, showupIndex) {
-  return (hubspotRows || [])
+  const deduped = new Map();
+  (hubspotRows || [])
     .filter((row) => isPaidSocialLead(row))
+    .forEach((row) => {
+      const key = hubspotIdentityKey(row);
+      if (!key) return;
+      const current = deduped.get(key);
+      const currentTs = current ? Date.parse(current?.createdate || '') : NaN;
+      const candidateTs = Date.parse(row?.createdate || '');
+      if (!current) {
+        deduped.set(key, row);
+        return;
+      }
+      if (!Number.isFinite(currentTs) || (Number.isFinite(candidateTs) && candidateTs > currentTs)) {
+        deduped.set(key, row);
+      }
+    });
+
+  return Array.from(deduped.values())
     .map((row) => {
       const createdDateKey = parseDateKey(row?.createdate);
       if (!createdDateKey) return null;
@@ -310,7 +348,7 @@ function buildPaidLeads(hubspotRows, showupIndex) {
         matchedShowup: !!showupMatch,
         matchedShowupDateKey: showupMatch?.dateKey || null,
         leadName,
-        email: String(row?.email || '').trim().toLowerCase(),
+        email: normalizeEmail(row?.email),
         firstName: String(row?.firstname || '').trim(),
         lastName: String(row?.lastname || '').trim(),
         membership: String(row?.membership_s || '').trim(),

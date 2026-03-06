@@ -1748,7 +1748,14 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
             {(freeEventsSummary.cards || []).map((item) => {
               const countUp = Number(item.count_change_pct) >= 0;
               const costUp = Number(item.cost_change_pct) >= 0;
-              const displayLabel = item.key === 'net_new_showups' ? 'Paid Meta Cohort First Show-Ups' : item.label;
+              const displayLabelMap = {
+                meta_leads: 'Free Group Leads (HubSpot)',
+                meta_qualified_leads: 'Free Group Qualified Leads (HubSpot)',
+                meta_great_leads: 'Free Group Great Leads (HubSpot)',
+                luma_signups_paid: 'Free Group Appts (HubSpot)',
+                net_new_showups: 'Free Group New Show Ups',
+              };
+              const displayLabel = displayLabelMap[item.key] || item.label;
               return (
                 <button
                   key={item.key}
@@ -1777,11 +1784,11 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
                   </div>
                   <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #dbeafe' }}>
                     <p style={{ margin: 0, fontSize: '10px', color: '#64748b', fontWeight: 700 }}>
-                      {item.key === 'meta_leads' ? 'Meta Leads CPL' :
-                        item.key === 'meta_qualified_leads' ? 'Meta Qualified Leads CPL' :
-                          item.key === 'meta_great_leads' ? 'Meta Great Leads CPL' :
-                            item.key === 'luma_signups_paid' ? 'Luma Cost Per Sign Up' :
-                              'Net New Show Up Cost'}
+                      {item.key === 'meta_leads' ? 'Free Group Ad Cost / Lead' :
+                        item.key === 'meta_qualified_leads' ? 'Free Group Ad Cost / Qualified Lead' :
+                          item.key === 'meta_great_leads' ? 'Free Group Ad Cost / Great Lead' :
+                            item.key === 'luma_signups_paid' ? 'Free Group Cost / Appt' :
+                              'Free Group Cost / New Show Up'}
                     </p>
                     <div style={{ marginTop: '4px', display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'baseline' }}>
                       <span style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a' }}>{currency(item.current_cost)}</span>
