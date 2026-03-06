@@ -91,7 +91,7 @@ Run from repo root:
 
 One-time historical backfill (recommended immediately after deploy):
 
-- `supabase functions invoke sync_attendance_from_hubspot --no-verify-jwt --body "{\"days\":730,\"include_reconcile\":true,\"include_luma\":true}"`
+- `supabase functions invoke sync_attendance_from_hubspot --jwt "$SUPABASE_SERVICE_ROLE_KEY" --body "{\"days\":730,\"include_reconcile\":true,\"include_luma\":true}"`
 
 ## License
 

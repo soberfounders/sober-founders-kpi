@@ -2,12 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 /* Data source priority: HubSpot call/meeting activities + associations only. */
 import { supabase } from '../lib/supabaseClient';
 import {
-  ANTHROPIC_API_KEY,
   ATTENDANCE_BACKFILL_DAYS,
-  CLAUDE_API_KEY,
-  GEMINI_API_KEY,
   HUBSPOT_PORTAL_ID,
-  OPENAI_API_KEY,
 } from '../lib/env';
 import { resolveCanonicalAttendeeName } from '../lib/attendeeCanonicalization';
 import {
@@ -2356,9 +2352,9 @@ const AttendanceDashboard = () => {
     if ((badNameQa.counts?.suspiciousContacts || 0) > 0) blindSpots.push(`${badNameQa.counts.suspiciousContacts} HubSpot contacts used in Attendance still have suspicious name data.`);
 
     const providerStatuses = [
-      { key: 'openai', label: 'OpenAI', configured: !!OPENAI_API_KEY, note: 'Frontend placeholder only; prefer Supabase Edge Function secrets' },
-      { key: 'gemini', label: 'Gemini', configured: !!GEMINI_API_KEY, note: 'Frontend placeholder only; prefer Supabase Edge Function secrets' },
-      { key: 'claude', label: 'Claude', configured: !!(CLAUDE_API_KEY || ANTHROPIC_API_KEY), note: 'Frontend placeholder only; prefer Supabase Edge Function secrets' },
+      { key: 'openai', label: 'OpenAI', configured: false, note: 'Configured on Supabase Edge Function secrets (server-side only).' },
+      { key: 'gemini', label: 'Gemini', configured: false, note: 'Configured on Supabase Edge Function secrets (server-side only).' },
+      { key: 'claude', label: 'Claude', configured: false, note: 'Configured on Supabase Edge Function secrets (server-side only).' },
     ];
 
     const autonomousWorkflow = [

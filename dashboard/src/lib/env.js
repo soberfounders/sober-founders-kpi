@@ -55,9 +55,3 @@ export const ATTENDANCE_BACKFILL_DAYS = getBoundedInt('VITE_ATTENDANCE_BACKFILL_
 });
 
 export const HUBSPOT_PORTAL_ID = getString('VITE_HUBSPOT_PORTAL_ID', '45070276');
-
-export const OPENAI_API_KEY = getString('VITE_OPENAI_API_KEY');
-export const GEMINI_API_KEY = getString('VITE_GEMINI_API_KEY');
-export const CLAUDE_API_KEY = getString('VITE_CLAUDE_API_KEY');
-export const ANTHROPIC_API_KEY = getString('VITE_ANTHROPIC_API_KEY');
-export const CLAUDE_OR_ANTHROPIC_API_KEY = CLAUDE_API_KEY || ANTHROPIC_API_KEY;

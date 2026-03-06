@@ -371,18 +371,27 @@ port = 54327
 backend = "postgres"
 
 [functions.ai-module-analysis]
-verify_jwt = false
+verify_jwt = true
 
 [functions.analyze-leads-insights]
-verify_jwt = false
+verify_jwt = true
 
 [functions.ai-briefing]
-verify_jwt = false
+verify_jwt = true
 
 [functions.master-sync]
-verify_jwt = false
+verify_jwt = true
 
 [functions.sync_attendance_from_hubspot]
+verify_jwt = true
+
+[functions.sync_mailchimp]
+verify_jwt = true
+
+[functions.manage_attendee_aliases]
+verify_jwt = true
+
+[functions.ingest_zeffy_donations]
 verify_jwt = false
 
 # Experimental features may be deprecated any time

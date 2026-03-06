@@ -1,17 +1,61 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import DashboardOverview from './views/DashboardOverview';
 import LeadsDashboard from './views/LeadsDashboard';
 import EmailDashboard from './views/EmailDashboard';
 import TodosDashboard from './views/TodosDashboard';
-import DataCleaning from './views/DataCleaning'; // Added import
-import AttendanceDashboard from './views/AttendanceDashboard'; // Added import
+import DataCleaning from './views/DataCleaning';
+import AttendanceDashboard from './views/AttendanceDashboard';
 import EmailMarketingDashboard from './views/EmailMarketingDashboard';
 import WebsiteTrafficDashboard from './views/WebsiteTrafficDashboard';
 import AIBriefingDashboard from './views/AIBriefingDashboard';
 import DonationsDashboard from './views/DonationsDashboard';
 import { hasSupabaseConfig, supabaseConfigError } from './lib/supabaseClient';
+
+const TAB_PATHS = {
+  Dashboard: '/dashboard',
+  Attendance: '/attendance',
+  Leads: '/leads',
+  Email: '/email',
+  'Website Traffic': '/website-traffic',
+  SEO: '/seo',
+  Donations: '/donations',
+  Marketing: '/marketing',
+  Sales: '/sales',
+  Revenue: '/revenue',
+  Operations: '/operations',
+  "To-Do's": '/todos',
+  Analysis: '/analysis',
+  'AI Manager': '/ai-manager',
+  'Data Integrity': '/data-integrity',
+};
+
+const PATH_TO_TAB = Object.entries(TAB_PATHS).reduce((acc, [tab, path]) => {
+  acc[path] = tab;
+  return acc;
+}, {});
+
+const ROUTE_ALIASES = {
+  '/': TAB_PATHS.Dashboard,
+  '/to-dos': TAB_PATHS["To-Do's"],
+  '/todo': TAB_PATHS["To-Do's"],
+  '/website': TAB_PATHS['Website Traffic'],
+};
+
+function normalizePathname(pathname = '') {
+  const trimmed = String(pathname || '').trim();
+  if (!trimmed) return '/';
+  if (trimmed.length > 1 && trimmed.endsWith('/')) return trimmed.slice(0, -1).toLowerCase();
+  return trimmed.toLowerCase();
+}
+
+function resolveTabFromPathname(pathname) {
+  const normalizedPath = normalizePathname(pathname);
+  const directPath = ROUTE_ALIASES[normalizedPath] || normalizedPath;
+  return PATH_TO_TAB[directPath] || null;
+}
 
 function PlaceholderView({ tab }) {
   return (
@@ -61,7 +105,14 @@ function tabRequiresSupabase(activeTab) {
 const MOBILE_BREAKPOINT = 1024;
 
 function App() {
-  const [activeTab, setActiveTab] = useState('Dashboard');
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const activeTab = useMemo(
+    () => resolveTabFromPathname(location.pathname) || 'Dashboard',
+    [location.pathname],
+  );
+
   const [isMobile, setIsMobile] = useState(
     () => (typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false),
   );
@@ -91,6 +142,13 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const resolvedTab = resolveTabFromPathname(location.pathname);
+    if (!resolvedTab) {
+      navigate(TAB_PATHS.Dashboard, { replace: true });
+    }
+  }, [location.pathname, navigate]);
+
+  useEffect(() => {
     if (typeof document === 'undefined') return undefined;
     const previousOverflow = document.body.style.overflow;
     if (isMobile && isMobileMenuOpen) {
@@ -104,7 +162,10 @@ function App() {
   }, [isMobile, isMobileMenuOpen]);
 
   const handleSetActiveTab = (tab) => {
-    setActiveTab(tab);
+    const targetPath = TAB_PATHS[tab] || TAB_PATHS.Dashboard;
+    if (normalizePathname(location.pathname) !== targetPath) {
+      navigate(targetPath);
+    }
     if (isMobile) setIsMobileMenuOpen(false);
   };
 
@@ -142,7 +203,7 @@ function App() {
         return <AIBriefingDashboard />;
       case 'Data Integrity':
         return <DataCleaning />;
-      case 'Attendance': // Added case for AttendanceDashboard
+      case 'Attendance':
         return <AttendanceDashboard />;
       case 'Sales':
         return <PlaceholderView tab="Sales" />;
