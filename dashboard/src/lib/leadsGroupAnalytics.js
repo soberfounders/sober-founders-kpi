@@ -844,13 +844,13 @@ function sumAds(adsRows, startKey, endKey, funnelFilter) {
 
 /**
  * Categorizes HubSpot contacts (in the date range) by revenue tier.
- * Also identifies contacts not found in HubSpot or missing revenue.
+ * Uses HubSpot as the lead-count source of truth and keeps Meta lead deltas
+ * as diagnostics only.
  *
- * @param {Object}   adsMetrics   { leads: number } — the Meta ads lead count for the group
+ * @param {Object}   adsMetrics   { leads: number } — Meta lead count for the group
  * @param {any[]}    hubspotRows  raw HubSpot contacts in date window
- * @param {Map}      emailIndex   from buildHubspotEmailIndex (all contacts)
  * @param {string}   funnelFilter 'free'|'phoenix'
- * @returns {{ bad, ok, qualified, great, unknown, total, unmatched[], mismatch }}
+ * @returns {{ bad, ok, qualified, qualifiedInclusive, great, unknown, total, hubspotTotal, metaTotal, unmatched[], mismatch, metaLeadGap }}
  */
 function buildLeadCategorization(adsMetrics, hubspotRows, funnelFilter) {
     const counts = { bad: 0, ok: 0, qualified: 0, great: 0, unknown: 0 };
@@ -878,21 +878,25 @@ function buildLeadCategorization(adsMetrics, hubspotRows, funnelFilter) {
     }
 
     const categorizedTotal = counts.bad + counts.ok + counts.qualified + counts.great + counts.unknown;
+    const qualifiedInclusive = counts.qualified + counts.great;
     const metaTotal = Math.round(adsMetrics.leads);
     const mismatch = metaTotal > 0 && categorizedTotal !== metaTotal;
-
-    if (mismatch && metaTotal > categorizedTotal) {
-        // More Meta leads than HubSpot records found — add synthetic "not found in HubSpot" entries
-        const gap = metaTotal - categorizedTotal;
-        for (let i = 0; i < gap; i++) {
-            unmatchedLeads.push({ name: '(unknown — not in HubSpot)', email: '', reason: 'Not found in HubSpot by email' });
-        }
-        counts.unknown += gap;
+    const metaLeadGap = metaTotal - categorizedTotal;
+    if (mismatch && metaLeadGap > 0) {
+        unmatchedLeads.push({
+            name: '(meta-to-hubspot gap)',
+            email: '',
+            reason: `${metaLeadGap} lead(s) exist in Meta but were not found in HubSpot for this range/funnel`,
+        });
     }
 
     return {
         ...counts,
-        total: metaTotal,
+        qualifiedInclusive,
+        total: categorizedTotal,
+        hubspotTotal: categorizedTotal,
+        metaTotal,
+        metaLeadGap,
         categorizedTotal,
         unmatched: unmatchedLeads,
         mismatch,
@@ -904,9 +908,6 @@ function buildLeadCategorization(adsMetrics, hubspotRows, funnelFilter) {
 // ---------------------------------------------------------------------------
 
 function buildLeadRows(ads, hubspotInRange, lumaRows, funnelFilter) {
-    const targetCount = Math.max(0, Math.round(Number(ads?.leads || 0)));
-    if (targetCount === 0) return [];
-
     const dedup = new Map();
     for (const row of hubspotInRange || []) {
         if (!isPaidSocialHubspotContact(row)) continue;
@@ -925,6 +926,10 @@ function buildLeadRows(ads, hubspotInRange, lumaRows, funnelFilter) {
 
     const contacts = Array.from(dedup.values())
         .sort((a, b) => contactCreatedTs(b) - contactCreatedTs(a));
+    const targetCount = contacts.length > 0
+        ? contacts.length
+        : Math.max(0, Math.round(Number(ads?.leads || 0)));
+    if (targetCount === 0) return [];
 
     const lumaByEmail = new Map();
     for (const row of lumaRows || []) {
@@ -1021,7 +1026,7 @@ function buildSubRowSnapshot(label, adsRows, hubspotRows, lumaRows, zoomRows, st
 
     const leadRows = buildLeadRows(ads, hubspotInRange, lumaFiltered, funnelFilter);
 
-    const cpl = safeDivide(ads.spend, ads.leads);
+    const cpl = safeDivide(ads.spend, Number(categorization?.total || ads.leads));
     const costPerRegistration = safeDivide(ads.spend, lumaCount);
     const costPerShowUp = safeDivide(ads.spend, zoomCount);
 
@@ -1031,6 +1036,7 @@ function buildSubRowSnapshot(label, adsRows, hubspotRows, lumaRows, zoomRows, st
         impressions: ads.impressions,
         clicks: ads.clicks,
         metaLeads: Math.round(ads.leads),
+        totalLeads: Number(categorization?.total || 0),
         lumaRegistrations: lumaCount,
         zoomShowUps: zoomCount,
         cpl,

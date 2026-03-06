@@ -6,7 +6,7 @@ This dashboard implementation standardizes lead-gen reporting around a single fu
 2. Clicks (Meta Ads)
 3. Leads Captured (HubSpot PAID_SOCIAL)
 4. Luma Registrations
-5. Net New Show-Ups (Zoom Tue/Thu only)
+5. Net New Show-Ups (HubSpot Tue/Thu meetings only)
 6. Qualified Leads (`$250K-$1M` revenue)
 7. Great Leads (`>$1M` revenue)
 
@@ -14,8 +14,8 @@ This dashboard implementation standardizes lead-gen reporting around a single fu
 
 - `raw_fb_ads_insights_daily` provides impressions, clicks, spend, leads, and ad identifiers.
 - `raw_hubspot_contacts` provides lead records, revenue, and lead-source metadata.
-- `kpi_metrics` (`Zoom Meeting Attendees`) provides attendee names by meeting for net-new detection.
-- `attendee_aliases` (if available) improves Zoom name normalization during sync.
+- `raw_hubspot_meeting_activities` + `hubspot_activity_contact_associations` provide attendee names/IDs for net-new detection.
+- `attendee_aliases` remains optional for historical cleanup only, not source-of-truth attendance.
 - `manage_attendee_aliases` (edge function) is the write/read path for alias merges when browser RLS blocks direct table writes.
 
 ## Metric Definitions
@@ -59,7 +59,7 @@ Conversion rates:
 - Last-name-only fragments should not override a valid first+last canonical name.
 - If an attendee is already represented by a clear first+last name, only suggest merge options when an in-session short alias with the same first name exists (for example, `Drew` or `Drew T`).
 
-Runtime canonicalization guardrails (applied during Zoom/Lu.ma processing and dashboard rollups):
+Runtime canonicalization guardrails (applied during attendance/Lu.ma processing and dashboard rollups):
 
 - Hard rules:
   - Any name starting with `Chris Lipper` resolves to `Chris Lipper`.
@@ -94,7 +94,7 @@ It writes normalized records to:
 
 Matching performed during sync:
 
-- Lu.ma -> Zoom (`matched_zoom`, `matched_zoom_net_new`) using guest full name against Thursday attendance rosters.
+- Lu.ma -> attendance (`matched_zoom`, `matched_zoom_net_new`) using guest full name against HubSpot-backed Thursday attendance rosters.
 - Lu.ma -> HubSpot (`matched_hubspot`) using email first, then normalized full name fallback.
 - Cross-email HubSpot guardrail: if email does not match, name-based auto-match only occurs when normalized full name aligns within `72` hours of registration time.
 
@@ -108,7 +108,7 @@ If `raw_luma_registrations` is missing/unavailable, the dashboard falls back to:
 - Week-over-week (`7d` vs prior `7d`)
 - Month-over-month (`30d` vs prior `30d`)
 - Leads includes a Fact Check Drilldown panel with window selector (`current/previous week`, `current/previous month`, `lookback`) and clickable metric drill-ins.
-- `sync_zoom_attendance` should run before analytics review to keep show-up metrics current.
+- `sync_attendance_from_hubspot` should run before analytics review to keep show-up metrics current.
 - `sync_luma_registrations` should run before Thursday funnel reviews to refresh registrations and match statuses.
 - Deploy `manage_attendee_aliases` before using merge buttons in Attendance:
   - `supabase functions deploy manage_attendee_aliases`
@@ -118,5 +118,5 @@ If `raw_luma_registrations` is missing/unavailable, the dashboard falls back to:
 
 1. Add direct Luma registration table (`raw_luma_registrations`) with `email`, `registered_at`, `event_id`.
 2. Persist deterministic ad identifiers in HubSpot (`ad_id`, `campaign_id`, `adset_id`) at lead capture time.
-3. Store canonical attendee email in Zoom sync metadata for stronger lead-to-show-up matching.
+3. Store canonical attendee email in HubSpot attendance snapshots for stronger lead-to-show-up matching.
 4. Add a materialized daily funnel fact table for faster historical analysis at scale.

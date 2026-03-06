@@ -152,11 +152,6 @@ serve(async (req: Request) => {
     if (hubspotFrom) hubspotSourceSyncBody.from = hubspotFrom;
     else hubspotSourceSyncBody.days = hubspotDays;
     if (hubspotTo) hubspotSourceSyncBody.to = hubspotTo;
-    const hubspotReconcileBody: Record<string, any> = { dry_run: false };
-    if (hubspotFrom) hubspotReconcileBody.from = hubspotFrom;
-    else hubspotReconcileBody.days = hubspotDays;
-    if (hubspotTo) hubspotReconcileBody.to = hubspotTo;
-
     console.log(`Starting Master Sync for week: ${weekStart}, force refresh: ${triggerRefresh}`);
 
     const results: any[] = [];
@@ -176,7 +171,7 @@ serve(async (req: Request) => {
       }
     };
 
-    // Stage 1: independent source syncs (including HubSpot calls, which is the attendance source of truth).
+    // Stage 1: independent source syncs (HubSpot is attendance source of truth).
     await Promise.all([
       runStep('hubspot_contacts', 'sync_kpis', {
         method: 'GET',
@@ -188,24 +183,21 @@ serve(async (req: Request) => {
       }),
       runStep('facebook_ads', 'sync_fb_ads', {
         method: 'GET',
-        query: { week_start: weekStart },
+        query: hubspotFrom
+          ? { from: hubspotFrom, to: hubspotTo || undefined }
+          : { days: hubspotDays },
       }),
       runStep('generic_metrics', 'sync-metrics', {
         method: 'GET',
         query: { trigger_refresh: true },
       }),
-      runStep('zoom_attendance_legacy', 'sync_zoom_attendance', { method: 'POST' }),
       runStep('google_analytics', 'sync_google_analytics', { method: 'POST' }),
       runStep('search_console', 'sync_search_console', { method: 'POST' }),
     ]);
 
-    // Stage 2: jobs that benefit from the refreshed HubSpot/Zoom caches.
+    // Stage 2: jobs that benefit from the refreshed HubSpot caches.
     await Promise.all([
       runStep('luma_registrations', 'sync_luma_registrations', { method: 'POST' }),
-      runStep('zoom_hubspot_reconcile', 'reconcile_zoom_attendee_hubspot_mappings', {
-        method: 'POST',
-        body: hubspotReconcileBody,
-      }),
     ]);
 
     // Keep a local Notion sync fallback if generic sync path is unavailable/misconfigured.
