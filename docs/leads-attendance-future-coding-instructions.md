@@ -5,7 +5,7 @@ Durable implementation guidance for future work on the Leads / Attendance module
 
 - Meta Ad lead -> HubSpot contact
 - Lu.ma registration -> HubSpot contact (Zapier-created, often duplicate/merge)
-- Zoom attendance -> HubSpot contact (best when HubSpot Call activity mapping exists)
+- HubSpot meeting/call attendee associations -> HubSpot contact (authoritative)
 
 This file is intentionally redundant with other docs. Treat it as the operational reference for future coding.
 
@@ -13,7 +13,7 @@ This file is intentionally redundant with other docs. Treat it as the operationa
 - `HubSpot` is the source of truth for contact identity + attribution when data exists.
 - The dashboard is an analytics layer and should not create a competing truth system.
 - Use cached/raw tables in Supabase for performance and reproducibility.
-- Use fallback matching (Lu.ma/Zoom/name) only when HubSpot truth is unavailable or delayed.
+- Use Lu.ma/name matching only for non-attendance enrichment when HubSpot truth is unavailable or delayed.
 
 ## Auto-Creation / Merge Behavior (Critical)
 - Meta leads auto-create HubSpot contacts via Meta->HubSpot integration.
@@ -39,13 +39,10 @@ Rules:
 - `fuzzy_name` matches must remain visible and reviewable.
 - Do not silently treat fuzzy matches as certain attribution.
 
-## HubSpot Call / Meeting Activity Mapping (Highest Confidence for Zoom)
-- Zoom attendee -> HubSpot Call activity association is the highest-confidence attendee identity signal.
-- It is often delayed because manual HubSpot attendee tagging may happen after the meeting.
-- Keep hybrid behavior:
-  - Prefer HubSpot Call/meeting mapping when available
-  - Fallback to Zoom/Lu.ma/name matching when missing
-  - Reconcile later (D+1 / D+3 / D+7 / rolling 30-day backfill)
+## HubSpot Call / Meeting Activity Mapping (Attendance Source of Truth)
+- HubSpot call/meeting activity associations are the attendance source of truth.
+- Attendance calculations should never depend on Zoom API exports.
+- If attendee tagging is delayed in HubSpot, treat this as source-data latency and re-sync HubSpot activities/associations.
 
 ## Attribution Precedence (Required)
 When determining acquisition source:
@@ -68,18 +65,18 @@ When determining acquisition source:
   - oldest created date for attribution anchoring (tie-break awareness)
 
 ## Tuesday vs Thursday Funnel Reality
-- Thursday often flows through Lu.ma (registrant -> Zoom).
-- Tuesday often bypasses Lu.ma and comes through apply/interview + Zoom.
+- Thursday often flows through Lu.ma registrations before HubSpot meeting attendance is marked.
+- Tuesday often bypasses Lu.ma and comes through apply/interview + HubSpot attendance marking.
 - Do not assume Lu.ma coverage for all attendance analysis.
-- Attendance/Zoom modules must support Tuesday via HubSpot and Zoom evidence directly.
+- Attendance modules must support Tuesday via HubSpot meeting/call activity evidence directly.
 
-## Zoom Name Handling Rules
-- Zoom display names vary by device/account (`SML`, `Robert D`, `iPhone`, etc.).
+## HubSpot Contact Name Handling Rules
+- Host-entered attendee naming can vary in HubSpot activity associations.
 - Use:
-  - alias map (`attendee_aliases`)
-  - canonicalization heuristics
-  - manual overrides (temporary only)
-- Manual overrides are scaffolding and should be retired when raw HubSpot/call mapping resolves the identity.
+  - HubSpot contact ID when present
+  - contact email fallback
+  - normalized name fallback only when IDs/emails are missing
+- Manual overrides are scaffolding and should be retired when HubSpot contact associations are complete.
 
 ## Manual Overrides (Use Carefully)
 - Manual overrides are useful for:
@@ -117,7 +114,7 @@ Do not allow silent failures in drilldowns.
 - `sync_hubspot_meeting_activities` edge function
 - `reconcile_zoom_attendee_hubspot_mappings` scaffold
 - Attendance dashboard HubSpot identity enrichment (non-breaking)
-- Leads `Unified Funnel (Meta to Lu.ma to Zoom)` panel with:
+- Leads `Unified Funnel (Meta to Lu.ma to Attendance)` panel with:
   - funnel rates
   - match confidence breakdowns
   - unmatched/review queues
@@ -127,7 +124,7 @@ Do not allow silent failures in drilldowns.
 - Apply migrations first.
 - Backfill HubSpot meeting/call activities before expecting strong call coverage metrics.
 - Reconcile recent windows after manual HubSpot attendee tagging is complete.
-- Missing dates in Zoom sync (example: Jan 29, 2026) should be handled via backfill + HubSpot call evidence.
+- Missing attendance dates should be handled via HubSpot activity backfill + association refresh.
 
 ## Validation Checklist for Future Changes
 - `npm run build` passes in `dashboard/`

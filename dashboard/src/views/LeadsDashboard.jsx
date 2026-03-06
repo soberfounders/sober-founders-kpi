@@ -24,6 +24,147 @@ const LOOKBACK_DAYS = LEADS_LOOKBACK_DAYS;
 const ATTRIBUTION_HISTORY_DAYS = LEADS_ATTRIBUTION_HISTORY_DAYS;
 const MIN_GROUP_ATTENDEES = 3;
 const EXPECTED_ZERO_GROUP_SESSION_KEYS = new Set(['2025-12-25|Thursday']);
+const ET_TIMEZONE = 'America/New_York';
+const HUBSPOT_GROUP_CALL_ET_MINUTES = { Tuesday: 12 * 60, Thursday: 11 * 60 };
+const HUBSPOT_CALL_TIME_TOLERANCE_MINUTES = 120;
+
+function getEtGroupTiming(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  const weekdayShort = new Intl.DateTimeFormat('en-US', { timeZone: ET_TIMEZONE, weekday: 'short' }).format(d);
+  const dayType = weekdayShort === 'Tue' ? 'Tuesday' : (weekdayShort === 'Thu' ? 'Thursday' : null);
+  if (!dayType) return null;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: ET_TIMEZONE,
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+  }).formatToParts(d);
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value || NaN);
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value || NaN);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  const etDateKey = new Intl.DateTimeFormat('en-CA', {
+    timeZone: ET_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d).replace(/\//g, '-');
+  const minuteOfDay = (hour * 60) + minute;
+  const minutesFromExpected = Math.abs(minuteOfDay - HUBSPOT_GROUP_CALL_ET_MINUTES[dayType]);
+  return { dayType, etDateKey, minutesFromExpected };
+}
+
+function classifyHubspotGroupDay(activity, timing) {
+  const title = String(activity?.title || '').toLowerCase();
+  if (title.includes('tactic tuesday')) return 'Tuesday';
+  if (title.includes('mastermind on zoom') || title.includes('all are welcome')) return 'Thursday';
+  if (title.includes('entrepreneur') && title.includes('big book')) return 'Thursday';
+  if (title.includes('sober founders mastermind') && !title.includes('intro')) return 'Thursday';
+  return timing?.minutesFromExpected <= HUBSPOT_CALL_TIME_TOLERANCE_MINUTES ? timing.dayType : null;
+}
+
+function buildHubspotAttendanceRowsFromActivities(activities = [], associations = []) {
+  const assocByActivity = new Map();
+  (associations || []).forEach((assoc) => {
+    const activityType = String(assoc?.activity_type || '').toLowerCase();
+    if (activityType !== 'call' && activityType !== 'meeting') return;
+    const activityId = Number(assoc?.hubspot_activity_id);
+    if (!Number.isFinite(activityId)) return;
+    const key = `${activityType}:${activityId}`;
+    if (!assocByActivity.has(key)) assocByActivity.set(key, []);
+    assocByActivity.get(key).push(assoc);
+  });
+
+  const candidatesByDateDay = new Map();
+  (activities || []).forEach((activity) => {
+    const activityType = String(activity?.activity_type || '').toLowerCase();
+    if (activityType !== 'call' && activityType !== 'meeting') return;
+    const activityId = Number(activity?.hubspot_activity_id);
+    if (!Number.isFinite(activityId)) return;
+    const ts = activity?.hs_timestamp || activity?.created_at_hubspot;
+    const timing = getEtGroupTiming(ts);
+    const dayType = classifyHubspotGroupDay(activity, timing);
+    if (!dayType || !timing?.etDateKey) return;
+    const key = `${timing.etDateKey}|${dayType}`;
+
+    const assocs = assocByActivity.get(`${activityType}:${activityId}`) || [];
+    const attendeeCount = assocs.filter((a) => {
+      const contactId = Number(a?.hubspot_contact_id);
+      const email = normalizeEmailKey(a?.contact_email);
+      return Number.isFinite(contactId) || !!email;
+    }).length;
+    if (!EXPECTED_ZERO_GROUP_SESSION_KEYS.has(key) && attendeeCount < MIN_GROUP_ATTENDEES) return;
+
+    const titleLc = String(activity?.title || '').toLowerCase();
+    const titleScore =
+      (titleLc.includes('sober founders') ? 8 : 0) +
+      (titleLc.includes('mastermind') ? 3 : 0);
+    const score = titleScore + (attendeeCount * 0.15) - (Number(timing?.minutesFromExpected || 999) * 0.01);
+
+    const candidate = {
+      activity,
+      activityId,
+      activityType,
+      dayType,
+      dateKey: timing.etDateKey,
+      minutesFromExpected: Number(timing.minutesFromExpected),
+      attendeeCount,
+      score,
+      assocs,
+    };
+    if (!candidatesByDateDay.has(key)) candidatesByDateDay.set(key, []);
+    candidatesByDateDay.get(key).push(candidate);
+  });
+
+  const chosenByDateDay = new Map();
+  candidatesByDateDay.forEach((candidates, key) => {
+    const ranked = [...(candidates || [])].sort((a, b) => {
+      const aNear = a.minutesFromExpected <= HUBSPOT_CALL_TIME_TOLERANCE_MINUTES;
+      const bNear = b.minutesFromExpected <= HUBSPOT_CALL_TIME_TOLERANCE_MINUTES;
+      if (aNear !== bNear) return bNear - aNear;
+      if (aNear && bNear && a.minutesFromExpected !== b.minutesFromExpected) return a.minutesFromExpected - b.minutesFromExpected;
+      if (b.attendeeCount !== a.attendeeCount) return b.attendeeCount - a.attendeeCount;
+      if (b.score !== a.score) return b.score - a.score;
+      const aTs = Date.parse(a?.activity?.hs_timestamp || a?.activity?.created_at_hubspot || '');
+      const bTs = Date.parse(b?.activity?.hs_timestamp || b?.activity?.created_at_hubspot || '');
+      return aTs - bTs;
+    });
+    if (ranked[0]) chosenByDateDay.set(key, ranked[0]);
+  });
+
+  return Array.from(chosenByDateDay.values())
+    .map((chosen) => {
+      const dedup = new Map();
+      (chosen?.assocs || []).forEach((assoc) => {
+        const contactId = Number(assoc?.hubspot_contact_id);
+        const email = normalizeEmailKey(assoc?.contact_email);
+        const name = `${String(assoc?.contact_firstname || '').trim()} ${String(assoc?.contact_lastname || '').trim()}`.trim();
+        const displayName = name || email || `HubSpot Contact ${Number.isFinite(contactId) ? contactId : ''}`.trim();
+        const attendeeKey = Number.isFinite(contactId)
+          ? `hubspot:${contactId}`
+          : (email ? `email:${email}` : `name:${normalizePersonNameKey(displayName)}`);
+        if (!attendeeKey || dedup.has(attendeeKey)) return;
+        dedup.set(attendeeKey, displayName);
+      });
+      const attendees = Array.from(dedup.values()).filter(Boolean);
+      return {
+        metric_name: 'Zoom Meeting Attendees',
+        metric_value: attendees.length,
+        metric_date: chosen.dateKey,
+        metadata: {
+          group_name: chosen.dayType,
+          meeting_id: `hubspot-call-${chosen.activityId}`,
+          start_time: chosen?.activity?.hs_timestamp || chosen?.activity?.created_at_hubspot || null,
+          attendees,
+          source: 'hubspot_call_associations',
+          hubspot_activity_id: chosen.activityId,
+          hubspot_activity_type: chosen.activityType,
+        },
+      };
+    })
+    .sort((a, b) => String(a.metric_date || '').localeCompare(String(b.metric_date || '')));
+}
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 const fmt = {
@@ -398,7 +539,7 @@ function MismatchWarning({ cat }) {
   return (
     <div style={{ marginTop: '10px', backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '10px' }}>
       <p style={{ margin: 0, fontWeight: 700, fontSize: '12px', color: '#9a3412' }}>
-        ⚠ Categorization mismatch: Meta shows {cat.total} leads, {cat.categorizedTotal} matched in HubSpot
+        ⚠ Source mismatch: HubSpot shows {cat.total} leads, Meta shows {cat.metaTotal}
       </p>
       <div style={{ marginTop: '6px', maxHeight: '100px', overflowY: 'auto' }}>
         {cat.unmatched.slice(0, 8).map((u, i) => (
@@ -438,9 +579,9 @@ function GroupPanel({ label, snap, prevSnap, onOpenModal }) {
         <MetricCell label="Impressions" value={snap.impressions} changePct={diff('impressions')} formatFn={fmt.int} />
         <MetricCell label="Clicks" value={snap.clicks} changePct={diff('clicks')} formatFn={fmt.int} />
         <MetricCell
-          label="Leads Generated"
-          value={snap.metaLeads}
-          changePct={diff('metaLeads')}
+          label="Total Leads (HubSpot)"
+          value={snap.totalLeads ?? snap?.categorization?.total ?? snap.metaLeads}
+          changePct={(snap.totalLeads !== undefined && prevSnap?.totalLeads !== undefined) ? diff('totalLeads') : diff('metaLeads')}
           formatFn={fmt.int}
           onClick={() => onOpenModal('leads', snap, label)}
         />
@@ -453,7 +594,7 @@ function GroupPanel({ label, snap, prevSnap, onOpenModal }) {
           onClick={() => onOpenModal('luma', snap, label)}
         />
         <MetricCell
-          label="Zoom Show-Ups"
+          label="HubSpot Show-Ups"
           value={snap.zoomShowUps}
           changePct={diff('zoomShowUps')}
           formatFn={fmt.int}
@@ -462,7 +603,7 @@ function GroupPanel({ label, snap, prevSnap, onOpenModal }) {
         <MetricCell label="Cost / Registration" value={snap.costPerRegistration} changePct={costDiff('costPerRegistration')} invertColor={true} formatFn={fmt.currency} />
         <MetricCell label="Cost / Show-Up" value={snap.costPerShowUp} changePct={costDiff('costPerShowUp')} invertColor={true} formatFn={fmt.currency} />
       </div>
-      <CategoryRow cat={snap.categorization} total={snap.metaLeads} />
+      <CategoryRow cat={snap.categorization} total={snap.totalLeads ?? snap?.categorization?.total ?? snap.metaLeads} />
       <MismatchWarning cat={snap.categorization} />
     </div>
   );
@@ -747,14 +888,10 @@ export default function LeadsDashboard() {
     const attributionStartKey = attributionStartDate.toISOString().slice(0, 10);
     const errors = [];
 
-    const [adsR, zoomR, hubspotR, aliasR] = await Promise.all([
+    const [adsR, hubspotR, aliasR] = await Promise.all([
       supabase.from('raw_fb_ads_insights_daily')
         .select('date_day,ad_account_id,funnel_key,campaign_name,adset_name,ad_name,ad_id,spend,impressions,clicks,leads')
         .gte('date_day', startKey).order('date_day', { ascending: true }),
-      supabase.from('kpi_metrics')
-        .select('metric_name,metric_value,metric_date,metadata')
-        .eq('metric_name', 'Zoom Meeting Attendees')
-        .gte('metric_date', startKey).order('metric_date', { ascending: true }),
       supabase.from('raw_hubspot_contacts')
         .select('*')
         .gte('createdate', `${attributionStartKey}T00:00:00.000Z`).order('createdate', { ascending: false }),
@@ -766,7 +903,6 @@ export default function LeadsDashboard() {
       .gte('event_date', attributionStartKey).order('event_date', { ascending: true });
 
     if (adsR.error) errors.push(`Meta ads unavailable: ${adsR.error.message}`);
-    if (zoomR.error) errors.push(`Zoom data unavailable: ${zoomR.error.message}`);
     if (lumaR.error) errors.push(`Luma data unavailable: ${lumaR.error.message}`);
     if (hubspotR.error) errors.push(`HubSpot data unavailable: ${hubspotR.error.message}`);
     if (aliasR.error) errors.push(`Alias data unavailable: ${aliasR.error.message}`);
@@ -776,6 +912,7 @@ export default function LeadsDashboard() {
     let hubspotActivitiesData = [];
     let hubspotActivityAssociationsData = [];
     let zoomHubspotMappingsData = [];
+    let hubspotAttendanceRows = [];
 
     try {
       const activitiesR = await supabase.from('raw_hubspot_meeting_activities')
@@ -829,8 +966,14 @@ export default function LeadsDashboard() {
       errors.push(`Optional HubSpot activity enrichment failed: ${optionalErr.message}`);
     }
 
+    if (hubspotActivitiesData.length > 0 && hubspotActivityAssociationsData.length > 0) {
+      hubspotAttendanceRows = buildHubspotAttendanceRowsFromActivities(hubspotActivitiesData, hubspotActivityAssociationsData);
+    } else {
+      errors.push('HubSpot attendance rows unavailable: missing meeting activities and/or attendee associations.');
+    }
+
     setRawAds(adsR.data || []);
-    setRawZoom(zoomR.data || []);
+    setRawZoom(hubspotAttendanceRows);
     setRawLuma(lumaR.data || []);
     setRawHubspot(hubspotR.data || []);
     setAliases(aliasR.data || []);
@@ -842,7 +985,7 @@ export default function LeadsDashboard() {
     const nextAnalytics = buildLeadAnalytics({
       adsRows: adsR.data || [],
       hubspotRows: hubspotR.data || [],
-      zoomRows: zoomR.data || [],
+      zoomRows: hubspotAttendanceRows,
       lumaRows: lumaR.data || [],
       aliases: aliasR.data || [],
       lookbackDays: LOOKBACK_DAYS
@@ -3224,7 +3367,7 @@ export default function LeadsDashboard() {
       });
     }
     if (type === 'zoom') {
-      setModal({ title: `${groupLabel} — Zoom Show-Ups`, columns: ZOOM_COLS, rows: snap.zoomRows || [] });
+      setModal({ title: `${groupLabel} — HubSpot Show-Ups`, columns: ZOOM_COLS, rows: snap.zoomRows || [] });
     }
   }, []);
 
@@ -3491,19 +3634,19 @@ export default function LeadsDashboard() {
     {
       key: 'total_leads',
       label: 'Total Leads',
-      value: Number(overviewCurrentCombined?.metaLeads || 0),
-      previous: Number(overviewPreviousCombined?.metaLeads || 0),
+      value: Number((overviewCurrentCombined?.totalLeads ?? overviewCurrentCategorization?.total ?? overviewCurrentCombined?.metaLeads) || 0),
+      previous: Number((overviewPreviousCombined?.totalLeads ?? overviewPreviousCategorization?.total ?? overviewPreviousCombined?.metaLeads) || 0),
       format: 'count',
-      note: 'Meta leads matched to selected window',
+      note: 'HubSpot paid-social leads matched to selected window',
       color: '#0f766e',
     },
     {
       key: 'qualified_leads',
-      label: 'Qualified Leads ($250K-$999K)',
-      value: Number(overviewCurrentCategorization?.qualified || 0),
-      previous: Number(overviewPreviousCategorization?.qualified || 0),
+      label: 'Qualified Leads (>= $250K)',
+      value: Number(overviewCurrentCategorization?.qualifiedInclusive ?? ((overviewCurrentCategorization?.qualified || 0) + (overviewCurrentCategorization?.great || 0))),
+      previous: Number(overviewPreviousCategorization?.qualifiedInclusive ?? ((overviewPreviousCategorization?.qualified || 0) + (overviewPreviousCategorization?.great || 0))),
       format: 'count',
-      note: 'Revenue tier from HubSpot contact data',
+      note: 'Includes both Qualified ($250K-$999K) and Great ($1M+)',
       color: '#2563eb',
     },
     {

@@ -1,4 +1,4 @@
-﻿
+
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -338,6 +338,15 @@ serve(async (req) => {
   }
 
   try {
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        disabled: true,
+        error: "sync_zoom_attendance is permanently disabled. Attendance source of truth is HubSpot call/meeting activities only.",
+      }),
+      { status: 410, headers: { ...corsHeaders, "content-type": "application/json" } },
+    );
+
     const supabaseUrl = mustGetEnv("SUPABASE_URL");
     const serviceRoleKey = mustGetEnv("SUPABASE_SERVICE_ROLE_KEY");
     const accountId = mustGetEnv("ZOOM_ACCOUNT_ID");

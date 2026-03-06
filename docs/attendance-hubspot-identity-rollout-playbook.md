@@ -1,12 +1,12 @@
 # Attendance + HubSpot Identity Rollout Playbook (Non-Breaking)
 
-Purpose: Improve attendee identity accuracy and HubSpot linkage without breaking current Zoom/Lu.ma analytics.
+Purpose: Improve attendee identity accuracy and HubSpot linkage with HubSpot as the only attendance source of truth.
 
 ## What Is Already Safe
 
-- Current attendance counts still come from `kpi_metrics` (`Zoom Meeting Attendees`)
-- New HubSpot identity fields in Attendance dashboard are enrichment only (email/link/mapping source)
-- Existing Leads/Attendance analytics logic remains intact
+- Current attendance counts come from HubSpot call/meeting activities + contact associations.
+- Attendance identity should be anchored to HubSpot contact IDs/emails.
+- Legacy Zoom attendance sync paths are deprecated/disabled.
 
 ## New Pieces Added
 
@@ -75,15 +75,14 @@ If you want a specific range (useful for timezone/date debugging):
 npx supabase functions invoke sync_hubspot_meeting_activities --no-verify-jwt --body "{\"from\":\"2026-01-20\",\"to\":\"2026-02-05\"}"
 ```
 
-### 4. Re-sync / backfill Zoom attendance if a date is missing
+### 4. Re-sync / backfill HubSpot attendance if a date is missing
 
-If a meeting happened but no `Zoom Meeting Attendees` row exists (example: `2026-01-29`), run:
+If a meeting happened but no attendance row appears, run:
 
 ```bash
-npx supabase functions invoke sync_zoom_attendance --no-verify-jwt
+npx supabase functions invoke sync_hubspot_meeting_activities --no-verify-jwt --body "{\"days\":90,\"include_calls\":true,\"include_meetings\":true}"
+npx supabase functions invoke sync_attendance_from_hubspot --no-verify-jwt --body "{\"days\":90}"
 ```
-
-Then verify `kpi_metrics` has the missing date.
 
 ### 5. Re-sync Lu.ma registrations (optional but recommended after cleanup)
 
@@ -107,7 +106,7 @@ npx supabase functions invoke reconcile_zoom_attendee_hubspot_mappings --no-veri
 ```
 
 This confirms:
-- Zoom sessions are present
+- HubSpot sessions are present
 - HubSpot activity tables are populated
 - how many sessions currently have a HubSpot activity match record
 
@@ -119,20 +118,20 @@ When a row is wrong/missing:
 2. Check `Mapping Source`
 3. If `manual_override`, verify it matches current HubSpot truth
 4. If `none` / `luma_unresolved_bridge`, search in HubSpot by:
-   - Zoom name
+   - attendee name shown in dashboard
    - Lu.ma email
    - alternate email / merged record
 5. Merge/fix in HubSpot
 6. Re-run:
    - HubSpot meeting activity sync
+   - Attendance sync from HubSpot
    - Lu.ma sync (if needed)
-   - Zoom sync (if attendance row missing)
 
 ## Important Notes
 
 - HubSpot meeting/call activities are the best identity signal **when present**
 - They may be delayed if attendee mapping in HubSpot is done manually after the meeting
-- Current system should keep working using Zoom/Lu.ma fallback during that delay
+- Current system should keep working from HubSpot activity + association refresh during that delay
 
 ## 2026-03 Stabilization: Canonical Session Selector (Permanent Fix)
 

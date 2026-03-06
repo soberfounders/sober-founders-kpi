@@ -16,6 +16,30 @@ function addDays(dateStr: string, days: number) {
   return isoDateOnly(d);
 }
 
+function isDateKey(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || "").trim());
+}
+
+function toFiniteNumber(value: any) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function extractLeadCountFromActions(actions: any[]): number {
+  if (!Array.isArray(actions) || actions.length === 0) return 0;
+  // Include core Meta lead action types used across forms + website lead objectives.
+  const leadActionTypes = new Set([
+    "lead",
+    "onsite_conversion.lead_grouped",
+    "omni_lead",
+  ]);
+  return actions.reduce((sum, action) => {
+    const actionType = String(action?.action_type || "").toLowerCase();
+    if (!leadActionTypes.has(actionType)) return sum;
+    return sum + toFiniteNumber(action?.value);
+  }, 0);
+}
+
 function normalizeAdAccountId(value: unknown): string {
   return String(value ?? "").replace(/^act_/i, "");
 }
@@ -158,26 +182,32 @@ serve(async (req) => {
     const SUPABASE_SERVICE_ROLE_KEY = mustGetEnv("SUPABASE_SERVICE_ROLE_KEY");
 
     const url = new URL(req.url);
-    const weekStart = url.searchParams.get("week_start");
-    
-    if (!weekStart) {
-      return new Response(JSON.stringify({ 
-        ok: false, 
-        error: "Missing week_start=YYYY-MM-DD" 
-      }), {
-        status: 400,
-        headers: { "content-type": "application/json" },
-      });
-    }
+    const body = req.method === "POST" ? (await req.json().catch(() => ({}))) : {};
 
-    // Week is Monday (weekStart) through Sunday (+6 days)
-    const weekEnd = addDays(weekStart, 6);
+    const weekStartRaw = String(url.searchParams.get("week_start") || body?.week_start || "").trim();
+    const fromRaw = String(url.searchParams.get("from") || body?.from || "").trim();
+    const toRaw = String(url.searchParams.get("to") || body?.to || "").trim();
+    const daysRaw = Number(url.searchParams.get("days") || body?.days || 45);
+    const days = Number.isFinite(daysRaw) && daysRaw > 0 ? Math.min(Math.floor(daysRaw), 730) : 45;
+
+    const today = isoDateOnly(new Date());
+    let dateStart = "";
+    let dateEnd = "";
+    if (isDateKey(fromRaw)) {
+      dateStart = fromRaw;
+      dateEnd = isDateKey(toRaw) ? toRaw : today;
+    } else if (isDateKey(weekStartRaw)) {
+      dateStart = weekStartRaw;
+      dateEnd = addDays(weekStartRaw, 6);
+    } else {
+      dateEnd = today;
+      dateStart = addDays(today, -(days - 1));
+    }
 
     // Fetch funnel rules
     const funnelRules = await fetchFunnelRules(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     let totalAdsFetched = 0;
-    let totalUpserted = 0;
     let allRows: any[] = [];
 
     // Iterate over each ad account
@@ -187,16 +217,15 @@ serve(async (req) => {
             const adsData = await fetchMetaAdsInsights(
               META_ACCESS_TOKEN,
               adAccountId,
-              weekStart,
-              weekEnd,
+              dateStart,
+              dateEnd,
             );
             
             totalAdsFetched += adsData.length;
 
             // Transform and apply funnel rules
             const rows = adsData.map((row: any) => {
-              const leadAction = row.actions?.find((a: any) => a.action_type === 'lead');
-              const leads = leadAction ? parseInt(leadAction.value) : 0;
+              const leads = extractLeadCountFromActions(row.actions);
 
               const transformedRow = {
                 ad_account_id: normalizeAdAccountId(adAccountId),
@@ -207,9 +236,9 @@ serve(async (req) => {
                 adset_name: row.adset_name,
                 ad_id: row.ad_id,
                 ad_name: row.ad_name,
-                spend: parseFloat(row.spend) || 0,
-                impressions: parseInt(row.impressions) || 0,
-                clicks: parseInt(row.clicks) || 0,
+                spend: toFiniteNumber(row.spend),
+                impressions: Math.round(toFiniteNumber(row.impressions)),
+                clicks: Math.round(toFiniteNumber(row.clicks)),
                 leads: leads,
               };
 
@@ -240,8 +269,9 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({
       ok: true,
-      week_start: weekStart,
-      week_end: weekEnd,
+      date_start: dateStart,
+      date_end: dateEnd,
+      days,
       ads_fetched: totalAdsFetched,
       rows_upserted: upserted,
       funnel_breakdown: {
