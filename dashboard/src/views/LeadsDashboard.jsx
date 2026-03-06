@@ -75,6 +75,21 @@ function mondayKey(dateKey) {
   return d.toISOString().slice(0, 10);
 }
 
+function dateKeyInTimeZone(date = new Date(), timeZone = 'UTC') {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const parts = formatter.formatToParts(date);
+  const year = parts.find((p) => p.type === 'year')?.value;
+  const month = parts.find((p) => p.type === 'month')?.value;
+  const day = parts.find((p) => p.type === 'day')?.value;
+  if (!year || !month || !day) return new Date().toISOString().slice(0, 10);
+  return `${year}-${month}-${day}`;
+}
+
 function normalizeHearAboutCategoryLabel(rawLabel) {
   if (!rawLabel) return 'Unknown';
   if (HEAR_ABOUT_KEY_BY_LABEL[rawLabel]) return rawLabel;
@@ -854,7 +869,7 @@ export default function LeadsDashboard() {
   }
 
   // Build date range windows
-  const today = new Date().toISOString().slice(0, 10);
+  const today = dateKeyInTimeZone(new Date(), 'America/New_York');
   const dateWindows = useMemo(() => buildDateRangeWindows(rangeType, customStart, customEnd, today), [rangeType, customStart, customEnd, today]);
 
   // Build grouped snapshot

@@ -1920,17 +1920,15 @@ const AttendanceDashboard = () => {
   useEffect(() => {
     if (!analytics?.sessions?.length || selectedSessionKey) return;
 
-    const targetDate = '2026-02-19';
-    const targetSession = analytics.sessions.find((s) => s.type === 'Thursday' && s.dateLabel === targetDate);
-    const fallbackThursday = [...analytics.sessions].reverse().find((s) => s.type === 'Thursday');
+    const latestThursday = [...analytics.sessions]
+      .filter((s) => s.type === 'Thursday')
+      .sort((a, b) => (a.date?.getTime?.() || 0) - (b.date?.getTime?.() || 0))
+      .pop();
     const fallbackAny = analytics.sessions[analytics.sessions.length - 1];
-    const selected = targetSession || fallbackThursday || fallbackAny;
+    const selected = latestThursday || fallbackAny;
 
     if (selected) {
       setSelectedSessionKey(`${selected.type}|${selected.dateLabel}`);
-      if (!targetSession) {
-        setDetailMessage(`No attendance row found for 02/19/2026 yet. Showing ${selected.type} ${selected.dateFormatted} for validation.`);
-      }
     }
   }, [analytics, selectedSessionKey]);
 
@@ -2875,7 +2873,7 @@ const AttendanceDashboard = () => {
       const d = payload[0].payload;
       return (
         <div style={{ backgroundColor: 'white', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
-          <p style={{ fontWeight: 700, marginBottom: '6px' }}>{label}</p>
+          <p style={{ fontWeight: 700, marginBottom: '6px', color: '#0f172a' }}>{label}</p>
           <div style={{ display: 'flex', gap: '12px', fontSize: '13px' }}>
             <span style={{ color: '#22c55e', fontWeight: 600 }}>New: {d.newCount}</span>
             <span style={{ color: '#64748b', fontWeight: 600 }}>Return: {d.repeatCount}</span>
