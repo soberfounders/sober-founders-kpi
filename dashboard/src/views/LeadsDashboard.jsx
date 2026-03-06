@@ -3485,7 +3485,56 @@ export default function LeadsDashboard() {
   const overviewPreviousCombined = groupedData?.previous?.free?.combined || null;
   const overviewCurrentCategorization = overviewCurrentCombined?.categorization || {};
   const overviewPreviousCategorization = overviewPreviousCombined?.categorization || {};
-  const overviewCurrentSpend = Number(overviewCurrentCombined?.spend || 0);
+  const overviewCurrentFreeSpend = Number(overviewCurrentCombined?.spend || 0);
+  const overviewPreviousFreeSpend = Number(overviewPreviousCombined?.spend || 0);
+  const overviewCurrentPhoenixSpend = Number(groupedData?.current?.phoenix?.spend || 0);
+  const overviewPreviousPhoenixSpend = Number(groupedData?.previous?.phoenix?.spend || 0);
+  const overviewCurrentTotalSpend = overviewCurrentFreeSpend + overviewCurrentPhoenixSpend;
+  const overviewPreviousTotalSpend = overviewPreviousFreeSpend + overviewPreviousPhoenixSpend;
+
+  const adSpendAccountBreakdown = useMemo(() => {
+    const startKey = dateWindows?.current?.start;
+    const endKey = dateWindows?.current?.end;
+    if (!startKey || !endKey) {
+      return { totalByAccount: [], freeByAccount: [], phoenixByAccount: [], phoenixSplitNote: 'Phoenix Forum Meta spend for selected window' };
+    }
+
+    const byAccount = new Map();
+    for (const row of rawAds || []) {
+      const dateKey = parseDateKeyLoose(row?.date_day);
+      if (!dateKey || dateKey < startKey || dateKey > endKey) continue;
+
+      const accountId = String(row?.ad_account_id || '').trim() || 'Unknown account';
+      const spend = Number(row?.spend || 0);
+      if (!Number.isFinite(spend)) continue;
+
+      if (!byAccount.has(accountId)) byAccount.set(accountId, { total: 0, free: 0, phoenix: 0 });
+      const bucket = byAccount.get(accountId);
+      bucket.total += spend;
+
+      const funnel = String(row?.funnel_key || row?.campaign_name || '').toLowerCase();
+      const isPhoenix = funnel.includes('phoenix') || String(row?.campaign_name || '').toLowerCase().includes('phoenix');
+      if (isPhoenix) bucket.phoenix += spend;
+      else bucket.free += spend;
+    }
+
+    const toRows = (key) => Array.from(byAccount.entries())
+      .map(([accountId, values]) => ({ accountId, spend: Number(values?.[key] || 0) }))
+      .filter((row) => row.spend > 0)
+      .sort((a, b) => b.spend - a.spend);
+
+    const phoenixByAccount = toRows('phoenix');
+    const phoenixSplitNote = phoenixByAccount.length > 0
+      ? `Phoenix split: ${phoenixByAccount.map((row) => `${row.accountId} ${fmt.currency(row.spend)}`).join(' + ')}`
+      : 'Phoenix Forum Meta spend for selected window';
+
+    return {
+      totalByAccount: toRows('total'),
+      freeByAccount: toRows('free'),
+      phoenixByAccount,
+      phoenixSplitNote,
+    };
+  }, [rawAds, dateWindows?.current?.start, dateWindows?.current?.end]);
 
   const getChangePct = (currentValue, previousValue) => {
     if (previousValue === null || previousValue === undefined) return null;
@@ -3494,14 +3543,34 @@ export default function LeadsDashboard() {
 
   const overviewKpiCards = [
     {
-      key: 'ad_spend',
-      label: 'Ad Spend',
-      value: overviewCurrentSpend,
-      previous: Number(overviewPreviousCombined?.spend || 0),
+      key: 'ad_spend_total',
+      label: 'Ad Spend (Total)',
+      value: overviewCurrentTotalSpend,
+      previous: overviewPreviousTotalSpend,
       format: 'currency',
       invertColor: true,
-      note: 'Group 1 Free Meta spend for selected window',
+      note: 'Meta spend across Free Groups + Phoenix Forum',
+      color: '#0f172a',
+    },
+    {
+      key: 'ad_spend_free',
+      label: 'Ad Spend (Free Groups)',
+      value: overviewCurrentFreeSpend,
+      previous: overviewPreviousFreeSpend,
+      format: 'currency',
+      invertColor: true,
+      note: 'Meta spend for non-Phoenix campaigns in selected window',
       color: '#dc2626',
+    },
+    {
+      key: 'ad_spend_phoenix',
+      label: 'Ad Spend (Phoenix Forum)',
+      value: overviewCurrentPhoenixSpend,
+      previous: overviewPreviousPhoenixSpend,
+      format: 'currency',
+      invertColor: true,
+      note: adSpendAccountBreakdown.phoenixSplitNote,
+      color: '#ea580c',
     },
     {
       key: 'total_leads',
@@ -3544,8 +3613,8 @@ export default function LeadsDashboard() {
   const costCardLookup = new Map((leadsDecisionModule?.costCards || []).map((row) => [row.key, row]));
   const previousCpql = Number(costCardLookup.get('costPerGoodLeadQualified')?.previous);
   const previousCpgl = Number(costCardLookup.get('costPerGreatLead1m')?.previous);
-  const qualifiedTargetAtPriorEfficiency = Number.isFinite(previousCpql) && previousCpql > 0 ? overviewCurrentSpend / previousCpql : null;
-  const greatTargetAtPriorEfficiency = Number.isFinite(previousCpgl) && previousCpgl > 0 ? overviewCurrentSpend / previousCpgl : null;
+  const qualifiedTargetAtPriorEfficiency = Number.isFinite(previousCpql) && previousCpql > 0 ? overviewCurrentFreeSpend / previousCpql : null;
+  const greatTargetAtPriorEfficiency = Number.isFinite(previousCpgl) && previousCpgl > 0 ? overviewCurrentFreeSpend / previousCpgl : null;
 
   const executiveRecommendations = [
     ...(paidDecisionInsights?.moves || []),
@@ -3613,6 +3682,43 @@ export default function LeadsDashboard() {
             changePct={getChangePct(item.value, item.previous)}
           />
         ))}
+      </div>
+
+      <div style={{ ...card, background: 'linear-gradient(120deg,#fffaf0 0%,#fff7ed 45%,#fefce8 100%)', border: '1px solid #fed7aa' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div>
+            <p style={{ margin: 0, fontSize: '11px', color: '#9a3412', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 800 }}>
+              Ad Account Transparency
+            </p>
+            <h3 style={{ margin: '6px 0 0', fontSize: '16px', color: '#7c2d12' }}>Spend split by ad account in selected window</h3>
+          </div>
+          <p style={{ margin: 0, fontSize: '11px', color: '#9a3412', fontWeight: 700 }}>
+            {dateWindows?.current?.start || 'N/A'} to {dateWindows?.current?.end || 'N/A'}
+          </p>
+        </div>
+        <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: '10px' }}>
+          {[
+            { key: 'total', label: 'Total Meta Spend by Account', rows: adSpendAccountBreakdown.totalByAccount, color: '#0f172a' },
+            { key: 'free', label: 'Free Groups Spend by Account', rows: adSpendAccountBreakdown.freeByAccount, color: '#dc2626' },
+            { key: 'phoenix', label: 'Phoenix Forum Spend by Account', rows: adSpendAccountBreakdown.phoenixByAccount, color: '#ea580c' },
+          ].map((section) => (
+            <div key={`spend-account-${section.key}`} style={{ ...subCard, border: `1px solid ${section.color}33`, backgroundColor: '#fff' }}>
+              <p style={{ margin: 0, fontSize: '11px', color: section.color, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                {section.label}
+              </p>
+              <div style={{ marginTop: '8px', display: 'grid', gap: '6px' }}>
+                {section.rows.length > 0 ? section.rows.map((row) => (
+                  <div key={`${section.key}-${row.accountId}`} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '12px', color: '#334155', fontFamily: 'monospace' }}>{row.accountId}</span>
+                    <span style={{ fontSize: '13px', color: section.color, fontWeight: 800 }}>{fmt.currency(row.spend)}</span>
+                  </div>
+                )) : (
+                  <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>No spend in this category for the selected window.</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(360px,1fr))', gap: '14px' }}>
