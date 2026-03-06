@@ -7,8 +7,8 @@ This dashboard implementation standardizes lead-gen reporting around a single fu
 3. Leads Captured (HubSpot PAID_SOCIAL)
 4. Luma Registrations
 5. Net New Show-Ups (Zoom Tue/Thu only)
-6. Qualified Leads (`$250K-$1M` revenue)
-7. Great Leads (`>$1M` revenue)
+6. Qualified Leads (`$250K-$999k` revenue)
+7. Great Leads (`>=$1M` revenue)
 
 ## Source Mapping
 
@@ -94,7 +94,6 @@ It writes normalized records to:
 
 Matching performed during sync:
 
-- Lu.ma -> Zoom (`matched_zoom`, `matched_zoom_net_new`) using guest full name against Thursday attendance rosters.
 - Lu.ma -> HubSpot (`matched_hubspot`) using email first, then normalized full name fallback.
 - Cross-email HubSpot guardrail: if email does not match, name-based auto-match only occurs when normalized full name aligns within `72` hours of registration time.
 
@@ -108,7 +107,6 @@ If `raw_luma_registrations` is missing/unavailable, the dashboard falls back to:
 - Week-over-week (`7d` vs prior `7d`)
 - Month-over-month (`30d` vs prior `30d`)
 - Leads includes a Fact Check Drilldown panel with window selector (`current/previous week`, `current/previous month`, `lookback`) and clickable metric drill-ins.
-- `sync_zoom_attendance` should run before analytics review to keep show-up metrics current.
 - `sync_luma_registrations` should run before Thursday funnel reviews to refresh registrations and match statuses.
 - Deploy `manage_attendee_aliases` before using merge buttons in Attendance:
   - `supabase functions deploy manage_attendee_aliases`
@@ -118,5 +116,4 @@ If `raw_luma_registrations` is missing/unavailable, the dashboard falls back to:
 
 1. Add direct Luma registration table (`raw_luma_registrations`) with `email`, `registered_at`, `event_id`.
 2. Persist deterministic ad identifiers in HubSpot (`ad_id`, `campaign_id`, `adset_id`) at lead capture time.
-3. Store canonical attendee email in Zoom sync metadata for stronger lead-to-show-up matching.
-4. Add a materialized daily funnel fact table for faster historical analysis at scale.
+3. Add a materialized daily funnel fact table for faster historical analysis at scale.
