@@ -31,6 +31,42 @@ function addDays(dateKey: string, days: number) {
   return isoDateOnly(d);
 }
 
+function clampInt(value: unknown, fallback: number, min: number, max: number) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, Math.floor(n)));
+}
+
+function parseDateKey(value: unknown) {
+  const text = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return "";
+  return text;
+}
+
+function buildAdsWeekStarts(baseWeekStart: string, priorWeeks: number, backfillFrom: string) {
+  const weekStarts: string[] = [];
+  const maxWeeks = Math.max(0, priorWeeks);
+  const normalizedFrom = backfillFrom ? mondayKeyUtc(new Date(`${backfillFrom}T00:00:00.000Z`)) : "";
+
+  let cursor = baseWeekStart;
+  let safety = 0;
+  while (safety < 200) {
+    weekStarts.push(cursor);
+    safety += 1;
+
+    if (normalizedFrom) {
+      if (cursor <= normalizedFrom) break;
+      cursor = addDays(cursor, -7);
+      continue;
+    }
+
+    if (weekStarts.length >= maxWeeks + 1) break;
+    cursor = addDays(cursor, -7);
+  }
+
+  return Array.from(new Set(weekStarts));
+}
+
 async function invokeEdgeFunction(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -141,7 +177,16 @@ serve(async (req: Request) => {
       url.searchParams.get("week_start") ||
       parsedBody?.week_start ||
       mondayKeyUtc(new Date());
-    const priorWeekStart = addDays(weekStart, -7);
+    const adsBackfillWeeks = clampInt(
+      url.searchParams.get("ads_backfill_weeks") || parsedBody?.ads_backfill_weeks || 1,
+      1,
+      0,
+      104,
+    );
+    const adsBackfillFrom = parseDateKey(
+      url.searchParams.get("ads_backfill_from") || parsedBody?.ads_backfill_from || "",
+    );
+    const adsWeekStarts = buildAdsWeekStarts(weekStart, adsBackfillWeeks, adsBackfillFrom);
     const hubspotDaysRaw =
       Number(url.searchParams.get("hubspot_days") || parsedBody?.hubspot_days || 45);
     const hubspotDays =
@@ -183,7 +228,7 @@ serve(async (req: Request) => {
       }
     };
 
-    // Stage 1: independent source syncs (including HubSpot calls, which is the attendance source of truth).
+    // Stage 1: independent non-ads source syncs (including HubSpot calls, which is the attendance source of truth).
     await Promise.all([
       runStep('hubspot_contacts', 'sync_kpis', {
         method: 'GET',
@@ -193,15 +238,6 @@ serve(async (req: Request) => {
         method: 'POST',
         body: hubspotSourceSyncBody,
       }),
-      runStep('facebook_ads', 'sync_fb_ads', {
-        method: 'GET',
-        query: { week_start: weekStart },
-      }),
-      // Keep prior-week ad days fresh in case a Fri/Sat/Sun sync was missed.
-      runStep('facebook_ads_prior_week_backfill', 'sync_fb_ads', {
-        method: 'GET',
-        query: { week_start: priorWeekStart },
-      }),
       runStep('generic_metrics', 'sync-metrics', {
         method: 'GET',
         query: { trigger_refresh: true },
@@ -210,6 +246,17 @@ serve(async (req: Request) => {
       runStep('google_analytics', 'sync_google_analytics', { method: 'POST' }),
       runStep('search_console', 'sync_search_console', { method: 'POST' }),
     ]);
+
+    // Stage 1b: ads sync with configurable backfill window.
+    // Execute sequentially to avoid unnecessary Meta API concurrency spikes.
+    for (let i = 0; i < adsWeekStarts.length; i += 1) {
+      const targetWeekStart = adsWeekStarts[i];
+      const sourceName = i === 0 ? 'facebook_ads' : `facebook_ads_backfill_week_${i}`;
+      await runStep(sourceName, 'sync_fb_ads', {
+        method: 'GET',
+        query: { week_start: targetWeekStart },
+      });
+    }
 
     // Stage 2: jobs that benefit from the refreshed HubSpot/Zoom caches.
     await Promise.all([
@@ -238,6 +285,9 @@ serve(async (req: Request) => {
         ok: !hasErrors,
         results,
         week_start: weekStart,
+        ads_backfill_weeks: adsBackfillWeeks,
+        ads_backfill_from: adsBackfillFrom || null,
+        ads_weeks_synced: adsWeekStarts,
         hubspot_days: hubspotDays,
         hubspot_from: hubspotFrom || null,
         hubspot_to: hubspotTo || null,
