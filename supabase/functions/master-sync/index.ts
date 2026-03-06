@@ -230,9 +230,19 @@ serve(async (req: Request) => {
 
     // Stage 1: independent non-ads source syncs (including HubSpot calls, which is the attendance source of truth).
     await Promise.all([
-      runStep('hubspot_contacts', 'sync_kpis', {
-        method: 'GET',
-        query: { week_start: weekStart },
+      runStep('hubspot_incremental', 'hubspot_incremental_sync', {
+        method: 'POST',
+        body: {
+          object_types: 'contacts,deals,calls,meetings',
+          overlap_minutes: 2,
+        },
+      }),
+      runStep('hubspot_reconcile_hourly', 'hubspot_reconcile_sync', {
+        method: 'POST',
+        body: {
+          mode: 'hourly',
+          hourly_lookback_days: 7,
+        },
       }),
       runStep('hubspot_calls', 'sync_hubspot_meeting_activities', {
         method: 'POST',

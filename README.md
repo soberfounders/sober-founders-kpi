@@ -89,9 +89,28 @@ Run from repo root:
 7. `supabase functions deploy analyze-leads-insights`
 8. `supabase functions deploy ai-briefing`
 
+HubSpot trust-sync deploy (new):
+
+9. `supabase functions deploy hubspot_webhook_ingest`
+10. `supabase functions deploy hubspot_webhook_worker`
+11. `supabase functions deploy hubspot_incremental_sync`
+12. `supabase functions deploy hubspot_reconcile_sync`
+13. `supabase functions deploy hubspot_bootstrap_backfill`
+
 One-time historical backfill (recommended immediately after deploy):
 
 - `supabase functions invoke sync_attendance_from_hubspot --no-verify-jwt --body "{\"days\":730,\"include_reconcile\":true,\"include_luma\":true}"`
+
+HubSpot webhook endpoint:
+
+- `https://ldnucnghzpkuixmnfjbs.supabase.co/functions/v1/hubspot_webhook_ingest`
+- Required secret header validation is based on `HUBSPOT_WEBHOOK_SECRET` (HubSpot app client secret)
+- Required function secrets:
+  - `HUBSPOT_PRIVATE_APP_TOKEN`
+  - `HUBSPOT_WEBHOOK_SECRET`
+  - `SUPABASE_URL`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+  - optional alerts: `HUBSPOT_SYNC_ALERT_WEBHOOK_URL`
 
 ## License
 
