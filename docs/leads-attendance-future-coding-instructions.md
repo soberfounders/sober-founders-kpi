@@ -13,7 +13,7 @@ This file is intentionally redundant with other docs. Treat it as the operationa
 - `HubSpot` is the source of truth for contact identity + attribution when data exists.
 - The dashboard is an analytics layer and should not create a competing truth system.
 - Use cached/raw tables in Supabase for performance and reproducibility.
-- Use fallback matching (Lu.ma/Zoom/name) only when HubSpot truth is unavailable or delayed.
+- Use fallback matching (Lu.ma/) only when HubSpot truth is unavailable or delayed.
 
 ## Auto-Creation / Merge Behavior (Critical)
 - Meta leads auto-create HubSpot contacts via Meta->HubSpot integration.
@@ -44,7 +44,7 @@ Rules:
 - It is often delayed because manual HubSpot attendee tagging may happen after the meeting.
 - Keep hybrid behavior:
   - Prefer HubSpot Call/meeting mapping when available
-  - Fallback to Zoom/Lu.ma/name matching when missing
+  - Fallback to Lu.ma/name matching when missing
   - Reconcile later (D+1 / D+3 / D+7 / rolling 30-day backfill)
 
 ## Attribution Precedence (Required)
@@ -68,28 +68,10 @@ When determining acquisition source:
   - oldest created date for attribution anchoring (tie-break awareness)
 
 ## Tuesday vs Thursday Funnel Reality
-- Thursday often flows through Lu.ma (registrant -> Zoom).
+- Thursday often flows through Lu.ma (registrant -> hubspot_call ).
 - Tuesday often bypasses Lu.ma and comes through apply/interview + Zoom.
 - Do not assume Lu.ma coverage for all attendance analysis.
-- Attendance/Zoom modules must support Tuesday via HubSpot and Zoom evidence directly.
-
-## Zoom Name Handling Rules
-- Zoom display names vary by device/account (`SML`, `Robert D`, `iPhone`, etc.).
-- Use:
-  - alias map (`attendee_aliases`)
-  - canonicalization heuristics
-  - manual overrides (temporary only)
-- Manual overrides are scaffolding and should be retired when raw HubSpot/call mapping resolves the identity.
-
-## Manual Overrides (Use Carefully)
-- Manual overrides are useful for:
-  - known repeat attendees
-  - abbreviated names
-  - raw sync coverage gaps
-- They should:
-  - be explicit
-  - record reason + HubSpot link/contact ID
-  - never silently override without auditability
+- Attendance modules must support Tuesday via HubSpot Calls evidence directly.
 
 ## Data Quality / Missing Reasons (Required UX Behavior)
 When matching fails or attribution is weak, surface why:
@@ -113,11 +95,10 @@ Do not allow silent failures in drilldowns.
   - optional fetches that degrade gracefully if migrations are not applied yet
 
 ## Current Additive Assets (as of this phase)
-- HubSpot meeting/call activity raw tables + associations + zoom mapping tables (migration)
+- HubSpot meeting/call activity raw tables + associations (migration)
 - `sync_hubspot_meeting_activities` edge function
-- `reconcile_zoom_attendee_hubspot_mappings` scaffold
 - Attendance dashboard HubSpot identity enrichment (non-breaking)
-- Leads `Unified Funnel (Meta to Lu.ma to Zoom)` panel with:
+- Leads `Unified Funnel (Meta to Lu.ma to hubspot calls)` panel with:
   - funnel rates
   - match confidence breakdowns
   - unmatched/review queues
