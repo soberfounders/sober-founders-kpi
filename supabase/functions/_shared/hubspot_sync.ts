@@ -401,10 +401,20 @@ export async function hubspotPullObjectsByUpdatedRange(
   fromIso: string,
   toIso: string,
 ): Promise<any[]> {
+  const rangeMs = Math.max(0, toMs(toIso) - toMs(fromIso));
+  const shouldUseContactListFallback =
+    objectType === "contacts" && rangeMs >= (24 * 60 * 60 * 1000);
   try {
-    return await hubspotSearchUpdated(token, objectType, fromIso, toIso);
+    const searched = await hubspotSearchUpdated(token, objectType, fromIso, toIso);
+    if (shouldUseContactListFallback && searched.length === 0) {
+      return await hubspotListAndFilterUpdated(token, objectType, fromIso, toIso, false);
+    }
+    return searched;
   } catch (e: any) {
-    const shouldFallback = objectType === "calls" || objectType === "meetings";
+    const shouldFallback =
+      objectType === "calls" ||
+      objectType === "meetings" ||
+      shouldUseContactListFallback;
     if (!shouldFallback) throw e;
     return await hubspotListAndFilterUpdated(token, objectType, fromIso, toIso, false);
   }

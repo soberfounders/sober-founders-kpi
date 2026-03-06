@@ -79,6 +79,34 @@ function parseDateKey(value) {
     return isoDate(d);
 }
 
+const HUBSPOT_REPORTING_TIMEZONE = 'America/New_York';
+
+function dateKeyInTimeZone(date, timeZone) {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    });
+    const parts = formatter.formatToParts(date);
+    const year = parts.find((p) => p.type === 'year')?.value;
+    const month = parts.find((p) => p.type === 'month')?.value;
+    const day = parts.find((p) => p.type === 'day')?.value;
+    if (!year || !month || !day) return null;
+    return `${year}-${month}-${day}`;
+}
+
+function parseDateKeyInTimeZone(value, timeZone) {
+    if (!value) return null;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return dateKeyInTimeZone(d, timeZone);
+}
+
+function parseHubspotCreatedDateKey(value) {
+    return parseDateKeyInTimeZone(value, HUBSPOT_REPORTING_TIMEZONE);
+}
+
 // ---------------------------------------------------------------------------
 // Date range windows builder
 // ---------------------------------------------------------------------------
@@ -394,6 +422,18 @@ function isPhoenixHubspotContact(row) {
     return blob.includes('phoenix');
 }
 
+function isActiveHubspotContact(row) {
+    const isDeleted = row?.is_deleted === true || row?.hubspot_archived === true;
+    const mergedIntoRaw = row?.merged_into_hubspot_contact_id;
+    const mergedInto = Number(mergedIntoRaw);
+    const hasMergedInto = mergedIntoRaw !== null
+        && mergedIntoRaw !== undefined
+        && mergedIntoRaw !== ''
+        && Number.isFinite(mergedInto)
+        && mergedInto > 0;
+    return !isDeleted && !hasMergedInto;
+}
+
 /**
  * Build an email-keyed map from HubSpot rows.
  * Checks both the primary `email` field AND `hs_additional_emails`
@@ -403,6 +443,7 @@ function buildHubspotEmailIndex(hubspotRows) {
     const byEmail = new Map();
 
     for (const row of hubspotRows || []) {
+        if (!isActiveHubspotContact(row)) continue;
         const primary = normalizeEmail(row?.email);
         if (primary) {
             if (!byEmail.has(primary)) byEmail.set(primary, []);
@@ -774,7 +815,8 @@ function buildLumaRows(lumaRows, startKey, endKey, hubspotRows, adsAdsetIndex) {
         const revenue = Number.isFinite(matchedRevenue) ? matchedRevenue : resolveHubspotRevenue(contact);
         const sobrietyDate = resolveHubspotSobrietyDate(contact);
         const campaignSource = String(contact?.hs_analytics_source_data_2 || contact?.campaign || '').trim();
-        const preferredDateKey = parseDateKey(contact?.createdate || row?.registered_at || row?.event_date || row?.event_start_at);
+        const preferredDateKey = parseHubspotCreatedDateKey(contact?.createdate)
+            || parseDateKey(row?.registered_at || row?.event_date || row?.event_start_at);
         const adGroup = inferAdGroupFromCampaign(campaignSource, preferredDateKey, adsAdsetIndex);
         const hubspotCentralizedHearAbout = extractHubspotLumaHearAbout(contact);
         const lumaHearAbout = extractHearAboutAnswer(row?.registration_answers);
@@ -863,6 +905,7 @@ function buildLeadCategorization(adsMetrics, hubspotRows, funnelFilter) {
     const unmatchedLeads = [];
 
     for (const row of hubspotRows || []) {
+        if (!isActiveHubspotContact(row)) continue;
         // Only paid-social leads
         if (!isPaidSocialHubspotContact(row)) continue;
 
@@ -893,7 +936,6 @@ function buildLeadCategorization(adsMetrics, hubspotRows, funnelFilter) {
         for (let i = 0; i < gap; i++) {
             unmatchedLeads.push({ name: '(unknown — not in HubSpot)', email: '', reason: 'Not found in HubSpot by email' });
         }
-        counts.unknown += gap;
     }
 
     return {
@@ -909,13 +951,11 @@ function buildLeadCategorization(adsMetrics, hubspotRows, funnelFilter) {
 // Build a single group snapshot
 // ---------------------------------------------------------------------------
 
-function buildLeadRows(ads, hubspotInRange, lumaRows, funnelFilter) {
-    const targetCount = Math.max(0, Math.round(Number(ads?.leads || 0)));
-    if (targetCount === 0) return [];
-
+function buildLeadRows(hubspotInRange, lumaRows, funnelFilter) {
     const dedup = new Map();
     const keyByEmail = new Map();
     for (const row of hubspotInRange || []) {
+        if (!isActiveHubspotContact(row)) continue;
         if (!isPaidSocialHubspotContact(row)) continue;
         const isPhoenix = isPhoenixHubspotContact(row);
         if (funnelFilter === 'phoenix' && !isPhoenix) continue;
@@ -989,39 +1029,6 @@ function buildLeadRows(ads, hubspotInRange, lumaRows, funnelFilter) {
         };
     });
 
-    const usedEmails = new Set(rows.map((row) => normalizeEmail(row.email)).filter(Boolean));
-    const lumaSorted = [...(lumaRows || [])]
-        .sort((a, b) => String(b?.date || '').localeCompare(String(a?.date || '')));
-
-    for (const row of lumaSorted) {
-        if (rows.length >= targetCount) break;
-        const email = normalizeEmail(row?.email);
-        if (email && usedEmails.has(email)) continue;
-        if (email) usedEmails.add(email);
-
-        rows.push({
-            name: String(row?.name || '').trim() || 'Not Found',
-            email: email || 'Not Found',
-            showedUp: row?.matchedZoom ? 'Yes' : 'No',
-            matchedZoom: !!row?.matchedZoom,
-            revenue: Number.isFinite(Number(row?.revenue)) ? Number(row.revenue) : 'Not Found',
-            sobrietyDate: formatDateMMDDYYYY(row?.sobrietyDate) || 'Not Found',
-        });
-    }
-
-    if (rows.length > targetCount) return rows.slice(0, targetCount);
-
-    while (rows.length < targetCount) {
-        rows.push({
-            name: 'Not Found',
-            email: 'Not Found',
-            showedUp: 'No',
-            matchedZoom: false,
-            revenue: 'Not Found',
-            sobrietyDate: 'Not Found',
-        });
-    }
-
     return rows;
 }
 
@@ -1039,12 +1046,13 @@ function buildSubRowSnapshot(label, adsRows, hubspotRows, lumaRows, zoomRows, st
 
     // HubSpot contacts in date window
     const hubspotInRange = (hubspotRows || []).filter((row) => {
-        const dk = parseDateKey(row?.createdate);
+        if (!isActiveHubspotContact(row)) return false;
+        const dk = parseHubspotCreatedDateKey(row?.createdate);
         return dk && dateInRange(dk, startKey, endKey);
     });
     const categorization = buildLeadCategorization(ads, hubspotInRange, funnelFilter === 'any' ? 'free' : funnelFilter);
 
-    const leadRows = buildLeadRows(ads, hubspotInRange, lumaFiltered, funnelFilter);
+    const leadRows = buildLeadRows(hubspotInRange, lumaFiltered, funnelFilter);
 
     const cpl = safeDivide(ads.spend, ads.leads);
     const costPerRegistration = safeDivide(ads.spend, lumaCount);
