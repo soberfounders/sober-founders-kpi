@@ -3565,15 +3565,6 @@ export default function LeadsDashboard() {
     return cur > prev ? 'up' : cur < prev ? 'down' : 'neutral';
   }
 
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-        <GroupSkeleton /><GroupSkeleton />
-        <div style={{ ...card }}><Skeleton h="300px" /></div>
-      </div>
-    );
-  }
-
   const showupRows = analytics?.showUpTracker?.rows?.slice(-20) || [];
   const fmtMaybeCurrency = (v) => {
     if (v === null || v === undefined || v === '') return 'N/A';
@@ -3670,6 +3661,15 @@ export default function LeadsDashboard() {
       phoenixSplitNote,
     };
   }, [rawAds, dateWindows?.current?.start, dateWindows?.current?.end]);
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <GroupSkeleton /><GroupSkeleton />
+        <div style={{ ...card }}><Skeleton h="300px" /></div>
+      </div>
+    );
+  }
 
   const qualificationCurrent = summarizeLeadQualificationAndQuality(
     overviewCurrentCombined?.leadRows || [],
