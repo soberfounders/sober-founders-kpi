@@ -4,7 +4,7 @@ Purpose: Improve attendee identity accuracy and HubSpot linkage without breaking
 
 ## What Is Already Safe
 
-- Current attendance counts still come from `kpi_metrics` (`Zoom Meeting Attendees`)
+- Current attendance counts still come from `kpi_metrics` (Never use API for `Zoom Meeting Attendees` it can only be hubspot_meetings)
 - New HubSpot identity fields in Attendance dashboard are enrichment only (email/link/mapping source)
 - Existing Leads/Attendance analytics logic remains intact
 
@@ -119,20 +119,18 @@ When a row is wrong/missing:
 2. Check `Mapping Source`
 3. If `manual_override`, verify it matches current HubSpot truth
 4. If `none` / `luma_unresolved_bridge`, search in HubSpot by:
-   - Zoom name
    - Lu.ma email
    - alternate email / merged record
 5. Merge/fix in HubSpot
 6. Re-run:
    - HubSpot meeting activity sync
    - Lu.ma sync (if needed)
-   - Zoom sync (if attendance row missing)
 
 ## Important Notes
 
 - HubSpot meeting/call activities are the best identity signal **when present**
 - They may be delayed if attendee mapping in HubSpot is done manually after the meeting
-- Current system should keep working using Zoom/Lu.ma fallback during that delay
+- Current system should keep working using Lu.ma fallback during that delay
 
 ## 2026-03 Stabilization: Canonical Session Selector (Permanent Fix)
 
