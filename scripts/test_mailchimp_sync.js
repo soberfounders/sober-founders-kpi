@@ -1,7 +1,7 @@
 // Test the sync_mailchimp edge function and report results
 const https = require('https');
 
-const SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxkbnVjbmdoenBrdWl4bW5mamJzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTI2MDI3MCwiZXhwIjoyMDg2ODM2MjcwfQ.XJcyJiaQPWOf-fPj8ZFVb5QVkl32IwE_0mhPRuCxfUU';
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const SUPABASE_URL = 'ldnucnghzpkuixmnfjbs.supabase.co';
 
 function httpsPost(hostname, path, headers, body) {
@@ -27,6 +27,11 @@ function httpsPost(hostname, path, headers, body) {
 }
 
 async function main() {
+  if (!SERVICE_KEY) {
+    console.error('Missing SUPABASE_SERVICE_ROLE_KEY environment variable. Refusing to run without service-role auth.');
+    process.exit(1);
+  }
+
   console.log('📡 Calling sync_mailchimp edge function...');
   console.log('   This fetches the last 50 sent campaigns from Mailchimp,');
   console.log('   classifies Tuesday/Thursday, computes MPP-adjusted metrics,');
