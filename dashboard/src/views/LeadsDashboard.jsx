@@ -7,7 +7,7 @@ import {
   SUPABASE_URL,
 } from '../lib/env';
 import { buildLeadAnalytics } from '../lib/leadAnalytics';
-import { buildGroupedLeadsSnapshot, buildDateRangeWindows, computeChangePct } from '../lib/leadsGroupAnalytics';
+import * as leadsGroupAnalyticsLib from '../lib/leadsGroupAnalytics';
 import { buildAliasMap, resolveCanonicalAttendeeName } from '../lib/attendeeCanonicalization';
 import { applyZoomAttributionOverride, getZoomAttributionOverride } from '../lib/zoomAttributionOverrides';
 import DrillDownModal from '../components/DrillDownModal';
@@ -15,10 +15,19 @@ import SendToNotionModal from '../components/SendToNotionModal';
 import AIAnalysisCard from '../components/AIAnalysisCard';
 import KPICard from '../components/KPICard';
 import CohortUnitEconomicsPreviewPanel from '../components/CohortUnitEconomicsPreviewPanel';
+import LeadsConfidenceActionPanel from '../components/LeadsConfidenceActionPanel';
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, ComposedChart,
 } from 'recharts';
+
+const {
+  buildGroupedLeadsSnapshot,
+  buildDateRangeWindows,
+  computeChangePct,
+  buildLeadsConfidenceSummary,
+  buildLeadsActionQueue,
+} = leadsGroupAnalyticsLib;
 
 const LOOKBACK_DAYS = LEADS_LOOKBACK_DAYS;
 const ATTRIBUTION_HISTORY_DAYS = LEADS_ATTRIBUTION_HISTORY_DAYS;
@@ -3661,10 +3670,78 @@ export default function LeadsDashboard() {
       phoenixSplitNote,
     };
   }, [rawAds, dateWindows?.current?.start, dateWindows?.current?.end]);
+  const leadsConfidenceActionData = (() => {
+    const normalizeQueuePayload = (source) => {
+      if (!source || typeof source !== 'object' || Array.isArray(source)) return null;
+      const pickFirstArray = (...values) => {
+        for (const value of values) {
+          if (Array.isArray(value)) return value;
+        }
+        return [];
+      };
+
+      const scoreRaw = Number(
+        source?.confidence_score
+        ?? source?.confidenceScore
+        ?? source?.score
+        ?? source?.confidence,
+      );
+      const confidenceScore = Number.isFinite(scoreRaw)
+        ? (scoreRaw > 1 ? scoreRaw / 100 : scoreRaw)
+        : null;
+
+      return {
+        confidence_score: confidenceScore,
+        confidence_level: String(source?.confidence_level ?? source?.confidenceLevel ?? '').trim(),
+        blockers: pickFirstArray(source?.blockers, source?.top_blockers, source?.topBlockers),
+        autonomous_tasks: pickFirstArray(source?.autonomous_tasks, source?.autonomousTasks, source?.autonomous_actions, source?.autonomousActions),
+        human_tasks: pickFirstArray(source?.human_tasks, source?.humanTasks, source?.human_actions, source?.humanActions),
+      };
+    };
+
+    const objectCandidates = [
+      analytics?.confidence_action_queue,
+      analytics?.confidenceActionQueue,
+      analytics?.analysis?.confidence_action_queue,
+      analytics?.analysis?.confidenceActionQueue,
+      groupedData?.confidence_action_queue,
+      groupedData?.confidenceActionQueue,
+    ];
+
+    const prebuiltPayload = objectCandidates.find((candidate) => candidate && typeof candidate === 'object' && !Array.isArray(candidate));
+    if (prebuiltPayload) return normalizeQueuePayload(prebuiltPayload);
+
+    if (typeof buildLeadsConfidenceSummary === 'function' && typeof buildLeadsActionQueue === 'function') {
+      try {
+        const confidenceInput = {
+          analytics,
+          groupedData,
+          unifiedCurrent,
+          unifiedPrevious,
+          loadErrors,
+          dateWindows,
+        };
+        const summary = buildLeadsConfidenceSummary(confidenceInput);
+        const queue = buildLeadsActionQueue({ confidence_summary: summary, ...confidenceInput });
+        const mergedPayload = {
+          ...(summary && typeof summary === 'object' && !Array.isArray(summary) ? summary : {}),
+          ...(queue && typeof queue === 'object' && !Array.isArray(queue) ? queue : {}),
+        };
+        if (Object.keys(mergedPayload).length > 0) {
+          return normalizeQueuePayload(mergedPayload);
+        }
+      } catch (confidenceErr) {
+        // Keep the page resilient when W1 helpers are unavailable or fail.
+      }
+    }
+
+    return null;
+  })();
 
   if (loading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <LeadsConfidenceActionPanel isLoading />
         <GroupSkeleton /><GroupSkeleton />
         <div style={{ ...card }}><Skeleton h="300px" /></div>
       </div>
@@ -3847,6 +3924,8 @@ export default function LeadsDashboard() {
           />
         ))}
       </div>
+
+      <LeadsConfidenceActionPanel data={leadsConfidenceActionData} isLoading={loading} />
 
       <div style={{ ...card, background: 'linear-gradient(120deg,#fffaf0 0%,#fff7ed 45%,#fefce8 100%)', border: '1px solid #fed7aa' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
