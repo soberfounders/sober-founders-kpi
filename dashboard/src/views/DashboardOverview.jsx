@@ -218,6 +218,89 @@ function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function parseEmailList(value) {
+  return String(value || '')
+    .split(',')
+    .map((part) => normalizeEmail(part))
+    .filter(Boolean);
+}
+
+function canonicalHubspotContactId(row) {
+  const mergedInto = Number(row?.merged_into_hubspot_contact_id);
+  if (Number.isFinite(mergedInto) && mergedInto > 0) return mergedInto;
+  const contactId = Number(row?.hubspot_contact_id);
+  if (Number.isFinite(contactId) && contactId > 0) return contactId;
+  return null;
+}
+
+function isActiveHubspotContact(row) {
+  if (!row) return false;
+  if (row?.is_deleted === true || row?.hubspot_archived === true) return false;
+  const mergedInto = Number(row?.merged_into_hubspot_contact_id);
+  if (Number.isFinite(mergedInto) && mergedInto > 0) return false;
+  return true;
+}
+
+function preferredHubspotContactRow(current, candidate) {
+  if (!current) return candidate;
+  if (!candidate) return current;
+  const currentActive = isActiveHubspotContact(current);
+  const candidateActive = isActiveHubspotContact(candidate);
+  if (candidateActive && !currentActive) return candidate;
+  if (currentActive && !candidateActive) return current;
+
+  const currentUpdatedTs = Date.parse(current?.hubspot_updated_at || current?.updated_at_hubspot || '');
+  const candidateUpdatedTs = Date.parse(candidate?.hubspot_updated_at || candidate?.updated_at_hubspot || '');
+  if (Number.isFinite(candidateUpdatedTs) && (!Number.isFinite(currentUpdatedTs) || candidateUpdatedTs > currentUpdatedTs)) {
+    return candidate;
+  }
+  if (Number.isFinite(currentUpdatedTs) && (!Number.isFinite(candidateUpdatedTs) || currentUpdatedTs > candidateUpdatedTs)) {
+    return current;
+  }
+
+  const currentCreatedTs = Date.parse(current?.createdate || '');
+  const candidateCreatedTs = Date.parse(candidate?.createdate || '');
+  if (!Number.isFinite(currentCreatedTs) || (Number.isFinite(candidateCreatedTs) && candidateCreatedTs > currentCreatedTs)) {
+    return candidate;
+  }
+  return current;
+}
+
+function dedupeHubspotContacts(rows) {
+  const deduped = new Map();
+  const keyByEmail = new Map();
+
+  (rows || []).forEach((row) => {
+    const canonicalId = canonicalHubspotContactId(row);
+    const primary = normalizeEmail(row?.email);
+    const extras = parseEmailList(row?.hs_additional_emails);
+    const emails = Array.from(new Set([primary, ...extras].filter(Boolean)));
+    const existingKeys = Array.from(new Set(emails.map((email) => keyByEmail.get(email)).filter(Boolean)));
+    const canonicalKey = Number.isFinite(canonicalId) ? `id:${canonicalId}` : null;
+    const fallbackEmailKey = emails.length > 0 ? `email:${emails[0]}` : null;
+    const key = canonicalKey || existingKeys[0] || fallbackEmailKey;
+    if (!key) return;
+
+    for (let i = 1; i < existingKeys.length; i += 1) {
+      const oldKey = existingKeys[i];
+      if (oldKey === key) continue;
+      const oldRow = deduped.get(oldKey);
+      if (oldRow) {
+        deduped.set(key, preferredHubspotContactRow(deduped.get(key), oldRow));
+        deduped.delete(oldKey);
+      }
+      keyByEmail.forEach((mappedKey, email) => {
+        if (mappedKey === oldKey) keyByEmail.set(email, key);
+      });
+    }
+
+    deduped.set(key, preferredHubspotContactRow(deduped.get(key), row));
+    emails.forEach((email) => keyByEmail.set(email, key));
+  });
+
+  return Array.from(deduped.values()).filter(isActiveHubspotContact);
+}
+
 function isPhoenixText(value) {
   return String(value || '').toLowerCase().includes('phoenix');
 }
@@ -619,7 +702,7 @@ const DashboardOverview = () => {
         .order('metric_date', { ascending: true }),
       supabase
         .from('raw_hubspot_contacts')
-        .select('hubspot_contact_id,createdate,email,firstname,lastname,original_traffic_source,hs_analytics_source,hs_latest_source,hs_analytics_source_data_2,hs_latest_source_data_2,campaign,campaign_source,membership_s,annual_revenue_in_dollars__official_,annual_revenue_in_dollars,sobriety_date')
+        .select('hubspot_contact_id,merged_into_hubspot_contact_id,is_deleted,hubspot_archived,createdate,hubspot_updated_at,email,hs_additional_emails,firstname,lastname,original_traffic_source,hs_analytics_source,hs_latest_source,hs_analytics_source_data_2,hs_latest_source_data_2,campaign,campaign_source,membership_s,annual_revenue_in_dollars__official_,annual_revenue_in_dollars,sobriety_date')
         .gte('createdate', `${contactStartDate}T00:00:00.000Z`)
         .order('createdate', { ascending: true }),
       supabase
@@ -969,7 +1052,8 @@ const DashboardOverview = () => {
       warning.includes('unavailable') || warning.includes('returned 0 rows')
     );
 
-    const parsedContacts = hubspotContacts
+    const canonicalContacts = dedupeHubspotContacts(hubspotContacts);
+    const parsedContacts = canonicalContacts
       .map((row) => ({ ...row, _createdAt: toUtcDayStart(row?.createdate) }))
       .filter((row) => row._createdAt);
 

@@ -64,6 +64,7 @@ const HEAR_ABOUT_KEY_BY_LABEL = HEAR_ABOUT_CATEGORIES.reduce((acc, item) => {
   acc[item.label] = item.key;
   return acc;
 }, {});
+const HUBSPOT_REPORTING_TIMEZONE = 'America/New_York';
 
 function mondayKey(dateKey) {
   if (!dateKey) return null;
@@ -115,11 +116,27 @@ function hubspotIdentityEmails(contact) {
   ].filter(Boolean)));
 }
 
+function canonicalHubspotContactId(contact) {
+  const mergedInto = Number(contact?.merged_into_hubspot_contact_id);
+  if (Number.isFinite(mergedInto) && mergedInto > 0) return mergedInto;
+  const id = Number(contact?.hubspot_contact_id);
+  if (Number.isFinite(id) && id > 0) return id;
+  return null;
+}
+
+function isActiveHubspotContact(contact) {
+  if (!contact) return false;
+  if (contact?.is_deleted === true || contact?.hubspot_archived === true) return false;
+  const mergedInto = Number(contact?.merged_into_hubspot_contact_id);
+  if (Number.isFinite(mergedInto) && mergedInto > 0) return false;
+  return true;
+}
+
 function hubspotIdentityKey(contact) {
+  const canonicalId = canonicalHubspotContactId(contact);
+  if (Number.isFinite(canonicalId)) return `id:${canonicalId}`;
   const emails = hubspotIdentityEmails(contact);
   if (emails.length > 0) return `email:${emails[0]}`;
-  const id = Number(contact?.hubspot_contact_id);
-  if (Number.isFinite(id)) return `id:${id}`;
   return null;
 }
 
@@ -138,6 +155,13 @@ function parseDateKeyLoose(value) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return null;
   return d.toISOString().slice(0, 10);
+}
+
+function parseHubspotCreatedDateKey(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return dateKeyInTimeZone(d, HUBSPOT_REPORTING_TIMEZONE);
 }
 
 function addDaysKey(dateKey, days) {
@@ -326,6 +350,21 @@ function hubspotRevenueValue(contact) {
   const fallback = Number(contact?.annual_revenue_in_dollars);
   if (Number.isFinite(fallback)) return fallback;
   return null;
+}
+
+function countUniquePaidHubspotLeads(hubspotRows, startKey, endKey) {
+  if (!startKey || !endKey) return 0;
+  const seen = new Set();
+  (hubspotRows || []).forEach((row) => {
+    const createdKey = parseHubspotCreatedDateKey(row?.createdate);
+    if (!createdKey || createdKey < startKey || createdKey > endKey) return;
+    if (!isActiveHubspotContact(row)) return;
+    if (!isPaidSocialHubspot(row)) return;
+    const identityKey = hubspotIdentityKey(row);
+    if (!identityKey) return;
+    seen.add(identityKey);
+  });
+  return seen.size;
 }
 
 function mapZoomMatchTypeToConfidence(matchType, matchedHubspot) {
@@ -3492,8 +3531,9 @@ export default function LeadsDashboard() {
 
     const paidLeadSeenByWeekIdentity = new Set();
     (rawHubspot || []).forEach((row) => {
-      const dateKey = parseDateKeyLoose(row?.createdate);
+      const dateKey = parseHubspotCreatedDateKey(row?.createdate);
       if (!dateInRange(dateKey)) return;
+      if (!isActiveHubspotContact(row)) return;
       if (!isPaidSocialHubspot(row) || isPhoenixHubspot(row)) return;
       const weekKey = mondayKey(dateKey);
       const agg = ensureWeek(weekKey);
@@ -3679,6 +3719,14 @@ export default function LeadsDashboard() {
     overviewPreviousCombined?.leadRows || [],
     dateWindows?.previous?.end || null,
   );
+  const uniquePaidLeadsCurrent = countUniquePaidHubspotLeads(
+    rawHubspot,
+    dateWindows?.current?.start || null,
+    dateWindows?.current?.end || null,
+  );
+  const uniquePaidLeadsPrevious = dateWindows?.previous
+    ? countUniquePaidHubspotLeads(rawHubspot, dateWindows.previous.start, dateWindows.previous.end)
+    : null;
   const currentLeadsForQualification = Number(overviewCurrentCombined?.metaLeads || qualificationCurrent.total || 0);
   const qualifiedLeadRate = currentLeadsForQualification > 0 ? (qualificationCurrent.qualified / currentLeadsForQualification) : null;
   const estimatedCostPerLead = currentLeadsForQualification > 0 ? (overviewCurrentFreeSpend / currentLeadsForQualification) : null;
@@ -3725,11 +3773,11 @@ export default function LeadsDashboard() {
     },
     {
       key: 'total_leads',
-      label: 'Free Group Leads',
-      value: Number(overviewCurrentCombined?.metaLeads || 0),
-      previous: Number(overviewPreviousCombined?.metaLeads || 0),
+      label: 'Total Unique Paid Leads',
+      value: Number(uniquePaidLeadsCurrent || 0),
+      previous: dateWindows?.previous ? Number(uniquePaidLeadsPrevious || 0) : null,
       format: 'count',
-      note: 'Free Group Meta leads matched to selected window',
+      note: 'HubSpot contacts (Original Traffic Source = Paid Social), deduped and merge-aware',
       color: '#0f766e',
     },
     {
