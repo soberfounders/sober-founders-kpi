@@ -7,7 +7,9 @@ import {
   SUPABASE_URL,
 } from '../lib/env';
 import { buildLeadAnalytics } from '../lib/leadAnalytics';
-import * as leadsGroupAnalyticsLib from '../lib/leadsGroupAnalytics';
+import { buildGroupedLeadsSnapshot, buildDateRangeWindows, computeChangePct } from '../lib/leadsGroupAnalytics';
+import { buildLeadsConfidenceSummary } from '../lib/leadsConfidenceModel';
+import { buildLeadsActionQueue } from '../lib/leadsActionQueue';
 import { buildAliasMap, resolveCanonicalAttendeeName } from '../lib/attendeeCanonicalization';
 import { applyZoomAttributionOverride, getZoomAttributionOverride } from '../lib/zoomAttributionOverrides';
 import DrillDownModal from '../components/DrillDownModal';
@@ -20,14 +22,6 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, ComposedChart,
 } from 'recharts';
-
-const {
-  buildGroupedLeadsSnapshot,
-  buildDateRangeWindows,
-  computeChangePct,
-  buildLeadsConfidenceSummary,
-  buildLeadsActionQueue,
-} = leadsGroupAnalyticsLib;
 
 const LOOKBACK_DAYS = LEADS_LOOKBACK_DAYS;
 const ATTRIBUTION_HISTORY_DAYS = LEADS_ATTRIBUTION_HISTORY_DAYS;
