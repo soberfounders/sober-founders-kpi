@@ -880,30 +880,63 @@ function sumAds(adsRows, startKey, endKey, funnelFilter) {
 // Lead categorization with mismatch detection
 // ---------------------------------------------------------------------------
 
+function buildDedupedPaidHubspotContacts(hubspotRows, funnelFilter) {
+    const dedup = new Map();
+    const keyByEmail = new Map();
+
+    for (const row of hubspotRows || []) {
+        if (!isActiveHubspotContact(row)) continue;
+        if (!isPaidSocialHubspotContact(row)) continue;
+        const isPhoenix = isPhoenixHubspotContact(row);
+        if (funnelFilter === 'phoenix' && !isPhoenix) continue;
+        if (funnelFilter === 'free' && isPhoenix) continue;
+
+        const primaryEmail = normalizeEmail(row?.email);
+        const extraEmails = parseEmailList(row?.hs_additional_emails);
+        const identityEmails = Array.from(new Set([primaryEmail, ...extraEmails].filter(Boolean)));
+        const existingKeys = Array.from(new Set(identityEmails.map((email) => keyByEmail.get(email)).filter(Boolean)));
+        const id = Number(row?.hubspot_contact_id);
+        const fallbackEmail = identityEmails[0] || '';
+        const fallbackId = Number.isFinite(id) ? `id:${id}` : null;
+        const key = existingKeys[0] || (fallbackEmail ? `email:${fallbackEmail}` : fallbackId);
+        if (!key) continue;
+
+        for (let i = 1; i < existingKeys.length; i += 1) {
+            const oldKey = existingKeys[i];
+            if (oldKey === key) continue;
+            const oldRow = dedup.get(oldKey);
+            if (oldRow) {
+                dedup.set(key, pickNewerContact(dedup.get(key), oldRow));
+                dedup.delete(oldKey);
+            }
+            keyByEmail.forEach((mappedKey, email) => {
+                if (mappedKey === oldKey) keyByEmail.set(email, key);
+            });
+        }
+
+        dedup.set(key, pickNewerContact(dedup.get(key), row));
+        identityEmails.forEach((email) => keyByEmail.set(email, key));
+    }
+
+    return Array.from(dedup.values())
+        .sort((a, b) => contactCreatedTs(b) - contactCreatedTs(a));
+}
+
 /**
  * Categorizes HubSpot contacts (in the date range) by revenue tier.
  * Also identifies contacts not found in HubSpot or missing revenue.
  *
  * @param {Object}   adsMetrics   { leads: number } — the Meta ads lead count for the group
  * @param {any[]}    hubspotRows  raw HubSpot contacts in date window
- * @param {Map}      emailIndex   from buildHubspotEmailIndex (all contacts)
  * @param {string}   funnelFilter 'free'|'phoenix'
  * @returns {{ bad, ok, qualified, great, unknown, total, unmatched[], mismatch }}
  */
 function buildLeadCategorization(adsMetrics, hubspotRows, funnelFilter) {
     const counts = { bad: 0, ok: 0, qualified: 0, great: 0, unknown: 0 };
     const unmatchedLeads = [];
+    const contacts = buildDedupedPaidHubspotContacts(hubspotRows, funnelFilter);
 
-    for (const row of hubspotRows || []) {
-        if (!isActiveHubspotContact(row)) continue;
-        // Only paid-social leads
-        if (!isPaidSocialHubspotContact(row)) continue;
-
-        // Funnel filter
-        const isPhoenix = isPhoenixHubspotContact(row);
-        if (funnelFilter === 'phoenix' && !isPhoenix) continue;
-        if (funnelFilter === 'free' && isPhoenix) continue;
-
+    for (const row of contacts) {
         const revenue = resolveHubspotRevenue(row);
         const tier = leadTierFromRevenue(revenue);
         const name = `${String(row?.firstname || '')} ${String(row?.lastname || '')}`.trim();
@@ -942,44 +975,7 @@ function buildLeadCategorization(adsMetrics, hubspotRows, funnelFilter) {
 // ---------------------------------------------------------------------------
 
 function buildLeadRows(hubspotInRange, lumaRows, funnelFilter) {
-    const dedup = new Map();
-    const keyByEmail = new Map();
-    for (const row of hubspotInRange || []) {
-        if (!isActiveHubspotContact(row)) continue;
-        if (!isPaidSocialHubspotContact(row)) continue;
-        const isPhoenix = isPhoenixHubspotContact(row);
-        if (funnelFilter === 'phoenix' && !isPhoenix) continue;
-        if (funnelFilter === 'free' && isPhoenix) continue;
-
-        const primaryEmail = normalizeEmail(row?.email);
-        const extraEmails = parseEmailList(row?.hs_additional_emails);
-        const identityEmails = Array.from(new Set([primaryEmail, ...extraEmails].filter(Boolean)));
-        const existingKeys = Array.from(new Set(identityEmails.map((email) => keyByEmail.get(email)).filter(Boolean)));
-        const id = Number(row?.hubspot_contact_id);
-        const fallbackEmail = identityEmails[0] || '';
-        const fallbackId = Number.isFinite(id) ? `id:${id}` : null;
-        const key = existingKeys[0] || (fallbackEmail ? `email:${fallbackEmail}` : fallbackId);
-        if (!key) continue;
-
-        for (let i = 1; i < existingKeys.length; i += 1) {
-            const oldKey = existingKeys[i];
-            if (oldKey === key) continue;
-            const oldRow = dedup.get(oldKey);
-            if (oldRow) {
-                dedup.set(key, pickNewerContact(dedup.get(key), oldRow));
-                dedup.delete(oldKey);
-            }
-            keyByEmail.forEach((mappedKey, email) => {
-                if (mappedKey === oldKey) keyByEmail.set(email, key);
-            });
-        }
-
-        dedup.set(key, pickNewerContact(dedup.get(key), row));
-        identityEmails.forEach((email) => keyByEmail.set(email, key));
-    }
-
-    const contacts = Array.from(dedup.values())
-        .sort((a, b) => contactCreatedTs(b) - contactCreatedTs(a));
+    const contacts = buildDedupedPaidHubspotContacts(hubspotInRange, funnelFilter);
 
     const lumaByEmail = new Map();
     for (const row of lumaRows || []) {
