@@ -88,21 +88,9 @@ function dateToUtc(dateStr) {
   return new Date(`${dateStr}T00:00:00.000Z`);
 }
 
-function isoDateUtc(date) {
-  return date.toISOString().slice(0, 10);
-}
-
 function shiftUtcDays(date, days) {
   const d = new Date(date);
   d.setUTCDate(d.getUTCDate() + days);
-  return d;
-}
-
-function mondayUtc(date) {
-  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-  const day = d.getUTCDay();
-  const offset = day === 0 ? -6 : 1 - day;
-  d.setUTCDate(d.getUTCDate() + offset);
   return d;
 }
 
@@ -110,26 +98,6 @@ function parseMaybeDate(value) {
   if (!value) return null;
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function etGroupTypeFromDate(dateLike) {
-  const d = parseMaybeDate(dateLike);
-  if (!d) return null;
-
-  const weekdayShort = etWeekdayFormatter.format(d);
-  const dayType = weekdayShort === 'Tue' ? 'Tuesday' : (weekdayShort === 'Thu' ? 'Thursday' : null);
-  if (!dayType) return null;
-
-  const parts = etTimePartsFormatter.formatToParts(d);
-  const hour = Number(parts.find((p) => p.type === 'hour')?.value || NaN);
-  const minute = Number(parts.find((p) => p.type === 'minute')?.value || NaN);
-  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
-
-  const minuteOfDay = hour * 60 + minute;
-  const expectedMinute = GROUP_CALL_ET_MINUTES[dayType];
-  const minutesFromExpected = Math.abs(minuteOfDay - expectedMinute);
-  if (minutesFromExpected <= GROUP_CALL_TIME_TOLERANCE_MINUTES) return dayType;
-  return null;
 }
 
 function etWeekdayGroupFromDate(dateLike) {
@@ -189,12 +157,6 @@ function formatCurrency(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return 'N/A';
   return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-}
-
-function avg(values = []) {
-  const nums = values.map((v) => Number(v)).filter((n) => Number.isFinite(n));
-  if (!nums.length) return null;
-  return nums.reduce((a, b) => a + b, 0) / nums.length;
 }
 
 function changeLabel(delta, { positiveIsGood = true } = {}) {

@@ -127,7 +127,7 @@ export default function DataCleaning() {
   const [pendingReviews, setPendingReviews] = useState([]);
   const [identities, setIdentities] = useState([]);
   const [blocklist, setBlocklist] = useState([]);
-  const [aliases, setAliases] = useState([]);
+  const [_aliases, setAliases] = useState([]);
 
   // UI State
   const [logFilter, setLogFilter] = useState('');
@@ -140,6 +140,7 @@ export default function DataCleaning() {
 
   useEffect(() => {
     fetchAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function fetchAll() {

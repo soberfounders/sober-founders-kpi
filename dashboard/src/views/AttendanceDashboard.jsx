@@ -778,38 +778,6 @@ function listMissingWeekKeys(sessions = [], dayType = 'Tuesday') {
   return missing;
 }
 
-function etWeekdayGroupFromDate(dateLike) {
-  const d = safeDate(dateLike);
-  if (!d) return null;
-  const weekdayShort = etWeekdayFormatter.format(d);
-  if (weekdayShort === 'Tue') return 'Tuesday';
-  if (weekdayShort === 'Thu') return 'Thursday';
-  return null;
-}
-
-function etGroupTimingFromDate(dateLike) {
-  const d = safeDate(dateLike);
-  if (!d) return null;
-  const dayType = etWeekdayGroupFromDate(d);
-  if (!dayType) return null;
-
-  const parts = etTimePartsFormatter.formatToParts(d);
-  const hour = Number(parts.find((p) => p.type === 'hour')?.value || NaN);
-  const minute = Number(parts.find((p) => p.type === 'minute')?.value || NaN);
-  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
-
-  const minuteOfDay = (hour * 60) + minute;
-  const expectedMinute = GROUP_CALL_ET_MINUTES[dayType];
-  const minutesFromExpected = Math.abs(minuteOfDay - expectedMinute);
-  return {
-    dayType,
-    minuteOfDay,
-    expectedMinute,
-    minutesFromExpected,
-    isNearScheduled: Number.isFinite(minutesFromExpected) && minutesFromExpected <= GROUP_CALL_TIME_TOLERANCE_MINUTES,
-  };
-}
-
 /** Export cleaned attendance data as CSV */
 function exportAttendanceCSV(sessions) {
   const rows = [['canonical_name', 'session_date', 'group', 'is_net_new']];
@@ -839,7 +807,7 @@ function isMissingTableError(error) {
 
 function buildPlan(analytics) {
   if (!analytics) return [];
-  const { atRiskCount, oneTimeShareTue, oneTimeShareThu, repeatRateTue, repeatRateThu, lowRecentShowRatePeople } = analytics;
+  const { atRiskCount, repeatRateTue, repeatRateThu, lowRecentShowRatePeople } = analytics;
 
   return [
     {
@@ -1149,12 +1117,6 @@ function computeAnalytics(
       .filter(a => {
         const contactId = Number(a.hubspot_contact_id);
 
-        // Enrichment
-        const enriched = contactId ? hubspotContactMap.get(contactId) : null;
-        const firstName = String(a.contact_firstname || enriched?.firstname || '').trim();
-        const lastName = String(a.contact_lastname || enriched?.lastname || '').trim();
-        const fullName = [firstName, lastName].filter(Boolean).join(' ');
-
         // HubSpot-only attendance rule:
         // only keep attendees with an explicit HubSpot contact id from call associations.
         if (!contactId) return false;
@@ -1422,13 +1384,8 @@ function computeAnalytics(
 
   // 3. Build People Stats (for Cohorts & KPI Cards)
   const people = new Map();
-  let mismatches = 0;
-  let totalAppearances = 0;
 
   sessions.forEach((session, idx) => {
-    if (session.mismatch) mismatches += 1;
-    totalAppearances += session.derivedCount;
-
     const attendeeEntries = (Array.isArray(session?.attendeeObjects) && session.attendeeObjects.length > 0)
       ? session.attendeeObjects
       : (Array.isArray(session?.attendees) ? session.attendees.map((name) => ({ name })) : []);
@@ -1744,7 +1701,7 @@ function buildAttendanceHubspotResolver({ rawHubspot = [] }) {
     };
   };
 
-  const resolveAttendee = (attendeeName, session = null) => {
+  const resolveAttendee = (attendeeName) => {
     const nameKey = normalizeName(attendeeName || '');
     if (!nameKey) {
       return {
@@ -1915,6 +1872,7 @@ const AttendanceDashboard = () => {
 
   useEffect(() => {
     loadAll(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
