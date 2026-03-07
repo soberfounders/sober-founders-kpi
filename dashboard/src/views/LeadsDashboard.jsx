@@ -3768,7 +3768,17 @@ export default function LeadsDashboard() {
     overviewPreviousCombined?.leadRows || [],
     dateWindows?.previous?.end || null,
   );
-  const currentLeadsForQualification = Number(overviewCurrentCombined?.metaLeads || qualificationCurrent.total || 0);
+  const currentFreeGroupHubspotLeads = Number(
+    overviewCurrentCombined?.categorization?.categorizedTotal
+    || qualificationCurrent.total
+    || 0,
+  );
+  const previousFreeGroupHubspotLeads = Number(
+    overviewPreviousCombined?.categorization?.categorizedTotal
+    || qualificationPrevious.total
+    || 0,
+  );
+  const currentLeadsForQualification = currentFreeGroupHubspotLeads;
   const qualifiedLeadRate = currentLeadsForQualification > 0 ? (qualificationCurrent.qualified / currentLeadsForQualification) : null;
   const estimatedCostPerLead = currentLeadsForQualification > 0 ? (overviewCurrentFreeSpend / currentLeadsForQualification) : null;
   const estimatedCostPerQualifiedLead = qualificationCurrent.qualified > 0 ? (overviewCurrentFreeSpend / qualificationCurrent.qualified) : null;
@@ -3815,10 +3825,10 @@ export default function LeadsDashboard() {
     {
       key: 'total_leads',
       label: 'Free Group Leads',
-      value: Number(overviewCurrentCombined?.metaLeads || 0),
-      previous: Number(overviewPreviousCombined?.metaLeads || 0),
+      value: currentFreeGroupHubspotLeads,
+      previous: previousFreeGroupHubspotLeads,
       format: 'count',
-      note: 'Free Group Meta leads matched to selected window',
+      note: 'HubSpot paid-social leads in selected window where campaign attribution is non-Phoenix',
       color: '#0f766e',
     },
     {
