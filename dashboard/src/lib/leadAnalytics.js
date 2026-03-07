@@ -1,4 +1,4 @@
-﻿import { buildAliasMap, resolveCanonicalAttendeeName } from './attendeeCanonicalization';
+import { buildAliasMap, resolveCanonicalAttendeeName } from './attendeeCanonicalization';
 
 const TUESDAY_MEETING_ID = '87199667045';
 const THURSDAY_MEETING_ID = '84242212480';
@@ -149,6 +149,22 @@ function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function canonicalHubspotContactId(row) {
+  const mergedInto = Number(row?.merged_into_hubspot_contact_id);
+  if (Number.isFinite(mergedInto) && mergedInto > 0) return mergedInto;
+  const id = Number(row?.hubspot_contact_id);
+  if (Number.isFinite(id) && id > 0) return id;
+  return null;
+}
+
+function isActiveHubspotContact(row) {
+  if (!row) return false;
+  if (row?.is_deleted === true || row?.hubspot_archived === true) return false;
+  const mergedInto = Number(row?.merged_into_hubspot_contact_id);
+  if (Number.isFinite(mergedInto) && mergedInto > 0) return false;
+  return true;
+}
+
 function parseEmailList(value) {
   return String(value || '')
     .split(',')
@@ -157,12 +173,12 @@ function parseEmailList(value) {
 }
 
 function hubspotIdentityKey(row) {
+  const canonicalId = canonicalHubspotContactId(row);
+  if (Number.isFinite(canonicalId)) return `id:${canonicalId}`;
   const primary = normalizeEmail(row?.email);
   if (primary) return `email:${primary}`;
   const extras = parseEmailList(row?.hs_additional_emails);
   if (extras.length > 0) return `email:${extras[0]}`;
-  const id = Number(row?.hubspot_contact_id);
-  if (Number.isFinite(id)) return `id:${id}`;
   return null;
 }
 
@@ -313,6 +329,7 @@ function matchLeadToShowup(leadName, createdDateKey, showupIndex) {
 function buildPaidLeads(hubspotRows, showupIndex) {
   const deduped = new Map();
   (hubspotRows || [])
+    .filter((row) => isActiveHubspotContact(row))
     .filter((row) => isPaidSocialLead(row))
     .forEach((row) => {
       const key = hubspotIdentityKey(row);
