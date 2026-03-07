@@ -156,14 +156,28 @@ function parseEmailList(value) {
     .filter(Boolean);
 }
 
-function hubspotIdentityKey(row) {
-  const primary = normalizeEmail(row?.email);
-  if (primary) return `email:${primary}`;
-  const extras = parseEmailList(row?.hs_additional_emails);
-  if (extras.length > 0) return `email:${extras[0]}`;
-  const id = Number(row?.hubspot_contact_id);
-  if (Number.isFinite(id)) return `id:${id}`;
-  return null;
+function isActiveHubspotContact(row) {
+  const isDeleted = row?.is_deleted === true;
+  const isArchived = row?.hubspot_archived === true;
+  const mergedIntoRaw = row?.merged_into_hubspot_contact_id;
+  const mergedInto = Number(mergedIntoRaw);
+  const hasMergedInto = mergedIntoRaw !== null
+    && mergedIntoRaw !== undefined
+    && mergedIntoRaw !== ''
+    && Number.isFinite(mergedInto)
+    && mergedInto > 0;
+  return !isDeleted && !isArchived && !hasMergedInto;
+}
+
+function hubspotContactCreatedTs(row) {
+  const ts = Date.parse(row?.createdate || '');
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+function pickNewerHubspotContact(current, candidate) {
+  if (!current) return candidate;
+  if (!candidate) return current;
+  return hubspotContactCreatedTs(candidate) > hubspotContactCreatedTs(current) ? candidate : current;
 }
 
 function pickPrimaryDate(rows, fallbackKey) {
@@ -312,21 +326,37 @@ function matchLeadToShowup(leadName, createdDateKey, showupIndex) {
 
 function buildPaidLeads(hubspotRows, showupIndex) {
   const deduped = new Map();
+  const keyByEmail = new Map();
   (hubspotRows || [])
-    .filter((row) => isPaidSocialLead(row))
     .forEach((row) => {
-      const key = hubspotIdentityKey(row);
+      if (!isPaidSocialLead(row)) return;
+      if (!isActiveHubspotContact(row)) return;
+
+      const primaryEmail = normalizeEmail(row?.email);
+      const extraEmails = parseEmailList(row?.hs_additional_emails);
+      const identityEmails = Array.from(new Set([primaryEmail, ...extraEmails].filter(Boolean)));
+      const existingKeys = Array.from(new Set(identityEmails.map((email) => keyByEmail.get(email)).filter(Boolean)));
+      const id = Number(row?.hubspot_contact_id);
+      const fallbackEmail = identityEmails[0] || '';
+      const fallbackId = Number.isFinite(id) && id > 0 ? `id:${id}` : null;
+      const key = existingKeys[0] || (fallbackEmail ? `email:${fallbackEmail}` : fallbackId);
       if (!key) return;
-      const current = deduped.get(key);
-      const currentTs = current ? Date.parse(current?.createdate || '') : NaN;
-      const candidateTs = Date.parse(row?.createdate || '');
-      if (!current) {
-        deduped.set(key, row);
-        return;
+
+      for (let i = 1; i < existingKeys.length; i += 1) {
+        const oldKey = existingKeys[i];
+        if (oldKey === key) continue;
+        const oldRow = deduped.get(oldKey);
+        if (oldRow) {
+          deduped.set(key, pickNewerHubspotContact(deduped.get(key), oldRow));
+          deduped.delete(oldKey);
+        }
+        keyByEmail.forEach((mappedKey, email) => {
+          if (mappedKey === oldKey) keyByEmail.set(email, key);
+        });
       }
-      if (!Number.isFinite(currentTs) || (Number.isFinite(candidateTs) && candidateTs > currentTs)) {
-        deduped.set(key, row);
-      }
+
+      deduped.set(key, pickNewerHubspotContact(deduped.get(key), row));
+      identityEmails.forEach((email) => keyByEmail.set(email, key));
     });
 
   return Array.from(deduped.values())
