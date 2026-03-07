@@ -32,12 +32,6 @@ function addDays(dateKey, days) {
     return isoDate(d);
 }
 
-function addMonths(dateKey, months) {
-    const d = toUtcDate(dateKey);
-    d.setUTCMonth(d.getUTCMonth() + months);
-    return isoDate(d);
-}
-
 /** Monday of the ISO week containing a given date */
 function mondayOf(dateKey) {
     const d = toUtcDate(dateKey);
@@ -525,10 +519,6 @@ function filterZoomShowUpsByLumaMatches(zoomRows, lumaRows) {
     if (matchedNames.size === 0) return [];
 
     return zoomRows.filter((row) => matchedNames.has(normalizePersonNameKey(row?.name)));
-}
-
-function countZoomShowUps(zoomRows, startKey, endKey, dayTypeFilter) {
-    return buildZoomShowUpRows(zoomRows, startKey, endKey, dayTypeFilter).length;
 }
 
 // ---------------------------------------------------------------------------

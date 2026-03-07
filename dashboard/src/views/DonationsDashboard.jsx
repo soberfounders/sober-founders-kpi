@@ -22,8 +22,6 @@ const baseCardStyle = {
   boxShadow: 'var(--glass-shadow)',
 };
 
-const chartPalette = ['#0f766e', '#0369a1', '#1d4ed8', '#7c3aed', '#c2410c', '#15803d', '#be185d'];
-
 function toDate(value) {
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;

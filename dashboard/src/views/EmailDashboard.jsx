@@ -30,7 +30,7 @@ const EmailDashboard = () => {
   const [data, setData] = useState({ tuesday: [], thursday: [], anomalies: [] });
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [error, setError] = useState(null);
+  const [, setError] = useState(null);
 
   const fetchEmailData = async (shouldSync = false) => {
     try {

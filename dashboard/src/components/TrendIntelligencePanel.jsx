@@ -89,13 +89,13 @@ function fmtVal(v) {
 /* ------------------------------------------------------------------ */
 export default function TrendIntelligencePanel() {
     const [rows, setRows] = useState([]);
-    const [goals, setGoals] = useState([]);
+    const [, setGoals] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showGoals, setShowGoals] = useState(false);
     const [editingKey, setEditingKey] = useState(null); // "kpi_key::funnel_key"
     const [editVal, setEditVal] = useState('');
     const [saving, setSaving] = useState(false);
-    const [lastLoaded, setLastLoaded] = useState(null);
+    const [, setLastLoaded] = useState(null);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -317,7 +317,6 @@ export default function TrendIntelligencePanel() {
                         {offTrack.map(r => {
                             const gap = Number(r.pct_to_goal);
                             const higher = r.higher_is_better !== false;
-                            const isBad = higher ? r.value < r.goal_value : r.value > r.goal_value;
                             return (
                                 <div key={`${r.kpi_key}-${r.funnel_key}`}
                                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 8, background: 'white', border: '1px solid #fde68a', gap: 12 }}>

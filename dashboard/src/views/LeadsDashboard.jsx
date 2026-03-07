@@ -1641,7 +1641,7 @@ export default function LeadsDashboard() {
 
       const assocs = hubspotAssocByActivityId.get(activityAssocKey(activityType, activityId)) || [];
       const attendeeCount = assocs
-        .filter((a) => Number.isFinite(Number(a?.hubspot_contact_id)) || normalizeEmail(a?.contact_email))
+        .filter((a) => Number.isFinite(Number(a?.hubspot_contact_id)) || normalizeEmailKey(a?.contact_email))
         .length;
       if (attendeeCount < MIN_GROUP_ATTENDEES) return;
 
@@ -2968,8 +2968,6 @@ export default function LeadsDashboard() {
       warnings.push(`${current.unknownOrOtherGoodMembers} good members are still attributed to Unknown/Other. Review the good-member source breakdown and attendee drilldowns to tighten attribution.`);
     }
 
-    const paidRepeatRate = paid.repeatRateAmongUnique;
-    const nonPaidRepeatRate = current.nonPaid?.repeatRateAmongUnique;
     const paidGoodRate = paid.goodRepeatRateAmongUnique;
     const nonPaidGoodRate = current.nonPaid?.goodRepeatRateAmongUnique;
 
@@ -3161,7 +3159,6 @@ export default function LeadsDashboard() {
     };
 
     const currentGreatMembers = dedupeGreatMembers(currentZoom.rows || [], currentWindow);
-    const previousGreatMembers = previousZoom && previousWindow ? dedupeGreatMembers(previousZoom.rows || [], previousWindow) : [];
 
     const currentGreatSourceRows = (currentZoom.goodMemberSourceRows || []).map((r) => ({
       ...r,
@@ -3663,7 +3660,7 @@ export default function LeadsDashboard() {
       phoenixByAccount,
       phoenixSplitNote,
     };
-  }, [rawAds, dateWindows?.current?.start, dateWindows?.current?.end]);
+  }, [rawAds, dateWindows]);
   const leadsConfidenceActionData = (() => {
     const normalizeQueuePayload = (source) => {
       if (!source || typeof source !== 'object' || Array.isArray(source)) return null;
