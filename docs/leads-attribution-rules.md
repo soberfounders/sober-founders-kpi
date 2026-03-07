@@ -28,6 +28,48 @@ Notes:
 
 - If HubSpot Original Traffic Source is `PAID_SOCIAL`, attribute as `Paid Social (Meta)`.
 
+## KPI contract: Total Unique Paid Leads (must stay stable)
+
+This KPI is intentionally strict and should not be reinterpreted in future refactors.
+
+- **Metric name:** `Total Unique Paid Leads (Last Week)`
+- **Source of truth:** `raw_hubspot_contacts` (HubSpot), not Meta lead totals
+- **Source filter:** HubSpot Original Traffic Source = `PAID_SOCIAL`
+  - Practical matching currently used in code: `original_traffic_source`, `hs_analytics_source`, `hs_latest_source` contains `PAID_SOCIAL`
+- **Time window:** Previous full Monday-Sunday week in **America/New_York**
+- **Uniqueness:** one real person once, merge-aware
+  - Exclude merged/deleted rows:
+    - `merged_into_hubspot_contact_id IS NULL`
+    - `is_deleted = false`
+    - `hubspot_archived = false`
+  - Dedupe by canonical HubSpot identity (`hubspot_contact_id` + `hs_additional_emails` fallback)
+- **Important:** Meta `leads` can be used for spend/CPL context, but **must never define this unique total KPI**.
+
+### Regression that was fixed (53 -> 51)
+
+Root cause:
+- The dashboard counted raw paid-social contact rows (and in one card, even Meta leads), which allowed merged/archived duplicate records to inflate totals.
+
+Observed issue:
+- Raw row count for last week: `53`
+- Correct merge-aware unique paid-lead count: `51`
+
+The two overcounted records were merged/archived contact rows:
+- `hubspot_contact_id=205309778512` -> `merged_into_hubspot_contact_id=205618290357`
+- `hubspot_contact_id=205551557982` -> `merged_into_hubspot_contact_id=205723057048`
+
+### Never-again guardrails (required)
+
+1. **Do not label Meta lead counts as unique paid leads.**
+   - If a card says "Total Unique Paid Leads", it must come from HubSpot merge-aware deduped logic.
+2. **Always ET-week bucket HubSpot created dates.**
+   - Last-week boundaries must be computed in `America/New_York`.
+3. **Always enforce merge/deletion filters before counting.**
+   - Never count rows where contact is archived/deleted/merged-into another contact.
+4. **Keep an acceptance check in PR validation for this KPI:**
+   - `raw paid_social rows (last week)` vs `corrected unique paid leads (last week)` and verify corrected value is expected.
+5. **When this KPI changes unexpectedly, first audit for merge artifacts and stale sync state before changing attribution rules.**
+
 ## OFFLINE interpretation rule (important)
 
 - `OFFLINE` in HubSpot often means the contact record was created via integration (commonly Lu.ma -> Zapier -> HubSpot) before a proper lead/contact match existed.

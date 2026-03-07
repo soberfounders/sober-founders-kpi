@@ -4,7 +4,7 @@ This dashboard implementation standardizes lead-gen reporting around a single fu
 
 1. Impressions (Meta Ads)
 2. Clicks (Meta Ads)
-3. Leads Captured (HubSpot PAID_SOCIAL)
+3. Leads Captured (HubSpot PAID_SOCIAL, deduped + merge-aware)
 4. Luma Registrations
 5. Net New Show-Ups (Zoom Tue/Thu only)
 6. Qualified Leads (`$250K-$999k` revenue)
@@ -34,6 +34,21 @@ Conversion rates:
 - `Registration -> Show-Up = Show-Ups / Registrations`
 - `Show-Up -> Qualified = Qualified Leads / Show-Ups`
 - `Show-Up -> Great = Great Leads / Show-Ups`
+
+### Canonical definition: Total Unique Paid Leads (Last Week)
+
+Use this definition for the KPI card and any summary labeled as unique paid leads:
+
+- Source table: `raw_hubspot_contacts`
+- Filter: HubSpot Original Traffic Source = `PAID_SOCIAL`
+- Window: previous full Mon-Sun week in `America/New_York`
+- Exclude non-canonical rows:
+  - `merged_into_hubspot_contact_id IS NOT NULL` -> exclude
+  - `is_deleted = true` -> exclude
+  - `hubspot_archived = true` -> exclude
+- Dedupe remaining rows by HubSpot canonical identity (contact id, with email/additional-email identity fallback in app logic)
+
+Do **not** use `raw_fb_ads_insights_daily.leads` to define this KPI total. Meta lead totals remain a supporting ad-platform metric only.
 
 ## Net-New Show-Up Rules
 
