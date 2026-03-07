@@ -8,6 +8,7 @@ import {
 } from '../lib/env';
 import { buildLeadAnalytics } from '../lib/leadAnalytics';
 import { buildGroupedLeadsSnapshot, buildDateRangeWindows, computeChangePct } from '../lib/leadsGroupAnalytics';
+import * as leadsGroupAnalyticsLib from '../lib/leadsGroupAnalytics';
 import { buildLeadsConfidenceSummary } from '../lib/leadsConfidenceModel';
 import { buildLeadsActionQueue } from '../lib/leadsActionQueue';
 import { buildAliasMap, resolveCanonicalAttendeeName } from '../lib/attendeeCanonicalization';
@@ -18,6 +19,7 @@ import AIAnalysisCard from '../components/AIAnalysisCard';
 import KPICard from '../components/KPICard';
 import CohortUnitEconomicsPreviewPanel from '../components/CohortUnitEconomicsPreviewPanel';
 import LeadsConfidenceActionPanel from '../components/LeadsConfidenceActionPanel';
+import LeadsParityGuardPanel from '../components/LeadsParityGuardPanel';
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, ComposedChart,
@@ -3728,11 +3730,30 @@ export default function LeadsDashboard() {
 
     return null;
   })();
+  const leadsParityReport = useMemo(() => {
+    const parityFnName = 'computeLeadsParityReport';
+    const computeLeadsParityReport = leadsGroupAnalyticsLib?.[parityFnName];
+    if (typeof computeLeadsParityReport !== 'function') return null;
+    try {
+      return computeLeadsParityReport({
+        analytics,
+        groupedData,
+        dateWindows,
+        rawAds,
+        rawHubspot,
+        rawLuma,
+        rawZoom,
+      });
+    } catch {
+      return null;
+    }
+  }, [analytics, groupedData, dateWindows, rawAds, rawHubspot, rawLuma, rawZoom]);
 
   if (loading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
         <LeadsConfidenceActionPanel isLoading />
+        <LeadsParityGuardPanel isLoading />
         <GroupSkeleton /><GroupSkeleton />
         <div style={{ ...card }}><Skeleton h="300px" /></div>
       </div>
@@ -3917,6 +3938,7 @@ export default function LeadsDashboard() {
       </div>
 
       <LeadsConfidenceActionPanel data={leadsConfidenceActionData} isLoading={loading} />
+      <LeadsParityGuardPanel report={leadsParityReport} isLoading={loading} />
 
       <div style={{ ...card, background: 'linear-gradient(120deg,#fffaf0 0%,#fff7ed 45%,#fefce8 100%)', border: '1px solid #fed7aa' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
