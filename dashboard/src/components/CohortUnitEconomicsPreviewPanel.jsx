@@ -16,6 +16,8 @@ const subCard = {
   borderRadius: '12px',
   padding: '12px',
 };
+const EMPTY_OBJECT = Object.freeze({});
+const EMPTY_ARRAY = Object.freeze([]);
 
 function currency(v) {
   const n = Number(v);
@@ -262,7 +264,6 @@ function buildMetaExpertPlaybook({ key, metaDiagnostics, campaignDiagnostics, we
   const cpqlForecast = cardMap.get('cpql_current_entry_forecast');
   const cpglForecast = cardMap.get('cpgl_current_entry_forecast');
   const signoff = weeklySignoff || {};
-  const topCampaign = campaignDiagnostics?.rows?.find((r) => (r.exact_match_leads || 0) > 0) || null;
   const bestCpqlCampaign = (campaignDiagnostics?.rows || [])
     .filter((r) => Number.isFinite(Number(r.cpql_exact_campaign_week)))
     .sort((a, b) => Number(a.cpql_exact_campaign_week) - Number(b.cpql_exact_campaign_week))[0] || null;
@@ -537,31 +538,31 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
     qa: false,
     metrics: false,
   });
-  const data = preview || null;
-  if (!data?.metrics?.length) return null;
+  const data = preview ?? EMPTY_OBJECT;
+  const hasMetrics = Array.isArray(data?.metrics) && data.metrics.length > 0;
   const isPrimary = placement === 'top';
   const isGlanceMode = isPrimary && viewMode === 'glance';
 
-  const metrics = [...data.metrics].sort((a, b) => metricOrderKey(a.key) - metricOrderKey(b.key));
-  const lagStats = data.lag_stats || {};
-  const dq = data.data_quality || {};
-  const counts = dq.counts || {};
-  const dates = dq.date_range || {};
-  const backfill = dq.spend_backfill_manual_week_end || null;
+  const metrics = [...(hasMetrics ? data.metrics : EMPTY_ARRAY)].sort((a, b) => metricOrderKey(a.key) - metricOrderKey(b.key));
+  const lagStats = data.lag_stats ?? EMPTY_OBJECT;
+  const dq = data.data_quality ?? EMPTY_OBJECT;
+  const counts = dq.counts ?? EMPTY_OBJECT;
+  const dates = dq.date_range ?? EMPTY_OBJECT;
+  const backfill = dq.spend_backfill_manual_week_end ?? null;
   const naive = data.naive_90d_period_cpa || null;
-  const weeklyCheckin = data.weekly_checkin || { checks: [] };
-  const drilldowns = data.drilldowns || {};
+  const weeklyCheckin = data.weekly_checkin ?? EMPTY_OBJECT;
+  const drilldowns = data.drilldowns ?? EMPTY_OBJECT;
   const metaDiagnostics = data.meta_specialist_diagnostics || null;
-  const metaCards = metaDiagnostics?.cards || [];
+  const metaCards = metaDiagnostics?.cards ?? EMPTY_ARRAY;
   const campaignDiagnostics = metaDiagnostics?.campaign_diagnostics || null;
-  const campaignCards = campaignDiagnostics?.cards || [];
-  const campaignRows = campaignDiagnostics?.rows || [];
+  const campaignCards = campaignDiagnostics?.cards ?? EMPTY_ARRAY;
+  const campaignRows = campaignDiagnostics?.rows ?? EMPTY_ARRAY;
   const metaAiAnalysis = metaDiagnostics?.ai_analysis || null;
-  const cplTrend = metaDiagnostics?.cpl_trend_last_12_weeks || [];
+  const cplTrend = metaDiagnostics?.cpl_trend_last_12_weeks ?? EMPTY_ARRAY;
   const freeEventsSummary = data.free_events_summary || null;
   const weeklySignoff = data.weekly_signoff || null;
   const numberAudit = data.number_audit || { counts: {}, checks: [] };
-  const diagnosticCards = [...metaCards, ...campaignCards];
+  const diagnosticCards = useMemo(() => [...metaCards, ...campaignCards], [metaCards, campaignCards]);
   const glanceDiagnosticCardKeys = new Set([
     'cpl_trailing_4w',
     'cpl_trailing_12w',
@@ -788,9 +789,9 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
   const activeDiagnosticCard = activeDiagnosticCardKey
     ? diagnosticCards.find((c) => c.key === activeDiagnosticCardKey) || null
     : null;
-  const nudgeCandidates = drilldowns.high_value_nudge_candidates || [];
-  const strongNonIcpMembers = drilldowns.strong_non_icp_members || [];
-  const greatLeadOutreachQueue = drilldowns.great_lead_outreach_queue || [];
+  const nudgeCandidates = drilldowns.high_value_nudge_candidates ?? EMPTY_ARRAY;
+  const strongNonIcpMembers = drilldowns.strong_non_icp_members ?? EMPTY_ARRAY;
+  const greatLeadOutreachQueue = drilldowns.great_lead_outreach_queue ?? EMPTY_ARRAY;
   const signoff = weeklySignoff || { status: 'unknown', summary: 'No signoff available' };
   const signoffUi = signoffBadge(signoff.status);
 
@@ -979,6 +980,7 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
       return { ...row, wow_cpl_pct: wowPct };
     });
   }, [cplTrend]);
+  if (!hasMetrics) return null;
   const campaignStageTabs = [
     ['all_leads', 'All Leads'],
     ['luma_signups', 'Luma'],
