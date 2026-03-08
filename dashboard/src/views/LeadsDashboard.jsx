@@ -11,6 +11,7 @@ import { buildGroupedLeadsSnapshot, buildDateRangeWindows, computeChangePct } fr
 import * as leadsGroupAnalyticsLib from '../lib/leadsGroupAnalytics';
 import { buildLeadsConfidenceSummary } from '../lib/leadsConfidenceModel';
 import { buildLeadsActionQueue } from '../lib/leadsActionQueue';
+import { buildLeadsManagerInsights } from '../lib/leadsManagerInsights';
 import { buildAliasMap, resolveCanonicalAttendeeName } from '../lib/attendeeCanonicalization';
 import { applyZoomAttributionOverride, getZoomAttributionOverride } from '../lib/zoomAttributionOverrides';
 import {
@@ -24,6 +25,7 @@ import AIAnalysisCard from '../components/AIAnalysisCard';
 import KPICard from '../components/KPICard';
 import CohortUnitEconomicsPreviewPanel from '../components/CohortUnitEconomicsPreviewPanel';
 import LeadsConfidenceActionPanel from '../components/LeadsConfidenceActionPanel';
+import LeadsManagerInsightsPanel from '../components/LeadsManagerInsightsPanel';
 import LeadsParityGuardPanel from '../components/LeadsParityGuardPanel';
 import LeadsQualificationParityPanel from '../components/LeadsQualificationParityPanel';
 import {
@@ -785,6 +787,7 @@ export default function LeadsDashboard() {
 
   // Drill-down modal state
   const [modal, setModal] = useState(null); // { title, columns, rows }
+  const [managerNotionModal, setManagerNotionModal] = useState({ open: false, taskName: '' });
 
   // Legacy drilldown
   const [drilldownWindowKey, setDrilldownWindowKey] = useState('monthCurrent');
@@ -3893,6 +3896,14 @@ export default function LeadsDashboard() {
     };
   }, [leadsParityReport, qualificationCurrent]);
 
+  const leadsManagerInsightsData = useMemo(() => buildLeadsManagerInsights({
+    analytics,
+    groupedData,
+    dateWindows,
+    qualificationCurrent,
+    qualificationPrevious,
+  }), [analytics, groupedData, dateWindows, qualificationCurrent, qualificationPrevious]);
+
   const costCardLookup = new Map((leadsDecisionModule?.costCards || []).map((row) => [row.key, row]));
   const previousCpql = Number(costCardLookup.get('costPerGoodLeadQualified')?.previous);
   const previousCpgl = Number(costCardLookup.get('costPerGreatLead1m')?.previous);
@@ -3968,6 +3979,16 @@ export default function LeadsDashboard() {
       </div>
 
       <LeadsConfidenceActionPanel data={leadsConfidenceActionData} isLoading={loading} />
+      <LeadsManagerInsightsPanel
+        data={leadsManagerInsightsData}
+        isLoading={loading}
+        onSendToNotion={(taskName) => setManagerNotionModal({ open: true, taskName: String(taskName || '').trim() })}
+      />
+      <SendToNotionModal
+        isOpen={managerNotionModal.open}
+        onClose={() => setManagerNotionModal({ open: false, taskName: '' })}
+        defaultTaskName={managerNotionModal.taskName}
+      />
       <LeadsParityGuardPanel report={leadsParityReport} isLoading={loading} />
 
       <div style={{ ...card, background: 'linear-gradient(120deg,#fffaf0 0%,#fff7ed 45%,#fefce8 100%)', border: '1px solid #fed7aa' }}>
