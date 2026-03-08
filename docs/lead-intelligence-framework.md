@@ -7,8 +7,8 @@ This dashboard implementation standardizes lead-gen reporting around a single fu
 3. Leads Captured (HubSpot PAID_SOCIAL)
 4. Luma Registrations
 5. Net New Show-Ups (Zoom Tue/Thu only)
-6. Qualified Leads (`$250K-$999k` revenue)
-7. Great Leads (`>=$1M` revenue)
+6. Qualified Leads (official revenue `>= $250K` **and** sobriety date at least 1 year old as of today)
+7. Great Leads (`>=$1M` official revenue; revenue-tier only)
 
 ## Source Mapping
 

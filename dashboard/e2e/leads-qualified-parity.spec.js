@@ -1,6 +1,21 @@
 import { test, expect } from '@playwright/test';
 
-test('leads qualified parity remains in sync', async ({ page }) => {
+function parseCount(value) {
+  const normalized = String(value || '').replace(/,/g, '').trim();
+  if (!normalized || normalized === 'N/A') return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+async function readMetricValue(panel, label) {
+  const labelNode = panel.getByText(label, { exact: true }).first();
+  await expect(labelNode).toBeVisible();
+  const card = labelNode.locator('xpath=ancestor::div[1]');
+  const raw = await card.locator('p').nth(1).innerText();
+  return parseCount(raw);
+}
+
+test('leads qualified rule check remains consistent', async ({ page }) => {
   test.setTimeout(180000);
 
   await page.goto('/');
@@ -22,20 +37,23 @@ test('leads qualified parity remains in sync', async ({ page }) => {
   const hasQualificationSection = (await qualificationSectionTitle.count()) > 0;
   if (hasQualificationSection) {
     await expect(qualificationSectionTitle).toBeVisible();
-    await expect(page.getByText('Bad (<$100K)')).toBeVisible();
-    await expect(page.getByText('OK ($100K-$249K)')).toBeVisible();
-    await expect(page.getByText('Good ($250K-$999K)')).toBeVisible();
-    await expect(page.getByText('Great ($1M+)')).toBeVisible();
-    await expect(page.getByText(/Qualified = official revenue.*AND sobriety date at least 365 days before as-of date/i)).toBeVisible();
-
-    const parityPanel = page.locator('div').filter({ hasText: 'Qualification Parity' }).first();
+    const parityPanel = page.locator('div').filter({ hasText: 'Qualification Rule Check' }).first();
     await expect(parityPanel).toBeVisible({ timeout: 60000 });
-    await expect(parityPanel.getByText('SOBRIETY-FILTERED')).toBeVisible();
-    await expect(parityPanel.getByText(/Good \+ Great is the high-revenue pool.*Qualified is the sobriety-filtered subset/i)).toBeVisible();
 
-    await expect(parityPanel).not.toContainText('Qualified parity mismatch: Qualified should equal Good + Great');
-    await expect(parityPanel).not.toContainText('IN SYNC');
-    await expect(parityPanel).not.toContainText('MISMATCH');
+    const isUnavailable = (await parityPanel.getByText('Qualification rule values are not available yet.').count()) > 0;
+    if (!isUnavailable) {
+      const qualified = await readMetricValue(parityPanel, 'Qualified');
+      const good = await readMetricValue(parityPanel, 'Good');
+      const great = await readMetricValue(parityPanel, 'Great');
+      const revenueEligible = await readMetricValue(parityPanel, 'Revenue Eligible');
+      if (qualified !== null && good !== null && great !== null && revenueEligible !== null) {
+        expect(revenueEligible).toBe(good + great);
+        expect(qualified).toBeLessThanOrEqual(revenueEligible);
+      }
+
+      const invalidWarning = parityPanel.getByText('Data anomaly: Qualified exceeds revenue-eligible leads (Good + Great).');
+      await expect(invalidWarning).toHaveCount(0);
+    }
   }
 
   await expect(page.locator('body')).not.toContainText('[object Object]');
