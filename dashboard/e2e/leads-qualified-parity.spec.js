@@ -15,7 +15,7 @@ async function readMetricValue(panel, label) {
   return parseCount(raw);
 }
 
-test('leads qualified rule check remains consistent', async ({ page }) => {
+test('leads qualification checks stay safe without parity enforcement', async ({ page }) => {
   test.setTimeout(180000);
 
   await page.goto('/');
@@ -48,6 +48,7 @@ test('leads qualified rule check remains consistent', async ({ page }) => {
       const revenueEligible = await readMetricValue(parityPanel, 'Revenue Eligible');
       if (qualified !== null && good !== null && great !== null && revenueEligible !== null) {
         expect(revenueEligible).toBe(good + great);
+        // Qualified is sobriety-gated; it may be lower than revenue-eligible.
         expect(qualified).toBeLessThanOrEqual(revenueEligible);
       }
 
