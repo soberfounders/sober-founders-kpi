@@ -87,6 +87,32 @@ function normalizeAutonomousActions(value: any, allowedActionKeys: Set<string>, 
   return out;
 }
 
+function hasRequiredAnalysisKeys(value: any) {
+  if (!value || typeof value !== "object") return false;
+  return "summary" in value && "autonomous_actions" in value && "human_actions" in value;
+}
+
+function buildFallbackAnalysis(
+  moduleKey: string,
+  fallbackSummary: string[],
+  fallbackHumanActions: string[],
+  actionCatalog: Array<{ action_key: string; description: string }>,
+) {
+  return {
+    summary: fallbackSummary.length > 0
+      ? fallbackSummary
+      : [
+          `${moduleKey} summary is unavailable from the latest AI response.`,
+          "Use Refresh Analysis to retry generation for this module.",
+        ],
+    autonomous_actions: actionCatalog.slice(0, 3).map((row: any) => ({
+      action_key: row.action_key,
+      description: row.description,
+    })),
+    human_actions: fallbackHumanActions,
+  };
+}
+
 async function sha256Hex(payload: any) {
   const encoded = new TextEncoder().encode(JSON.stringify(payload ?? {}));
   const digest = await crypto.subtle.digest("SHA-256", encoded);
@@ -227,36 +253,38 @@ serve(async (req: Request) => {
     }
 
     const allowedActionKeys = new Set(actionCatalog.map((row: any) => String(row?.action_key || "")));
+    const fallbackAnalysis = buildFallbackAnalysis(moduleKey, fallbackSummary, fallbackHumanActions, actionCatalog);
 
-    let parsed: any = null;
+    let parsed: any = fallbackAnalysis;
     let aiModel = OPENAI_MODEL;
     let isMock = false;
 
     if (OPENAI_API_KEY) {
-      parsed = await callOpenAiAnalysis(
-        OPENAI_API_KEY,
-        OPENAI_MODEL,
-        moduleKey,
-        context,
-        actionCatalog,
-        systemRoleOverride,
-      );
+      try {
+        const openAiParsed = await callOpenAiAnalysis(
+          OPENAI_API_KEY,
+          OPENAI_MODEL,
+          moduleKey,
+          context,
+          actionCatalog,
+          systemRoleOverride,
+        );
+        parsed = hasRequiredAnalysisKeys(openAiParsed) ? openAiParsed : fallbackAnalysis;
+      } catch {
+        parsed = fallbackAnalysis;
+      }
     } else {
       isMock = true;
       aiModel = "none (MOCK)";
-      parsed = {
-        summary: fallbackSummary.length > 0
-          ? fallbackSummary
-          : [
+      parsed = fallbackSummary.length > 0
+        ? fallbackAnalysis
+        : {
+            ...fallbackAnalysis,
+            summary: [
               `${moduleKey} analysis is running in fallback mode because OPENAI_API_KEY is not configured.`,
               "Set OPENAI_API_KEY in Supabase Edge Function secrets to enable live AI summaries and recommendations.",
             ],
-        autonomous_actions: actionCatalog.slice(0, 3).map((row: any) => ({
-          action_key: row.action_key,
-          description: row.description,
-        })),
-        human_actions: fallbackHumanActions,
-      };
+          };
     }
 
     const normalizedSummary = (() => {
