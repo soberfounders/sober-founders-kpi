@@ -211,25 +211,71 @@ function buildOrganicReferralInsights(sourceRows) {
   const referral = findBucket('Referral');
   const paid = findBucket('Paid Social (Meta)');
 
-  const showUpsTotal = rows.reduce((sum, row) => sum + Number(row?.showUpRows || 0), 0);
-  const organicShare = safeDivide(Number(organic?.showUpRows || 0), showUpsTotal);
-  const referralShare = safeDivide(Number(referral?.showUpRows || 0), showUpsTotal);
-  const paidShare = safeDivide(Number(paid?.showUpRows || 0), showUpsTotal);
+  const qualitySnapshot = (row) => {
+    if (!row) return null;
+    const showUps = Number(row?.showUpRows || 0);
+    const repeatMembers = Number(row?.repeatMembers || 0);
+    const goodRepeatMembers = Number(row?.goodRepeatMembers || 0);
+    const qualifiedRate = safeDivide(repeatMembers, showUps);
+    const greatRate = safeDivide(goodRepeatMembers, showUps);
+    const weightedQualityScore = (
+      ((qualifiedRate || 0) * 100 * 0.65)
+      + ((greatRate || 0) * 100 * 0.35)
+    );
+
+    return {
+      showUps,
+      repeatMembers,
+      goodRepeatMembers,
+      qualifiedRate,
+      greatRate,
+      weightedQualityScore,
+    };
+  };
+
+  const formatSnapshot = (label, snapshot) => {
+    if (!snapshot || snapshot.showUps < 5) {
+      return `${label}: insufficient sample (${snapshot?.showUps || 0} show-ups) for quality-economics scoring.`;
+    }
+    return `${label}: Repeat ${(snapshot.qualifiedRate * 100).toFixed(1)}%, Good-repeat ${(snapshot.greatRate * 100).toFixed(1)}%, weighted quality score ${snapshot.weightedQualityScore.toFixed(1)}.`;
+  };
+
+  const paidMetrics = qualitySnapshot(paid);
+  const organicMetrics = qualitySnapshot(organic);
+  const referralMetrics = qualitySnapshot(referral);
 
   const bullets = [];
-  if (organic) {
-    bullets.push(`Organic Search contributes ${Math.round((organicShare || 0) * 100)}% of show-up volume; expand pages and topics that already generate repeat/high-fit attendees.`);
+  if (organicMetrics) {
+    bullets.push(formatSnapshot('Organic Search', organicMetrics));
   } else {
     bullets.push('Organic Search source rows are sparse; improve UTM/source hygiene and SEO landing-page tracking before scaling content experiments.');
   }
-  if (referral) {
-    bullets.push(`Referral contributes ${Math.round((referralShare || 0) * 100)}% of show-up volume; formalize partner/referral loops to increase qualified pipeline share.`);
+  if (referralMetrics) {
+    bullets.push(formatSnapshot('Referral', referralMetrics));
   } else {
     bullets.push('Referral pipeline appears under-attributed; add explicit referral capture and partner tagging in forms and HubSpot fields.');
   }
-  if (paid && paidShare !== null && (organicShare !== null || referralShare !== null)) {
-    const nonPaidShare = Math.max(1 - paidShare, 0);
-    bullets.push(`Non-paid sources are ${Math.round(nonPaidShare * 100)}% of current show-ups; protect this channel mix while paid optimization is in flight.`);
+
+  if (paidMetrics && paidMetrics.showUps >= 5) {
+    if (organicMetrics && organicMetrics.showUps >= 5) {
+      const qualityDelta = organicMetrics.weightedQualityScore - paidMetrics.weightedQualityScore;
+      bullets.push(
+        qualityDelta >= 0
+          ? `Organic quality score is +${qualityDelta.toFixed(1)} vs paid; prioritize conversion-path and capture improvements to preserve this edge while scaling.`
+          : `Organic quality score is ${qualityDelta.toFixed(1)} vs paid; tighten SEO landing ICP intent and form filtering before traffic expansion.`,
+      );
+    }
+
+    if (referralMetrics && referralMetrics.showUps >= 5) {
+      const qualityDelta = referralMetrics.weightedQualityScore - paidMetrics.weightedQualityScore;
+      bullets.push(
+        qualityDelta >= 0
+          ? `Referral quality score is +${qualityDelta.toFixed(1)} vs paid; expand partner loops and referral ask playbooks.`
+          : `Referral quality score is ${qualityDelta.toFixed(1)} vs paid; tighten partner qualification criteria before adding volume.`,
+      );
+    }
+  } else {
+    bullets.push('Paid baseline sample is limited; hold channel reallocations until Paid Social has at least 5 attributed show-ups in-window.');
   }
 
   return bullets.slice(0, 4);
@@ -270,4 +316,3 @@ export function buildLeadsExperimentAnalyzer({
     organic_referral_insights: organicReferralInsights,
   };
 }
-

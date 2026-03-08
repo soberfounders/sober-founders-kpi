@@ -314,7 +314,7 @@ function buildEmpiricalImpact({
   };
 }
 
-function buildActionProjectedImpact(metrics, analytics) {
+function buildActionProjectedImpact(metrics, analytics, actionEffect = {}) {
   const historical = buildHistoricalMetricSeries(analytics);
   const baselines = {
     cpl_pct: pickNumber(metrics.weekly.current.cpl, metrics.monthly.current.cpl),
@@ -323,7 +323,7 @@ function buildActionProjectedImpact(metrics, analytics) {
     non_qualified_rate_pp: pickNumber(metrics.weekly.current.nonQualifiedRate, metrics.monthly.current.nonQualifiedRate),
   };
 
-  return {
+  const baseImpacts = {
     cpl_pct: buildEmpiricalImpact({
       baselineValue: baselines.cpl_pct,
       historicalValues: historical.cpl_pct,
@@ -365,17 +365,55 @@ function buildActionProjectedImpact(metrics, analytics) {
       method: 'historical_percentile_target_gap_rate_p25_vs_current',
     }),
   };
+
+  return Object.entries(baseImpacts).reduce((acc, [metricKey, metricImpact]) => {
+    const multiplier = toNumberOrNull(actionEffect?.[metricKey]) ?? 1;
+    if (!metricImpact || metricImpact.insufficient_evidence || metricImpact.impact_value === null) {
+      acc[metricKey] = {
+        ...metricImpact,
+        effect_multiplier: multiplier,
+      };
+      return acc;
+    }
+
+    acc[metricKey] = {
+      ...metricImpact,
+      impact_value: metricImpact.impact_value * multiplier,
+      method: `${metricImpact.method}_action_effect_adjusted`,
+      effect_multiplier: multiplier,
+    };
+    return acc;
+  }, {});
 }
 
 function buildAutonomousActions(metrics, analytics) {
   const nonQualifiedRate = pickNumber(metrics.weekly.current.nonQualifiedRate, metrics.monthly.current.nonQualifiedRate, 0.5);
-  const projectedImpact = buildActionProjectedImpact(metrics, analytics);
+  const actionEffectProfiles = {
+    budget_reallocation: {
+      cpl_pct: 1,
+      cpql_pct: 1.1,
+      qualified_rate_pp: 0.7,
+      non_qualified_rate_pp: 0.7,
+    },
+    qualification_messaging: {
+      cpl_pct: 0.35,
+      cpql_pct: 0.85,
+      qualified_rate_pp: 1,
+      non_qualified_rate_pp: 1,
+    },
+    no_show_reactivation: {
+      cpl_pct: 0.2,
+      cpql_pct: 0.55,
+      qualified_rate_pp: 0.45,
+      non_qualified_rate_pp: 0.5,
+    },
+  };
 
-  const actionTemplate = ({ title, summary, priority }) => ({
+  const actionTemplate = ({ title, summary, priority, effectProfileKey }) => ({
     title,
     summary,
     priority,
-    projected_impact: projectedImpact,
+    projected_impact: buildActionProjectedImpact(metrics, analytics, actionEffectProfiles[effectProfileKey]),
   });
 
   return [
@@ -383,16 +421,19 @@ function buildAutonomousActions(metrics, analytics) {
       title: 'Shift budget to higher-quality ad cohorts',
       summary: 'Reallocate spend from low-fit ad sets toward campaigns already generating qualified leads.',
       priority: nonQualifiedRate > 0.55 ? 'High' : 'Medium',
+      effectProfileKey: 'budget_reallocation',
     }),
     actionTemplate({
       title: 'Tighten qualification messaging in ads and forms',
       summary: 'Deploy creative and form-copy variants that pre-qualify for revenue and sobriety fit.',
       priority: nonQualifiedRate > 0.5 ? 'High' : 'Medium',
+      effectProfileKey: 'qualification_messaging',
     }),
     actionTemplate({
       title: 'Automate high-fit no-show reactivation',
       summary: 'Trigger follow-up sequences for qualified leads that did not show up within 24 hours.',
       priority: 'Medium',
+      effectProfileKey: 'no_show_reactivation',
     }),
   ].slice(0, 3);
 }
