@@ -20,6 +20,7 @@ import KPICard from '../components/KPICard';
 import CohortUnitEconomicsPreviewPanel from '../components/CohortUnitEconomicsPreviewPanel';
 import LeadsConfidenceActionPanel from '../components/LeadsConfidenceActionPanel';
 import LeadsParityGuardPanel from '../components/LeadsParityGuardPanel';
+import LeadsQualificationParityPanel from '../components/LeadsQualificationParityPanel';
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, ComposedChart,
@@ -3837,7 +3838,7 @@ export default function LeadsDashboard() {
       value: Number(qualificationCurrent?.qualified || 0),
       previous: dateWindows?.previous ? Number(qualificationPrevious?.qualified || 0) : null,
       format: 'count',
-      note: 'Gold-standard rule: revenue >= $250K and sobriety >= 1 year',
+      note: 'HubSpot official annual revenue >= $250K',
       color: '#2563eb',
     },
     {
@@ -3872,6 +3873,40 @@ export default function LeadsDashboard() {
   ];
   const qualityMixTotal = qualityMixRows.reduce((sum, row) => sum + row.value, 0);
   const qualityUnknownCount = Number(qualificationCurrent?.qualityCounts?.unknown || 0);
+  const leadsQualificationParityData = useMemo(() => {
+    const report = (leadsParityReport && typeof leadsParityReport === 'object') ? leadsParityReport : {};
+    const summary = (report.summary && typeof report.summary === 'object') ? report.summary : {};
+
+    const toNumberOrNull = (value) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const qualifiedFromReport = toNumberOrNull(report.qualified_count ?? summary.qualified_count);
+    const goodFromReport = toNumberOrNull(report.good_count ?? summary.good_count);
+    const greatFromReport = toNumberOrNull(report.great_count ?? summary.great_count);
+    const deltaFromReport = toNumberOrNull(report.qualified_quality_parity_delta ?? summary.qualified_quality_parity_delta);
+
+    const qualifiedFallback = toNumberOrNull(qualificationCurrent?.qualified);
+    const goodFallback = toNumberOrNull(qualificationCurrent?.qualityCounts?.good);
+    const greatFallback = toNumberOrNull(qualificationCurrent?.qualityCounts?.great);
+
+    const qualifiedCount = qualifiedFromReport ?? qualifiedFallback;
+    const goodCount = goodFromReport ?? goodFallback;
+    const greatCount = greatFromReport ?? greatFallback;
+    const computedDelta = (
+      qualifiedCount !== null && goodCount !== null && greatCount !== null
+        ? qualifiedCount - (goodCount + greatCount)
+        : null
+    );
+
+    return {
+      qualified_count: qualifiedCount,
+      good_count: goodCount,
+      great_count: greatCount,
+      qualified_quality_parity_delta: deltaFromReport ?? computedDelta,
+    };
+  }, [leadsParityReport, qualificationCurrent]);
 
   const costCardLookup = new Map((leadsDecisionModule?.costCards || []).map((row) => [row.key, row]));
   const previousCpql = Number(costCardLookup.get('costPerGoodLeadQualified')?.previous);
@@ -4028,7 +4063,7 @@ export default function LeadsDashboard() {
           </p>
           <h3 style={{ margin: '6px 0 0', fontSize: '17px', color: '#0f172a' }}>Free Group Qualified vs Non-Qualified and quality tiers</h3>
           <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#64748b' }}>
-            Qualified = revenue {'>='} $250K and sobriety {'>='} 1 year. Cost metrics below use Free Groups ad spend in the selected window.
+            Qualified = HubSpot official annual revenue {'>='} $250K. Cost metrics below use Free Groups ad spend in the selected window.
           </p>
           <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: '10px' }}>
             <div style={{ ...subCard, border: '1px solid #dbeafe', backgroundColor: '#f8fbff' }}>
@@ -4092,6 +4127,9 @@ export default function LeadsDashboard() {
                 </p>
               </div>
             </div>
+          </div>
+          <div style={{ marginTop: '10px' }}>
+            <LeadsQualificationParityPanel data={leadsQualificationParityData} isLoading={loading} />
           </div>
         </div>
       </div>
