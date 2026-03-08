@@ -37,7 +37,7 @@ import {
   Users,
 } from 'lucide-react';
 
-const SOURCE_KEYS = ['zoom', 'google_analytics', 'google_search_console'];
+const SOURCE_KEYS = ['zoom'];
 const LOOKBACK_DAYS = DASHBOARD_LOOKBACK_DAYS;
 const MODULE_ANALYSIS_TTL_HOURS = 24;
 const REMOTE_AI_MODULE_ANALYSIS_ENABLED = ENABLE_REMOTE_AI_MODULE_ANALYSIS;
@@ -2063,7 +2063,7 @@ const DashboardOverview = () => {
     return {
       referenceDate,
       periodMeta,
-      managers,
+      managers: managers.filter((manager) => manager.key !== 'seo'),
     };
   }, [dashboard, donationRows, fbAdsRows, hubspotActivities, hubspotActivityAssocs, hubspotContacts, warnings]);
 
@@ -2413,7 +2413,7 @@ const DashboardOverview = () => {
           <div>
             <h3 style={{ fontSize: '20px' }}>Executive Summary (All KPI Sections)</h3>
             <p style={{ marginTop: '6px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
-              Synthesized insights from Board, Leads, Attendance, SEO, and Donations AI Managers with top focus and remediation signals.
+              Synthesized insights from Board, Leads, Attendance, and Donations AI Managers with top focus and remediation signals.
             </p>
           </div>
           <div style={{ textAlign: 'right' }}>

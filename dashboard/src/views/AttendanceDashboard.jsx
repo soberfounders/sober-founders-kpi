@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient';
 import {
   ANTHROPIC_API_KEY,
   ATTENDANCE_BACKFILL_DAYS,
+  ATTENDANCE_ENABLE_BAD_NAMES_QA,
   CLAUDE_API_KEY,
   GEMINI_API_KEY,
   HUBSPOT_PORTAL_ID,
@@ -2122,6 +2123,9 @@ const AttendanceDashboard = () => {
   }, [analytics, attendanceHubspotResolver]);
 
   const badNameQa = useMemo(() => {
+    if (!ATTENDANCE_ENABLE_BAD_NAMES_QA) {
+      return { rows: [], counts: { suspiciousContacts: 0, suspiciousUnmatchedAssocCount: 0 } };
+    }
     const sessionActivityIds = new Set(
       (analytics?.sessions || [])
         .map((s) => String(s?.meetingId || ''))
@@ -3843,6 +3847,7 @@ const AttendanceDashboard = () => {
           </div>
         </div>
       </div>
+      {ATTENDANCE_ENABLE_BAD_NAMES_QA && (
       <div style={{ ...cardStyle, borderLeft: '5px solid #ef4444' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
           <div>
@@ -3986,6 +3991,7 @@ const AttendanceDashboard = () => {
           </div>
         )}
       </div>
+      )}
 
       <div style={{ ...cardStyle, borderLeft: '5px solid #8b5cf6', background: 'linear-gradient(180deg, #faf5ff 0%, #ffffff 75%)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
@@ -4075,7 +4081,7 @@ const AttendanceDashboard = () => {
           </div>
           <div style={{ marginTop: '10px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
             {attendanceAiInsight.autonomousWorkflow.map((task) => (
-              <div key={task.id} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', backgroundColor: 'white', padding: '10px' }}>
+              <div key={task.id} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', backgroundColor: '#ffffff', padding: '10px' }}>
                 <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>{task.title}</p>
                 <p style={{ margin: '4px 0 0 0', fontSize: '11px', color: '#64748b' }}>{task.delivery}</p>
                 <button type="button" disabled style={{ marginTop: '8px', padding: '6px 10px', borderRadius: '8px', border: '1px solid #d1d5db', backgroundColor: '#f3f4f6', color: '#6b7280', fontSize: '11px', fontWeight: 700, cursor: 'not-allowed' }}>
@@ -4113,7 +4119,7 @@ const AttendanceDashboard = () => {
             (group) => {
               const GroupIcon = group.icon;
               return (
-                <div key={group.title} style={{ border: '1px solid var(--color-border)', borderRadius: '12px', padding: '12px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+                <div key={group.title} style={{ border: '1px solid var(--color-border)', borderRadius: '12px', padding: '12px', backgroundColor: '#f8fafc' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                     <GroupIcon size={16} color="var(--color-dark-green)" />
                     <h4 style={{ fontSize: '16px', color: 'var(--color-text-primary)' }}>{group.title}</h4>

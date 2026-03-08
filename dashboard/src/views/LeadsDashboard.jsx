@@ -3848,7 +3848,7 @@ export default function LeadsDashboard() {
   ];
   const qualityMixTotal = qualityMixRows.reduce((sum, row) => sum + row.value, 0);
   const qualityUnknownCount = Number(qualificationCurrent?.qualityCounts?.unknown || 0);
-  const leadsQualificationParityData = useMemo(() => {
+  const leadsQualificationParityData = (() => {
     const report = (leadsParityReport && typeof leadsParityReport === 'object') ? leadsParityReport : {};
     const summary = (report.summary && typeof report.summary === 'object') ? report.summary : {};
 
@@ -3896,21 +3896,21 @@ export default function LeadsDashboard() {
       qualified_quality_parity_delta: deltaFromReport ?? computedDelta,
       qualified_sobriety_gap_count: sobrietyGapFromReport ?? computedSobrietyGap,
     };
-  }, [leadsParityReport, qualificationCurrent]);
+  })();
 
-  const leadsManagerInsightsData = useMemo(() => buildLeadsManagerInsights({
+  const leadsManagerInsightsData = buildLeadsManagerInsights({
     analytics,
     groupedData,
     dateWindows,
     qualificationCurrent,
     qualificationPrevious,
-  }), [analytics, groupedData, dateWindows, qualificationCurrent, qualificationPrevious]);
+  });
 
-  const leadsExperimentAnalyzerData = useMemo(() => buildLeadsExperimentAnalyzer({
+  const leadsExperimentAnalyzerData = buildLeadsExperimentAnalyzer({
     adAttributionRows: analytics?.adAttributionRows || [],
     sourceRows: zoomSourceModule?.current?.sourceRows || [],
     minLeadsThreshold: 8,
-  }), [analytics, zoomSourceModule]);
+  });
 
   const costCardLookup = new Map((leadsDecisionModule?.costCards || []).map((row) => [row.key, row]));
   const previousCpql = Number(costCardLookup.get('costPerGoodLeadQualified')?.previous);
