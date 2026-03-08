@@ -1,9 +1,9 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
-import DashboardOverview from './views/DashboardOverview';
 import { hasSupabaseConfig, supabaseConfigError } from './lib/supabaseClient';
 
+const DashboardOverview = lazy(() => import('./views/DashboardOverview'));
 const LeadsDashboard = lazy(() => import('./views/LeadsDashboard'));
 const EmailDashboard = lazy(() => import('./views/EmailDashboard'));
 const TodosDashboard = lazy(() => import('./views/TodosDashboard'));
@@ -44,8 +44,32 @@ function SupabaseEnvRequiredView() {
 
 function ModuleLoadingView() {
   return (
-    <div className="glass-panel page-transition-enter" style={{ padding: '24px', maxWidth: '760px', margin: '0 auto' }}>
-      <p style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>Loading module...</p>
+    <div
+      className="page-transition-enter"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding: '6px 10px',
+        borderRadius: '999px',
+        background: 'rgba(148, 163, 184, 0.14)',
+        color: 'var(--color-text-secondary)',
+        fontSize: '12px',
+        fontWeight: 600,
+      }}
+      role="status"
+      aria-live="polite"
+    >
+      <span
+        style={{
+          width: '8px',
+          height: '8px',
+          borderRadius: '50%',
+          backgroundColor: 'var(--color-dark-green)',
+          opacity: 0.8,
+        }}
+      />
+      Loading view...
     </div>
   );
 }
