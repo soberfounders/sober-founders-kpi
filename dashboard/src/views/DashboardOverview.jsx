@@ -41,6 +41,26 @@ const SOURCE_KEYS = ['zoom', 'google_analytics', 'google_search_console'];
 const LOOKBACK_DAYS = DASHBOARD_LOOKBACK_DAYS;
 const MODULE_ANALYSIS_TTL_HOURS = 24;
 const REMOTE_AI_MODULE_ANALYSIS_ENABLED = ENABLE_REMOTE_AI_MODULE_ANALYSIS;
+const HUBSPOT_CONTACT_SELECT_COLUMNS = [
+  'hubspot_contact_id',
+  'createdate',
+  'email',
+  'firstname',
+  'lastname',
+  'original_traffic_source',
+  'hs_analytics_source',
+  'hs_latest_source',
+  'hs_analytics_source_data_2',
+  'hs_latest_source_data_2',
+  'campaign',
+  'campaign_source',
+  'membership_s',
+  // Canonical HubSpot source-of-truth property.
+  'annual_revenue_in_dollars__official_',
+  'annual_revenue_in_dollars',
+  'sobriety_date',
+  'sobriety_date__official_',
+];
 const DUMMY_DONATION_ROWS = [
   {
     source_system: 'dummy',
@@ -78,6 +98,45 @@ const GROUP_CALL_ET_MINUTES = {
 const GROUP_CALL_TIME_TOLERANCE_MINUTES = 120;
 const MIN_GROUP_ATTENDEES = 3;
 const EXPECTED_ZERO_GROUP_SESSION_KEYS = new Set(['Thursday|2025-12-25']);
+
+function parseMissingSupabaseColumn(errorMessage = '') {
+  const match = String(errorMessage || '').match(/column\s+raw_hubspot_contacts\.([a-zA-Z0-9_]+)\s+does not exist/i);
+  return match?.[1] || null;
+}
+
+async function fetchHubspotContactsWithSchemaFallback(contactStartDate) {
+  const requestedColumns = [...HUBSPOT_CONTACT_SELECT_COLUMNS];
+  const runQuery = (columns) => (
+    supabase
+      .from('raw_hubspot_contacts')
+      .select(columns.join(','))
+      .gte('createdate', `${contactStartDate}T00:00:00.000Z`)
+      .order('createdate', { ascending: true })
+  );
+
+  const firstResult = await runQuery(requestedColumns);
+  if (!firstResult.error) {
+    return { ...firstResult, schemaWarnings: [] };
+  }
+
+  const missingColumn = parseMissingSupabaseColumn(firstResult.error?.message);
+  if (!missingColumn || !requestedColumns.includes(missingColumn)) {
+    return { ...firstResult, schemaWarnings: [] };
+  }
+
+  const fallbackColumns = requestedColumns.filter((columnName) => columnName !== missingColumn);
+  const fallbackResult = await runQuery(fallbackColumns);
+  if (fallbackResult.error) {
+    return { ...fallbackResult, schemaWarnings: [] };
+  }
+
+  return {
+    ...fallbackResult,
+    schemaWarnings: [
+      `HubSpot contacts query auto-recovered from missing optional column \`${missingColumn}\`. Run schema migrations to restore full compatibility across deployments.`,
+    ],
+  };
+}
 
 const etWeekdayFormatter = new Intl.DateTimeFormat('en-US', {
   timeZone: ET_TIMEZONE,
@@ -551,11 +610,7 @@ const DashboardOverview = () => {
         .in('source_slug', SOURCE_KEYS)
         .gte('metric_date', startDate)
         .order('metric_date', { ascending: true }),
-      supabase
-        .from('raw_hubspot_contacts')
-        .select('hubspot_contact_id,createdate,email,firstname,lastname,original_traffic_source,hs_analytics_source,hs_latest_source,hs_analytics_source_data_2,hs_latest_source_data_2,campaign,campaign_source,membership_s,annual_revenue_in_usd_official,annual_revenue_in_dollars__official_,annual_revenue_in_dollars,sobriety_date,sobriety_date__official_')
-        .gte('createdate', `${contactStartDate}T00:00:00.000Z`)
-        .order('createdate', { ascending: true }),
+      fetchHubspotContactsWithSchemaFallback(contactStartDate),
       supabase
         .from('raw_fb_ads_insights_daily')
         .select('date_day,spend,leads,funnel_key,campaign_name')
@@ -583,6 +638,8 @@ const DashboardOverview = () => {
 
     if (hubspotContactsRes.error) {
       nextWarnings.push(`HubSpot contacts unavailable for Leads manager: ${hubspotContactsRes.error.message}`);
+    } else if (Array.isArray(hubspotContactsRes.schemaWarnings) && hubspotContactsRes.schemaWarnings.length > 0) {
+      nextWarnings.push(...hubspotContactsRes.schemaWarnings);
     }
     if (fbAdsRes.error) {
       nextWarnings.push(`Meta Ads rows unavailable for Leads manager: ${fbAdsRes.error.message}`);
