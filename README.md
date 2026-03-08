@@ -128,3 +128,6 @@ The Leads view now implements a full marketing funnel analysis with:
 - AI recommendations prioritized by CPGL impact
 
 Reference: `docs/lead-intelligence-framework.md`
+
+- Quick-win autonomous workflow pilot: `docs/ai-manager-quick-win-pilot.md`
+- Leads autonomous manager execution plan: `docs/leads-autonomous-manager-plan.md`

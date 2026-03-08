@@ -37,8 +37,9 @@ All checks run only when sample gate passes.
   - Currency metrics: `<= 5.00`
   - Rate metrics (0..1): `<= 0.02`
 - Relative delta threshold (`pct_delta_threshold`):
-  - Default: `<= 3.0%`
-  - Strict metrics (`spend`, `leads_paid`, `registrations`, `showups`): `<= 1.5%`
+  - Default warning threshold: `<= 10.0%`
+  - Alert/critical threshold: `> 20.0%`
+  - Core metrics (`spend`, `leads_paid`, `registrations`, `showups`, `cpl_paid`) use the same 10%/20% policy to match current operating preference.
 
 ### 2.2 Sample Size Gate
 - Minimum sample size per metric:
@@ -57,15 +58,15 @@ All checks run only when sample gate passes.
 
 ### 3.1 Severity
 - `PASS`: within thresholds or valid null parity.
-- `WARNING`: threshold breach for 1 run, non-core metric, or low confidence source freshness.
-- `CRITICAL`: threshold breach for core metric (`spend`, `leads_paid`, `registrations`, `showups`, `cpl_paid`) for 2 consecutive daily runs, or any single-run breach above 2x configured threshold.
+- `WARNING`: relative delta breach above `10%` and up to `20%`, or stale/low-confidence source freshness.
+- `CRITICAL`: relative delta breach above `20%` on any core metric (`spend`, `leads_paid`, `registrations`, `showups`, `cpl_paid`) or repeated warning on the same metric for 2 consecutive daily runs.
 
 ### 3.2 Escalation Path
 1. Warning:
-   - Post to analytics/dev channel with top 5 deltas and source freshness snapshot.
+   - Send a push notification + Slack message with top 5 deltas and source freshness snapshot.
    - Create triage ticket if warning persists 2 days.
 2. Critical:
-   - Page on-call data owner immediately.
+   - Send immediate push notification + Slack alert to on-call data owner.
    - Open incident ticket and assign Leads owner + data pipeline owner.
    - Block parity-dependent release promotions until resolved or explicitly waived.
 
