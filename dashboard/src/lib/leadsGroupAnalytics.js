@@ -11,6 +11,12 @@
  *   Group 2 – Phoenix Forum Leads (funnel_key === 'phoenix')
  */
 
+import {
+    isQualifiedRevenueOnly,
+    leadQualityTierFromOfficialRevenue,
+    parseOfficialRevenue,
+} from './leadsQualificationRules.js';
+
 export const TUESDAY_MEETING_ID = '87199667045';
 export const THURSDAY_MEETING_ID = '84242212480';
 
@@ -233,13 +239,9 @@ export function buildDateRangeWindows(rangeType, customStart, customEnd, todayKe
  * @returns {'bad'|'ok'|'qualified'|'great'|'unknown'}
  */
 export function leadTierFromRevenue(revenueValue) {
-    if (revenueValue === null || revenueValue === undefined || revenueValue === '') return 'unknown';
-    const n = Number(revenueValue);
-    if (!Number.isFinite(n)) return 'unknown';
-    if (n >= 1_000_000) return 'great';
-    if (n >= 250_000 && n < 1_000_000) return 'qualified';
-    if (n >= 100_000 && n < 250_000) return 'ok';
-    return 'bad';
+    const canonical = leadQualityTierFromOfficialRevenue(revenueValue);
+    if (canonical === 'good') return 'qualified';
+    return canonical;
 }
 
 // ---------------------------------------------------------------------------
@@ -321,28 +323,8 @@ function fullNameFromContact(contact) {
     return `${String(contact?.firstname || '').trim()} ${String(contact?.lastname || '').trim()}`.trim();
 }
 
-const HUBSPOT_REVENUE_FIELDS = [
-    'annual_revenue_in_usd_official',
-    'annual_revenue_in_dollars__official_',
-    'annual_revenue_in_dollars',
-    'annual_revenue',
-];
-
-function extractHubspotRevenueRaw(contact, fieldNames = HUBSPOT_REVENUE_FIELDS) {
-    for (const key of fieldNames) {
-        const value = contact?.[key];
-        if (value !== null && value !== undefined && value !== '') return value;
-    }
-    return null;
-}
-
 function resolveHubspotOfficialRevenue(contact) {
-    const officialRaw = extractHubspotRevenueRaw(contact, HUBSPOT_REVENUE_FIELDS.slice(0, 2));
-    if (officialRaw !== null && officialRaw !== undefined && officialRaw !== '') {
-        const official = Number(officialRaw);
-        if (Number.isFinite(official)) return official;
-    }
-    return null;
+    return parseOfficialRevenue(contact);
 }
 
 function resolveHubspotRevenue(contact) {
@@ -935,10 +917,14 @@ function buildLeadCategorization(adsMetrics, hubspotRows, funnelFilter) {
     const counts = { bad: 0, ok: 0, qualified: 0, great: 0, unknown: 0 };
     const unmatchedLeads = [];
     const contacts = buildDedupedPaidHubspotContacts(hubspotRows, funnelFilter);
+    let qualifiedCount = 0;
+    let goodCount = 0;
+    let greatCount = 0;
 
     for (const row of contacts) {
         const revenue = resolveHubspotRevenue(row);
-        const tier = leadTierFromRevenue(revenue);
+        const qualityTier = leadQualityTierFromOfficialRevenue(revenue);
+        const tier = qualityTier === 'good' ? 'qualified' : qualityTier;
         const name = `${String(row?.firstname || '')} ${String(row?.lastname || '')}`.trim();
         const email = String(row?.email || '').trim().toLowerCase();
 
@@ -947,6 +933,9 @@ function buildLeadCategorization(adsMetrics, hubspotRows, funnelFilter) {
         }
 
         if (counts[tier] !== undefined) counts[tier]++;
+        if (isQualifiedRevenueOnly(revenue)) qualifiedCount += 1;
+        if (qualityTier === 'good') goodCount += 1;
+        if (qualityTier === 'great') greatCount += 1;
     }
 
     const categorizedTotal = counts.bad + counts.ok + counts.qualified + counts.great + counts.unknown;
@@ -965,6 +954,10 @@ function buildLeadCategorization(adsMetrics, hubspotRows, funnelFilter) {
         ...counts,
         total: metaTotal,
         categorizedTotal,
+        qualified_count: qualifiedCount,
+        good_count: goodCount,
+        great_count: greatCount,
+        qualified_quality_parity_delta: qualifiedCount - (goodCount + greatCount),
         unmatched: unmatchedLeads,
         mismatch,
     };
