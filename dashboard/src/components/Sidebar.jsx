@@ -2,14 +2,9 @@ import React from 'react';
 import {
   LayoutDashboard,
   Users,
-  TrendingUp,
-  DollarSign,
-  Briefcase,
   CheckSquare,
-  BarChart2,
   Megaphone,
   Mail,
-  Database,
   Calendar,
   Globe,
   Bot,
@@ -28,13 +23,8 @@ const sidebarItems = [
   { id: 'Online Discovery', icon: Globe, label: 'Online Discovery' },
   { id: 'Donations', icon: Gift, label: 'Donations' },
   { id: 'Marketing', icon: Megaphone, label: 'Marketing' },
-  { id: 'Sales', icon: TrendingUp, label: 'Sales' },
-  { id: 'Revenue', icon: DollarSign, label: 'Revenue' },
-  { id: 'Operations', icon: Briefcase, label: 'Operations' },
   { id: 'To-Do\'s', icon: CheckSquare, label: 'To-Do\'s' },
-  { id: 'Analysis', icon: BarChart2, label: 'Analysis' },
-  { id: 'AI Manager', icon: Bot, label: 'AI Manager' },
-  { id: 'Data Integrity', icon: Database, label: 'Data Integrity' },
+  { id: 'AI Manager', icon: Bot, label: 'Board of Directors' },
 ];
 
 const Sidebar = ({
