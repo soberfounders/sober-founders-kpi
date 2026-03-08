@@ -295,17 +295,37 @@ function classifyGroupCall(activity, attendeeCount) {
   const start = parseMaybeDate(activity?.hs_timestamp || activity?.created_at_hubspot);
   if (!start) return null;
 
+  const hasAny = (needles) => needles.some((needle) => title.includes(needle));
+  const isLikelyFreeGroupTitle = hasAny([
+    'tactic tuesday',
+    'mastermind on zoom',
+    'all are welcome',
+    "entrepreneur's big book",
+    'big book',
+    'sober founders mastermind',
+    'sober founders free group',
+    'free group call',
+    'free group meeting',
+  ]);
+  const explicitTuesday = hasAny(['tactic tuesday', ' tuesday']);
+  const explicitThursday = hasAny(['thursday', 'mastermind on zoom', 'all are welcome', "entrepreneur's big book", 'big book']);
+  const isPhoenixForum = hasAny(['phoenix forum']);
+
   const timing = etGroupTimingFromDate(start);
   const titleType =
-    title.includes('tactic tuesday') ? 'Tuesday' :
-      (title.includes('mastermind on zoom') || title.includes('all are welcome')) ? 'Thursday' :
-        (title.includes("entrepreneur's big book") || title.includes('big book')) ? 'Thursday' :
-          (title.includes('sober founders mastermind') && !title.includes('intro')) ? 'Thursday' :
-            null;
+    explicitTuesday ? 'Tuesday' :
+      explicitThursday ? 'Thursday' :
+        (title.includes('sober founders mastermind') && !title.includes('intro')) ? 'Thursday' :
+          null;
 
   if (timing?.isNearScheduled && timing?.dayType) return timing.dayType;
   if (titleType && attendeeCount >= MIN_GROUP_ATTENDEES) return titleType;
   if (timing?.dayType && attendeeCount >= MIN_GROUP_ATTENDEES) return timing.dayType;
+
+  // Defensive fallback for known naming drift on free-group calls.
+  if (!isPhoenixForum && attendeeCount >= MIN_GROUP_ATTENDEES && isLikelyFreeGroupTitle && timing?.dayType) {
+    return timing.dayType;
+  }
 
   if (titleType) return titleType;
 
@@ -1739,8 +1759,8 @@ const DashboardOverview = () => {
       `Lineage: net-new, total attendances, and avg visits come from raw_hubspot_meeting_activities joined to hubspot_activity_contact_associations (completed Tue/Thu free-group calls only).`,
       `Meta cost per new attendee uses raw_fb_ads_insights_daily free-group spend (${formatCurrency(attendanceAdsMonth.freeSpend)}) / net-new (${formatInt(attendeesMonth.newAttendees)}).`,
       `30d raw counts: net-new=${formatInt(attendeesMonth.newAttendees)}, total attendances=${formatInt(attendeesMonth.attendanceParticipations)}, avg visits=${formatInt(attendeesMonth.attendanceParticipations)}/${formatInt(attendeesMonth.uniqueAttendees)}.`,
-      unclassifiedLargeCalls > 0
-        ? `${formatInt(unclassifiedLargeCalls)} high-attendance HubSpot calls are unclassified and may affect free-group reporting until titles are standardized.`
+      unclassifiedLargeCalls >= 3
+        ? `${formatInt(unclassifiedLargeCalls)} high-attendance calls remain unclassified in the last 30 days and are queued for taxonomy QA follow-up.`
         : '',
     ].filter(Boolean).join(' ');
 
