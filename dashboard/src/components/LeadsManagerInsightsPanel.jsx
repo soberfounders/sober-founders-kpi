@@ -15,10 +15,10 @@ const sectionCardStyle = {
 };
 
 const IMPACT_ROWS = [
-  { key: 'cpl_pct', metricLabel: 'CPL', format: 'pct' },
-  { key: 'cpql_pct', metricLabel: 'CPQL', format: 'pct' },
-  { key: 'qualified_rate_pp', metricLabel: 'Qualified %', format: 'pp' },
-  { key: 'non_qualified_rate_pp', metricLabel: 'Non-Qualified %', format: 'pp' },
+  { key: 'cpl_pct', metricLabel: 'CPL', baselineFormat: 'currency', targetFormat: 'currency', impactFormat: 'pct' },
+  { key: 'cpql_pct', metricLabel: 'CPQL', baselineFormat: 'currency', targetFormat: 'currency', impactFormat: 'pct' },
+  { key: 'qualified_rate_pp', metricLabel: 'Qualified %', baselineFormat: 'rate', targetFormat: 'rate', impactFormat: 'pp' },
+  { key: 'non_qualified_rate_pp', metricLabel: 'Non-Qualified %', baselineFormat: 'rate', targetFormat: 'rate', impactFormat: 'pp' },
 ];
 
 function toNumberOrNull(value) {
@@ -41,28 +41,32 @@ function fmtPp(value, digits = 1) {
   return `${sign}${parsed.toFixed(digits)} pp`;
 }
 
-function formatImpactValue(value, format) {
-  if (typeof value === 'string' && value.toLowerCase().includes('insufficient')) {
-    return 'Insufficient sample/data';
+function fmtCurrency(value) {
+  const parsed = toNumberOrNull(value);
+  if (parsed === null) return 'N/A';
+  return `$${parsed.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}
+
+function formatByType(value, type) {
+  const parsed = toNumberOrNull(value);
+  if (parsed === null) return 'N/A';
+  if (type === 'currency') return fmtCurrency(parsed);
+  if (type === 'rate') return `${(parsed * 100).toFixed(1)}%`;
+  return String(parsed);
+}
+
+function formatImpactDisplay(impactMetric, impactFormat) {
+  if (!impactMetric || impactMetric.insufficient_evidence || impactMetric.impact_value === null) {
+    return 'insufficient_evidence';
   }
-  const numeric = toNumberOrNull(value);
-  if (numeric === null) return 'Insufficient sample/data';
-  return format === 'pp' ? fmtPp(numeric) : fmtPct(numeric);
+  if (impactFormat === 'pp') return fmtPp(impactMetric.impact_value);
+  return fmtPct(impactMetric.impact_value);
 }
 
 function formatConfidence(confidenceRaw) {
   const confidence = String(confidenceRaw || '').toUpperCase();
-  if (confidence === 'HIGH') return 'HIGH';
-  if (confidence === 'MEDIUM') return 'MEDIUM';
-  if (confidence === 'LOW') return 'LOW';
-  return 'Insufficient sample/data';
-}
-
-function formatImpactBasis(basisRaw) {
-  if (!basisRaw) return 'Insufficient sample/data';
-  const basis = String(basisRaw);
-  if (basis.toLowerCase().includes('insufficient')) return 'Insufficient sample/data';
-  return basis;
+  if (!confidence) return 'UNKNOWN';
+  return confidence;
 }
 
 function priorityTone(priorityRaw) {
@@ -110,7 +114,7 @@ export default function LeadsManagerInsightsPanel({
       </p>
       <h3 style={{ margin: '6px 0 0', fontSize: '17px', color: '#0f172a' }}>Actionable manager queue</h3>
       <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#64748b' }}>
-        Phase 1 view: trend insights, top autonomous actions, and human-required tasks.
+        Data-backed target-gap view: projections are historical benchmark gaps, not causal promises.
       </p>
 
       {!hasAnyData && (
@@ -158,22 +162,29 @@ export default function LeadsManagerInsightsPanel({
                   </p>
                   <div style={{ marginTop: '8px', display: 'grid', gap: '8px' }}>
                     {IMPACT_ROWS.map((entry) => {
-                      const impactValue = action?.projected_impact?.[entry.key];
-                      const impactBasis = action?.projected_impact?.impact_basis?.[entry.key];
-                      const confidenceValue = action?.projected_impact?.confidence?.[entry.key];
-                      const displayImpact = formatImpactValue(impactValue, entry.format);
+                      const impactMetric = action?.projected_impact?.[entry.key];
+                      const confidence = formatConfidence(impactMetric?.confidence);
+                      const sampleSize = toNumberOrNull(impactMetric?.sample_size);
                       return (
                         <div key={`${action.title || idx}-${entry.key}`} style={{ border: '1px solid #ccfbf1', borderRadius: '8px', padding: '8px', backgroundColor: '#f8fffe' }}>
                           <p style={{ margin: 0, fontSize: '11px', fontWeight: 700, color: '#0f172a' }}>{entry.metricLabel}</p>
                           <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#334155' }}>
-                            <strong>Metric impact:</strong> {displayImpact}
+                            <strong>Target gap:</strong> {formatImpactDisplay(impactMetric, entry.impactFormat)}
                           </p>
                           <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>
-                            <strong>Impact basis:</strong> {formatImpactBasis(impactBasis)}
+                            <strong>Baseline:</strong> {formatByType(impactMetric?.baseline_value, entry.baselineFormat)} | <strong>Target:</strong> {formatByType(impactMetric?.target_value, entry.targetFormat)}
                           </p>
                           <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>
-                            <strong>Confidence:</strong> {formatConfidence(confidenceValue)}
+                            <strong>Method:</strong> {String(impactMetric?.method || 'N/A')}
                           </p>
+                          <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>
+                            <strong>Sample Size:</strong> {sampleSize !== null ? Math.round(sampleSize) : 'N/A'} | <strong>Confidence:</strong> {confidence}
+                          </p>
+                          {impactMetric?.insufficient_evidence && (
+                            <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#9a3412', fontWeight: 700 }}>
+                              insufficient_evidence
+                            </p>
+                          )}
                         </div>
                       );
                     })}
@@ -242,3 +253,4 @@ export default function LeadsManagerInsightsPanel({
     </section>
   );
 }
+

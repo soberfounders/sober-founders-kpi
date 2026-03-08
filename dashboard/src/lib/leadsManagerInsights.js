@@ -30,6 +30,36 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function mean(values) {
+  const nums = (values || []).map((value) => toNumberOrNull(value)).filter((value) => value !== null);
+  if (nums.length === 0) return null;
+  return nums.reduce((sum, value) => sum + value, 0) / nums.length;
+}
+
+function standardDeviation(values) {
+  const nums = (values || []).map((value) => toNumberOrNull(value)).filter((value) => value !== null);
+  if (nums.length === 0) return null;
+  const avg = mean(nums);
+  if (avg === null) return null;
+  const variance = nums.reduce((sum, value) => sum + ((value - avg) ** 2), 0) / nums.length;
+  return Math.sqrt(variance);
+}
+
+function percentile(values, p) {
+  const nums = (values || [])
+    .map((value) => toNumberOrNull(value))
+    .filter((value) => value !== null)
+    .sort((a, b) => a - b);
+  if (nums.length === 0) return null;
+  if (nums.length === 1) return nums[0];
+  const rank = (p / 100) * (nums.length - 1);
+  const lower = Math.floor(rank);
+  const upper = Math.ceil(rank);
+  if (lower === upper) return nums[lower];
+  const weight = rank - lower;
+  return nums[lower] + ((nums[upper] - nums[lower]) * weight);
+}
+
 function fmtPct(value, digits = 1) {
   const parsed = toNumberOrNull(value);
   if (parsed === null) return 'N/A';
@@ -182,141 +212,187 @@ function buildTrendInsights(metrics) {
   return trendInsights;
 }
 
-function buildImpactSampleProfile(metrics) {
-  const weeklyEnough = (
-    Number(metrics.weekly.current.leads || 0) >= 20
-    && Number(metrics.weekly.previous.leads || 0) >= 20
-    && Number(metrics.weekly.current.qualified || 0) >= 5
-    && Number(metrics.weekly.previous.qualified || 0) >= 5
-  );
-  const monthlyEnough = (
-    Number(metrics.monthly.current.leads || 0) >= 40
-    && Number(metrics.monthly.previous.leads || 0) >= 40
-    && Number(metrics.monthly.current.qualified || 0) >= 12
-    && Number(metrics.monthly.previous.qualified || 0) >= 12
-  );
-  return {
-    weeklyEnough,
-    monthlyEnough,
-    anyEnough: weeklyEnough || monthlyEnough,
+function buildHistoricalMetricSeries(analytics) {
+  const rows = Array.isArray(analytics?.showUpTracker?.rows) ? analytics.showUpTracker.rows : [];
+  const series = {
+    cpl_pct: [],
+    cpql_pct: [],
+    qualified_rate_pp: [],
+    non_qualified_rate_pp: [],
   };
+
+  rows.forEach((row) => {
+    const spend = toNumberOrNull(row?.spend);
+    const leads = toNumberOrNull(row?.leads);
+    const qualifiedLeads = toNumberOrNull(row?.qualifiedLeads);
+
+    if (spend !== null && leads !== null && leads > 0) {
+      const cpl = spend / leads;
+      series.cpl_pct.push(cpl);
+
+      const qualifiedRate = safeDivide(qualifiedLeads, leads);
+      if (qualifiedRate !== null) {
+        series.qualified_rate_pp.push(qualifiedRate);
+        series.non_qualified_rate_pp.push(1 - qualifiedRate);
+      }
+    }
+
+    if (spend !== null && qualifiedLeads !== null && qualifiedLeads > 0) {
+      series.cpql_pct.push(spend / qualifiedLeads);
+    }
+  });
+
+  return series;
 }
 
-function metricProjectionEntry(metricKey, rawValue, basis, sampleProfile) {
-  const confidence = sampleProfile.weeklyEnough && sampleProfile.monthlyEnough
-    ? 'HIGH'
-    : (sampleProfile.anyEnough ? 'MEDIUM' : 'LOW_SAMPLE');
+function deriveConfidenceFromEvidence(sampleSize, volatility, volatilityMax) {
+  const sampleScore = clamp(sampleSize / 30, 0, 1);
+  const volatilityScore = volatility === null
+    ? 0
+    : clamp(1 - (volatility / volatilityMax), 0, 1);
+  const confidenceScore = (sampleScore * 0.6) + (volatilityScore * 0.4);
+
+  if (confidenceScore >= 0.75) return 'HIGH';
+  if (confidenceScore >= 0.55) return 'MEDIUM';
+  if (confidenceScore >= 0.35) return 'LOW';
+  return 'VERY_LOW';
+}
+
+function buildEmpiricalImpact({
+  baselineValue,
+  historicalValues,
+  betterDirection,
+  targetPercentile,
+  minSampleSize,
+  volatilityType,
+  volatilityMax,
+  method,
+}) {
+  const sampleSize = (historicalValues || []).length;
+  const targetValue = percentile(historicalValues, targetPercentile);
+  const avg = mean(historicalValues);
+  const stdDev = standardDeviation(historicalValues);
+  const volatility = volatilityType === 'coefficient_of_variation'
+    ? safeDivide(stdDev, Math.abs(avg || 0))
+    : stdDev;
+  const confidence = deriveConfidenceFromEvidence(sampleSize, volatility, volatilityMax);
+
+  const insufficientEvidence = (
+    baselineValue === null
+    || targetValue === null
+    || sampleSize < minSampleSize
+    || volatility === null
+    || volatility > volatilityMax
+  );
+
+  if (insufficientEvidence) {
+    return {
+      insufficient_evidence: true,
+      impact_value: null,
+      baseline_value: baselineValue,
+      target_value: targetValue,
+      method,
+      sample_size: sampleSize,
+      volatility,
+      confidence,
+    };
+  }
+
+  const impactValue = betterDirection === 'lower'
+    ? relativeDelta(targetValue, baselineValue)
+    : ((targetValue - baselineValue) * 100);
+
   return {
-    key: metricKey,
-    value: sampleProfile.anyEnough ? rawValue : 'insufficient sample',
-    basis: sampleProfile.anyEnough ? basis : `${basis} (insufficient sample)`,
+    insufficient_evidence: false,
+    impact_value: impactValue,
+    baseline_value: baselineValue,
+    target_value: targetValue,
+    method,
+    sample_size: sampleSize,
+    volatility,
     confidence,
   };
 }
 
-function buildAutonomousActions(metrics) {
+function buildActionProjectedImpact(metrics, analytics) {
+  const historical = buildHistoricalMetricSeries(analytics);
+  const baselines = {
+    cpl_pct: pickNumber(metrics.weekly.current.cpl, metrics.monthly.current.cpl),
+    cpql_pct: pickNumber(metrics.weekly.current.cpql, metrics.monthly.current.cpql),
+    qualified_rate_pp: pickNumber(metrics.weekly.current.qualifiedRate, metrics.monthly.current.qualifiedRate),
+    non_qualified_rate_pp: pickNumber(metrics.weekly.current.nonQualifiedRate, metrics.monthly.current.nonQualifiedRate),
+  };
+
+  return {
+    cpl_pct: buildEmpiricalImpact({
+      baselineValue: baselines.cpl_pct,
+      historicalValues: historical.cpl_pct,
+      betterDirection: 'lower',
+      targetPercentile: 25,
+      minSampleSize: 14,
+      volatilityType: 'coefficient_of_variation',
+      volatilityMax: 1.0,
+      method: 'historical_percentile_target_gap_cost_p25_vs_current',
+    }),
+    cpql_pct: buildEmpiricalImpact({
+      baselineValue: baselines.cpql_pct,
+      historicalValues: historical.cpql_pct,
+      betterDirection: 'lower',
+      targetPercentile: 25,
+      minSampleSize: 14,
+      volatilityType: 'coefficient_of_variation',
+      volatilityMax: 1.0,
+      method: 'historical_percentile_target_gap_cost_p25_vs_current',
+    }),
+    qualified_rate_pp: buildEmpiricalImpact({
+      baselineValue: baselines.qualified_rate_pp,
+      historicalValues: historical.qualified_rate_pp,
+      betterDirection: 'higher',
+      targetPercentile: 75,
+      minSampleSize: 14,
+      volatilityType: 'standard_deviation',
+      volatilityMax: 0.18,
+      method: 'historical_percentile_target_gap_rate_p75_vs_current',
+    }),
+    non_qualified_rate_pp: buildEmpiricalImpact({
+      baselineValue: baselines.non_qualified_rate_pp,
+      historicalValues: historical.non_qualified_rate_pp,
+      betterDirection: 'lower',
+      targetPercentile: 25,
+      minSampleSize: 14,
+      volatilityType: 'standard_deviation',
+      volatilityMax: 0.18,
+      method: 'historical_percentile_target_gap_rate_p25_vs_current',
+    }),
+  };
+}
+
+function buildAutonomousActions(metrics, analytics) {
   const nonQualifiedRate = pickNumber(metrics.weekly.current.nonQualifiedRate, metrics.monthly.current.nonQualifiedRate, 0.5);
-  const cplRegression = Math.max(
-    pickNumber(relativeDelta(metrics.weekly.current.cpl, metrics.weekly.previous.cpl), 0),
-    0,
-  );
-  const cpqlRegression = Math.max(
-    pickNumber(relativeDelta(metrics.weekly.current.cpql, metrics.weekly.previous.cpql), 0),
-    0,
-  );
-  const qualificationGap = Math.max(nonQualifiedRate - 0.45, 0);
-  const sampleProfile = buildImpactSampleProfile(metrics);
+  const projectedImpact = buildActionProjectedImpact(metrics, analytics);
 
-  const baseCplGain = clamp(0.03 + (cplRegression * 0.35) + (qualificationGap * 0.15), 0.02, 0.15);
-  const baseCpqlGain = clamp(0.06 + (cpqlRegression * 0.45) + (qualificationGap * 0.2), 0.04, 0.25);
-  const baseQualifiedGainPp = clamp(1.2 + (qualificationGap * 10) + (cpqlRegression * 4), 1.0, 8.0);
-
-  const actionTemplate = ({
+  const actionTemplate = ({ title, summary, priority }) => ({
     title,
     summary,
     priority,
-    cplScale,
-    cpqlScale,
-    qualificationScale,
-    basisPrefix,
-  }) => {
-    const cplEntry = metricProjectionEntry(
-      'cpl_pct',
-      -clamp(baseCplGain * cplScale, 0.01, 0.25),
-      `${basisPrefix}; based on CPL trend regression and current non-qualified gap (${fmtPct(nonQualifiedRate)}).`,
-      sampleProfile,
-    );
-    const cpqlEntry = metricProjectionEntry(
-      'cpql_pct',
-      -clamp(baseCpqlGain * cpqlScale, 0.02, 0.35),
-      `${basisPrefix}; based on CPQL trend regression and qualification gap pressure.`,
-      sampleProfile,
-    );
-    const qualifiedEntry = metricProjectionEntry(
-      'qualified_rate_pp',
-      clamp(baseQualifiedGainPp * qualificationScale, 0.5, 10),
-      `${basisPrefix}; based on historical sensitivity between message tightness and qualified conversion.`,
-      sampleProfile,
-    );
-    const nonQualifiedEntry = metricProjectionEntry(
-      'non_qualified_rate_pp',
-      -clamp(baseQualifiedGainPp * qualificationScale, 0.5, 10),
-      `${basisPrefix}; inverse of qualified-rate projection.`,
-      sampleProfile,
-    );
-
-    return {
-      title,
-      summary,
-      priority,
-      projected_impact: {
-        cpl_pct: cplEntry.value,
-        cpql_pct: cpqlEntry.value,
-        qualified_rate_pp: qualifiedEntry.value,
-        non_qualified_rate_pp: nonQualifiedEntry.value,
-        impact_basis: {
-          cpl_pct: cplEntry.basis,
-          cpql_pct: cpqlEntry.basis,
-          qualified_rate_pp: qualifiedEntry.basis,
-          non_qualified_rate_pp: nonQualifiedEntry.basis,
-        },
-        confidence: {
-          cpl_pct: cplEntry.confidence,
-          cpql_pct: cpqlEntry.confidence,
-          qualified_rate_pp: qualifiedEntry.confidence,
-          non_qualified_rate_pp: nonQualifiedEntry.confidence,
-        },
-      },
-    };
-  };
+    projected_impact: projectedImpact,
+  });
 
   return [
     actionTemplate({
       title: 'Shift budget to higher-quality ad cohorts',
       summary: 'Reallocate spend from low-fit ad sets toward campaigns already generating qualified leads.',
-      priority: (nonQualifiedRate > 0.55 || cpqlRegression > 0.08) ? 'High' : 'Medium',
-      cplScale: 1.0,
-      cpqlScale: 1.0,
-      qualificationScale: 1.0,
-      basisPrefix: 'Budget-mix reallocation model',
+      priority: nonQualifiedRate > 0.55 ? 'High' : 'Medium',
     }),
     actionTemplate({
       title: 'Tighten qualification messaging in ads and forms',
       summary: 'Deploy creative and form-copy variants that pre-qualify for revenue and sobriety fit.',
       priority: nonQualifiedRate > 0.5 ? 'High' : 'Medium',
-      cplScale: 0.7,
-      cpqlScale: 0.9,
-      qualificationScale: 1.1,
-      basisPrefix: 'Qualification copy sensitivity model',
     }),
     actionTemplate({
       title: 'Automate high-fit no-show reactivation',
       summary: 'Trigger follow-up sequences for qualified leads that did not show up within 24 hours.',
       priority: 'Medium',
-      cplScale: 0.25,
-      cpqlScale: 0.65,
-      qualificationScale: 0.7,
-      basisPrefix: 'Post-registration recovery model',
     }),
   ].slice(0, 3);
 }
@@ -437,9 +513,8 @@ export function buildLeadsManagerInsights({
       previous_window: dateWindows?.previous || null,
     },
     trend_insights: buildTrendInsights(metrics),
-    autonomous_actions: buildAutonomousActions(metrics),
+    autonomous_actions: buildAutonomousActions(metrics, analytics),
     human_required_actions: buildHumanRequiredActions(metrics, qualificationCurrent?.qualityCounts),
     organic_referral_insights: buildOrganicReferralQualityInsights(groupedData),
   };
 }
-
