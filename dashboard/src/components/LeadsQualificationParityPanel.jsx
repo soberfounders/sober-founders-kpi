@@ -48,7 +48,6 @@ export default function LeadsQualificationParityPanel({ data, isLoading = false 
     || normalized.good_count !== null
     || normalized.great_count !== null
     || normalized.qualified_quality_parity_delta !== null;
-  const hasMismatch = normalized.qualified_quality_parity_delta !== null && normalized.qualified_quality_parity_delta !== 0;
 
   return (
     <div style={cardStyle}>
@@ -62,12 +61,12 @@ export default function LeadsQualificationParityPanel({ data, isLoading = false 
             padding: '3px 8px',
             fontSize: '11px',
             fontWeight: 700,
-            backgroundColor: hasMismatch ? '#fee2e2' : '#dcfce7',
-            color: hasMismatch ? '#991b1b' : '#166534',
-            border: `1px solid ${hasMismatch ? '#fca5a5' : '#86efac'}`,
+            backgroundColor: '#eff6ff',
+            color: '#1d4ed8',
+            border: '1px solid #bfdbfe',
           }}
         >
-          {hasMismatch ? 'MISMATCH' : 'IN SYNC'}
+          SOBRIETY-FILTERED
         </span>
       </div>
 
@@ -93,18 +92,16 @@ export default function LeadsQualificationParityPanel({ data, isLoading = false 
           </div>
           <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px' }}>
             <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>Delta</p>
-            <p style={{ margin: '4px 0 0', fontSize: '16px', fontWeight: 800, color: hasMismatch ? '#991b1b' : '#166534' }}>
+            <p style={{ margin: '4px 0 0', fontSize: '16px', fontWeight: 800, color: '#334155' }}>
               {fmtInt(normalized.qualified_quality_parity_delta)}
             </p>
           </div>
         </div>
       )}
 
-      {hasMismatch && (
-        <p style={{ margin: '10px 0 0', fontSize: '12px', color: '#991b1b', fontWeight: 700 }}>
-          Qualified parity mismatch: Qualified should equal Good + Great
-        </p>
-      )}
+      <p style={{ margin: '10px 0 0', fontSize: '12px', color: '#475569' }}>
+        Good + Great is the high-revenue pool (official revenue only). Qualified is the sobriety-filtered subset (revenue {'>='} $250K and sobriety date at least 365 days before as-of date).
+      </p>
     </div>
   );
 }

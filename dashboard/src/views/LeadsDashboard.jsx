@@ -3838,7 +3838,7 @@ export default function LeadsDashboard() {
       value: Number(qualificationCurrent?.qualified || 0),
       previous: dateWindows?.previous ? Number(qualificationPrevious?.qualified || 0) : null,
       format: 'count',
-      note: 'HubSpot official annual revenue >= $250K',
+      note: 'Official revenue >= $250K and sobriety date at least 365 days before as-of date',
       color: '#2563eb',
     },
     {
@@ -3847,7 +3847,7 @@ export default function LeadsDashboard() {
       value: Number(qualificationCurrent?.nonQualified || 0),
       previous: dateWindows?.previous ? Number(qualificationPrevious?.nonQualified || 0) : null,
       format: 'count',
-      note: 'Free Group leads not meeting qualified rule',
+      note: 'Free Group leads not meeting the qualified rule (revenue + sobriety)',
       color: '#64748b',
     },
     {
@@ -3873,7 +3873,7 @@ export default function LeadsDashboard() {
   ];
   const qualityMixTotal = qualityMixRows.reduce((sum, row) => sum + row.value, 0);
   const qualityUnknownCount = Number(qualificationCurrent?.qualityCounts?.unknown || 0);
-  const leadsQualificationParityData = useMemo(() => {
+  const leadsQualificationParityData = (() => {
     const report = (leadsParityReport && typeof leadsParityReport === 'object') ? leadsParityReport : {};
     const summary = (report.summary && typeof report.summary === 'object') ? report.summary : {};
 
@@ -3906,7 +3906,7 @@ export default function LeadsDashboard() {
       great_count: greatCount,
       qualified_quality_parity_delta: deltaFromReport ?? computedDelta,
     };
-  }, [leadsParityReport, qualificationCurrent]);
+  })();
 
   const costCardLookup = new Map((leadsDecisionModule?.costCards || []).map((row) => [row.key, row]));
   const previousCpql = Number(costCardLookup.get('costPerGoodLeadQualified')?.previous);
@@ -4063,7 +4063,7 @@ export default function LeadsDashboard() {
           </p>
           <h3 style={{ margin: '6px 0 0', fontSize: '17px', color: '#0f172a' }}>Free Group Qualified vs Non-Qualified and quality tiers</h3>
           <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#64748b' }}>
-            Qualified = HubSpot official annual revenue {'>='} $250K. Cost metrics below use Free Groups ad spend in the selected window.
+            Qualified = official revenue {'>='} $250K AND sobriety date at least 365 days before as-of date. Cost metrics below use Free Groups ad spend in the selected window.
           </p>
           <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: '10px' }}>
             <div style={{ ...subCard, border: '1px solid #dbeafe', backgroundColor: '#f8fbff' }}>
