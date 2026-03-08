@@ -4,97 +4,78 @@ Date: 2026-03-08
 Auditor: W4
 Scope reviewed:
 - `dashboard/src/lib/leadsManagerInsights.js`
-- `dashboard/src/lib/leadsExperimentAnalyzer.js`
 - `dashboard/src/components/LeadsManagerInsightsPanel.jsx`
+- `dashboard/src/lib/leadsExperimentAnalyzer.js`
 - `dashboard/src/components/LeadsExperimentAnalyzerPanel.jsx`
 - `dashboard/e2e/leads-manager-experiment-panels.spec.js`
 
-## Overall Verdict
+## Final Verdict
 
-FAIL (one blocking criterion remains).
+PASS
 
-Blocking reason:
-- Projected impact basis/confidence is present in UI, but the impact model remains heuristic and not empirically defensible enough for full acceptance.
+Rationale:
+- Empirical impact fields are now implemented and rendered (baseline, target, method, sample size, confidence, insufficient-evidence state).
+- Low-sample hold behavior and low-CPL trap protections are explicit and visible.
+- Required e2e validation passed with the requested command.
 
-## PASS/FAIL By Manager Goal
+## PASS/FAIL By Criterion
 
 1) Actionable trend bullets: PASS
-- WoW/MoM qualified rate plus CPL/CPQL deltas are produced as explicit bullets.
-- Evidence: `dashboard/src/lib/leadsManagerInsights.js:149`-`183`.
+- WoW/MoM qualified-rate and CPL/CPQL trend bullets are generated and displayed.
+- Evidence: `dashboard/src/lib/leadsManagerInsights.js:179`-`213`, `dashboard/src/components/LeadsManagerInsightsPanel.jsx:130`-`142`.
 
-2) Top 3 autonomous tasks + defensible impact basis/confidence: FAIL
-- PASS: exactly 3 autonomous tasks are emitted.
-- PASS: each metric impact now includes basis text + confidence labels and insufficient-sample fallback.
-- FAIL (blocker): basis is still formula/heuristic-driven, not calibrated against realized historical lift or uncertainty bands.
+2) Top 3 autonomous tasks + defensible impact basis/confidence: PASS
+- Exactly top 3 autonomous actions are emitted.
+- Each metric now includes empirical target-gap fields: `impact_value`, `baseline_value`, `target_value`, `method`, `sample_size`, `confidence`, `insufficient_evidence`.
+- UI exposes these fields directly per metric row.
 - Evidence:
-  - top 3 actions: `dashboard/src/lib/leadsManagerInsights.js:293`-`322`
-  - basis/confidence fields: `dashboard/src/lib/leadsManagerInsights.js:243`-`289`
-  - heuristic formulas: `dashboard/src/lib/leadsManagerInsights.js:230`-`233`
+  - empirical model: `dashboard/src/lib/leadsManagerInsights.js:261`-`368`
+  - top 3 actions: `dashboard/src/lib/leadsManagerInsights.js:381`-`398`
+  - panel rendering: `dashboard/src/components/LeadsManagerInsightsPanel.jsx:164`-`187`
 
 3) Human-required tasks + Notion-action path visibility: PASS
-- Human-required tasks are clearly separated with reasons and priority.
-- Notion handoff button is visible from each human-required action.
-- Evidence:
-  - task generation: `dashboard/src/lib/leadsManagerInsights.js:324`-`350`
-  - panel section + button: `dashboard/src/components/LeadsManagerInsightsPanel.jsx:188`-`233`
+- Human-required lane is separate, with reason and priority, plus Notion send button.
+- Evidence: `dashboard/src/lib/leadsManagerInsights.js:400`-`426`, `dashboard/src/components/LeadsManagerInsightsPanel.jsx:199`-`243`.
 
 4) Clear low-sample hold behavior: PASS
-- Analyzer emits explicit `HOLD_LOW_SAMPLE` decision with required lead threshold reason.
-- UI maps and displays `HOLD LOW SAMPLE` clearly.
-- QA spec asserts this behavior is rendered.
+- Analyzer produces `HOLD_LOW_SAMPLE` with explicit threshold reason when sample is below gate.
+- Panel labels this clearly as `HOLD LOW SAMPLE`.
+- Evidence: `dashboard/src/lib/leadsExperimentAnalyzer.js:107`-`115`, `dashboard/src/components/LeadsExperimentAnalyzerPanel.jsx:45`-`46`.
+
+5) Campaign/adset quality comparison preventing low-CPL trap: PASS
+- Rubric combines absolute quality floors, efficiency bands, relative comparisons, and low-CPL/weak-quality trap logic.
+- Decision context is surfaced per row.
+- Evidence: `dashboard/src/lib/leadsExperimentAnalyzer.js:24`-`37`, `121`-`177`; `dashboard/src/components/LeadsExperimentAnalyzerPanel.jsx:231`-`237`.
+
+6) Paid + organic/referral insights: PASS
+- Paid recommendations are present and aligned with keep/kill/hold/trap outcomes.
+- Organic/referral insights are present and rendered in analyzer; manager insights also include quality-based organic/referral bullets.
 - Evidence:
-  - hold logic: `dashboard/src/lib/leadsExperimentAnalyzer.js:107`-`115`
-  - decision label mapping: `dashboard/src/components/LeadsExperimentAnalyzerPanel.jsx:41`-`47`
-  - e2e assertion: `dashboard/e2e/leads-manager-experiment-panels.spec.js:63`
+  - analyzer recs: `dashboard/src/lib/leadsExperimentAnalyzer.js:181`-`245`
+  - manager quality bullets: `dashboard/src/lib/leadsManagerInsights.js:437`-`493`
+  - panel rendering: `dashboard/src/components/LeadsExperimentAnalyzerPanel.jsx:262`-`289`
 
-5) Campaign/adset quality comparison that prevents low-CPL trap: PASS
-- Absolute quality floors + efficiency bands + trap detection now gate keep/kill decisions.
-- Decision reason context is surfaced per row.
-- Evidence:
-  - rubric and trap logic: `dashboard/src/lib/leadsExperimentAnalyzer.js:24`-`37`, `121`-`155`
-  - trap flag + decision context in UI: `dashboard/src/components/LeadsExperimentAnalyzerPanel.jsx:225`-`233`
+## Validation
 
-6) Paid + organic/referral insights: PASS (with caution)
-- Paid recommendation bullets are present and include hold/trap references.
-- Organic/referral insights are present in both manager insights and analyzer outputs.
-- Evidence:
-  - paid recs: `dashboard/src/lib/leadsExperimentAnalyzer.js:181`-`214`
-  - organic/referral in analyzer: `dashboard/src/lib/leadsExperimentAnalyzer.js:216`-`245`
-  - organic/referral quality in manager insights: `dashboard/src/lib/leadsManagerInsights.js:361`-`417`
-
-## QA Validation Summary
-
-Executed:
-- `npm run test:e2e -- e2e/leads-manager-experiment-panels.spec.js`
+Executed (required):
+- `npm --prefix dashboard run test:e2e -- leads-manager-experiment-panels.spec.js --reporter=line`
 
 Result:
-- PASS (`1 passed`, Chromium) on 2026-03-08.
-- Confirms key UI safety and visibility checks for manager insights/analyzer, including low-sample hold rendering.
+- PASS (`1 passed`) on 2026-03-08.
 
-## Residual Risks
+## Remaining Risks
 
-High:
-- Forecast trust risk: impact projections can still be interpreted as predictive despite heuristic origin.
-
-Medium:
-- Threshold portability risk: hard-coded quality/efficiency floors may not generalize by seasonality/source mix.
-- Organic/referral decision quality risk: analyzer organic/referral block is still show-up-share weighted, not quality-cost weighted.
-
-Low:
-- Confidence display consistency risk: one fallback label path shows `LOW SAMPLE` while another displays `INSUFFICIENT SAMPLE/DATA`.
+- Medium: Empirical impact is benchmark-gap based (historical percentile vs current), not causal attribution; decision-makers can still over-read it as guaranteed lift.
+- Medium: The same projected impact object is reused across all 3 autonomous actions, so action-specific incremental effect is not differentiated.
+- Low: Analyzer organic/referral block remains share-oriented (show-up mix) and is less quality-economic than paid rubric outputs.
 
 ## Top 3 Next Improvements
 
-1) Replace heuristic impact projection with calibrated backtest model
-- Add rolling forecast calibration (predicted vs realized CPL/CPQL/Qualified% deltas) and show error bands.
+1) Add action-specific empirical uplift deltas
+- Calibrate separate expected effect sizes per action family instead of reusing one projected-impact profile.
 
-2) Externalize and version rubric thresholds
-- Move floors/bands to config with environment/date-version tagging and periodic re-baselining by source type.
+2) Add closed-loop forecast accuracy tracking
+- Store predicted vs realized CPL/CPQL/Qualified%/Non-Qualified% deltas and show rolling MAE/MAPE to govern confidence.
 
-3) Upgrade organic/referral analyzer to quality economics
-- Add qualified rate, great rate, and CPQL/CPGL proxy per non-paid source so recommendations optimize quality, not only volume share.
-
-## Final Acceptance Decision
-
-- Current release acceptance: FAIL
-- Reason: criterion #2 (defensible projected impact basis/confidence) is not yet met at production-governance level.
+3) Upgrade organic/referral analyzer to quality-cost scoring
+- Add qualified/great-rate and quality-cost proxies for organic/referral so recommendations match paid decision rigor.
