@@ -61,6 +61,10 @@ const HUBSPOT_CONTACT_SELECT_COLUMNS = [
   'sobriety_date',
   'sobriety_date__official_',
 ];
+const HUBSPOT_CONTACT_SILENT_FALLBACK_COLUMNS = new Set([
+  'annual_revenue_in_usd_official',
+  'sobriety_date__official_',
+]);
 const DUMMY_DONATION_ROWS = [
   {
     source_system: 'dummy',
@@ -141,9 +145,11 @@ async function fetchHubspotContactsWithSchemaFallback(contactStartDate) {
 
     attemptedMissingColumns.add(missingColumn);
     selectedColumns = selectedColumns.filter((columnName) => columnName !== missingColumn);
-    schemaWarnings.push(
-      `HubSpot contacts query auto-recovered from missing optional column \`${missingColumn}\`. Run schema migrations to restore full compatibility across deployments.`,
-    );
+    if (!HUBSPOT_CONTACT_SILENT_FALLBACK_COLUMNS.has(missingColumn)) {
+      schemaWarnings.push(
+        `HubSpot contacts query auto-recovered from missing optional column \`${missingColumn}\`. Run schema migrations to restore full compatibility across deployments.`,
+      );
+    }
   }
 
   return {
