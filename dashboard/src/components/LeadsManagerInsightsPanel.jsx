@@ -14,6 +14,13 @@ const sectionCardStyle = {
   border: '1px solid #e2e8f0',
 };
 
+const IMPACT_ROWS = [
+  { key: 'cpl_pct', metricLabel: 'CPL', format: 'pct' },
+  { key: 'cpql_pct', metricLabel: 'CPQL', format: 'pct' },
+  { key: 'qualified_rate_pp', metricLabel: 'Qualified %', format: 'pp' },
+  { key: 'non_qualified_rate_pp', metricLabel: 'Non-Qualified %', format: 'pp' },
+];
+
 function toNumberOrNull(value) {
   if (value === null || value === undefined || value === '') return null;
   const parsed = Number(value);
@@ -34,42 +41,35 @@ function fmtPp(value, digits = 1) {
   return `${sign}${parsed.toFixed(digits)} pp`;
 }
 
+function formatImpactValue(value, format) {
+  if (typeof value === 'string' && value.toLowerCase().includes('insufficient')) {
+    return 'Insufficient sample/data';
+  }
+  const numeric = toNumberOrNull(value);
+  if (numeric === null) return 'Insufficient sample/data';
+  return format === 'pp' ? fmtPp(numeric) : fmtPct(numeric);
+}
+
+function formatConfidence(confidenceRaw) {
+  const confidence = String(confidenceRaw || '').toUpperCase();
+  if (confidence === 'HIGH') return 'HIGH';
+  if (confidence === 'MEDIUM') return 'MEDIUM';
+  if (confidence === 'LOW') return 'LOW';
+  return 'Insufficient sample/data';
+}
+
+function formatImpactBasis(basisRaw) {
+  if (!basisRaw) return 'Insufficient sample/data';
+  const basis = String(basisRaw);
+  if (basis.toLowerCase().includes('insufficient')) return 'Insufficient sample/data';
+  return basis;
+}
+
 function priorityTone(priorityRaw) {
   const priority = String(priorityRaw || '').toLowerCase();
   if (priority === 'high') return { bg: '#fee2e2', color: '#991b1b', border: '#fecaca' };
   if (priority === 'medium') return { bg: '#ffedd5', color: '#9a3412', border: '#fdba74' };
   return { bg: '#e2e8f0', color: '#334155', border: '#cbd5e1' };
-}
-
-function impactChip(label, value, format, positiveIsGood = true) {
-  const num = toNumberOrNull(value);
-  const color = num === null
-    ? '#475569'
-    : ((num >= 0) === positiveIsGood ? '#166534' : '#991b1b');
-  const bg = num === null
-    ? '#e2e8f0'
-    : ((num >= 0) === positiveIsGood ? '#dcfce7' : '#fee2e2');
-
-  const displayValue = format === 'pp' ? fmtPp(num) : fmtPct(num);
-  return (
-    <span
-      key={`${label}-${displayValue}`}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '4px',
-        padding: '3px 8px',
-        borderRadius: '999px',
-        fontSize: '11px',
-        fontWeight: 700,
-        backgroundColor: bg,
-        color,
-        border: `1px solid ${color}33`,
-      }}
-    >
-      {label}: {displayValue}
-    </span>
-  );
 }
 
 export default function LeadsManagerInsightsPanel({
@@ -116,7 +116,7 @@ export default function LeadsManagerInsightsPanel({
       {!hasAnyData && (
         <div style={{ marginTop: '12px', ...sectionCardStyle }}>
           <p style={{ margin: 0, fontSize: '12px', color: '#475569' }}>
-            Insights are not available yet for the selected window.
+            Insufficient sample/data for the selected window.
           </p>
         </div>
       )}
@@ -134,7 +134,7 @@ export default function LeadsManagerInsightsPanel({
                 ))}
               </ul>
             ) : (
-              <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#64748b' }}>No trend insights available.</p>
+              <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#64748b' }}>Insufficient sample/data for trend insights.</p>
             )}
           </div>
 
@@ -154,24 +154,40 @@ export default function LeadsManagerInsightsPanel({
                     </span>
                   </div>
                   <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#475569' }}>
-                    {action.summary || 'No summary provided.'}
+                    {action.summary || 'Insufficient sample/data for action summary.'}
                   </p>
-                  <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                    {impactChip('CPL', action?.projected_impact?.cpl_pct, 'pct', false)}
-                    {impactChip('CPQL', action?.projected_impact?.cpql_pct, 'pct', false)}
-                    {impactChip('Qualified%', action?.projected_impact?.qualified_rate_pp, 'pp', true)}
-                    {impactChip('Non-Qualified%', action?.projected_impact?.non_qualified_rate_pp, 'pp', false)}
+                  <div style={{ marginTop: '8px', display: 'grid', gap: '8px' }}>
+                    {IMPACT_ROWS.map((entry) => {
+                      const impactValue = action?.projected_impact?.[entry.key];
+                      const impactBasis = action?.projected_impact?.impact_basis?.[entry.key];
+                      const confidenceValue = action?.projected_impact?.confidence?.[entry.key];
+                      const displayImpact = formatImpactValue(impactValue, entry.format);
+                      return (
+                        <div key={`${action.title || idx}-${entry.key}`} style={{ border: '1px solid #ccfbf1', borderRadius: '8px', padding: '8px', backgroundColor: '#f8fffe' }}>
+                          <p style={{ margin: 0, fontSize: '11px', fontWeight: 700, color: '#0f172a' }}>{entry.metricLabel}</p>
+                          <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#334155' }}>
+                            <strong>Metric impact:</strong> {displayImpact}
+                          </p>
+                          <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>
+                            <strong>Impact basis:</strong> {formatImpactBasis(impactBasis)}
+                          </p>
+                          <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>
+                            <strong>Confidence:</strong> {formatConfidence(confidenceValue)}
+                          </p>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )) : (
-                <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>No autonomous actions available.</p>
+                <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Insufficient sample/data for autonomous actions.</p>
               )}
             </div>
           </div>
 
           <div style={{ ...sectionCardStyle, borderLeft: '4px solid #d97706' }}>
             <p style={{ margin: 0, fontSize: '11px', color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
-              Human Required
+              Human Required Actions
             </p>
             <div style={{ marginTop: '8px', display: 'grid', gap: '8px' }}>
               {normalized.humanRequired.length > 0 ? normalized.humanRequired.map((item, idx) => {
@@ -217,7 +233,7 @@ export default function LeadsManagerInsightsPanel({
                   </div>
                 );
               }) : (
-                <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>No human-required actions available.</p>
+                <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Insufficient sample/data for human-required actions.</p>
               )}
             </div>
           </div>

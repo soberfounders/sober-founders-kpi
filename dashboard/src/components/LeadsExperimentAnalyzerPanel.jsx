@@ -40,10 +40,10 @@ function fmtPct(value, digits = 1) {
 
 function decisionTone(decisionRaw) {
   const decision = String(decisionRaw || '').toUpperCase();
-  if (decision === 'KEEP') return { bg: '#dcfce7', color: '#166534', border: '#86efac' };
-  if (decision === 'KILL') return { bg: '#fee2e2', color: '#991b1b', border: '#fecaca' };
-  if (decision === 'HOLD_LOW_SAMPLE') return { bg: '#e2e8f0', color: '#334155', border: '#cbd5e1' };
-  return { bg: '#ffedd5', color: '#9a3412', border: '#fdba74' };
+  if (decision === 'KEEP') return { bg: '#dcfce7', color: '#166534', border: '#86efac', label: 'KEEP' };
+  if (decision === 'KILL') return { bg: '#fee2e2', color: '#991b1b', border: '#fecaca', label: 'KILL' };
+  if (decision === 'HOLD_LOW_SAMPLE') return { bg: '#e2e8f0', color: '#334155', border: '#cbd5e1', label: 'HOLD LOW SAMPLE' };
+  return { bg: '#ffedd5', color: '#9a3412', border: '#fdba74', label: 'ITERATE' };
 }
 
 function confidenceTone(confidenceRaw) {
@@ -51,14 +51,13 @@ function confidenceTone(confidenceRaw) {
   if (confidence === 'HIGH') return { bg: '#dbeafe', color: '#1d4ed8', border: '#93c5fd', label: 'HIGH' };
   if (confidence === 'MEDIUM') return { bg: '#e0f2fe', color: '#0369a1', border: '#bae6fd', label: 'MEDIUM' };
   if (confidence === 'LOW') return { bg: '#fef9c3', color: '#854d0e', border: '#fde047', label: 'LOW' };
-  return { bg: '#e2e8f0', color: '#334155', border: '#cbd5e1', label: 'LOW SAMPLE' };
+  return { bg: '#e2e8f0', color: '#334155', border: '#cbd5e1', label: 'INSUFFICIENT SAMPLE/DATA' };
 }
 
 const TABLE_COLUMNS = [
   { key: 'decision', label: 'Decision', sortable: true },
-  { key: 'confidence', label: 'Confidence', sortable: true },
   { key: 'name', label: 'Campaign / Ad Set', sortable: true },
-  { key: 'decision_reason', label: 'Decision Reason', sortable: false },
+  { key: 'decision_reason', label: 'Decision Context', sortable: false },
   { key: 'spend', label: 'Spend', sortable: true },
   { key: 'leads', label: 'Leads', sortable: true },
   { key: 'qualified_leads', label: 'Qualified', sortable: true },
@@ -92,7 +91,7 @@ export default function LeadsExperimentAnalyzerPanel({ data, isLoading = false }
       const left = sortKey === 'name' ? String(a?.name || '') : a?.[sortKey];
       const right = sortKey === 'name' ? String(b?.name || '') : b?.[sortKey];
 
-      if (sortKey === 'decision' || sortKey === 'confidence' || sortKey === 'name') {
+      if (sortKey === 'decision' || sortKey === 'name') {
         return String(left || '').localeCompare(String(right || '')) * direction;
       }
       const leftNum = toNumberOrNull(left);
@@ -176,7 +175,7 @@ export default function LeadsExperimentAnalyzerPanel({ data, isLoading = false }
       </div>
 
       <div style={{ marginTop: '12px', overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1120px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '960px' }}>
           <thead>
             <tr style={{ backgroundColor: '#f8fafc' }}>
               {TABLE_COLUMNS.map((col) => (
@@ -194,7 +193,7 @@ export default function LeadsExperimentAnalyzerPanel({ data, isLoading = false }
                   }}
                   onClick={() => col.sortable && onSort(col.key)}
                 >
-                  {col.label}{sortKey === col.key ? ` ${sortDir === 'asc' ? '↑' : '↓'}` : ''}
+                  {col.label}{sortKey === col.key ? ` ${sortDir === 'asc' ? '^' : 'v'}` : ''}
                 </th>
               ))}
             </tr>
@@ -212,14 +211,14 @@ export default function LeadsExperimentAnalyzerPanel({ data, isLoading = false }
                   }}
                 >
                   <td style={{ padding: '8px', textAlign: 'right' }}>
-                    <span style={{ display: 'inline-flex', borderRadius: '999px', padding: '2px 8px', fontSize: '10px', fontWeight: 700, backgroundColor: decisionStyle.bg, color: decisionStyle.color, border: `1px solid ${decisionStyle.border}` }}>
-                      {String(row.decision || 'ITERATE').replace(/_/g, ' ')}
-                    </span>
-                  </td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>
-                    <span style={{ display: 'inline-flex', borderRadius: '999px', padding: '2px 8px', fontSize: '10px', fontWeight: 700, backgroundColor: confidenceStyle.bg, color: confidenceStyle.color, border: `1px solid ${confidenceStyle.border}` }}>
-                      {confidenceStyle.label}
-                    </span>
+                    <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
+                      <span style={{ display: 'inline-flex', borderRadius: '999px', padding: '2px 8px', fontSize: '10px', fontWeight: 700, backgroundColor: decisionStyle.bg, color: decisionStyle.color, border: `1px solid ${decisionStyle.border}` }}>
+                        {decisionStyle.label}
+                      </span>
+                      <span style={{ display: 'inline-flex', borderRadius: '999px', padding: '2px 8px', fontSize: '10px', fontWeight: 700, backgroundColor: confidenceStyle.bg, color: confidenceStyle.color, border: `1px solid ${confidenceStyle.border}` }}>
+                        {confidenceStyle.label}
+                      </span>
+                    </div>
                   </td>
                   <td style={{ padding: '8px', textAlign: 'left', fontSize: '12px', color: '#0f172a', fontWeight: 600 }}>
                     {row.name}
@@ -229,8 +228,13 @@ export default function LeadsExperimentAnalyzerPanel({ data, isLoading = false }
                       </span>
                     )}
                   </td>
-                  <td style={{ padding: '8px', textAlign: 'left', fontSize: '11px', color: '#475569', minWidth: '280px' }}>
-                    {String(row.decision_reason || 'No reason available.')}
+                  <td style={{ padding: '8px', textAlign: 'left', fontSize: '11px', color: '#475569', minWidth: '220px', lineHeight: 1.35 }}>
+                    <div style={{ display: 'grid', gap: '4px' }}>
+                      <span>{String(row.decision_reason || 'Insufficient sample/data for decision reason.')}</span>
+                      <span style={{ fontSize: '10px', color: '#64748b' }}>
+                        Confidence: {confidenceStyle.label}
+                      </span>
+                    </div>
                   </td>
                   <td style={{ padding: '8px', textAlign: 'right', fontSize: '12px', color: '#334155' }}>{fmtCurrency(row.spend)}</td>
                   <td style={{ padding: '8px', textAlign: 'right', fontSize: '12px', color: '#334155' }}>{fmtInt(row.lead_base)}</td>
@@ -247,7 +251,7 @@ export default function LeadsExperimentAnalyzerPanel({ data, isLoading = false }
             {rows.length === 0 && (
               <tr>
                 <td colSpan={TABLE_COLUMNS.length} style={{ padding: '12px', fontSize: '12px', color: '#64748b' }}>
-                  No experiment-quality rows are available for this window.
+                  Insufficient sample/data for experiment-quality rows in this window.
                 </td>
               </tr>
             )}
@@ -265,7 +269,7 @@ export default function LeadsExperimentAnalyzerPanel({ data, isLoading = false }
               <li key={`paid-rec-${idx}-${line}`} style={{ fontSize: '12px', color: '#334155', lineHeight: 1.4 }}>{line}</li>
             ))}
             {(!Array.isArray(data?.paid_recommendations) || data.paid_recommendations.length === 0) && (
-              <li style={{ fontSize: '12px', color: '#64748b' }}>No paid recommendations available.</li>
+              <li style={{ fontSize: '12px', color: '#64748b' }}>Insufficient sample/data for paid recommendations.</li>
             )}
           </ul>
         </div>
@@ -279,7 +283,7 @@ export default function LeadsExperimentAnalyzerPanel({ data, isLoading = false }
               <li key={`organic-rec-${idx}-${line}`} style={{ fontSize: '12px', color: '#334155', lineHeight: 1.4 }}>{line}</li>
             ))}
             {(!Array.isArray(data?.organic_referral_insights) || data.organic_referral_insights.length === 0) && (
-              <li style={{ fontSize: '12px', color: '#64748b' }}>No organic/referral insights available.</li>
+              <li style={{ fontSize: '12px', color: '#64748b' }}>Insufficient sample/data for organic/referral insights.</li>
             )}
           </ul>
         </div>
