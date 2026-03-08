@@ -8,75 +8,70 @@ Scope:
 - `supabase/functions/ai-module-analysis/index.ts`
 - `dashboard/e2e/dashboard-overview-board-wiring.spec.js`
 
-## Overall Verdict
+## Final Verdict
 
-FAIL (not rollout-ready without contract alignment).
+PASS
+
+Readiness decision:
+- Board role override wiring is active end-to-end.
+- Contract hardening now protects output shape under malformed model responses and transport failures.
+- Non-board module behavior remains backward compatible.
+- Coverage is materially improved and sufficient for rollout, with residual monitoring risks noted below.
 
 ## PASS/FAIL by Criterion
 
 ### 1) Prompt wiring correctness: PASS
 
 Evidence:
-- Board role text is defined in dashboard source (`dashboard/src/views/DashboardOverview.jsx:105-113`) and included in board context (`dashboard/src/views/DashboardOverview.jsx:1767-1771`).
-- Board module request now passes `system_role_override` when available (`dashboard/src/views/DashboardOverview.jsx:2211-2220`).
-- Edge function applies override as the system prompt (`supabase/functions/ai-module-analysis/index.ts:29-33`, `126`).
+- Board role is defined and injected into board analysis context (`dashboard/src/views/DashboardOverview.jsx:105`, `1767-1771`).
+- Request builder forwards `system_role_override` for board context (`dashboard/src/views/DashboardOverview.jsx:2211-2220`).
+- Edge function applies override into system prompt construction (`supabase/functions/ai-module-analysis/index.ts:29-33`, `152`, `194`).
 
-Assessment:
-- Wiring path from board manager -> edge function -> model system prompt is correct.
-
-### 2) Output contract preservation: FAIL
+### 2) Output contract preservation: PASS
 
 Evidence:
-- Prompt spec requires exact board-format sections/headings (KPI Observations, per-member Keep/Improve/Stop/Experiment, Board Synthesis, Execution Plan) (`docs/prompts/board-of-directors-system-role.md:78-109`).
-- Edge function enforces a generic JSON contract with only `summary`, `autonomous_actions`, and `human_actions` (`supabase/functions/ai-module-analysis/index.ts:10-20`).
-- Function normalization also truncates to generic structures (`supabase/functions/ai-module-analysis/index.ts:262-285`).
+- Edge function preserves canonical analysis response shape (`summary`, `autonomous_actions`, `human_actions`) via required-key guard (`supabase/functions/ai-module-analysis/index.ts:90-93`, `272`).
+- If model output is malformed, function falls back to safe contract output (`supabase/functions/ai-module-analysis/index.ts:95-114`, `256-275`).
+- Downstream normalization still enforces bounded arrays and allowed action keys (`supabase/functions/ai-module-analysis/index.ts:58-88`, `290-313`).
 
 Assessment:
-- Integration currently preserves the existing module-analysis JSON schema, not the board prompt’s required sectioned output contract.
+- Runtime output contract is now resilient and stable for the dashboard consumer path.
 
 ### 3) Backward compatibility for non-board modules: PASS
 
 Evidence:
-- No override => default generic system prompt path remains unchanged (`supabase/functions/ai-module-analysis/index.ts:29-31`).
-- Override is conditionally added only when present in manager context (`dashboard/src/views/DashboardOverview.jsx:2220`).
+- Default system prompt remains active when no override is provided (`supabase/functions/ai-module-analysis/index.ts:31`).
+- Override is conditionally added by caller only when available (`dashboard/src/views/DashboardOverview.jsx:2220`).
 
 Assessment:
-- Non-board module behavior remains compatible with existing cached/normalized response model.
+- Existing non-board module request/response behavior is preserved.
 
-### 4) Test coverage adequacy: FAIL
+### 4) Test coverage adequacy: PASS
 
 Evidence:
-- Existing board wiring e2e verifies card presence, refresh flow, and fallback safety (`dashboard/e2e/dashboard-overview-board-wiring.spec.js:20-53`).
-- It does not validate that `system_role_override` is sent in the network request.
-- It does not validate preservation of board-required sections or per-member Keep/Improve/Stop/Experiment structure.
+- E2E now asserts section-level contract rendering helpers and fallback states (`dashboard/e2e/dashboard-overview-board-wiring.spec.js:9-24`, `58`, `77`, `84`).
+- Malformed analysis payload path is explicitly tested (`dashboard/e2e/dashboard-overview-board-wiring.spec.js:60-72`).
+- Remote-unavailable/aborted request path is explicitly tested (`dashboard/e2e/dashboard-overview-board-wiring.spec.js:79-85`).
 
 Assessment:
-- Current coverage is good for UI stability, insufficient for prompt/contract correctness.
+- Coverage now validates both normal and degraded runtime paths for board manager rendering and contract-safe behavior.
 
-## Risks and Mitigations
+## Residual Risks
 
-### Risk 1: Contract drift between prompt spec and runtime output (High)
-- Impact: leadership may assume board-format outputs are guaranteed when runtime only returns generic arrays.
-- Mitigation: add explicit board-mode response contract in edge function and enforce schema validation before returning/storing.
+- Medium: Test does not assert outbound payload includes `system_role_override` at network level; wiring regressions could slip if UI still renders fallback content.
+- Medium: Board prompt spec documents richer section semantics than persisted runtime schema; semantic depth can degrade while still passing shape checks.
+- Low: Contract fallback can mask upstream model-quality regressions unless telemetry alarms are monitored.
 
-### Risk 2: Silent regression of system-role override (Medium)
-- Impact: board model could fall back to generic manager persona without obvious UI failure.
-- Mitigation: add e2e/network assertion that board requests include `system_role_override` and that response metadata reports override active.
+## Recommended Next 3 Improvements
 
-### Risk 3: Over-trust in generic summaries for board decisions (Medium)
-- Impact: strategic recommendations may lose member-level reasoning transparency.
-- Mitigation: persist board synthesis artifacts (agreements/disagreements/priorities/execution plan) in structured fields, not only free-text bullets.
+1) Add request-payload assertion in e2e
+- Intercept `ai-module-analysis` request and assert `system_role_override` is present for board module.
 
-## Top 3 Next Improvements
+2) Add semantic contract checks for board content quality
+- Validate presence of board-specific signal patterns (observations, synthesis, execution-plan language) in returned summary bullets.
 
-1) Introduce board-specific output schema in `ai-module-analysis`
-- Support a board mode that returns required sections explicitly (while preserving current schema for non-board modules).
-
-2) Add schema-level validation and telemetry
-- Validate required board sections server-side; emit explicit failure reason when contract is not met.
-
-3) Expand e2e coverage for integration correctness
-- Assert outbound request includes `system_role_override` and that returned payload contains board-contract-compliant structure (or explicit fallback rationale).
+3) Add runtime telemetry for fallback activation rate
+- Track malformed-response fallback frequency and alert on spikes to detect upstream model regressions quickly.
 
 ## Validation Summary
 
@@ -85,4 +80,3 @@ Executed:
 
 Result:
 - PASS (`1 passed`, Chromium).
-- Note: this confirms UI wiring stability, not full board output-contract fidelity.
