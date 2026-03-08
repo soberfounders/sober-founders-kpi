@@ -42,12 +42,15 @@ function decisionTone(decisionRaw) {
   const decision = String(decisionRaw || '').toUpperCase();
   if (decision === 'KEEP') return { bg: '#dcfce7', color: '#166534', border: '#86efac' };
   if (decision === 'KILL') return { bg: '#fee2e2', color: '#991b1b', border: '#fecaca' };
+  if (decision === 'HOLD_LOW_SAMPLE') return { bg: '#e2e8f0', color: '#334155', border: '#cbd5e1' };
   return { bg: '#ffedd5', color: '#9a3412', border: '#fdba74' };
 }
 
 function confidenceTone(confidenceRaw) {
   const confidence = String(confidenceRaw || '').toUpperCase();
   if (confidence === 'HIGH') return { bg: '#dbeafe', color: '#1d4ed8', border: '#93c5fd', label: 'HIGH' };
+  if (confidence === 'MEDIUM') return { bg: '#e0f2fe', color: '#0369a1', border: '#bae6fd', label: 'MEDIUM' };
+  if (confidence === 'LOW') return { bg: '#fef9c3', color: '#854d0e', border: '#fde047', label: 'LOW' };
   return { bg: '#e2e8f0', color: '#334155', border: '#cbd5e1', label: 'LOW SAMPLE' };
 }
 
@@ -55,6 +58,7 @@ const TABLE_COLUMNS = [
   { key: 'decision', label: 'Decision', sortable: true },
   { key: 'confidence', label: 'Confidence', sortable: true },
   { key: 'name', label: 'Campaign / Ad Set', sortable: true },
+  { key: 'decision_reason', label: 'Decision Reason', sortable: false },
   { key: 'spend', label: 'Spend', sortable: true },
   { key: 'leads', label: 'Leads', sortable: true },
   { key: 'qualified_leads', label: 'Qualified', sortable: true },
@@ -183,7 +187,7 @@ export default function LeadsExperimentAnalyzerPanel({ data, isLoading = false }
                     borderBottom: '1px solid #e2e8f0',
                     fontSize: '11px',
                     color: '#334155',
-                    textAlign: col.key === 'name' ? 'left' : 'right',
+                    textAlign: (col.key === 'name' || col.key === 'decision_reason') ? 'left' : 'right',
                     cursor: col.sortable ? 'pointer' : 'default',
                     userSelect: 'none',
                     whiteSpace: 'nowrap',
@@ -209,7 +213,7 @@ export default function LeadsExperimentAnalyzerPanel({ data, isLoading = false }
                 >
                   <td style={{ padding: '8px', textAlign: 'right' }}>
                     <span style={{ display: 'inline-flex', borderRadius: '999px', padding: '2px 8px', fontSize: '10px', fontWeight: 700, backgroundColor: decisionStyle.bg, color: decisionStyle.color, border: `1px solid ${decisionStyle.border}` }}>
-                      {String(row.decision || 'ITERATE')}
+                      {String(row.decision || 'ITERATE').replace(/_/g, ' ')}
                     </span>
                   </td>
                   <td style={{ padding: '8px', textAlign: 'right' }}>
@@ -224,6 +228,9 @@ export default function LeadsExperimentAnalyzerPanel({ data, isLoading = false }
                         Low CPL / Weak Quality
                       </span>
                     )}
+                  </td>
+                  <td style={{ padding: '8px', textAlign: 'left', fontSize: '11px', color: '#475569', minWidth: '280px' }}>
+                    {String(row.decision_reason || 'No reason available.')}
                   </td>
                   <td style={{ padding: '8px', textAlign: 'right', fontSize: '12px', color: '#334155' }}>{fmtCurrency(row.spend)}</td>
                   <td style={{ padding: '8px', textAlign: 'right', fontSize: '12px', color: '#334155' }}>{fmtInt(row.lead_base)}</td>
@@ -280,4 +287,3 @@ export default function LeadsExperimentAnalyzerPanel({ data, isLoading = false }
     </section>
   );
 }
-

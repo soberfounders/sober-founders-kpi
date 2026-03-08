@@ -50,6 +50,33 @@ function fmtSignedPp(value, digits = 1) {
   return `${sign}${parsed.toFixed(digits)} pp`;
 }
 
+function parseSobrietyDate(value) {
+  const text = String(value || '').trim();
+  if (!text || text.toLowerCase() === 'not found') return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return new Date(`${text}T00:00:00.000Z`);
+  const mmddyyyy = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (mmddyyyy) {
+    const mm = String(mmddyyyy[1]).padStart(2, '0');
+    const dd = String(mmddyyyy[2]).padStart(2, '0');
+    const yyyy = String(mmddyyyy[3]).padStart(4, '0');
+    return new Date(`${yyyy}-${mm}-${dd}T00:00:00.000Z`);
+  }
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function hasOneYearSobriety(sobrietyDateValue, referenceDate = new Date()) {
+  const sobrietyDate = parseSobrietyDate(sobrietyDateValue);
+  if (!sobrietyDate) return false;
+  const reference = new Date(Date.UTC(referenceDate.getUTCFullYear(), referenceDate.getUTCMonth(), referenceDate.getUTCDate()));
+  const anniversary = new Date(Date.UTC(
+    sobrietyDate.getUTCFullYear() + 1,
+    sobrietyDate.getUTCMonth(),
+    sobrietyDate.getUTCDate(),
+  ));
+  return anniversary.getTime() <= reference.getTime();
+}
+
 function extractMetrics({
   analytics,
   groupedData,
@@ -155,6 +182,38 @@ function buildTrendInsights(metrics) {
   return trendInsights;
 }
 
+function buildImpactSampleProfile(metrics) {
+  const weeklyEnough = (
+    Number(metrics.weekly.current.leads || 0) >= 20
+    && Number(metrics.weekly.previous.leads || 0) >= 20
+    && Number(metrics.weekly.current.qualified || 0) >= 5
+    && Number(metrics.weekly.previous.qualified || 0) >= 5
+  );
+  const monthlyEnough = (
+    Number(metrics.monthly.current.leads || 0) >= 40
+    && Number(metrics.monthly.previous.leads || 0) >= 40
+    && Number(metrics.monthly.current.qualified || 0) >= 12
+    && Number(metrics.monthly.previous.qualified || 0) >= 12
+  );
+  return {
+    weeklyEnough,
+    monthlyEnough,
+    anyEnough: weeklyEnough || monthlyEnough,
+  };
+}
+
+function metricProjectionEntry(metricKey, rawValue, basis, sampleProfile) {
+  const confidence = sampleProfile.weeklyEnough && sampleProfile.monthlyEnough
+    ? 'HIGH'
+    : (sampleProfile.anyEnough ? 'MEDIUM' : 'LOW_SAMPLE');
+  return {
+    key: metricKey,
+    value: sampleProfile.anyEnough ? rawValue : 'insufficient sample',
+    basis: sampleProfile.anyEnough ? basis : `${basis} (insufficient sample)`,
+    confidence,
+  };
+}
+
 function buildAutonomousActions(metrics) {
   const nonQualifiedRate = pickNumber(metrics.weekly.current.nonQualifiedRate, metrics.monthly.current.nonQualifiedRate, 0.5);
   const cplRegression = Math.max(
@@ -166,6 +225,7 @@ function buildAutonomousActions(metrics) {
     0,
   );
   const qualificationGap = Math.max(nonQualifiedRate - 0.45, 0);
+  const sampleProfile = buildImpactSampleProfile(metrics);
 
   const baseCplGain = clamp(0.03 + (cplRegression * 0.35) + (qualificationGap * 0.15), 0.02, 0.15);
   const baseCpqlGain = clamp(0.06 + (cpqlRegression * 0.45) + (qualificationGap * 0.2), 0.04, 0.25);
@@ -178,17 +238,57 @@ function buildAutonomousActions(metrics) {
     cplScale,
     cpqlScale,
     qualificationScale,
-  }) => ({
-    title,
-    summary,
-    priority,
-    projected_impact: {
-      cpl_pct: -clamp(baseCplGain * cplScale, 0.01, 0.25),
-      cpql_pct: -clamp(baseCpqlGain * cpqlScale, 0.02, 0.35),
-      qualified_rate_pp: clamp(baseQualifiedGainPp * qualificationScale, 0.5, 10),
-      non_qualified_rate_pp: -clamp(baseQualifiedGainPp * qualificationScale, 0.5, 10),
-    },
-  });
+    basisPrefix,
+  }) => {
+    const cplEntry = metricProjectionEntry(
+      'cpl_pct',
+      -clamp(baseCplGain * cplScale, 0.01, 0.25),
+      `${basisPrefix}; based on CPL trend regression and current non-qualified gap (${fmtPct(nonQualifiedRate)}).`,
+      sampleProfile,
+    );
+    const cpqlEntry = metricProjectionEntry(
+      'cpql_pct',
+      -clamp(baseCpqlGain * cpqlScale, 0.02, 0.35),
+      `${basisPrefix}; based on CPQL trend regression and qualification gap pressure.`,
+      sampleProfile,
+    );
+    const qualifiedEntry = metricProjectionEntry(
+      'qualified_rate_pp',
+      clamp(baseQualifiedGainPp * qualificationScale, 0.5, 10),
+      `${basisPrefix}; based on historical sensitivity between message tightness and qualified conversion.`,
+      sampleProfile,
+    );
+    const nonQualifiedEntry = metricProjectionEntry(
+      'non_qualified_rate_pp',
+      -clamp(baseQualifiedGainPp * qualificationScale, 0.5, 10),
+      `${basisPrefix}; inverse of qualified-rate projection.`,
+      sampleProfile,
+    );
+
+    return {
+      title,
+      summary,
+      priority,
+      projected_impact: {
+        cpl_pct: cplEntry.value,
+        cpql_pct: cpqlEntry.value,
+        qualified_rate_pp: qualifiedEntry.value,
+        non_qualified_rate_pp: nonQualifiedEntry.value,
+        impact_basis: {
+          cpl_pct: cplEntry.basis,
+          cpql_pct: cpqlEntry.basis,
+          qualified_rate_pp: qualifiedEntry.basis,
+          non_qualified_rate_pp: nonQualifiedEntry.basis,
+        },
+        confidence: {
+          cpl_pct: cplEntry.confidence,
+          cpql_pct: cpqlEntry.confidence,
+          qualified_rate_pp: qualifiedEntry.confidence,
+          non_qualified_rate_pp: nonQualifiedEntry.confidence,
+        },
+      },
+    };
+  };
 
   return [
     actionTemplate({
@@ -198,6 +298,7 @@ function buildAutonomousActions(metrics) {
       cplScale: 1.0,
       cpqlScale: 1.0,
       qualificationScale: 1.0,
+      basisPrefix: 'Budget-mix reallocation model',
     }),
     actionTemplate({
       title: 'Tighten qualification messaging in ads and forms',
@@ -206,6 +307,7 @@ function buildAutonomousActions(metrics) {
       cplScale: 0.7,
       cpqlScale: 0.9,
       qualificationScale: 1.1,
+      basisPrefix: 'Qualification copy sensitivity model',
     }),
     actionTemplate({
       title: 'Automate high-fit no-show reactivation',
@@ -214,6 +316,7 @@ function buildAutonomousActions(metrics) {
       cplScale: 0.25,
       cpqlScale: 0.65,
       qualificationScale: 0.7,
+      basisPrefix: 'Post-registration recovery model',
     }),
   ].slice(0, 3);
 }
@@ -246,6 +349,73 @@ function buildHumanRequiredActions(metrics, qualityCounts) {
   ];
 }
 
+function classifySourceBucket(row) {
+  const source = String(row?.originalTrafficSource || '').trim().toUpperCase();
+  const hearAbout = String(row?.hearAboutCategory || '').trim().toLowerCase();
+  if (source.includes('ORGANIC_SEARCH') || hearAbout === 'google') return 'organic';
+  if (source.includes('REFERRAL') || hearAbout === 'referral') return 'referral';
+  if (source.includes('PAID_SOCIAL') || hearAbout === 'meta') return 'paid';
+  return 'other';
+}
+
+function buildOrganicReferralQualityInsights(groupedData) {
+  const rows = groupedData?.current?.free?.combined?.lumaRows || [];
+  const stats = {
+    organic: { rows: 0, showUps: 0, qualified: 0, great: 0 },
+    referral: { rows: 0, showUps: 0, qualified: 0, great: 0 },
+    paid: { rows: 0, showUps: 0, qualified: 0, great: 0 },
+  };
+
+  rows.forEach((row) => {
+    const bucket = classifySourceBucket(row);
+    if (!stats[bucket]) return;
+    const revenue = pickNumber(row?.revenueOfficial, row?.revenue);
+    const great = revenue !== null && revenue >= 1_000_000;
+    const qualified = revenue !== null && revenue >= 250_000 && hasOneYearSobriety(row?.sobrietyDate);
+    stats[bucket].rows += 1;
+    if (row?.matchedZoom) stats[bucket].showUps += 1;
+    if (great) stats[bucket].great += 1;
+    if (qualified) stats[bucket].qualified += 1;
+  });
+
+  const organic = stats.organic;
+  const referral = stats.referral;
+  const paid = stats.paid;
+  const totalRows = rows.length;
+
+  const makeQualityLine = (label, s) => {
+    if (s.rows < 5) return `${label}: insufficient sample (${s.rows} rows) to trust Qualified%/Great% projections.`;
+    const qualifiedRate = safeDivide(s.qualified, s.rows);
+    const greatRate = safeDivide(s.great, s.rows);
+    const share = safeDivide(s.rows, totalRows);
+    return `${label}: ${s.rows} rows (${fmtPct(share)} share), Qualified ${fmtPct(qualifiedRate)}, Great ${fmtPct(greatRate)}.`;
+  };
+
+  const bullets = [
+    makeQualityLine('Organic Search', organic),
+    makeQualityLine('Referral', referral),
+  ];
+
+  if (paid.rows >= 5) {
+    const paidQualifiedRate = safeDivide(paid.qualified, paid.rows);
+    const paidGreatRate = safeDivide(paid.great, paid.rows);
+    if (organic.rows >= 5) {
+      const organicQualifiedRate = safeDivide(organic.qualified, organic.rows);
+      if (organicQualifiedRate !== null && paidQualifiedRate !== null && organicQualifiedRate < paidQualifiedRate) {
+        bullets.push(`Organic Qualified% trails paid by ${fmtSignedPp((organicQualifiedRate - paidQualifiedRate) * 100)}; tighten organic ICP messaging and conversion path.`);
+      }
+    }
+    if (referral.rows >= 5) {
+      const referralGreatRate = safeDivide(referral.great, referral.rows);
+      if (referralGreatRate !== null && paidGreatRate !== null && referralGreatRate > paidGreatRate) {
+        bullets.push(`Referral Great% exceeds paid by ${fmtSignedPp((referralGreatRate - paidGreatRate) * 100)}; expand partner-led qualified introductions.`);
+      }
+    }
+  }
+
+  return bullets.slice(0, 4);
+}
+
 export function buildLeadsManagerInsights({
   analytics,
   groupedData,
@@ -269,5 +439,7 @@ export function buildLeadsManagerInsights({
     trend_insights: buildTrendInsights(metrics),
     autonomous_actions: buildAutonomousActions(metrics),
     human_required_actions: buildHumanRequiredActions(metrics, qualificationCurrent?.qualityCounts),
+    organic_referral_insights: buildOrganicReferralQualityInsights(groupedData),
   };
 }
+
