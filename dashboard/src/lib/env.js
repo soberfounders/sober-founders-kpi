@@ -2,6 +2,7 @@ const rawEnv = import.meta.env || {};
 
 const MIN_LOOKBACK_DAYS = 30;
 const MAX_LOOKBACK_DAYS = 1095;
+const DEFAULT_INITIAL_ATTRIBUTION_LOOKBACK_DAYS = 120;
 
 function getString(key, fallback = '') {
   return String(rawEnv[key] ?? fallback).trim();
@@ -45,7 +46,7 @@ export const LEADS_LOOKBACK_DAYS = getBoundedInt('VITE_LEADS_LOOKBACK_DAYS', 365
 
 export const LEADS_ATTRIBUTION_HISTORY_DAYS = getBoundedInt(
   'VITE_LEADS_ATTRIBUTION_HISTORY_DAYS',
-  365,
+  DEFAULT_INITIAL_ATTRIBUTION_LOOKBACK_DAYS,
   { min: MIN_LOOKBACK_DAYS, max: MAX_LOOKBACK_DAYS },
 );
 
