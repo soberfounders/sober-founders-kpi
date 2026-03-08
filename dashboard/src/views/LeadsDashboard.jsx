@@ -794,6 +794,8 @@ export default function LeadsDashboard() {
   // Legacy drilldown
   const [drilldownWindowKey, setDrilldownWindowKey] = useState('monthCurrent');
   const [drilldownMetricKey, setDrilldownMetricKey] = useState('leads');
+  const [legacyComparisonOpen, setLegacyComparisonOpen] = useState(false);
+  const [factCheckDrilldownOpen, setFactCheckDrilldownOpen] = useState(false);
 
   // Supabase connection info for AI panel
   const supabaseUrl = SUPABASE_URL;
@@ -910,13 +912,38 @@ export default function LeadsDashboard() {
       zoomRows: zoomR.data || [],
       lumaRows: lumaR.data || [],
       aliases: aliasR.data || [],
-      lookbackDays: LOOKBACK_DAYS
+      lookbackDays: LOOKBACK_DAYS,
+      includeDrilldowns: false,
     });
     setAnalytics(nextAnalytics);
 
     setLoadErrors(errors);
     setLoading(false);
   }
+
+  useEffect(() => {
+    if (!factCheckDrilldownOpen) return;
+    if (!analytics?.drilldowns?.isDeferred) return;
+
+    const drilldownReadyAnalytics = buildLeadAnalytics({
+      adsRows: rawAds,
+      hubspotRows: rawHubspot,
+      zoomRows: rawZoom,
+      lumaRows: rawLuma,
+      aliases,
+      lookbackDays: LOOKBACK_DAYS,
+      includeDrilldowns: true,
+    });
+    setAnalytics(drilldownReadyAnalytics);
+  }, [
+    factCheckDrilldownOpen,
+    analytics?.drilldowns?.isDeferred,
+    rawAds,
+    rawHubspot,
+    rawZoom,
+    rawLuma,
+    aliases,
+  ]);
 
   // Build date range windows
   const today = dateKeyInTimeZone(new Date(), 'America/New_York');
@@ -3355,14 +3382,15 @@ export default function LeadsDashboard() {
   }, []);
 
   // Legacy drilldown helpers
+  const drilldownDataReady = !analytics?.drilldowns?.isDeferred;
   const activeDrilldownWindow = analytics?.drilldowns?.byWindow?.[drilldownWindowKey] || null;
   const activeDrilldownTable = activeDrilldownWindow?.tables?.[drilldownMetricKey] || null;
   const drilldownQuickMetrics = ['leads', 'registrations', 'showups', 'qualified', 'great', 'cpl', 'cpql', 'cost_per_showup', 'cost_per_registration'];
 
   const topAttributionRows = useMemo(() => {
-    if (!analytics?.adAttributionRows) return [];
+    if (!legacyComparisonOpen || !analytics?.adAttributionRows) return [];
     return [...analytics.adAttributionRows].sort((a, b) => (b.attributedShowUps - a.attributedShowUps) || (b.spend - a.spend)).slice(0, 15);
-  }, [analytics]);
+  }, [legacyComparisonOpen, analytics]);
 
   const liveFreshnessModule = useMemo(() => {
     const todayKeyUtc = new Date().toISOString().slice(0, 10);
@@ -4346,7 +4374,10 @@ export default function LeadsDashboard() {
 
       <CohortUnitEconomicsPreviewPanel supabaseUrl={supabaseUrl} supabaseKey={supabaseKey} placement="top" />
 
-      <details style={{ ...card, padding: '16px' }}>
+      <details
+        style={{ ...card, padding: '16px' }}
+        onToggle={(event) => setLegacyComparisonOpen(Boolean(event.currentTarget?.open))}
+      >
         <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <div>
             <span style={{ fontWeight: 700, fontSize: '15px', color: '#0f172a' }}>Legacy Comparison (Mixed / Zoom-era analytics)</span>
@@ -4358,7 +4389,8 @@ export default function LeadsDashboard() {
             Comparison Only
           </span>
         </summary>
-        <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        {legacyComparisonOpen ? (
+          <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
 
           {/* ── TOP INSIGHTS: BEST MEMBERS (ZOOM-FIRST) ── */}
           <div style={card}>
@@ -5628,28 +5660,33 @@ export default function LeadsDashboard() {
 
               {/* Fact Check Drilldown (collapsed) */}
               <div style={card}>
-                <details>
+                <details onToggle={(event) => setFactCheckDrilldownOpen(Boolean(event.currentTarget?.open))}>
                   <summary style={{ cursor: 'pointer', fontWeight: 700, fontSize: '16px', color: '#0f172a', listStyle: 'none' }}>
                     Fact Check Drilldown
                     <span style={{ marginLeft: '8px', fontWeight: 500, fontSize: '12px', color: '#64748b' }}>
                       Click to expand raw supporting rows
                     </span>
                   </summary>
-                  <div style={{ marginTop: '12px' }}>
+                  {factCheckDrilldownOpen ? (
+                    <div style={{ marginTop: '12px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                       <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Click KPI numbers above, or choose a metric and window below.</p>
-                      <select value={drilldownWindowKey} onChange={(e) => setDrilldownWindowKey(e.target.value)} style={{ padding: '8px 10px', borderRadius: '10px', border: '1px solid #cbd5e1', backgroundColor: '#fff', fontSize: '12px', fontWeight: 600, color: '#334155' }}>
+                      <select value={drilldownWindowKey} onChange={(e) => setDrilldownWindowKey(e.target.value)} disabled={!drilldownDataReady} style={{ padding: '8px 10px', borderRadius: '10px', border: '1px solid #cbd5e1', backgroundColor: '#fff', fontSize: '12px', fontWeight: 600, color: '#334155', opacity: drilldownDataReady ? 1 : 0.6 }}>
                         {Object.entries(analytics.drilldowns.windows || {}).map(([k, w]) => <option key={k} value={k}>{w.label}: {w.startKey} to {w.endKey}</option>)}
                       </select>
                     </div>
                     <div style={{ marginTop: '10px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                       {drilldownQuickMetrics.map((k) => (
-                        <button key={k} onClick={() => setDrilldownMetricKey(k)} style={{ border: '1px solid #cbd5e1', backgroundColor: drilldownMetricKey === k ? '#0f766e' : '#f8fafc', color: drilldownMetricKey === k ? '#fff' : '#334155', borderRadius: '999px', padding: '6px 10px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                        <button key={k} onClick={() => setDrilldownMetricKey(k)} disabled={!drilldownDataReady} style={{ border: '1px solid #cbd5e1', backgroundColor: drilldownMetricKey === k ? '#0f766e' : '#f8fafc', color: drilldownMetricKey === k ? '#fff' : '#334155', borderRadius: '999px', padding: '6px 10px', fontSize: '12px', fontWeight: 600, cursor: drilldownDataReady ? 'pointer' : 'not-allowed', opacity: drilldownDataReady ? 1 : 0.6 }}>
                           {analytics.drilldowns.metricLabels?.[k] || k}
                         </button>
                       ))}
                     </div>
-                    {activeDrilldownWindow && activeDrilldownTable ? (
+                    {!drilldownDataReady ? (
+                      <p style={{ marginTop: '12px', fontSize: '12px', color: '#64748b' }}>
+                        Loading drilldown tables...
+                      </p>
+                    ) : activeDrilldownWindow && activeDrilldownTable ? (
                       <>
                         <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
                           <p style={{ margin: 0, fontSize: '13px', fontWeight: 700 }}>{analytics.drilldowns.metricLabels?.[drilldownMetricKey] || drilldownMetricKey}</p>
@@ -5684,7 +5721,8 @@ export default function LeadsDashboard() {
                     ) : (
                       <p style={{ marginTop: '12px', fontSize: '12px', color: '#64748b' }}>No drilldown data available.</p>
                     )}
-                  </div>
+                    </div>
+                  ) : null}
                 </details>
               </div>
             </>
@@ -5693,7 +5731,8 @@ export default function LeadsDashboard() {
           {/* ── AI Insights Panel ── */}
           <AIInsightsPanel supabaseUrl={supabaseUrl} supabaseKey={supabaseKey} groupedData={groupedData} />
 
-        </div>
+          </div>
+        ) : null}
       </details>
 
       {/* ── Drill-down Modal ── */}

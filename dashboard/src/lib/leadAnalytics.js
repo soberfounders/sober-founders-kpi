@@ -1258,6 +1258,7 @@ export function buildLeadAnalytics({
   lumaRows = [],
   aliases = [],
   lookbackDays = LOOKBACK_DAYS_DEFAULT,
+  includeDrilldowns = true,
 }) {
   const todayKey = new Date().toISOString().slice(0, 10);
   const primaryDate = pickPrimaryDate([...adsRows, ...hubspotRows, ...zoomRows], todayKey);
@@ -1352,18 +1353,20 @@ export function buildLeadAnalytics({
     weekPrevious: { label: 'Previous 7 Days', startKey: weekPreviousRange.start, endKey: weekPreviousRange.end },
     lookback: { label: 'Lookback Window', startKey: lookbackRange.start, endKey: lookbackRange.end },
   };
-  const drilldownByWindow = Object.entries(drilldownWindows).reduce((acc, [key, range]) => {
-    acc[key] = buildWindowDrilldown({
-      startKey: range.startKey,
-      endKey: range.endKey,
-      adsRows: adState.normalizedRows,
-      paidLeads,
-      lumaRegistrations,
-      zoomSessions: zoomNetNew.sessions || [],
-      hasDirectLumaData,
-    });
-    return acc;
-  }, {});
+  const drilldownByWindow = includeDrilldowns
+    ? Object.entries(drilldownWindows).reduce((acc, [key, range]) => {
+      acc[key] = buildWindowDrilldown({
+        startKey: range.startKey,
+        endKey: range.endKey,
+        adsRows: adState.normalizedRows,
+        paidLeads,
+        lumaRegistrations,
+        zoomSessions: zoomNetNew.sessions || [],
+        hasDirectLumaData,
+      });
+      return acc;
+    }, {})
+    : {};
   const drilldownMetricLabels = {
     impressions: 'Impressions',
     clicks: 'Clicks',
@@ -1456,6 +1459,7 @@ export function buildLeadAnalytics({
       windows: drilldownWindows,
       byWindow: drilldownByWindow,
       metricLabels: drilldownMetricLabels,
+      isDeferred: !includeDrilldowns,
     },
     analysis,
     helpers: {
