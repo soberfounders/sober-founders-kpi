@@ -2208,16 +2208,19 @@ const DashboardOverview = () => {
     }
 
     try {
+      const systemRoleOverride = String(manager?.analysisContext?.system_role || '').trim();
+      const requestBody = {
+        module_key: key,
+        context: manager.analysisContext || {},
+        action_catalog: actionCatalog,
+        ttl_hours: MODULE_ANALYSIS_TTL_HOURS,
+        force_refresh: forceRefresh,
+        fallback_summary: fallbackSummary,
+        fallback_human_actions: fallbackHumanActions,
+        ...(systemRoleOverride ? { system_role_override: systemRoleOverride } : {}),
+      };
       const { data, error: invokeError } = await supabase.functions.invoke('ai-module-analysis', {
-        body: {
-          module_key: key,
-          context: manager.analysisContext || {},
-          action_catalog: actionCatalog,
-          ttl_hours: MODULE_ANALYSIS_TTL_HOURS,
-          force_refresh: forceRefresh,
-          fallback_summary: fallbackSummary,
-          fallback_human_actions: fallbackHumanActions,
-        },
+        body: requestBody,
       });
 
       if (invokeError) throw invokeError;

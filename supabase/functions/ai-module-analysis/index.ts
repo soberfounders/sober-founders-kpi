@@ -7,9 +7,8 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST,OPTIONS",
 };
 
-const SYSTEM_PROMPT = [
-  "You are a sales and operations manager assistant. You will be given structured data",
-  "from each module (leads, attendance, etc). Return a JSON object with three keys:",
+const JSON_OUTPUT_CONTRACT_PROMPT = [
+  'Return a JSON object with three keys:',
   '- "summary": array of 3-5 bullet point strings describing current status and trends',
   '- "autonomous_actions": array of up to 3 objects with "description" and "action_key"',
   '- "human_actions": array of up to 3 plain-English suggestion strings with button to add to notion',
@@ -19,6 +18,19 @@ const SYSTEM_PROMPT = [
   "Return JSON only. No markdown, no preamble.",
   "Only use action_key values that appear in the allowed action catalog.",
 ].join("\n");
+
+const SYSTEM_PROMPT = [
+  "You are a sales and operations manager assistant. You will be given structured data",
+  "from each module (leads, attendance, etc).",
+  "",
+  JSON_OUTPUT_CONTRACT_PROMPT,
+].join("\n");
+
+function buildSystemPrompt(systemRoleOverride: string) {
+  const override = String(systemRoleOverride || "").trim();
+  if (!override) return SYSTEM_PROMPT;
+  return [override, "", JSON_OUTPUT_CONTRACT_PROMPT].join("\n");
+}
 
 function mustGetEnv(name: string) {
   const value = Deno.env.get(name);
@@ -88,6 +100,7 @@ async function callOpenAiAnalysis(
   moduleKey: string,
   context: any,
   actionCatalog: Array<{ action_key: string; description: string }>,
+  systemRoleOverride: string,
 ) {
   const prompt = [
     `module_key: ${moduleKey}`,
@@ -110,7 +123,7 @@ async function callOpenAiAnalysis(
       temperature: 0.2,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: buildSystemPrompt(systemRoleOverride) },
         { role: "user", content: prompt },
       ],
     }),
@@ -152,6 +165,7 @@ serve(async (req: Request) => {
     const body = await req.json().catch(() => ({}));
     const moduleKey = String(body?.module_key || "").trim().toLowerCase();
     const context = body?.context ?? {};
+    const systemRoleOverride = normalizeText(body?.system_role_override, "");
     const actionCatalog = Array.isArray(body?.action_catalog)
       ? body.action_catalog
           .map((row: any) => ({
@@ -225,6 +239,7 @@ serve(async (req: Request) => {
         moduleKey,
         context,
         actionCatalog,
+        systemRoleOverride,
       );
     } else {
       isMock = true;
