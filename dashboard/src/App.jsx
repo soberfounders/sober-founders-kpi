@@ -1,17 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import DashboardOverview from './views/DashboardOverview';
-import LeadsDashboard from './views/LeadsDashboard';
-import EmailDashboard from './views/EmailDashboard';
-import TodosDashboard from './views/TodosDashboard';
-import DataCleaning from './views/DataCleaning'; // Added import
-import AttendanceDashboard from './views/AttendanceDashboard'; // Added import
-import EmailMarketingDashboard from './views/EmailMarketingDashboard';
-import WebsiteTrafficDashboard from './views/WebsiteTrafficDashboard';
-import AIBriefingDashboard from './views/AIBriefingDashboard';
-import DonationsDashboard from './views/DonationsDashboard';
 import { hasSupabaseConfig, supabaseConfigError } from './lib/supabaseClient';
+
+const LeadsDashboard = lazy(() => import('./views/LeadsDashboard'));
+const EmailDashboard = lazy(() => import('./views/EmailDashboard'));
+const TodosDashboard = lazy(() => import('./views/TodosDashboard'));
+const DataCleaning = lazy(() => import('./views/DataCleaning'));
+const AttendanceDashboard = lazy(() => import('./views/AttendanceDashboard'));
+const EmailMarketingDashboard = lazy(() => import('./views/EmailMarketingDashboard'));
+const WebsiteTrafficDashboard = lazy(() => import('./views/WebsiteTrafficDashboard'));
+const AIBriefingDashboard = lazy(() => import('./views/AIBriefingDashboard'));
+const DonationsDashboard = lazy(() => import('./views/DonationsDashboard'));
 
 function PlaceholderView({ tab }) {
   return (
@@ -37,6 +38,14 @@ function SupabaseEnvRequiredView() {
       <div style={{ marginTop: '16px', fontSize: '14px', color: 'var(--color-text-muted)', lineHeight: 1.6, background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '8px' }}>
         <p><strong>Required:</strong> `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`</p>
       </div>
+    </div>
+  );
+}
+
+function ModuleLoadingView() {
+  return (
+    <div className="glass-panel page-transition-enter" style={{ padding: '24px', maxWidth: '760px', margin: '0 auto' }}>
+      <p style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>Loading module...</p>
     </div>
   );
 }
@@ -142,7 +151,7 @@ function App() {
         return <AIBriefingDashboard />;
       case 'Data Integrity':
         return <DataCleaning />;
-      case 'Attendance': // Added case for AttendanceDashboard
+      case 'Attendance':
         return <AttendanceDashboard />;
       case 'Sales':
         return <PlaceholderView tab="Sales" />;
@@ -172,7 +181,9 @@ function App() {
         <Header activeTab={activeTab} onMenuClick={handleMenuToggle} isMobile={isMobile} />
         <main style={{ flex: 1, minWidth: 0, padding: isMobile ? '12px' : '32px 40px', overflowY: 'auto' }}>
           <div className="page-transition-enter">
-            {renderView()}
+            <Suspense fallback={<ModuleLoadingView />}>
+              {renderView()}
+            </Suspense>
           </div>
         </main>
       </div>
