@@ -1,5 +1,12 @@
 ﻿import { buildAliasMap, resolveCanonicalAttendeeName } from './attendeeCanonicalization';
 
+import {
+  isQualifiedLead,
+  leadQualityTierFromOfficialRevenue,
+  parseOfficialRevenue,
+  parseSobrietyDate,
+} from './leadsQualificationRules';
+
 const TUESDAY_MEETING_ID = '87199667045';
 const THURSDAY_MEETING_ID = '84242212480';
 const LOOKBACK_DAYS_DEFAULT = 120;
@@ -98,30 +105,24 @@ function classifyLeadFunnel(row) {
 }
 
 function leadTierFromRevenue(value) {
-  if (value === null || value === undefined || value === '') return 'unknown';
-  const revenue = toNumber(value);
-  if (revenue >= 1_000_000) return 'great';
-  if (revenue >= 250_000) return 'qualified';
-  if (revenue >= 100_000) return 'ok';
-  return 'bad';
+  const canonical = leadQualityTierFromOfficialRevenue(value);
+  if (canonical === 'good') return 'qualified';
+  return canonical;
 }
 
 function resolveHubspotRevenue(row) {
-  const officialRaw =
-    row?.annual_revenue_in_usd_official
-    ?? row?.annual_revenue_in_dollars__official_;
-  if (officialRaw !== null && officialRaw !== undefined && officialRaw !== '') {
-    const official = Number(officialRaw);
-    if (Number.isFinite(official)) return official;
-  }
+  return parseOfficialRevenue(row);
+}
 
-  const fallbackRaw = row?.annual_revenue_in_dollars;
-  if (fallbackRaw !== null && fallbackRaw !== undefined && fallbackRaw !== '') {
-    const fallback = Number(fallbackRaw);
-    if (Number.isFinite(fallback)) return fallback;
-  }
-
-  return null;
+function resolveHubspotSobrietyRaw(row) {
+  return (
+    row?.sobriety_date
+    ?? row?.sobriety_date__official_
+    ?? row?.sober_date
+    ?? row?.clean_date
+    ?? row?.sobrietydate
+    ?? null
+  );
 }
 
 function isPaidSocialLead(row) {
@@ -365,7 +366,10 @@ function buildPaidLeads(hubspotRows, showupIndex) {
       if (!createdDateKey) return null;
 
       const revenue = resolveHubspotRevenue(row);
+      const sobrietyRaw = resolveHubspotSobrietyRaw(row);
+      const sobrietyDate = parseSobrietyDate(sobrietyRaw);
       const tier = leadTierFromRevenue(revenue);
+      const isQualified = isQualifiedLead({ revenue, sobrietyDate });
       const leadName = getLeadName(row);
       const showupMatch = matchLeadToShowup(leadName, createdDateKey, showupIndex);
 
@@ -386,6 +390,8 @@ function buildPaidLeads(hubspotRows, showupIndex) {
         sourceData1: String(row?.hs_analytics_source_data_1 || '').trim(),
         sourceData2: String(row?.hs_analytics_source_data_2 || '').trim(),
         revenue,
+        sobrietyDate: sobrietyDate ? sobrietyDate.toISOString().slice(0, 10) : null,
+        isQualified,
       };
     })
     .filter(Boolean)
@@ -514,14 +520,14 @@ function buildLeadBuckets(paidLeads, lumaRegistrations = []) {
     const bucket = byDateFunnel.get(dateFunnelKey);
     bucket.leads += 1;
     if (lead.isRegistration) bucket.registrations += 1;
-    if (lead.tier === 'qualified') bucket.qualifiedLeads += 1;
+    if (lead.isQualified) bucket.qualifiedLeads += 1;
     if (lead.tier === 'great') bucket.greatLeads += 1;
     if (lead.matchedShowup) bucket.matchedShowUps += 1;
 
     const dateRow = byDate.get(lead.createdDateKey);
     dateRow.leads += 1;
     if (lead.isRegistration) dateRow.registrations += 1;
-    if (lead.tier === 'qualified') dateRow.qualifiedLeads += 1;
+    if (lead.isQualified) dateRow.qualifiedLeads += 1;
     if (lead.tier === 'great') dateRow.greatLeads += 1;
   });
 
@@ -671,12 +677,12 @@ function getSnapshot({ adsRows, paidLeads, zoomDaily, lumaRegistrations, hasDire
   const showUps = showupsInRange.reduce((acc, row) => acc + row.total, 0);
   const registrationShowUps = hasDirectLumaData ? lumaMatchedNetNewShowUps : showUps;
 
-  const qualifiedLeads = leadsInRange.filter((row) => row.tier === 'qualified').length;
+  const qualifiedLeads = leadsInRange.filter((row) => row.isQualified).length;
   const greatLeads = leadsInRange.filter((row) => row.tier === 'great').length;
   const okLeads = leadsInRange.filter((row) => row.tier === 'ok').length;
   const badLeads = leadsInRange.filter((row) => row.tier === 'bad').length;
   const unknownLeads = leadsInRange.filter((row) => row.tier === 'unknown').length;
-  const standardLeads = Math.max(leads - qualifiedLeads - greatLeads - okLeads - badLeads - unknownLeads, 0);
+  const standardLeads = Math.max(leads - qualifiedLeads, 0);
 
   const tuesdayShowUps = showupsInRange.reduce((acc, row) => acc + row.tuesday, 0);
   const thursdayShowUps = showupsInRange.reduce((acc, row) => acc + row.thursday, 0);
@@ -1000,9 +1006,8 @@ function buildLeadQualityBreakdown(snapshot) {
     qualifiedPct,
     greatPct,
     chartRows: [
-      { name: 'Standard', value: snapshot.standardLeads, pct: standardPct, color: '#94a3b8' },
+      { name: 'Non-Qualified', value: snapshot.standardLeads, pct: standardPct, color: '#94a3b8' },
       { name: 'Qualified', value: snapshot.qualifiedLeads, pct: qualifiedPct, color: '#0ea5e9' },
-      { name: 'Great', value: snapshot.greatLeads, pct: greatPct, color: '#16a34a' },
     ],
   };
 }
@@ -1040,6 +1045,8 @@ function buildWindowDrilldown({
     funnel: row.funnel,
     tier: row.tier,
     revenue: row.revenue,
+    sobrietyDate: row.sobrietyDate || '',
+    qualified: row.isQualified ? 'Yes' : 'No',
     matchedShowup: row.matchedShowup ? 'Yes' : 'No',
     matchedShowupDate: row.matchedShowupDateKey || '',
     registrationProxy: row.isRegistration ? 'Yes' : 'No',
@@ -1048,8 +1055,8 @@ function buildWindowDrilldown({
     sourceData2: row.sourceData2 || '',
   }));
 
-  const standardLeadRows = leadRows.filter((row) => row.tier === 'standard');
-  const qualifiedLeadRows = leadRows.filter((row) => row.tier === 'qualified');
+  const standardLeadRows = leadRows.filter((row) => row.qualified !== 'Yes');
+  const qualifiedLeadRows = leadRows.filter((row) => row.qualified === 'Yes');
   const greatLeadRows = leadRows.filter((row) => row.tier === 'great');
 
   const fallbackRegistrationRows = leadsInRange
@@ -1163,10 +1170,12 @@ function buildWindowDrilldown({
         { key: 'email', label: 'Email', type: 'text' },
         { key: 'funnel', label: 'Funnel', type: 'text' },
         { key: 'revenue', label: 'Revenue', type: 'currency' },
+        { key: 'sobrietyDate', label: 'Sobriety Date', type: 'text' },
+        { key: 'qualified', label: 'Qualified Rule', type: 'text' },
         { key: 'campaign', label: 'Campaign', type: 'text' },
       ],
       rows: standardLeadRows,
-      emptyMessage: 'No standard leads in this window.',
+      emptyMessage: 'No non-qualified leads in this window.',
     },
     qualified: {
       columns: [
@@ -1175,6 +1184,7 @@ function buildWindowDrilldown({
         { key: 'email', label: 'Email', type: 'text' },
         { key: 'funnel', label: 'Funnel', type: 'text' },
         { key: 'revenue', label: 'Revenue', type: 'currency' },
+        { key: 'sobrietyDate', label: 'Sobriety Date', type: 'text' },
         { key: 'matchedShowup', label: 'Matched Show-Up', type: 'text' },
         { key: 'campaign', label: 'Campaign', type: 'text' },
       ],
@@ -1360,7 +1370,7 @@ export function buildLeadAnalytics({
     leads: 'Leads Captured',
     registrations: 'Registrations',
     showups: 'Net New Show-Ups',
-    standard: 'Standard Leads',
+    standard: 'Non-Qualified Leads',
     qualified: 'Qualified Leads',
     great: 'Great Leads',
     cpl: 'CPL',

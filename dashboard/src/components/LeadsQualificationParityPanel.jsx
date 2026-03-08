@@ -8,6 +8,7 @@ const cardStyle = {
 };
 
 function toNumberOrNull(value) {
+  if (value === null || value === undefined || value === '') return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -22,24 +23,36 @@ export default function LeadsQualificationParityPanel({ data, isLoading = false 
     const qualifiedCount = toNumberOrNull(data?.qualified_count);
     const goodCount = toNumberOrNull(data?.good_count);
     const greatCount = toNumberOrNull(data?.great_count);
+    const revenueEligible = toNumberOrNull(data?.revenue_eligible_count);
 
-    let delta = toNumberOrNull(data?.qualified_quality_parity_delta);
-    if (delta === null && qualifiedCount !== null && goodCount !== null && greatCount !== null) {
-      delta = qualifiedCount - (goodCount + greatCount);
+    let qualifiedMinusEligible = toNumberOrNull(data?.qualified_quality_parity_delta);
+    const computedEligible = (
+      revenueEligible !== null
+        ? revenueEligible
+        : (goodCount !== null && greatCount !== null ? goodCount + greatCount : null)
+    );
+    if (qualifiedMinusEligible === null && qualifiedCount !== null && computedEligible !== null) {
+      qualifiedMinusEligible = qualifiedCount - computedEligible;
+    }
+    let sobrietyGap = toNumberOrNull(data?.qualified_sobriety_gap_count);
+    if (sobrietyGap === null && qualifiedCount !== null && computedEligible !== null) {
+      sobrietyGap = Math.max(computedEligible - qualifiedCount, 0);
     }
 
     return {
       qualified_count: qualifiedCount,
       good_count: goodCount,
       great_count: greatCount,
-      qualified_quality_parity_delta: delta,
+      revenue_eligible_count: computedEligible,
+      qualified_minus_revenue_eligible: qualifiedMinusEligible,
+      qualified_sobriety_gap_count: sobrietyGap,
     };
   }, [data]);
 
   if (isLoading) {
     return (
       <div style={{ ...cardStyle, backgroundColor: '#f8fafc' }}>
-        <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Loading qualification parity...</p>
+        <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Loading qualification rule check...</p>
       </div>
     );
   }
@@ -47,13 +60,19 @@ export default function LeadsQualificationParityPanel({ data, isLoading = false 
   const hasAnyValue = normalized.qualified_count !== null
     || normalized.good_count !== null
     || normalized.great_count !== null
-    || normalized.qualified_quality_parity_delta !== null;
+    || normalized.revenue_eligible_count !== null
+    || normalized.qualified_sobriety_gap_count !== null;
+  const hasAboveEligible = normalized.qualified_minus_revenue_eligible !== null && normalized.qualified_minus_revenue_eligible > 0;
+  const hasSobrietyGap = normalized.qualified_sobriety_gap_count !== null && normalized.qualified_sobriety_gap_count > 0;
+  const statusStyle = hasSobrietyGap
+      ? { bg: '#ffedd5', color: '#9a3412', border: '#fdba74', label: 'SOBRIETY GATE' }
+      : { bg: '#dcfce7', color: '#166534', border: '#86efac', label: 'RULE APPLIED' };
 
   return (
     <div style={cardStyle}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
         <p style={{ margin: 0, fontSize: '11px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
-          Qualification Parity
+          Qualification Rule Check
         </p>
         <span
           style={{
@@ -61,18 +80,18 @@ export default function LeadsQualificationParityPanel({ data, isLoading = false 
             padding: '3px 8px',
             fontSize: '11px',
             fontWeight: 700,
-            backgroundColor: '#eff6ff',
-            color: '#1d4ed8',
-            border: '1px solid #bfdbfe',
+            backgroundColor: statusStyle.bg,
+            color: statusStyle.color,
+            border: `1px solid ${statusStyle.border}`,
           }}
         >
-          SOBRIETY-FILTERED
+          {statusStyle.label}
         </span>
       </div>
 
       {!hasAnyValue && (
         <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#64748b' }}>
-          Qualification parity values are not available yet.
+          Qualification rule values are not available yet.
         </p>
       )}
 
@@ -91,17 +110,36 @@ export default function LeadsQualificationParityPanel({ data, isLoading = false 
             <p style={{ margin: '4px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmtInt(normalized.great_count)}</p>
           </div>
           <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px' }}>
-            <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>Delta</p>
-            <p style={{ margin: '4px 0 0', fontSize: '16px', fontWeight: 800, color: '#334155' }}>
-              {fmtInt(normalized.qualified_quality_parity_delta)}
+            <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>Revenue Eligible</p>
+            <p style={{ margin: '4px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
+              {fmtInt(normalized.revenue_eligible_count)}
+            </p>
+          </div>
+          <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px' }}>
+            <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>Sobriety Gate Gap</p>
+            <p style={{ margin: '4px 0 0', fontSize: '16px', fontWeight: 800, color: hasSobrietyGap ? '#9a3412' : '#166534' }}>
+              {fmtInt(normalized.qualified_sobriety_gap_count)}
+            </p>
+          </div>
+          <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px' }}>
+            <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>Qualified - Eligible</p>
+            <p style={{ margin: '4px 0 0', fontSize: '16px', fontWeight: 800, color: hasAboveEligible ? '#9a3412' : '#166534' }}>
+              {fmtInt(normalized.qualified_minus_revenue_eligible)}
             </p>
           </div>
         </div>
       )}
 
-      <p style={{ margin: '10px 0 0', fontSize: '12px', color: '#475569' }}>
-        Good + Great is the high-revenue pool (official revenue only). Qualified is the sobriety-filtered subset (revenue {'>='} $250K and sobriety date at least 365 days before as-of date).
-      </p>
+      {hasAboveEligible && (
+        <p style={{ margin: '10px 0 0', fontSize: '12px', color: '#9a3412', fontWeight: 700 }}>
+          Qualified and Good/Great can diverge; review revenue mapping if this stays positive.
+        </p>
+      )}
+      {!hasAboveEligible && hasSobrietyGap && (
+        <p style={{ margin: '10px 0 0', fontSize: '12px', color: '#9a3412', fontWeight: 700 }}>
+          Gap shows revenue-eligible leads that do not yet meet the 1-year sobriety rule.
+        </p>
+      )}
     </div>
   );
 }

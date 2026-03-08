@@ -12,7 +12,7 @@
  */
 
 import {
-    isQualifiedRevenueWithSobriety,
+    isQualifiedLead,
     leadQualityTierFromOfficialRevenue,
     parseOfficialRevenue,
 } from './leadsQualificationRules.js';
@@ -328,16 +328,7 @@ function resolveHubspotOfficialRevenue(contact) {
 }
 
 function resolveHubspotRevenue(contact) {
-    const official = resolveHubspotOfficialRevenue(contact);
-    if (Number.isFinite(official)) return official;
-
-    const fallbackRaw = contact?.annual_revenue_in_dollars;
-    if (fallbackRaw !== null && fallbackRaw !== undefined && fallbackRaw !== '') {
-        const fallback = Number(fallbackRaw);
-        if (Number.isFinite(fallback)) return fallback;
-    }
-
-    return null;
+    return resolveHubspotOfficialRevenue(contact);
 }
 
 const HUBSPOT_SOBRIETY_FIELDS = [
@@ -911,10 +902,9 @@ function buildDedupedPaidHubspotContacts(hubspotRows, funnelFilter) {
  * @param {Object}   adsMetrics   { leads: number } — the Meta ads lead count for the group
  * @param {any[]}    hubspotRows  raw HubSpot contacts in date window
  * @param {string}   funnelFilter 'free'|'phoenix'
- * @param {string}   asOfDateKey  YYYY-MM-DD (end of selected window)
  * @returns {{ bad, ok, qualified, great, unknown, total, unmatched[], mismatch }}
  */
-function buildLeadCategorization(adsMetrics, hubspotRows, funnelFilter, asOfDateKey) {
+function buildLeadCategorization(adsMetrics, hubspotRows, funnelFilter) {
     const counts = { bad: 0, ok: 0, qualified: 0, great: 0, unknown: 0 };
     const unmatchedLeads = [];
     const contacts = buildDedupedPaidHubspotContacts(hubspotRows, funnelFilter);
@@ -923,19 +913,19 @@ function buildLeadCategorization(adsMetrics, hubspotRows, funnelFilter, asOfDate
     let greatCount = 0;
 
     for (const row of contacts) {
-        const officialRevenue = parseOfficialRevenue(row);
-        const qualityTier = leadQualityTierFromOfficialRevenue(officialRevenue);
+        const revenue = resolveHubspotRevenue(row);
+        const sobrietyRaw = extractHubspotSobrietyRaw(row);
+        const qualityTier = leadQualityTierFromOfficialRevenue(revenue);
         const tier = qualityTier === 'good' ? 'qualified' : qualityTier;
         const name = `${String(row?.firstname || '')} ${String(row?.lastname || '')}`.trim();
         const email = String(row?.email || '').trim().toLowerCase();
-        const sobrietyDate = resolveHubspotSobrietyDate(row);
 
         if (tier === 'unknown') {
             unmatchedLeads.push({ name, email, reason: 'Missing revenue field in HubSpot' });
         }
 
         if (counts[tier] !== undefined) counts[tier]++;
-        if (isQualifiedRevenueWithSobriety(officialRevenue, sobrietyDate, asOfDateKey)) qualifiedCount += 1;
+        if (isQualifiedLead({ revenue, sobrietyDate: sobrietyRaw })) qualifiedCount += 1;
         if (qualityTier === 'good') goodCount += 1;
         if (qualityTier === 'great') greatCount += 1;
     }
@@ -959,7 +949,9 @@ function buildLeadCategorization(adsMetrics, hubspotRows, funnelFilter, asOfDate
         qualified_count: qualifiedCount,
         good_count: goodCount,
         great_count: greatCount,
+        revenue_eligible_count: goodCount + greatCount,
         qualified_quality_parity_delta: qualifiedCount - (goodCount + greatCount),
+        qualified_sobriety_gap_count: Math.max((goodCount + greatCount) - qualifiedCount, 0),
         unmatched: unmatchedLeads,
         mismatch,
     };
@@ -997,7 +989,7 @@ function buildLeadRows(hubspotInRange, lumaRows, funnelFilter) {
         const extraEmails = parseEmailList(contact?.hs_additional_emails);
         const candidateEmails = [primaryEmail, ...extraEmails].filter(Boolean);
         const matchedLuma = candidateEmails.map((email) => lumaByEmail.get(email)).find(Boolean) || null;
-        const revenue = parseOfficialRevenue(contact);
+        const revenue = resolveHubspotRevenue(contact);
         const sobrietyDate = resolveHubspotSobrietyDate(contact);
 
         return {
@@ -1031,12 +1023,7 @@ function buildSubRowSnapshot(label, adsRows, hubspotRows, lumaRows, zoomRows, st
         const dk = parseHubspotCreatedDateKey(row?.createdate);
         return dk && dateInRange(dk, startKey, endKey);
     });
-    const categorization = buildLeadCategorization(
-        ads,
-        hubspotInRange,
-        funnelFilter === 'any' ? 'free' : funnelFilter,
-        endKey,
-    );
+    const categorization = buildLeadCategorization(ads, hubspotInRange, funnelFilter === 'any' ? 'free' : funnelFilter);
 
     const leadRows = buildLeadRows(hubspotInRange, lumaFiltered, funnelFilter);
 

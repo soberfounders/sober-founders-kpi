@@ -13,6 +13,11 @@ import { buildLeadsConfidenceSummary } from '../lib/leadsConfidenceModel';
 import { buildLeadsActionQueue } from '../lib/leadsActionQueue';
 import { buildAliasMap, resolveCanonicalAttendeeName } from '../lib/attendeeCanonicalization';
 import { applyZoomAttributionOverride, getZoomAttributionOverride } from '../lib/zoomAttributionOverrides';
+import {
+  isQualifiedLead,
+  leadQualityTierFromOfficialRevenue,
+  parseOfficialRevenue,
+} from '../lib/leadsQualificationRules';
 import DrillDownModal from '../components/DrillDownModal';
 import SendToNotionModal from '../components/SendToNotionModal';
 import AIAnalysisCard from '../components/AIAnalysisCard';
@@ -167,41 +172,17 @@ function daysBetweenDateKeys(laterDateKey, earlierDateKey) {
   return Math.floor((later.getTime() - earlier.getTime()) / 86400000);
 }
 
-function parseSobrietyDateKey(value) {
-  const text = String(value || '').trim();
-  if (!text || text.toLowerCase() === 'not found') return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
-
-  const mmddyyyy = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (mmddyyyy) {
-    const mm = String(mmddyyyy[1]).padStart(2, '0');
-    const dd = String(mmddyyyy[2]).padStart(2, '0');
-    const yyyy = mmddyyyy[3];
-    return `${yyyy}-${mm}-${dd}`;
-  }
-
-  return parseDateKeyLoose(text);
-}
-
-function summarizeLeadQualificationAndQuality(leadRows, asOfDateKey) {
+function summarizeLeadQualificationAndQuality(leadRows) {
   const rows = Array.isArray(leadRows) ? leadRows : [];
   const qualityCounts = { bad: 0, ok: 0, good: 0, great: 0, unknown: 0 };
   let qualified = 0;
 
   for (const row of rows) {
-    const revenue = Number(row?.revenue);
-    const hasRevenue = Number.isFinite(revenue);
-    const sobrietyDateKey = parseSobrietyDateKey(row?.sobrietyDate);
-    const sobrietyDays = sobrietyDateKey && asOfDateKey ? daysBetweenDateKeys(asOfDateKey, sobrietyDateKey) : null;
-    const hasOneYearSobriety = Number.isFinite(sobrietyDays) && sobrietyDays >= 365;
+    const revenue = parseOfficialRevenue(row?.revenueOfficial ?? row?.revenue);
+    const qualityTier = leadQualityTierFromOfficialRevenue(revenue);
 
-    if (hasRevenue && revenue >= 250000 && hasOneYearSobriety) qualified += 1;
-
-    if (!hasRevenue) qualityCounts.unknown += 1;
-    else if (revenue >= 1000000) qualityCounts.great += 1;
-    else if (revenue >= 250000) qualityCounts.good += 1;
-    else if (revenue >= 100000) qualityCounts.ok += 1;
-    else qualityCounts.bad += 1;
+    if (qualityCounts[qualityTier] !== undefined) qualityCounts[qualityTier] += 1;
+    if (isQualifiedLead({ revenue, sobrietyDate: row?.sobrietyDate })) qualified += 1;
   }
 
   const total = rows.length;
@@ -327,11 +308,7 @@ function isPhoenixHubspot(row) {
 }
 
 function hubspotRevenueValue(contact) {
-  const official = hubspotRevenueOfficialValue(contact);
-  if (Number.isFinite(official)) return official;
-  const fallback = Number(contact?.annual_revenue_in_dollars);
-  if (Number.isFinite(fallback)) return fallback;
-  return null;
+  return parseOfficialRevenue(contact);
 }
 
 function mapZoomMatchTypeToConfidence(matchType, matchedHubspot) {
@@ -1043,11 +1020,7 @@ export default function LeadsDashboard() {
     const enrichRows = (rows) => (rows || []).map((row) => {
       const email = normalizeEmail(row?.email);
       const historyShowUps = email ? (historyZoomCounts.get(email) || 0) : 0;
-      const revenueOfficial = Number(row?.revenueOfficial);
-      const revenueFallback = Number(row?.revenue);
-      const revenueForGood = Number.isFinite(revenueOfficial)
-        ? revenueOfficial
-        : (Number.isFinite(revenueFallback) ? revenueFallback : null);
+      const revenueForGood = parseOfficialRevenue(row?.revenueOfficial ?? row?.revenue);
       const isRepeatMember = !!row?.matchedZoom && historyShowUps >= 2;
       const isGoodRepeatMember = !!row?.matchedZoom && historyShowUps >= 3 && Number.isFinite(revenueForGood) && revenueForGood >= 250000;
       const sourceBucket = sourceBucketFromRow(row);
@@ -1516,10 +1489,9 @@ export default function LeadsDashboard() {
 
     const resolveRevenue = (contact) => {
       const official = hubspotRevenueOfficialValue(contact);
-      if (Number.isFinite(official)) return { revenue: official, revenueOfficial: official };
-      const fallback = Number(contact?.annual_revenue_in_dollars);
-      if (Number.isFinite(fallback)) return { revenue: fallback, revenueOfficial: null };
-      return { revenue: null, revenueOfficial: null };
+      const revenue = parseOfficialRevenue(contact);
+      if (!Number.isFinite(revenue)) return { revenue: null, revenueOfficial: null };
+      return { revenue, revenueOfficial: Number.isFinite(official) ? official : null };
     };
 
     const sourceBucketFromContact = (contact) => {
@@ -3763,11 +3735,9 @@ export default function LeadsDashboard() {
 
   const qualificationCurrent = summarizeLeadQualificationAndQuality(
     overviewCurrentCombined?.leadRows || [],
-    dateWindows?.current?.end || null,
   );
   const qualificationPrevious = summarizeLeadQualificationAndQuality(
     overviewPreviousCombined?.leadRows || [],
-    dateWindows?.previous?.end || null,
   );
   const currentFreeGroupHubspotLeads = Number(
     overviewCurrentCombined?.categorization?.categorizedTotal
@@ -3838,7 +3808,7 @@ export default function LeadsDashboard() {
       value: Number(qualificationCurrent?.qualified || 0),
       previous: dateWindows?.previous ? Number(qualificationPrevious?.qualified || 0) : null,
       format: 'count',
-      note: 'Official revenue >= $250K and sobriety date at least 365 days before as-of date',
+      note: 'HubSpot official annual revenue >= $250K and sobriety date >= 1 year as of today',
       color: '#2563eb',
     },
     {
@@ -3847,7 +3817,7 @@ export default function LeadsDashboard() {
       value: Number(qualificationCurrent?.nonQualified || 0),
       previous: dateWindows?.previous ? Number(qualificationPrevious?.nonQualified || 0) : null,
       format: 'count',
-      note: 'Free Group leads not meeting the qualified rule (revenue + sobriety)',
+      note: 'Free Group leads not meeting qualified rule',
       color: '#64748b',
     },
     {
@@ -3873,11 +3843,12 @@ export default function LeadsDashboard() {
   ];
   const qualityMixTotal = qualityMixRows.reduce((sum, row) => sum + row.value, 0);
   const qualityUnknownCount = Number(qualificationCurrent?.qualityCounts?.unknown || 0);
-  const leadsQualificationParityData = (() => {
+  const leadsQualificationParityData = useMemo(() => {
     const report = (leadsParityReport && typeof leadsParityReport === 'object') ? leadsParityReport : {};
     const summary = (report.summary && typeof report.summary === 'object') ? report.summary : {};
 
     const toNumberOrNull = (value) => {
+      if (value === null || value === undefined || value === '') return null;
       const parsed = Number(value);
       return Number.isFinite(parsed) ? parsed : null;
     };
@@ -3885,7 +3856,9 @@ export default function LeadsDashboard() {
     const qualifiedFromReport = toNumberOrNull(report.qualified_count ?? summary.qualified_count);
     const goodFromReport = toNumberOrNull(report.good_count ?? summary.good_count);
     const greatFromReport = toNumberOrNull(report.great_count ?? summary.great_count);
+    const revenueEligibleFromReport = toNumberOrNull(report.revenue_eligible_count ?? summary.revenue_eligible_count);
     const deltaFromReport = toNumberOrNull(report.qualified_quality_parity_delta ?? summary.qualified_quality_parity_delta);
+    const sobrietyGapFromReport = toNumberOrNull(report.qualified_sobriety_gap_count ?? summary.qualified_sobriety_gap_count);
 
     const qualifiedFallback = toNumberOrNull(qualificationCurrent?.qualified);
     const goodFallback = toNumberOrNull(qualificationCurrent?.qualityCounts?.good);
@@ -3894,9 +3867,19 @@ export default function LeadsDashboard() {
     const qualifiedCount = qualifiedFromReport ?? qualifiedFallback;
     const goodCount = goodFromReport ?? goodFallback;
     const greatCount = greatFromReport ?? greatFallback;
+    const revenueEligibleCount = revenueEligibleFromReport ?? (
+      goodCount !== null && greatCount !== null
+        ? goodCount + greatCount
+        : null
+    );
     const computedDelta = (
-      qualifiedCount !== null && goodCount !== null && greatCount !== null
-        ? qualifiedCount - (goodCount + greatCount)
+      qualifiedCount !== null && revenueEligibleCount !== null
+        ? qualifiedCount - revenueEligibleCount
+        : null
+    );
+    const computedSobrietyGap = (
+      qualifiedCount !== null && revenueEligibleCount !== null
+        ? Math.max(revenueEligibleCount - qualifiedCount, 0)
         : null
     );
 
@@ -3904,9 +3887,11 @@ export default function LeadsDashboard() {
       qualified_count: qualifiedCount,
       good_count: goodCount,
       great_count: greatCount,
+      revenue_eligible_count: revenueEligibleCount,
       qualified_quality_parity_delta: deltaFromReport ?? computedDelta,
+      qualified_sobriety_gap_count: sobrietyGapFromReport ?? computedSobrietyGap,
     };
-  })();
+  }, [leadsParityReport, qualificationCurrent]);
 
   const costCardLookup = new Map((leadsDecisionModule?.costCards || []).map((row) => [row.key, row]));
   const previousCpql = Number(costCardLookup.get('costPerGoodLeadQualified')?.previous);
@@ -4063,7 +4048,7 @@ export default function LeadsDashboard() {
           </p>
           <h3 style={{ margin: '6px 0 0', fontSize: '17px', color: '#0f172a' }}>Free Group Qualified vs Non-Qualified and quality tiers</h3>
           <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#64748b' }}>
-            Qualified = official revenue {'>='} $250K AND sobriety date at least 365 days before as-of date. Cost metrics below use Free Groups ad spend in the selected window.
+            Qualified = HubSpot official annual revenue {'>='} $250K and sobriety date at least 1 year old as of today. Good/Great tiers are revenue-only.
           </p>
           <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: '10px' }}>
             <div style={{ ...subCard, border: '1px solid #dbeafe', backgroundColor: '#f8fbff' }}>

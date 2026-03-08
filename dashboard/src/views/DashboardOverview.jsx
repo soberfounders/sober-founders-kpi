@@ -6,6 +6,13 @@ import {
   HUBSPOT_CONTACT_LOOKBACK_DAYS,
   USE_DUMMY_DONATIONS,
 } from '../lib/env';
+import {
+  hasOneYearSobrietyByDate,
+  isQualifiedLead,
+  leadQualityTierFromOfficialRevenue,
+  parseOfficialRevenue,
+  parseSobrietyDate,
+} from '../lib/leadsQualificationRules';
 import SendToNotionModal from '../components/SendToNotionModal';
 import {
   ResponsiveContainer,
@@ -326,66 +333,31 @@ function buildNotionTaskProperties(taskName) {
 }
 
 function hubspotOfficialRevenue(row) {
-  const candidates = [
-    row?.annual_revenue_in_dollars__official_,
-    // Legacy alias fallback if older cached rows included this name.
-    row?.annual_revenue_in_usd_official,
-  ];
-  for (const value of candidates) {
-    const n = Number(value);
-    if (Number.isFinite(n)) return n;
-  }
-  return null;
-}
-
-function hubspotPreferredRevenue(row) {
-  const official = hubspotOfficialRevenue(row);
-  if (Number.isFinite(official)) return official;
-  const fallback = Number(row?.annual_revenue_in_dollars);
-  if (Number.isFinite(fallback)) return fallback;
-  return null;
+  return parseOfficialRevenue(row);
 }
 
 function hubspotSobrietyDateUtc(row) {
-  const raw = row?.sobriety_date ?? row?.sobriety_date__official_ ?? null;
-  const d = parseMaybeDate(raw);
-  if (!d) return null;
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-}
-
-function addUtcYears(date, years) {
-  if (!date) return null;
-  const out = new Date(Date.UTC(date.getUTCFullYear() + years, date.getUTCMonth(), date.getUTCDate()));
-  if (out.getUTCMonth() !== date.getUTCMonth()) {
-    return new Date(Date.UTC(date.getUTCFullYear() + years, date.getUTCMonth() + 1, 0));
-  }
-  return out;
-}
-
-function isSoberOverOneYearAtLead(row, leadDate) {
-  const leadDay = toUtcDayStart(leadDate);
-  const sobriety = hubspotSobrietyDateUtc(row);
-  if (!leadDay || !sobriety) return false;
-  const anniversary = addUtcYears(sobriety, 1);
-  return !!anniversary && anniversary.getTime() <= leadDay.getTime();
+  return parseSobrietyDate(row);
 }
 
 function leadQualityFlags(row) {
-  const leadDate = row?._createdAt || row?.createdate;
   const officialRevenue = hubspotOfficialRevenue(row);
-  const revenue = hubspotPreferredRevenue(row);
+  const revenue = officialRevenue;
+  const qualityTier = leadQualityTierFromOfficialRevenue(officialRevenue);
   const hasSobriety = !!hubspotSobrietyDateUtc(row);
-  const sober1yAtLead = isSoberOverOneYearAtLead(row, leadDate);
-  const greatLead = sober1yAtLead && Number.isFinite(revenue) && revenue >= 1_000_000;
-  const qualifiedLead = sober1yAtLead && Number.isFinite(revenue) && revenue >= 250_000 && revenue < 1_000_000;
-  const highQualityLead = greatLead || qualifiedLead;
+  const sober1yToday = hasOneYearSobrietyByDate(row);
+  const greatLead = qualityTier === 'great';
+  const qualifiedLead = isQualifiedLead({ revenue: officialRevenue, sobrietyDate: row });
+  const highQualityLead = qualifiedLead;
   return {
     officialRevenue,
     revenue,
     hasOfficialRevenue: Number.isFinite(officialRevenue),
-    hasRevenue: Number.isFinite(revenue),
+    hasRevenue: Number.isFinite(officialRevenue),
     hasSobriety,
-    sober1yAtLead,
+    sober1yAtLead: sober1yToday,
+    sober1yToday,
+    qualityTier,
     greatLead,
     qualifiedLead,
     highQualityLead,
@@ -581,7 +553,7 @@ const DashboardOverview = () => {
         .order('metric_date', { ascending: true }),
       supabase
         .from('raw_hubspot_contacts')
-        .select('hubspot_contact_id,createdate,email,firstname,lastname,original_traffic_source,hs_analytics_source,hs_latest_source,hs_analytics_source_data_2,hs_latest_source_data_2,campaign,campaign_source,membership_s,annual_revenue_in_dollars__official_,annual_revenue_in_dollars,sobriety_date')
+        .select('hubspot_contact_id,createdate,email,firstname,lastname,original_traffic_source,hs_analytics_source,hs_latest_source,hs_analytics_source_data_2,hs_latest_source_data_2,campaign,campaign_source,membership_s,annual_revenue_in_usd_official,annual_revenue_in_dollars__official_,annual_revenue_in_dollars,sobriety_date,sobriety_date__official_')
         .gte('createdate', `${contactStartDate}T00:00:00.000Z`)
         .order('createdate', { ascending: true }),
       supabase
@@ -1705,7 +1677,7 @@ const DashboardOverview = () => {
           pillBg: '#ccfbf1',
           pillText: '#115e59',
         },
-        scopeLabel: `HubSpot contacts + Meta Ads (${periodMeta.asOfLabel} as of) | Quality = revenue + sobriety at lead date`,
+        scopeLabel: `HubSpot contacts + Meta Ads (${periodMeta.asOfLabel} as of) | Qualified = official revenue + sobriety (1y as of today); Good/Great = revenue-only`,
         sectionFocus: 'Lead quality, source mix, and acquisition efficiency across Phoenix Forum and feeder campaigns',
         analysisContext: leadsAnalysisContext,
         summaries: {
