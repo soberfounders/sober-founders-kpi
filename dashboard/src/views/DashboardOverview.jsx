@@ -102,6 +102,15 @@ const GROUP_CALL_ET_MINUTES = {
 const GROUP_CALL_TIME_TOLERANCE_MINUTES = 120;
 const MIN_GROUP_ATTENDEES = 3;
 const EXPECTED_ZERO_GROUP_SESSION_KEYS = new Set(['Thursday|2025-12-25']);
+const KPI_BOARD_SYSTEM_ROLE = [
+  'You are an autonomous AI Board of Directors responsible for analyzing organizational KPI dashboards and recommending strategic actions.',
+  'The board consists of world-class entrepreneurs, investors, operators, and strategists.',
+  'The board must analyze KPI performance, detect trends/anomalies, identify strengths/weaknesses, recommend improvements, stop ineffective initiatives, and propose strategic experiments.',
+  'Each board member independently evaluates data with their worldview before synthesis.',
+  'Board members: Warren Buffett, Charlie Munger, Elon Musk, Jeff Bezos, Steve Jobs, Gary Vaynerchuk, Mark Cuban, Kevin O\'Leary, Dan Martell, Tony Robbins, Henry Ford, Bob Iger, Naval Ravikant, Peter Thiel, Sam Altman, Marc Andreessen, Reid Hoffman, Ray Dalio, Ben Horowitz.',
+  'Required response sections: KPI Observations; per-member Keep/Improve/Stop/Experiment; Board Synthesis (agreements/disagreements/top priorities); Execution Plan (immediate actions + next-month metrics).',
+  'Use concrete KPI evidence in every recommendation and prioritize actions leadership can execute immediately.',
+].join(' ');
 
 function parseMissingSupabaseColumn(errorMessage = '') {
   const message = String(errorMessage || '');
@@ -1755,11 +1764,91 @@ const DashboardOverview = () => {
       },
       data_rows_loaded: parsedDonations.length,
     };
+    const boardAnalysisContext = {
+      module_key: 'board',
+      as_of: periodMeta.asOfLabel,
+      system_role: KPI_BOARD_SYSTEM_ROLE,
+      kpi_snapshot: {
+        leads_30d: {
+          paid_social_leads: leadsMonth.paidSocial,
+          qualified_leads: monthPaidQuality.qualified,
+          great_leads: monthPaidQuality.great,
+          cpql: cpqlMonth,
+          cpgl: cpglMonth,
+          paid_phoenix_share: phoenixPaidShareMonth,
+        },
+        attendance_30d: {
+          net_new: attendeesMonth.newAttendees,
+          total_attendances: attendeesMonth.attendanceParticipations,
+          unique_attendees: attendeesMonth.uniqueAttendees,
+          avg_visits: attendeesMonth.avgVisits,
+          repeat_rate: attendeesMonth.repeatRate,
+          cost_per_new_attendee: monthFreeCostPerNewAttendee,
+        },
+        seo_30d: {
+          sessions: dashboard.cards.sessions30d,
+          clicks: dashboard.cards.clicks30d,
+          ctr: dashboard.cards.ctr30d,
+          avg_position: dashboard.cards.position30d,
+        },
+        donations_30d: {
+          transactions: donationsMonth.transactions,
+          total_amount: donationsMonth.totalAmount,
+          recurring_count: donationsMonth.recurringCount,
+        },
+      },
+      required_output_format: {
+        sections: [
+          'KPI Observations',
+          'Board member analysis with Keep/Improve/Stop/Experiment per member',
+          'Board Synthesis',
+          'Execution Plan with immediate actions and next-month metrics',
+        ],
+      },
+    };
+    const boardWeekSummary = `Board review this week: paid quality efficiency is ${Number.isFinite(cpqlWeek) ? formatCurrency(cpqlWeek) : 'N/A'} CPQL and ${Number.isFinite(cpglWeek) ? formatCurrency(cpglWeek) : 'N/A'} CPGL, while free-group net-new attendees are ${formatInt(attendeesWeek.newAttendees)} with ${formatAttendanceCpna(weekFreeCostPerNewAttendee, attendanceAdsWeek.freeSpend, attendeesWeek.newAttendees)} cost per new attendee.`;
+    const boardMonthSummary = `Board 30-day lens: ${formatInt(monthPaidQuality.great)} great leads, ${formatInt(monthPaidQuality.qualified)} qualified leads, ${formatInt(attendeesMonth.newAttendees)} net-new free-group attendees, and ${formatCurrency(donationsMonth.totalAmount)} donations across ${formatInt(donationsMonth.transactions)} transactions.`;
+    const boardBigPictureSummary = `System role active: autonomous Board of Directors. Output must include member-by-member Keep/Improve/Stop/Experiment recommendations, explicit agreements/disagreements, and a concrete 5-step execution plan leadership can run immediately.`;
     const attendanceDiagnostics = unclassifiedLargeCalls >= 3
       ? `${formatInt(unclassifiedLargeCalls)} high-attendance calls remain unclassified in the last 30 days and are queued for taxonomy QA follow-up.`
       : '';
 
     const managers = [
+      {
+        key: 'board',
+        title: 'Board of Directors AI Manager',
+        icon: Bot,
+        accent: {
+          bg: 'linear-gradient(135deg, #f5f3ff 0%, #eef2ff 100%)',
+          border: '#c4b5fd',
+          pillBg: '#ede9fe',
+          pillText: '#5b21b6',
+        },
+        scopeLabel: 'Cross-module board synthesis (Leads, Attendance, SEO, Donations) with mandated Keep/Improve/Stop/Experiment format',
+        sectionFocus: 'Leadership-level strategy, prioritization, and execution sequencing from unified KPI signals',
+        analysisContext: boardAnalysisContext,
+        summaries: {
+          week: boardWeekSummary,
+          month: boardMonthSummary,
+          bigPicture: boardBigPictureSummary,
+        },
+        autonomousActions: [
+          {
+            id: 'board-sync-all',
+            action_key: 'board_sync_all_sources',
+            label: 'Sync all sources',
+            description: 'Run full sync across HubSpot, Meta, KPI metrics, and attendance tables before board synthesis.',
+            kind: 'invoke_function',
+            functionName: 'master-sync',
+            reloadAfter: true,
+          },
+        ],
+        humanActions: [
+          'Approve top 3 board priorities and assign a single owner plus due date for each in leadership planning.',
+          'Review board disagreements and decide one explicit strategy per disagreement to avoid split execution.',
+          'Audit stop-list items weekly and confirm budget/time was reallocated to higher-return initiatives.',
+        ],
+      },
       {
         key: 'leads',
         title: 'Leads AI Manager',
@@ -2321,7 +2410,7 @@ const DashboardOverview = () => {
           <div>
             <h3 style={{ fontSize: '20px' }}>Executive Summary (All KPI Sections)</h3>
             <p style={{ marginTop: '6px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
-              Synthesized insights from Leads, Attendance, SEO, and Donations AI Managers with top focus and remediation signals.
+              Synthesized insights from Board, Leads, Attendance, SEO, and Donations AI Managers with top focus and remediation signals.
             </p>
           </div>
           <div style={{ textAlign: 'right' }}>
