@@ -128,3 +128,8 @@ The Leads view now implements a full marketing funnel analysis with:
 - AI recommendations prioritized by CPGL impact
 
 Reference: `docs/lead-intelligence-framework.md`
+
+- Quick-win autonomous workflow pilot: `docs/ai-manager-quick-win-pilot.md`
+- Leads autonomous manager execution plan: `docs/leads-autonomous-manager-plan.md`
+- Leads manager execution board (owners, tasks, success gates): `docs/leads-manager-execution-board.md`
+- HubSpot sync verification SQL pack: `scripts/verify_hubspot_sync_health.sql`

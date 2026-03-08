@@ -34,17 +34,40 @@ test('leads manager insights and experiment analyzer render safely', async ({ pa
   await expect(autonomousActionsCard).toContainText('CPL:');
   await expect(autonomousActionsCard).toContainText('CPQL:');
   await expect(autonomousActionsCard).toContainText('Qualified%:');
-  {
-    const autonomousText = await autonomousActionsCard.innerText();
-    const hasImpactBasisOrConfidence = /impact basis|basis:|confidence:/i.test(autonomousText);
-    const hasInsufficientSampleFallback = /insufficient sample|n\/a/i.test(autonomousText);
-    expect(
-      hasImpactBasisOrConfidence || hasInsufficientSampleFallback,
-      'Expected impact basis/confidence metadata or an insufficient-sample fallback in manager insights.',
-    ).toBeTruthy();
+
+  const impactRows = autonomousActionsCard.locator('div').filter({ hasText: 'Target gap:' });
+  await expect.poll(async () => (await impactRows.count()) > 0, { timeout: 120000 }).toBeTruthy();
+
+  let evidenceRows = 0;
+  let insufficientRows = 0;
+  const impactRowCount = await impactRows.count();
+  for (let i = 0; i < impactRowCount; i += 1) {
+    const row = impactRows.nth(i);
+    const rowText = await row.innerText();
+
+    expect(rowText).toMatch(/Target gap:/i);
+    expect(rowText).toMatch(/Baseline:/i);
+    expect(rowText).toMatch(/Target:/i);
+    expect(rowText).toMatch(/Method:/i);
+    expect(rowText).toMatch(/Sample Size:/i);
+    expect(rowText).toMatch(/Confidence:/i);
+
+    const targetGapMatch = rowText.match(/Target gap:\s*([^\n]+)/i);
+    const targetGapValue = (targetGapMatch?.[1] || '').trim();
+    if (/insufficient_evidence/i.test(targetGapValue)) {
+      insufficientRows += 1;
+      expect(targetGapValue).toBe('insufficient_evidence');
+    } else {
+      evidenceRows += 1;
+      expect(targetGapValue).toMatch(/[+\-]?\d+(\.\d+)?\s*(%|pp)/i);
+    }
   }
 
-  const humanRequiredCard = await sectionCard(managerPanel, 'Human Required');
+  expect(evidenceRows + insufficientRows).toBeGreaterThan(0);
+
+  const humanRequiredTitle = managerPanel.getByText(/Human Required( Actions)?/i).first();
+  await expect(humanRequiredTitle).toBeVisible();
+  const humanRequiredCard = humanRequiredTitle.locator('xpath=ancestor::div[1]');
   await expect(humanRequiredCard).toBeVisible();
 
   const experimentPanel = page.locator('section').filter({ hasText: 'Experiment Quality Analyzer' }).first();

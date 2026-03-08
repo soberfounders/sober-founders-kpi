@@ -1,3 +1,9 @@
+import {
+  DEFAULT_LEADS_EXPERIMENT_RUBRIC,
+  LEADS_EXPERIMENT_RUBRIC_VERSION,
+  resolveLeadsExperimentRubric,
+} from './leadsExperimentRubric.js';
+
 function toNumberOrNull(value) {
   if (value === null || value === undefined || value === '') return null;
   const parsed = Number(value);
@@ -21,21 +27,6 @@ function median(values) {
   return nums.length % 2 === 0 ? ((nums[mid - 1] + nums[mid]) / 2) : nums[mid];
 }
 
-const RUBRIC = Object.freeze({
-  quality: {
-    qualifiedKeepFloor: 0.26,
-    greatKeepFloor: 0.07,
-    qualifiedKillFloor: 0.14,
-    greatKillFloor: 0.03,
-  },
-  efficiency: {
-    cpqlGood: 900,
-    cpqlPoor: 1800,
-    cpglGood: 2800,
-    cpglPoor: 5200,
-  },
-});
-
 function confidenceFromSample(leadBase, minLeadsThreshold) {
   if (leadBase < minLeadsThreshold) return 'LOW_SAMPLE';
   if (leadBase >= Math.max(minLeadsThreshold * 2, 24)) return 'HIGH';
@@ -51,7 +42,7 @@ function efficiencyBand(value, goodThreshold, poorThreshold) {
   return 'MID';
 }
 
-function buildGroupRows(adRows, keyBuilder, minLeadsThreshold) {
+function buildGroupRows(adRows, keyBuilder, minLeadsThreshold, rubric) {
   const grouped = new Map();
   (adRows || []).forEach((row) => {
     const key = keyBuilder(row);
@@ -115,18 +106,18 @@ function buildGroupRows(adRows, keyBuilder, minLeadsThreshold) {
       };
     }
 
-    const cpqlBand = efficiencyBand(row.cpql, RUBRIC.efficiency.cpqlGood, RUBRIC.efficiency.cpqlPoor);
-    const cpglBand = efficiencyBand(row.cpgl, RUBRIC.efficiency.cpglGood, RUBRIC.efficiency.cpglPoor);
+    const cpqlBand = efficiencyBand(row.cpql, rubric.efficiency.cpqlGood, rubric.efficiency.cpqlPoor);
+    const cpglBand = efficiencyBand(row.cpgl, rubric.efficiency.cpglGood, rubric.efficiency.cpglPoor);
 
     const meetsQualityFloors = (
       toNumberOrNull(row.qualified_rate) !== null
       && toNumberOrNull(row.great_rate) !== null
-      && row.qualified_rate >= RUBRIC.quality.qualifiedKeepFloor
-      && row.great_rate >= RUBRIC.quality.greatKeepFloor
+      && row.qualified_rate >= rubric.quality.qualifiedKeepFloor
+      && row.great_rate >= rubric.quality.greatKeepFloor
     );
     const failsQualityFloors = (
-      (toNumberOrNull(row.qualified_rate) !== null && row.qualified_rate <= RUBRIC.quality.qualifiedKillFloor)
-      || (toNumberOrNull(row.great_rate) !== null && row.great_rate <= RUBRIC.quality.greatKillFloor)
+      (toNumberOrNull(row.qualified_rate) !== null && row.qualified_rate <= rubric.quality.qualifiedKillFloor)
+      || (toNumberOrNull(row.great_rate) !== null && row.great_rate <= rubric.quality.greatKillFloor)
     );
 
     const relativeOutperforming = (
@@ -155,7 +146,7 @@ function buildGroupRows(adRows, keyBuilder, minLeadsThreshold) {
     }
 
     const reasonParts = [];
-    reasonParts.push(`Qualified ${(row.qualified_rate * 100).toFixed(1)}% (floor ${(RUBRIC.quality.qualifiedKeepFloor * 100).toFixed(0)}%), Great ${(row.great_rate * 100).toFixed(1)}% (floor ${(RUBRIC.quality.greatKeepFloor * 100).toFixed(0)}%).`);
+    reasonParts.push(`Qualified ${(row.qualified_rate * 100).toFixed(1)}% (floor ${(rubric.quality.qualifiedKeepFloor * 100).toFixed(0)}%), Great ${(row.great_rate * 100).toFixed(1)}% (floor ${(rubric.quality.greatKeepFloor * 100).toFixed(0)}%).`);
     reasonParts.push(`Efficiency bands: CPQL ${cpqlBand}${row.cpql !== null ? ` (${Math.round(row.cpql)})` : ''}, CPGL ${cpglBand}${row.cpgl !== null ? ` (${Math.round(row.cpgl)})` : ''}.`);
     if (relativeOutperforming) reasonParts.push('Relative comparison: outperforming peer median.');
     if (relativeUnderperforming) reasonParts.push('Relative comparison: below peer median.');
@@ -248,16 +239,21 @@ export function buildLeadsExperimentAnalyzer({
   adAttributionRows = [],
   sourceRows = [],
   minLeadsThreshold = 8,
+  rubricOverride = null,
 }) {
+  const rubric = resolveLeadsExperimentRubric(rubricOverride || DEFAULT_LEADS_EXPERIMENT_RUBRIC);
+
   const campaignRows = buildGroupRows(
     adAttributionRows,
     (row) => `campaign:${String(row?.campaignName || 'Unknown Campaign')}`,
     minLeadsThreshold,
+    rubric,
   );
   const adsetRows = buildGroupRows(
     adAttributionRows,
     (row) => `campaign:${String(row?.campaignName || 'Unknown Campaign')}|adset:${String(row?.adsetName || 'Unknown Ad Set')}`,
     minLeadsThreshold,
+    rubric,
   );
 
   const paidRecommendations = buildPaidRecommendations(campaignRows, adsetRows);
@@ -266,7 +262,8 @@ export function buildLeadsExperimentAnalyzer({
   return {
     generated_at: new Date().toISOString(),
     min_leads_threshold: minLeadsThreshold,
-    rubric: RUBRIC,
+    rubric,
+    rubric_version: LEADS_EXPERIMENT_RUBRIC_VERSION,
     campaign_rows: campaignRows,
     adset_rows: adsetRows,
     paid_recommendations: paidRecommendations,
