@@ -10,6 +10,11 @@ This dashboard implementation standardizes lead-gen reporting around a single fu
 6. Qualified Leads (official revenue `>= $250K` **and** sobriety date at least 1 year old as of today)
 7. Great Leads (`>=$1M` official revenue; revenue-tier only)
 
+Revenue-tier semantics:
+
+- Bad/OK/Good/Great are revenue-only tiers.
+- Qualified/Unqualified is a separate eligibility layer that uses both official revenue and sobriety age.
+
 ## Source Mapping
 
 - `raw_fb_ads_insights_daily` provides impressions, clicks, spend, leads, and ad identifiers.
@@ -25,6 +30,9 @@ This dashboard implementation standardizes lead-gen reporting around a single fu
 - `CPGL = Spend / Great Leads`
 - `Cost Per Show-Up = Spend / Net New Show-Ups`
 - `Cost Per Registration = Spend / Registrations`
+- `Qualified% = Qualified Leads / Leads`
+- `Non-Qualified% = Unqualified Leads / Leads`
+- `Great% = Great Leads / Leads`
 
 Conversion rates:
 
@@ -111,6 +119,13 @@ If `raw_luma_registrations` is missing/unavailable, the dashboard falls back to:
 - Deploy `manage_attendee_aliases` before using merge buttons in Attendance:
   - `supabase functions deploy manage_attendee_aliases`
 - Run `deno run -A scripts/check_lead_analytics_readiness.ts` after schema changes or environment updates.
+
+## Manager Decision Layer
+
+- Weekly decisions should compare WoW and MoM for `CPL`, `CPQL`, `Qualified%`, `Non-Qualified%`, and `Great%`.
+- Budget/campaign recommendations should prioritize quality-adjusted economics (`CPQL`) over low `CPL`.
+- Human-required actions (compliance, spend authority, policy changes) must be routed through manager approval workflow.
+- Full manager operating spec reference: `docs/leads-action-manager-spec.md`.
 
 ## Recommended Next Schema Improvements
 

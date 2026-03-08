@@ -8,14 +8,14 @@
 
 HubSpot official annual revenue and sobriety date are the source of truth for `Qualified` vs `Unqualified`.
 
-Revenue tiers (revenue-only, official annual revenue USD):
+Revenue tiers are revenue-only labels (official annual revenue USD):
 - Great: `>= 1,000,000`
 - Good: `>= 250,000` and `< 1,000,000`
 - OK: `>= 100,000` and `< 250,000`
 - Bad: `< 100,000`
 - Unknown: missing, null, empty, or unparseable official revenue
 
-Qualification rule (independent of revenue-tier labels):
+Qualification rule is independent of revenue-tier labels:
 - Qualified: official annual revenue `>= 250,000` **AND** sobriety date is at least 1 year old as of runtime "today".
 - Unqualified: any lead that does not meet the Qualified rule above.
 
@@ -23,6 +23,7 @@ Notes:
 - Revenue must be parsed as a numeric USD value before classification.
 - "At least 1 year old" means `today - sobriety_date >= 365 days` (UTC day boundary).
 - Non-official revenue fields are not allowed for classification unless explicitly flagged (see allowed fields section).
+- Qualified/Unqualified may use both revenue + sobriety logic, while Bad/OK/Good/Great must stay revenue-only.
 
 ## 2) Invariants
 
@@ -71,3 +72,9 @@ Release is accepted only when all checks pass:
    - Diagnostic output/logging includes which official field was used for each classified row (or `unknown` reason).
 10. Regression safety:
    - Existing dashboard totals remain stable except where corrected by canonical official-field enforcement.
+
+## 5) Manager Ops Alignment
+
+- Manager-facing insights and actions must follow these same definitions without alias terms.
+- Experiment decisions must optimize `CPQL`, `Qualified%`, and `Great%` before raw `CPL`.
+- Canonical manager spec reference: `docs/leads-action-manager-spec.md`.
