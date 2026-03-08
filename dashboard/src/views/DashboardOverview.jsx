@@ -1755,14 +1755,9 @@ const DashboardOverview = () => {
       },
       data_rows_loaded: parsedDonations.length,
     };
-    const attendanceDiagnostics = [
-      `Lineage: net-new, total attendances, and avg visits come from raw_hubspot_meeting_activities joined to hubspot_activity_contact_associations (completed Tue/Thu free-group calls only).`,
-      `Meta cost per new attendee uses raw_fb_ads_insights_daily free-group spend (${formatCurrency(attendanceAdsMonth.freeSpend)}) / net-new (${formatInt(attendeesMonth.newAttendees)}).`,
-      `30d raw counts: net-new=${formatInt(attendeesMonth.newAttendees)}, total attendances=${formatInt(attendeesMonth.attendanceParticipations)}, avg visits=${formatInt(attendeesMonth.attendanceParticipations)}/${formatInt(attendeesMonth.uniqueAttendees)}.`,
-      unclassifiedLargeCalls >= 3
-        ? `${formatInt(unclassifiedLargeCalls)} high-attendance calls remain unclassified in the last 30 days and are queued for taxonomy QA follow-up.`
-        : '',
-    ].filter(Boolean).join(' ');
+    const attendanceDiagnostics = unclassifiedLargeCalls >= 3
+      ? `${formatInt(unclassifiedLargeCalls)} high-attendance calls remain unclassified in the last 30 days and are queued for taxonomy QA follow-up.`
+      : '';
 
     const managers = [
       {
@@ -2063,10 +2058,6 @@ const DashboardOverview = () => {
       .slice(0, 8);
     const fixNow = [
       ...(warnings || []).map((warning) => `Data warning: ${warning}`),
-      ...managerSnapshots
-        .map((snapshot) => snapshot.manager?.diagnostics)
-        .filter(Boolean)
-        .map((diagnostic) => `Diagnostic: ${diagnostic}`),
     ].slice(0, 6);
     const improvementLevers = managerSnapshots
       .flatMap((snapshot) => snapshot.humanActions.map((item) => `${snapshot.manager.title}: ${item}`))
@@ -2551,8 +2542,11 @@ const DashboardOverview = () => {
                     </p>
                   )}
                   {manager.diagnostics && (
-                    <div style={{ marginTop: '8px', padding: '8px 10px', backgroundColor: 'rgba(255,152,0,0.1)', borderRadius: '10px', border: '1px solid rgba(255,152,0,0.3)' }}>
-                      <p style={{ fontSize: '12px', color: 'var(--color-orange)' }}>{manager.diagnostics}</p>
+                    <div style={{ marginTop: '8px', padding: '8px 10px', backgroundColor: 'rgba(148,163,184,0.12)', borderRadius: '10px', border: '1px solid rgba(148,163,184,0.35)' }}>
+                      <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Audit note
+                      </p>
+                      <p style={{ marginTop: '4px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>{manager.diagnostics}</p>
                     </div>
                   )}
                 </div>
