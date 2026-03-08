@@ -100,12 +100,23 @@ const MIN_GROUP_ATTENDEES = 3;
 const EXPECTED_ZERO_GROUP_SESSION_KEYS = new Set(['Thursday|2025-12-25']);
 
 function parseMissingSupabaseColumn(errorMessage = '') {
-  const match = String(errorMessage || '').match(/column\s+raw_hubspot_contacts\.([a-zA-Z0-9_]+)\s+does not exist/i);
-  return match?.[1] || null;
+  const message = String(errorMessage || '');
+  const patterns = [
+    /column\s+(?:"?[a-zA-Z0-9_]+"?\.)?(?:"?raw_hubspot_contacts"?\.)?"?([a-zA-Z0-9_]+)"?\s+does not exist/i,
+    /Could not find the\s+'([a-zA-Z0-9_]+)'\s+column\s+of\s+'raw_hubspot_contacts'/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = message.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+
+  return null;
 }
 
 async function fetchHubspotContactsWithSchemaFallback(contactStartDate) {
   const requestedColumns = [...HUBSPOT_CONTACT_SELECT_COLUMNS];
+  const schemaWarnings = [];
   const runQuery = (columns) => (
     supabase
       .from('raw_hubspot_contacts')
@@ -114,27 +125,31 @@ async function fetchHubspotContactsWithSchemaFallback(contactStartDate) {
       .order('createdate', { ascending: true })
   );
 
-  const firstResult = await runQuery(requestedColumns);
-  if (!firstResult.error) {
-    return { ...firstResult, schemaWarnings: [] };
-  }
+  let selectedColumns = [...requestedColumns];
+  const attemptedMissingColumns = new Set();
 
-  const missingColumn = parseMissingSupabaseColumn(firstResult.error?.message);
-  if (!missingColumn || !requestedColumns.includes(missingColumn)) {
-    return { ...firstResult, schemaWarnings: [] };
-  }
+  while (selectedColumns.length > 0) {
+    const result = await runQuery(selectedColumns);
+    if (!result.error) {
+      return { ...result, schemaWarnings };
+    }
 
-  const fallbackColumns = requestedColumns.filter((columnName) => columnName !== missingColumn);
-  const fallbackResult = await runQuery(fallbackColumns);
-  if (fallbackResult.error) {
-    return { ...fallbackResult, schemaWarnings: [] };
+    const missingColumn = parseMissingSupabaseColumn(result.error?.message);
+    if (!missingColumn || !selectedColumns.includes(missingColumn) || attemptedMissingColumns.has(missingColumn)) {
+      return { ...result, schemaWarnings };
+    }
+
+    attemptedMissingColumns.add(missingColumn);
+    selectedColumns = selectedColumns.filter((columnName) => columnName !== missingColumn);
+    schemaWarnings.push(
+      `HubSpot contacts query auto-recovered from missing optional column \`${missingColumn}\`. Run schema migrations to restore full compatibility across deployments.`,
+    );
   }
 
   return {
-    ...fallbackResult,
-    schemaWarnings: [
-      `HubSpot contacts query auto-recovered from missing optional column \`${missingColumn}\`. Run schema migrations to restore full compatibility across deployments.`,
-    ],
+    data: null,
+    error: { message: 'HubSpot contacts query failed after removing all selectable columns.' },
+    schemaWarnings,
   };
 }
 
