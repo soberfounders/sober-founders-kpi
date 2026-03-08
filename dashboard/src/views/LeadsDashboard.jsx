@@ -12,6 +12,7 @@ import * as leadsGroupAnalyticsLib from '../lib/leadsGroupAnalytics';
 import { buildLeadsConfidenceSummary } from '../lib/leadsConfidenceModel';
 import { buildLeadsActionQueue } from '../lib/leadsActionQueue';
 import { buildLeadsManagerInsights } from '../lib/leadsManagerInsights';
+import { buildLeadsExperimentAnalyzer } from '../lib/leadsExperimentAnalyzer';
 import { buildAliasMap, resolveCanonicalAttendeeName } from '../lib/attendeeCanonicalization';
 import { applyZoomAttributionOverride, getZoomAttributionOverride } from '../lib/zoomAttributionOverrides';
 import {
@@ -26,6 +27,7 @@ import KPICard from '../components/KPICard';
 import CohortUnitEconomicsPreviewPanel from '../components/CohortUnitEconomicsPreviewPanel';
 import LeadsConfidenceActionPanel from '../components/LeadsConfidenceActionPanel';
 import LeadsManagerInsightsPanel from '../components/LeadsManagerInsightsPanel';
+import LeadsExperimentAnalyzerPanel from '../components/LeadsExperimentAnalyzerPanel';
 import LeadsParityGuardPanel from '../components/LeadsParityGuardPanel';
 import LeadsQualificationParityPanel from '../components/LeadsQualificationParityPanel';
 import {
@@ -3904,6 +3906,12 @@ export default function LeadsDashboard() {
     qualificationPrevious,
   }), [analytics, groupedData, dateWindows, qualificationCurrent, qualificationPrevious]);
 
+  const leadsExperimentAnalyzerData = useMemo(() => buildLeadsExperimentAnalyzer({
+    adAttributionRows: analytics?.adAttributionRows || [],
+    sourceRows: zoomSourceModule?.current?.sourceRows || [],
+    minLeadsThreshold: 8,
+  }), [analytics, zoomSourceModule]);
+
   const costCardLookup = new Map((leadsDecisionModule?.costCards || []).map((row) => [row.key, row]));
   const previousCpql = Number(costCardLookup.get('costPerGoodLeadQualified')?.previous);
   const previousCpgl = Number(costCardLookup.get('costPerGreatLead1m')?.previous);
@@ -3983,6 +3991,10 @@ export default function LeadsDashboard() {
         data={leadsManagerInsightsData}
         isLoading={loading}
         onSendToNotion={(taskName) => setManagerNotionModal({ open: true, taskName: String(taskName || '').trim() })}
+      />
+      <LeadsExperimentAnalyzerPanel
+        data={leadsExperimentAnalyzerData}
+        isLoading={loading}
       />
       <SendToNotionModal
         isOpen={managerNotionModal.open}
