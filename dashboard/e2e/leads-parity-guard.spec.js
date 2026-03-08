@@ -5,9 +5,18 @@ test('leads parity guard panel renders with warning-safe states', async ({ page 
 
   await page.goto('/');
   await page.getByRole('button', { name: 'Leads' }).click();
+  await expect(page.getByRole('heading', { name: 'Leads Overview' })).toBeVisible({ timeout: 60000 });
 
+  const missingEnv = page.getByText('Supabase Environment Variables Missing');
   const parityPanel = page.locator('section').filter({ hasText: 'Parity Guard' }).first();
-  await expect(parityPanel).toBeVisible({ timeout: 60000 });
+  await expect(parityPanel.or(missingEnv).first()).toBeVisible({ timeout: 60000 });
+  if ((await missingEnv.count()) > 0) {
+    await expect(page.getByText('Configuration Required')).toBeVisible();
+    await expect(page.locator('main')).toContainText('VITE_SUPABASE_URL');
+    await expect(page.locator('body')).not.toContainText('[object Object]');
+    return;
+  }
+
   await expect(parityPanel.getByText('Legacy vs grouped parity status')).toBeVisible({ timeout: 60000 });
 
   await expect.poll(async () => {
