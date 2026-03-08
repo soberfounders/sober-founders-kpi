@@ -1,19 +1,5 @@
 import { test, expect } from '@playwright/test';
 
-function parseCount(value) {
-  const normalized = String(value || '').replace(/,/g, '').trim();
-  if (!normalized || normalized === 'N/A') return null;
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-async function readMetricValue(panel, label) {
-  const card = panel.locator('div').filter({ hasText: label }).first();
-  await expect(card).toBeVisible();
-  const raw = await card.locator('p').nth(1).innerText();
-  return parseCount(raw);
-}
-
 test('leads qualified parity remains in sync', async ({ page }) => {
   test.setTimeout(180000);
 
@@ -36,21 +22,20 @@ test('leads qualified parity remains in sync', async ({ page }) => {
   const hasQualificationSection = (await qualificationSectionTitle.count()) > 0;
   if (hasQualificationSection) {
     await expect(qualificationSectionTitle).toBeVisible();
+    await expect(page.getByText('Bad (<$100K)')).toBeVisible();
+    await expect(page.getByText('OK ($100K-$249K)')).toBeVisible();
+    await expect(page.getByText('Good ($250K-$999K)')).toBeVisible();
+    await expect(page.getByText('Great ($1M+)')).toBeVisible();
+    await expect(page.getByText(/Qualified = official revenue.*AND sobriety date at least 365 days before as-of date/i)).toBeVisible();
+
     const parityPanel = page.locator('div').filter({ hasText: 'Qualification Parity' }).first();
     await expect(parityPanel).toBeVisible({ timeout: 60000 });
+    await expect(parityPanel.getByText('SOBRIETY-FILTERED')).toBeVisible();
+    await expect(parityPanel.getByText(/Good \+ Great is the high-revenue pool.*Qualified is the sobriety-filtered subset/i)).toBeVisible();
 
-    const isUnavailable = (await parityPanel.getByText('Qualification parity values are not available yet.').count()) > 0;
-    if (!isUnavailable) {
-      const qualified = await readMetricValue(parityPanel, 'Qualified');
-      const good = await readMetricValue(parityPanel, 'Good');
-      const great = await readMetricValue(parityPanel, 'Great');
-      if (qualified !== null && good !== null && great !== null) {
-        expect(qualified).toBe(good + great);
-      }
-
-      const mismatchWarning = parityPanel.getByText('Qualified parity mismatch: Qualified should equal Good + Great');
-      await expect(mismatchWarning).toHaveCount(0);
-    }
+    await expect(parityPanel).not.toContainText('Qualified parity mismatch: Qualified should equal Good + Great');
+    await expect(parityPanel).not.toContainText('IN SYNC');
+    await expect(parityPanel).not.toContainText('MISMATCH');
   }
 
   await expect(page.locator('body')).not.toContainText('[object Object]');
