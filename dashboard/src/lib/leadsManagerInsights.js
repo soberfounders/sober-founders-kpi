@@ -1,3 +1,5 @@
+import { evaluateLeadQualification } from './leadsQualificationRules';
+
 function toNumberOrNull(value) {
   if (value === null || value === undefined || value === '') return null;
   const parsed = Number(value);
@@ -78,33 +80,6 @@ function fmtSignedPp(value, digits = 1) {
   if (parsed === null) return 'N/A';
   const sign = parsed >= 0 ? '+' : '';
   return `${sign}${parsed.toFixed(digits)} pp`;
-}
-
-function parseSobrietyDate(value) {
-  const text = String(value || '').trim();
-  if (!text || text.toLowerCase() === 'not found') return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return new Date(`${text}T00:00:00.000Z`);
-  const mmddyyyy = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (mmddyyyy) {
-    const mm = String(mmddyyyy[1]).padStart(2, '0');
-    const dd = String(mmddyyyy[2]).padStart(2, '0');
-    const yyyy = String(mmddyyyy[3]).padStart(4, '0');
-    return new Date(`${yyyy}-${mm}-${dd}T00:00:00.000Z`);
-  }
-  const parsed = new Date(text);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
-function hasOneYearSobriety(sobrietyDateValue, referenceDate = new Date()) {
-  const sobrietyDate = parseSobrietyDate(sobrietyDateValue);
-  if (!sobrietyDate) return false;
-  const reference = new Date(Date.UTC(referenceDate.getUTCFullYear(), referenceDate.getUTCMonth(), referenceDate.getUTCDate()));
-  const anniversary = new Date(Date.UTC(
-    sobrietyDate.getUTCFullYear() + 1,
-    sobrietyDate.getUTCMonth(),
-    sobrietyDate.getUTCDate(),
-  ));
-  return anniversary.getTime() <= reference.getTime();
 }
 
 function extractMetrics({
@@ -438,12 +413,10 @@ function buildAutonomousActions(metrics, analytics) {
   ].slice(0, 3);
 }
 
-function buildHumanRequiredActions(metrics, qualityCounts) {
+function buildHumanRequiredActions(metrics, qualificationCurrent = {}) {
   const nonQualifiedRate = pickNumber(metrics.weekly.current.nonQualifiedRate, metrics.monthly.current.nonQualifiedRate, 0);
-  const good = pickNumber(qualityCounts?.good, 0);
-  const great = pickNumber(qualityCounts?.great, 0);
-  const qualified = pickNumber(metrics.weekly.current.qualified, metrics.monthly.current.qualified, 0);
-  const sobrietyGap = Math.max((good + great) - qualified, 0);
+  const fallbackQualified = pickNumber(qualificationCurrent?.qualificationBasis?.fallback_qualified_count, 0);
+  const fallbackShare = pickNumber(qualificationCurrent?.qualificationBasis?.fallback_share_pct, null);
 
   return [
     {
@@ -452,11 +425,11 @@ function buildHumanRequiredActions(metrics, qualityCounts) {
       priority: (nonQualifiedRate > 0.55) ? 'High' : 'Medium',
     },
     {
-      task: 'Complete HubSpot sobriety-date cleanup for revenue-eligible leads',
-      reason: sobrietyGap > 0
-        ? `At least ${Math.round(sobrietyGap)} revenue-eligible leads are blocked by sobriety data/rule status and need manual CRM verification.`
-        : 'CRM field audits still require manual verification and owner confirmation.',
-      priority: sobrietyGap > 0 ? 'High' : 'Medium',
+      task: 'Audit fallback-qualified leads for source-of-truth cleanup',
+      reason: fallbackQualified > 0
+        ? `${Math.round(fallbackQualified)} qualified leads currently rely on fallback revenue (>= $250k because official revenue is missing). Verify official revenue fields and sobriety records in HubSpot for confidence.`
+        : 'Continue periodic HubSpot field audits for revenue and sobriety data quality.',
+      priority: fallbackShare !== null && fallbackShare >= 0.25 ? 'High' : 'Medium',
     },
     {
       task: 'Run founder outreach for top qualified leads from this window',
@@ -488,7 +461,13 @@ function buildOrganicReferralQualityInsights(groupedData) {
     if (!stats[bucket]) return;
     const revenue = pickNumber(row?.revenueOfficial, row?.revenue);
     const great = revenue !== null && revenue >= 1_000_000;
-    const qualified = revenue !== null && revenue >= 250_000 && hasOneYearSobriety(row?.sobrietyDate);
+    const qualified = evaluateLeadQualification({
+      revenue: {
+        annual_revenue_in_dollars__official_: row?.revenueOfficial,
+        annual_revenue_in_dollars: row?.revenue,
+      },
+      sobrietyDate: row?.sobrietyDate,
+    }).qualified;
     stats[bucket].rows += 1;
     if (row?.matchedZoom) stats[bucket].showUps += 1;
     if (great) stats[bucket].great += 1;
@@ -555,7 +534,7 @@ export function buildLeadsManagerInsights({
     },
     trend_insights: buildTrendInsights(metrics),
     autonomous_actions: buildAutonomousActions(metrics, analytics),
-    human_required_actions: buildHumanRequiredActions(metrics, qualificationCurrent?.qualityCounts),
+    human_required_actions: buildHumanRequiredActions(metrics, qualificationCurrent),
     organic_referral_insights: buildOrganicReferralQualityInsights(groupedData),
   };
 }

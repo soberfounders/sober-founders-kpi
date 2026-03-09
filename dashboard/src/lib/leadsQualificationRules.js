@@ -17,8 +17,40 @@ const SOBRIETY_DATE_FIELDS = Object.freeze([
   'sobrietydate',
 ]);
 
+const OFFICIAL_QUALIFIED_MIN_REVENUE = 250_000;
+const FALLBACK_QUALIFIED_MIN_REVENUE = OFFICIAL_QUALIFIED_MIN_REVENUE;
+
 function toNumberOrNull(value) {
   if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string') {
+    const raw = value.trim();
+    if (!raw) return null;
+
+    const negativeFromParens = /^\(.*\)$/.test(raw);
+    let normalized = raw
+      .replace(/[,\s$]/g, '')
+      .replace(/usd/ig, '')
+      .trim();
+
+    if (negativeFromParens) {
+      normalized = normalized.replace(/[()]/g, '');
+      normalized = `-${normalized}`;
+    }
+
+    const suffixMatch = normalized.match(/^([-+]?\d*\.?\d+)([kmb])$/i);
+    if (suffixMatch) {
+      const base = Number(suffixMatch[1]);
+      const suffix = String(suffixMatch[2]).toLowerCase();
+      const multiplier = suffix === 'k' ? 1_000 : suffix === 'm' ? 1_000_000 : 1_000_000_000;
+      const parsed = base * multiplier;
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -41,20 +73,45 @@ function addUtcYears(date, years) {
 }
 
 export function parseOfficialRevenue(input) {
-  if (input === null || input === undefined) return null;
-  if (typeof input !== 'object') return toNumberOrNull(input);
+  // Backward-compatible behavior for existing tiering/analytics code:
+  // return official revenue when present, otherwise numeric fallback revenue.
+  return extractRevenueSignals(input).effectiveRevenue;
+}
 
+export function parseFallbackRevenue(input) {
+  return extractRevenueSignals(input).fallbackRevenue;
+}
+
+export function extractRevenueSignals(input) {
+  if (input === null || input === undefined) {
+    return { officialRevenue: null, fallbackRevenue: null, effectiveRevenue: null };
+  }
+
+  if (typeof input !== 'object') {
+    const parsed = toNumberOrNull(input);
+    return { officialRevenue: parsed, fallbackRevenue: null, effectiveRevenue: parsed };
+  }
+
+  let officialRevenue = null;
   for (const field of OFFICIAL_REVENUE_FIELDS) {
     const parsed = toNumberOrNull(input?.[field]);
-    if (parsed !== null) return parsed;
+    if (parsed !== null) {
+      officialRevenue = parsed;
+      break;
+    }
   }
 
-  // Official revenue is canonical; if it is missing, allow numeric fallback fields.
+  let fallbackRevenue = null;
   for (const field of NUMERIC_REVENUE_FALLBACK_FIELDS) {
     const parsed = toNumberOrNull(input?.[field]);
-    if (parsed !== null) return parsed;
+    if (parsed !== null) {
+      fallbackRevenue = parsed;
+      break;
+    }
   }
-  return null;
+
+  const effectiveRevenue = officialRevenue ?? fallbackRevenue;
+  return { officialRevenue, fallbackRevenue, effectiveRevenue };
 }
 
 export function parseSobrietyDate(input) {
@@ -102,13 +159,44 @@ export function isQualifiedLead({
   sobrietyDate,
   referenceDate = new Date(),
 }) {
-  const revenueValue = parseOfficialRevenue(revenue);
-  if (revenueValue === null || revenueValue < 250_000) return false;
-  return hasOneYearSobrietyByDate(sobrietyDate, referenceDate);
+  return evaluateLeadQualification({ revenue, sobrietyDate, referenceDate }).qualified;
+}
+
+export function evaluateLeadQualification({
+  revenue,
+  sobrietyDate,
+  referenceDate = new Date(),
+}) {
+  const { officialRevenue, fallbackRevenue, effectiveRevenue } = extractRevenueSignals(revenue);
+  const sobrietyEligible = hasOneYearSobrietyByDate(sobrietyDate, referenceDate);
+  const hasOfficialRevenue = officialRevenue !== null;
+  const officialQualified = officialRevenue !== null && officialRevenue >= OFFICIAL_QUALIFIED_MIN_REVENUE;
+  const fallbackQualified = !hasOfficialRevenue
+    && fallbackRevenue !== null
+    && fallbackRevenue >= FALLBACK_QUALIFIED_MIN_REVENUE;
+  const qualifiedFromRevenue = officialQualified || fallbackQualified;
+  const qualified = sobrietyEligible && qualifiedFromRevenue;
+  const qualificationBasis = qualified ? (officialQualified ? 'official' : 'fallback') : null;
+
+  return {
+    qualified,
+    qualificationBasis,
+    qualifiedFromRevenue,
+    officialQualified,
+    fallbackQualified,
+    sobrietyEligible,
+    officialRevenue,
+    fallbackRevenue,
+    effectiveRevenue,
+    thresholds: {
+      official: OFFICIAL_QUALIFIED_MIN_REVENUE,
+      fallback: FALLBACK_QUALIFIED_MIN_REVENUE,
+    },
+  };
 }
 
 export function leadQualityTierFromOfficialRevenue(revenue) {
-  const value = parseOfficialRevenue(revenue);
+  const value = extractRevenueSignals(revenue).effectiveRevenue;
   if (value === null) return 'unknown';
   if (value >= 1_000_000) return 'great';
   if (value >= 250_000) return 'good';
@@ -117,8 +205,16 @@ export function leadQualityTierFromOfficialRevenue(revenue) {
 }
 
 export function isQualifiedRevenueOnly(revenue) {
-  const value = toNumberOrNull(revenue);
-  return value !== null && value >= 250_000;
+  const { officialRevenue, fallbackRevenue } = extractRevenueSignals(revenue);
+  const hasOfficialRevenue = officialRevenue !== null;
+  return (officialRevenue !== null && officialRevenue >= OFFICIAL_QUALIFIED_MIN_REVENUE)
+    || (!hasOfficialRevenue && fallbackRevenue !== null && fallbackRevenue >= FALLBACK_QUALIFIED_MIN_REVENUE);
 }
 
-export { OFFICIAL_REVENUE_FIELDS, SOBRIETY_DATE_FIELDS, NUMERIC_REVENUE_FALLBACK_FIELDS };
+export {
+  OFFICIAL_REVENUE_FIELDS,
+  SOBRIETY_DATE_FIELDS,
+  NUMERIC_REVENUE_FALLBACK_FIELDS,
+  OFFICIAL_QUALIFIED_MIN_REVENUE,
+  FALLBACK_QUALIFIED_MIN_REVENUE,
+};

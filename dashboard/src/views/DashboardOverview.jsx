@@ -7,12 +7,13 @@ import {
   USE_DUMMY_DONATIONS,
 } from '../lib/env';
 import {
-  hasOneYearSobrietyByDate,
-  isQualifiedLead,
+  evaluateLeadQualification,
+  extractRevenueSignals,
   leadQualityTierFromOfficialRevenue,
   parseOfficialRevenue,
   parseSobrietyDate,
 } from '../lib/leadsQualificationRules';
+import { buildLeadsQualificationSnapshot, buildUnifiedKpiSnapshot } from '../lib/kpiSnapshot';
 import SendToNotionModal from '../components/SendToNotionModal';
 import {
   ResponsiveContainer,
@@ -442,6 +443,10 @@ function buildNotionTaskProperties(taskName) {
 }
 
 function hubspotOfficialRevenue(row) {
+  return extractRevenueSignals(row).officialRevenue;
+}
+
+function hubspotEffectiveRevenue(row) {
   return parseOfficialRevenue(row);
 }
 
@@ -451,12 +456,13 @@ function hubspotSobrietyDateUtc(row) {
 
 function leadQualityFlags(row) {
   const officialRevenue = hubspotOfficialRevenue(row);
-  const revenue = officialRevenue;
-  const qualityTier = leadQualityTierFromOfficialRevenue(officialRevenue);
+  const revenue = hubspotEffectiveRevenue(row);
+  const qualityTier = leadQualityTierFromOfficialRevenue(revenue);
   const hasSobriety = !!hubspotSobrietyDateUtc(row);
-  const sober1yToday = hasOneYearSobrietyByDate(row);
+  const qualification = evaluateLeadQualification({ revenue: row, sobrietyDate: row });
+  const sober1yToday = qualification.sobrietyEligible;
   const greatLead = qualityTier === 'great';
-  const qualifiedLead = isQualifiedLead({ revenue: officialRevenue, sobrietyDate: row });
+  const qualifiedLead = qualification.qualified;
   const highQualityLead = qualifiedLead;
   return {
     officialRevenue,
@@ -629,10 +635,20 @@ const DashboardOverview = () => {
   const [actionState, setActionState] = useState({});
   const [moduleAnalysisState, setModuleAnalysisState] = useState({});
   const [notionModal, setNotionModal] = useState({ open: false, taskName: '' });
+  const [deferredInsightsReady, setDeferredInsightsReady] = useState(false);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (loading) {
+      setDeferredInsightsReady(false);
+      return undefined;
+    }
+    const timer = setTimeout(() => setDeferredInsightsReady(true), 0);
+    return () => clearTimeout(timer);
+  }, [loading, metrics.length, hubspotContacts.length, fbAdsRows.length, hubspotActivities.length]);
 
   async function loadData() {
     setLoading(true);
@@ -1317,7 +1333,7 @@ const DashboardOverview = () => {
       let recommendation = '';
 
       if (spendUpMaterially && volumeRoughlyFlat && highQualityDeltaAbs <= 0) {
-        diagnosis = `We spent ${formatCurrencySignedDelta(spendDeltaAbs)} on lead-gen campaigns for roughly the same paid-social lead volume, but high-quality output ($250k+ and >1 year sober) did not improve. That pattern usually signals creative fatigue, audience saturation, or weaker qualification signal quality.`;
+        diagnosis = `We spent ${formatCurrencySignedDelta(spendDeltaAbs)} on lead-gen campaigns for roughly the same paid-social lead volume, but qualified output (sobriety 1y + revenue >= $250k, official first with fallback only when official is missing) did not improve. That pattern usually signals creative fatigue, audience saturation, or weaker qualification signal quality.`;
         recommendation = 'Management call: refresh creative + qualification hooks on the highest-spend ad sets before scaling budget.';
       } else if (spendUpMaterially && greatDeltaAbs < 0) {
         diagnosis = `Lead-gen spend increased ${changeLabel(spendDelta)} while great-lead output moved ${changeLabel(greatDelta)}. This is a quality regression, not just a volume wobble.`;
@@ -1859,7 +1875,7 @@ const DashboardOverview = () => {
           pillBg: '#ccfbf1',
           pillText: '#115e59',
         },
-        scopeLabel: `HubSpot contacts + Meta Ads (${periodMeta.asOfLabel} as of) | Qualified = official revenue + sobriety (1y as of today); Good/Great = revenue-only`,
+        scopeLabel: `HubSpot contacts + Meta Ads (${periodMeta.asOfLabel} as of) | Qualified = sobriety (1y) and revenue >= $250k (official first, fallback only if official missing); Good/Great = revenue-only`,
         sectionFocus: 'Lead quality, source mix, and acquisition efficiency across Phoenix Forum and feeder campaigns',
         analysisContext: leadsAnalysisContext,
         summaries: {
@@ -2074,6 +2090,88 @@ const DashboardOverview = () => {
     });
     return out;
   }, [aiManagers]);
+  const dashboardKpiSnapshot = useMemo(() => {
+    const latestDateKey = (rows, selector) => {
+      let latest = null;
+      (rows || []).forEach((row) => {
+        const raw = selector(row);
+        if (!raw) return;
+        const parsed = new Date(raw);
+        if (Number.isNaN(parsed.getTime())) return;
+        const candidate = parsed.toISOString().slice(0, 10);
+        if (!candidate) return;
+        if (!latest || candidate > latest) latest = candidate;
+      });
+      return latest;
+    };
+
+    const leadsRows = (hubspotContacts || []).filter((row) => isPaidSocialHubspotContact(row));
+    const leadsSpend = Number(managerByKey.get('leads')?.analysisContext?.current_30d?.lead_gen_spend || 0);
+    const leadsSnapshot = buildLeadsQualificationSnapshot({
+      leadRows: leadsRows,
+      spend: leadsSpend,
+      referenceDate: aiManagers?.referenceDate || new Date(),
+    });
+    const attendanceCurrent30d = managerByKey.get('attendance')?.analysisContext?.current_30d || {};
+
+    return buildUnifiedKpiSnapshot({
+      lookbackDays: LOOKBACK_DAYS,
+      generatedAt: new Date().toISOString(),
+      sourceLineage: [
+        ...(dashboard?.sourceCoverage || []).map((source) => ({
+          key: source?.source,
+          label: source?.source,
+          row_count: source?.count,
+          latest_date: source?.latest,
+        })),
+        {
+          key: 'hubspot_contacts',
+          label: 'HubSpot Contacts',
+          row_count: (hubspotContacts || []).length,
+          latest_date: latestDateKey(hubspotContacts, (row) => row?.createdate),
+        },
+        {
+          key: 'meta_ads',
+          label: 'Meta Ads',
+          row_count: (fbAdsRows || []).length,
+          latest_date: latestDateKey(fbAdsRows, (row) => row?.date_day),
+        },
+        {
+          key: 'hubspot_activities',
+          label: 'HubSpot Activities',
+          row_count: (hubspotActivities || []).length,
+          latest_date: latestDateKey(hubspotActivities, (row) => row?.hs_timestamp || row?.created_at_hubspot),
+        },
+        {
+          key: 'hubspot_activity_associations',
+          label: 'HubSpot Activity Associations',
+          row_count: (hubspotActivityAssocs || []).length,
+          latest_date: null,
+        },
+      ],
+      dashboard: {
+        sessions_7d: dashboard?.cards?.sessions7d ?? null,
+        clicks_7d: dashboard?.cards?.clicks7d ?? null,
+        engagement_7d: dashboard?.cards?.engagement7d ?? null,
+        repeat_rate: dashboard?.cards?.repeatRate ?? null,
+      },
+      leads: leadsSnapshot,
+      attendance: {
+        tuesday_count: Number(attendanceCurrent30d?.tuesday_sessions || 0),
+        thursday_count: Number(attendanceCurrent30d?.thursday_sessions || 0),
+        new_attendees_count: Number(attendanceCurrent30d?.new_attendees || 0),
+        avg_attendance_per_person: attendanceCurrent30d?.avg_visits ?? null,
+      },
+    });
+  }, [
+    aiManagers?.referenceDate,
+    dashboard,
+    hubspotContacts,
+    fbAdsRows,
+    hubspotActivities,
+    hubspotActivityAssocs,
+    managerByKey,
+  ]);
   const disableRemoteModuleAnalysis = useMemo(() => {
     const host = typeof window !== 'undefined' ? window.location.hostname : '';
     const isLocalHost = host === 'localhost' || host === '127.0.0.1';
@@ -2082,6 +2180,15 @@ const DashboardOverview = () => {
   }, []);
 
   const executiveSynthesis = useMemo(() => {
+    if (!deferredInsightsReady) {
+      return {
+        managerSnapshots: [],
+        keySignals: [],
+        priorityFocus: [],
+        fixNow: [],
+        improvementLevers: [],
+      };
+    }
     const managers = aiManagers?.managers || [];
     const managerSnapshots = managers.map((manager) => {
       const analysis = moduleAnalysisState[manager.key] || {};
@@ -2159,7 +2266,7 @@ const DashboardOverview = () => {
       fixNow,
       improvementLevers,
     };
-  }, [aiManagers, moduleAnalysisState, dashboard, warnings]);
+  }, [deferredInsightsReady, aiManagers, moduleAnalysisState, dashboard, warnings]);
 
   async function requestModuleAnalysis(manager, forceRefresh = false) {
     if (!manager?.key) return;
@@ -2274,7 +2381,7 @@ const DashboardOverview = () => {
   }
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || !deferredInsightsReady) return;
     (aiManagers?.managers || []).forEach((manager) => {
       const state = moduleAnalysisState[manager.key];
       const contextSignature = managerAnalysisContextSignature(manager);
@@ -2284,7 +2391,7 @@ const DashboardOverview = () => {
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, aiManagers]);
+  }, [loading, deferredInsightsReady, aiManagers]);
 
   async function runAutonomousAction(action) {
     if (!action?.id) return;
@@ -2408,6 +2515,8 @@ const DashboardOverview = () => {
         </div>
       )}
 
+      {deferredInsightsReady ? (
+        <>
       <div style={baseCardStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
           <div>
@@ -2756,6 +2865,18 @@ const DashboardOverview = () => {
           })}
         </div>
       </div>
+        </>
+      ) : (
+        <div style={baseCardStyle}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+            <p style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>Loading AI manager synthesis...</p>
+          </div>
+          <p style={{ marginTop: '8px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+            North-star KPIs below are prioritized for first render. Deeper section synthesis appears right after.
+          </p>
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '16px' }}>
         <div style={baseCardStyle}>
@@ -2784,6 +2905,64 @@ const DashboardOverview = () => {
           <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Zoom Repeat Rate</p>
           <p style={{ fontSize: '30px', fontWeight: 700, marginTop: '8px' }}>{pct(dashboard.cards.repeatRate)}</p>
           <p style={{ marginTop: '8px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>Last 12 meetings</p>
+        </div>
+      </div>
+
+      <div style={{ ...baseCardStyle, border: '1px solid var(--color-border-glow)' }} data-testid="dashboard-kpi-snapshot-card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div>
+            <p style={{ fontSize: '12px', textTransform: 'uppercase', fontWeight: 700, color: 'var(--color-dark-green)' }}>Unified KPI Snapshot</p>
+            <h3 style={{ fontSize: '18px', marginTop: '6px' }}>North-star contract, qualification basis, and lineage</h3>
+            <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+              Qualified = sobriety 1 year + revenue {'>='} $250K (official first, fallback only if official is missing).
+            </p>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Generated</p>
+            <p style={{ fontWeight: 700 }}>{new Date(dashboardKpiSnapshot?.meta?.generated_at || Date.now()).toLocaleString()}</p>
+            <p style={{ marginTop: '4px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+              Freshness: {String(dashboardKpiSnapshot?.meta?.freshness_status || 'unknown').toUpperCase()}
+            </p>
+          </div>
+        </div>
+
+        <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '10px' }}>
+          <div className="glass-panel" style={{ borderRadius: '10px', padding: '10px' }}>
+            <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Leads Qualified</p>
+            <p style={{ marginTop: '4px', fontSize: '22px', fontWeight: 700 }}>{formatInt(dashboardKpiSnapshot?.leads?.qualified_count || 0)}</p>
+            <p style={{ marginTop: '4px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+              Qualified %: {pct(dashboardKpiSnapshot?.leads?.qualified_pct)}
+            </p>
+            <p style={{ marginTop: '4px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+              Official {formatInt(dashboardKpiSnapshot?.leads?.qualification_basis?.official_qualified_count || 0)} | Fallback {formatInt(dashboardKpiSnapshot?.leads?.qualification_basis?.fallback_qualified_count || 0)}
+            </p>
+          </div>
+          <div className="glass-panel" style={{ borderRadius: '10px', padding: '10px' }}>
+            <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Attendance Core</p>
+            <p style={{ marginTop: '4px', fontSize: '13px', color: 'var(--color-text-primary)' }}>
+              Tuesday Count: <strong>{formatInt(dashboardKpiSnapshot?.attendance?.tuesday_count || 0)}</strong>
+            </p>
+            <p style={{ marginTop: '4px', fontSize: '13px', color: 'var(--color-text-primary)' }}>
+              Thursday Count: <strong>{formatInt(dashboardKpiSnapshot?.attendance?.thursday_count || 0)}</strong>
+            </p>
+            <p style={{ marginTop: '4px', fontSize: '13px', color: 'var(--color-text-primary)' }}>
+              New Attendees: <strong>{formatInt(dashboardKpiSnapshot?.attendance?.new_attendees_count || 0)}</strong>
+            </p>
+            <p style={{ marginTop: '4px', fontSize: '13px', color: 'var(--color-text-primary)' }}>
+              Avg Attendance / Person: <strong>{Number.isFinite(Number(dashboardKpiSnapshot?.attendance?.avg_attendance_per_person)) ? Number(dashboardKpiSnapshot.attendance.avg_attendance_per_person).toFixed(2) : 'N/A'}</strong>
+            </p>
+          </div>
+        </div>
+
+        <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: '8px' }}>
+          {(dashboardKpiSnapshot?.meta?.sources || []).map((source) => (
+            <div key={`dashboard-source-lineage-${source.key}`} className="glass-panel" style={{ borderRadius: '10px', padding: '8px' }}>
+              <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>{source.label}</p>
+              <p style={{ marginTop: '4px', fontSize: '12px', fontWeight: 700 }}>{formatInt(source.row_count || 0)} rows</p>
+              <p style={{ marginTop: '2px', fontSize: '11px', color: 'var(--color-text-secondary)' }}>Latest: {source.latest_date || 'No data'}</p>
+              <p style={{ marginTop: '2px', fontSize: '11px', color: 'var(--color-text-secondary)' }}>{String(source.freshness_status || 'unknown').toUpperCase()}</p>
+            </div>
+          ))}
         </div>
       </div>
 

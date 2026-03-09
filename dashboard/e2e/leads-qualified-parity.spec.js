@@ -56,7 +56,8 @@ test('leads qualification checks stay safe without parity enforcement', async ({
       const great = await readMetricValue(parityPanel, 'Great');
       const revenueEligible = await readMetricValue(parityPanel, 'Revenue Eligible');
       if (qualified !== null && good !== null && great !== null && revenueEligible !== null) {
-        expect(revenueEligible).toBe(good + great);
+        // Revenue-eligible includes leads at >= $250k revenue (official first, fallback only if official is missing).
+        expect(revenueEligible).toBeGreaterThanOrEqual(good + great);
         // Qualified is sobriety-gated; it may be lower than revenue-eligible.
         expect(qualified).toBeLessThanOrEqual(revenueEligible);
       }

@@ -16,10 +16,14 @@ import { buildLeadsExperimentAnalyzer } from '../lib/leadsExperimentAnalyzer';
 import { buildAliasMap, resolveCanonicalAttendeeName } from '../lib/attendeeCanonicalization';
 import { applyZoomAttributionOverride, getZoomAttributionOverride } from '../lib/zoomAttributionOverrides';
 import {
-  isQualifiedLead,
+  evaluateLeadQualification,
   leadQualityTierFromOfficialRevenue,
   parseOfficialRevenue,
 } from '../lib/leadsQualificationRules';
+import {
+  buildLeadsQualificationSnapshot,
+  buildUnifiedKpiSnapshot,
+} from '../lib/kpiSnapshot';
 import DrillDownModal from '../components/DrillDownModal';
 import SendToNotionModal from '../components/SendToNotionModal';
 import AIAnalysisCard from '../components/AIAnalysisCard';
@@ -258,22 +262,41 @@ function summarizeLeadQualificationAndQuality(leadRows) {
   const rows = Array.isArray(leadRows) ? leadRows : [];
   const qualityCounts = { bad: 0, ok: 0, good: 0, great: 0, unknown: 0 };
   let qualified = 0;
+  let officialQualified = 0;
+  let fallbackQualified = 0;
 
   for (const row of rows) {
     const revenue = parseOfficialRevenue(row?.revenueOfficial ?? row?.revenue);
     const qualityTier = leadQualityTierFromOfficialRevenue(revenue);
+    const qualification = evaluateLeadQualification({
+      revenue: {
+        annual_revenue_in_dollars__official_: row?.revenueOfficial,
+        annual_revenue_in_dollars: row?.revenue,
+      },
+      sobrietyDate: row?.sobrietyDate,
+    });
 
     if (qualityCounts[qualityTier] !== undefined) qualityCounts[qualityTier] += 1;
-    if (isQualifiedLead({ revenue, sobrietyDate: row?.sobrietyDate })) qualified += 1;
+    if (qualification.qualified) {
+      qualified += 1;
+      if (qualification.qualificationBasis === 'official') officialQualified += 1;
+      if (qualification.qualificationBasis === 'fallback') fallbackQualified += 1;
+    }
   }
 
   const total = rows.length;
   const nonQualified = Math.max(0, total - qualified);
+  const fallbackSharePct = qualified > 0 ? fallbackQualified / qualified : null;
   return {
     total,
     qualified,
     nonQualified,
     qualityCounts,
+    qualificationBasis: {
+      official_qualified_count: officialQualified,
+      fallback_qualified_count: fallbackQualified,
+      fallback_share_pct: fallbackSharePct,
+    },
   };
 }
 
@@ -868,6 +891,7 @@ export default function LeadsDashboard() {
   // Drill-down modal state
   const [modal, setModal] = useState(null); // { title, columns, rows }
   const [managerNotionModal, setManagerNotionModal] = useState({ open: false, taskName: '' });
+  const [deferredInsightsReady, setDeferredInsightsReady] = useState(false);
 
   // Legacy drilldown
   const [drilldownWindowKey, setDrilldownWindowKey] = useState('monthCurrent');
@@ -880,6 +904,15 @@ export default function LeadsDashboard() {
   const supabaseKey = SUPABASE_ANON_KEY;
 
   useEffect(() => { fetchData(); }, []);
+
+  useEffect(() => {
+    if (loading) {
+      setDeferredInsightsReady(false);
+      return undefined;
+    }
+    const timer = setTimeout(() => setDeferredInsightsReady(true), 0);
+    return () => clearTimeout(timer);
+  }, [loading, rawAds.length, rawHubspot.length, rawLuma.length, rawZoom.length]);
 
   async function fetchData() {
     setLoading(true);
@@ -3917,7 +3950,7 @@ export default function LeadsDashboard() {
       value: Number(qualificationCurrent?.qualified || 0),
       previous: dateWindows?.previous ? Number(qualificationPrevious?.qualified || 0) : null,
       format: 'count',
-      note: 'HubSpot official annual revenue >= $250K and sobriety date >= 1 year as of today',
+      note: 'Sobriety >= 1 year and revenue >= $250K (official first, fallback only if official is missing)',
       color: '#2563eb',
     },
     {
@@ -3952,6 +3985,24 @@ export default function LeadsDashboard() {
   ];
   const qualityMixTotal = qualityMixRows.reduce((sum, row) => sum + row.value, 0);
   const qualityUnknownCount = Number(qualificationCurrent?.qualityCounts?.unknown || 0);
+  const leadsQualificationSnapshot = buildLeadsQualificationSnapshot({
+    leadRows: overviewCurrentCombined?.leadRows || [],
+    spend: overviewCurrentFreeSpend,
+    referenceDate: new Date(),
+  });
+  const leadsKpiSnapshot = buildUnifiedKpiSnapshot({
+    lookbackDays: LOOKBACK_DAYS,
+    generatedAt: new Date().toISOString(),
+    sourceLineage: (liveFreshnessModule?.sourceRows || []).map((row) => ({
+      key: row?.key,
+      label: row?.label,
+      row_count: row?.rowCount,
+      latest_date: row?.dateKey,
+    })),
+    leads: leadsQualificationSnapshot,
+    attendance: {},
+    dashboard: {},
+  });
   const leadsQualificationParityData = (() => {
     const report = (leadsParityReport && typeof leadsParityReport === 'object') ? leadsParityReport : {};
     const summary = (report.summary && typeof report.summary === 'object') ? report.summary : {};
@@ -3970,6 +4021,7 @@ export default function LeadsDashboard() {
     const sobrietyGapFromReport = toNumberOrNull(report.qualified_sobriety_gap_count ?? summary.qualified_sobriety_gap_count);
 
     const qualifiedFallback = toNumberOrNull(qualificationCurrent?.qualified);
+    const okFallback = toNumberOrNull(qualificationCurrent?.qualityCounts?.ok);
     const goodFallback = toNumberOrNull(qualificationCurrent?.qualityCounts?.good);
     const greatFallback = toNumberOrNull(qualificationCurrent?.qualityCounts?.great);
 
@@ -3977,8 +4029,8 @@ export default function LeadsDashboard() {
     const goodCount = goodFromReport ?? goodFallback;
     const greatCount = greatFromReport ?? greatFallback;
     const revenueEligibleCount = revenueEligibleFromReport ?? (
-      goodCount !== null && greatCount !== null
-        ? goodCount + greatCount
+      okFallback !== null && goodCount !== null && greatCount !== null
+        ? okFallback + goodCount + greatCount
         : null
     );
     const computedDelta = (
@@ -4002,19 +4054,23 @@ export default function LeadsDashboard() {
     };
   })();
 
-  const leadsManagerInsightsData = buildLeadsManagerInsights({
-    analytics,
-    groupedData,
-    dateWindows,
-    qualificationCurrent,
-    qualificationPrevious,
-  });
+  const leadsManagerInsightsData = deferredInsightsReady
+    ? buildLeadsManagerInsights({
+      analytics,
+      groupedData,
+      dateWindows,
+      qualificationCurrent,
+      qualificationPrevious,
+    })
+    : null;
 
-  const leadsExperimentAnalyzerData = buildLeadsExperimentAnalyzer({
-    adAttributionRows: analytics?.adAttributionRows || [],
-    sourceRows: zoomSourceModule?.current?.sourceRows || [],
-    minLeadsThreshold: 8,
-  });
+  const leadsExperimentAnalyzerData = deferredInsightsReady
+    ? buildLeadsExperimentAnalyzer({
+      adAttributionRows: analytics?.adAttributionRows || [],
+      sourceRows: zoomSourceModule?.current?.sourceRows || [],
+      minLeadsThreshold: 8,
+    })
+    : null;
 
   const costCardLookup = new Map((leadsDecisionModule?.costCards || []).map((row) => [row.key, row]));
   const previousCpql = Number(costCardLookup.get('costPerGoodLeadQualified')?.previous);
@@ -4090,15 +4146,69 @@ export default function LeadsDashboard() {
         ))}
       </div>
 
+      <div
+        style={{
+          ...card,
+          border: '1px solid #c7d2fe',
+          background: 'linear-gradient(120deg, #eef2ff 0%, #f8fafc 50%, #ecfeff 100%)',
+        }}
+        data-testid="leads-kpi-snapshot-card"
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', flexWrap: 'wrap' }}>
+          <div>
+            <p style={{ margin: 0, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 800, color: '#3730a3' }}>
+              Unified KPI Snapshot
+            </p>
+            <h3 style={{ margin: '6px 0 0', fontSize: '16px', color: '#0f172a' }}>Qualified basis, freshness, and source lineage</h3>
+            <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#475569' }}>
+              Qualified = sobriety at least 1 year and revenue {'>='} $250K (official first, fallback only if official is missing).
+            </p>
+          </div>
+          <div style={{ ...subCard, border: '1px solid #cbd5e1', minWidth: '220px', backgroundColor: '#ffffffb3' }}>
+            <p style={{ margin: 0, fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Snapshot Generated</p>
+            <p style={{ margin: '4px 0 0', fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
+              {new Date(leadsKpiSnapshot?.meta?.generated_at || Date.now()).toLocaleString()}
+            </p>
+            <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#64748b' }}>
+              Lookback: {Number(leadsKpiSnapshot?.meta?.lookback_days || 0)} days
+            </p>
+          </div>
+        </div>
+        <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: '8px' }}>
+          {[
+            { label: 'Qualified Count', value: fmt.int(leadsKpiSnapshot?.leads?.qualified_count || 0), color: '#1d4ed8' },
+            { label: 'Qualified %', value: fmtMaybePct(leadsKpiSnapshot?.leads?.qualified_pct), color: '#0f766e' },
+            { label: 'Official Qualified', value: fmt.int(leadsKpiSnapshot?.leads?.qualification_basis?.official_qualified_count || 0), color: '#3730a3' },
+            { label: 'Fallback Qualified', value: fmt.int(leadsKpiSnapshot?.leads?.qualification_basis?.fallback_qualified_count || 0), color: '#92400e' },
+            { label: 'Fallback Share', value: fmtMaybePct(leadsKpiSnapshot?.leads?.qualification_basis?.fallback_share_pct), color: '#b45309' },
+          ].map((metric) => (
+            <div key={`leads-snapshot-${metric.label}`} style={{ ...subCard, border: '1px solid #dbeafe', backgroundColor: '#fff' }}>
+              <p style={{ margin: 0, fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>{metric.label}</p>
+              <p style={{ margin: '6px 0 0', fontSize: '20px', fontWeight: 800, color: metric.color }}>{metric.value}</p>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: '8px' }}>
+          {(leadsKpiSnapshot?.meta?.sources || []).map((source) => (
+            <div key={`leads-source-lineage-${source.key}`} style={{ ...subCard, border: '1px solid #dbeafe', backgroundColor: '#fff' }}>
+              <p style={{ margin: 0, fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>{source.label}</p>
+              <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>{fmt.int(source.row_count || 0)} rows</p>
+              <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>Latest: {source.latest_date || 'No data'}</p>
+              <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>Status: {String(source.freshness_status || 'unknown').toUpperCase()}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <LeadsConfidenceActionPanel data={leadsConfidenceActionData} isLoading={loading} />
       <LeadsManagerInsightsPanel
         data={leadsManagerInsightsData}
-        isLoading={loading}
+        isLoading={loading || !deferredInsightsReady}
         onSendToNotion={(taskName) => setManagerNotionModal({ open: true, taskName: String(taskName || '').trim() })}
       />
       <LeadsExperimentAnalyzerPanel
         data={leadsExperimentAnalyzerData}
-        isLoading={loading}
+        isLoading={loading || !deferredInsightsReady}
       />
       <SendToNotionModal
         isOpen={managerNotionModal.open}
@@ -4185,7 +4295,7 @@ export default function LeadsDashboard() {
           </p>
           <h3 style={{ margin: '6px 0 0', fontSize: '17px', color: '#0f172a' }}>Free Group Qualified vs Non-Qualified and quality tiers</h3>
           <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#64748b' }}>
-            Qualified = HubSpot official annual revenue {'>='} $250K and sobriety date at least 1 year old as of today. Good/Great tiers are revenue-only.
+            Qualified = sobriety date at least 1 year old and revenue {'>='} $250K (official first, fallback only if official is missing). Good/Great tiers are revenue-only.
           </p>
           <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: '10px' }}>
             <div style={{ ...subCard, border: '1px solid #dbeafe', backgroundColor: '#f8fbff' }}>
