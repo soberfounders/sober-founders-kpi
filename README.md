@@ -133,3 +133,23 @@ Reference: `docs/lead-intelligence-framework.md`
 - Leads autonomous manager execution plan: `docs/leads-autonomous-manager-plan.md`
 - Leads manager execution board (owners, tasks, success gates): `docs/leads-manager-execution-board.md`
 - HubSpot sync verification SQL pack: `scripts/verify_hubspot_sync_health.sql`
+
+## KPI Data Integrity Verification
+
+Use the reconciliation suite to verify HubSpot -> Supabase -> KPI contract integrity.
+
+Commands:
+
+- `npm run integrity:check`
+- `npm run integrity:check:strict` (requires `HUBSPOT_PRIVATE_APP_TOKEN`)
+- `npm run integrity:check:json`
+
+Artifacts:
+
+- `docs/audits/kpi-data-integrity-latest.md`
+- `docs/audits/kpi-data-integrity-latest.json` (when using `integrity:check:json`)
+
+Documentation:
+
+- `docs/data-integrity/kpi-data-integrity-contract.md`
+- `docs/audits/kpi-data-integrity-qa-checklist.md`

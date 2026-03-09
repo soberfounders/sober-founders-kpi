@@ -4,7 +4,10 @@
     "dashboard:build": "npm --prefix dashboard run build --",
     "dashboard:test:e2e": "npm --prefix dashboard run test:e2e --",
     "dashboard:dev": "npm --prefix dashboard run dev --",
-    "dashboard:test:e2e:headed": "npm --prefix dashboard run test:e2e -- --headed"
+    "dashboard:test:e2e:headed": "npm --prefix dashboard run test:e2e -- --headed",
+    "integrity:check": "node scripts/verify_kpi_data_integrity.mjs",
+    "integrity:check:strict": "node scripts/verify_kpi_data_integrity.mjs --strict-hubspot-parity",
+    "integrity:check:json": "node scripts/verify_kpi_data_integrity.mjs --json=docs/audits/kpi-data-integrity-latest.json"
   },
   "dependencies": {
     "pg": "^8.18.0"
