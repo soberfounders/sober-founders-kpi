@@ -60,23 +60,37 @@ const LEADS_HUBSPOT_CONTACT_REQUIRED_COLUMNS = [
   'campaign',
   'campaign_source',
   'membership_s',
-  'annual_revenue_in_dollars',
-  'annual_revenue',
-  'sobriety_date',
-  'sober_date',
-  'clean_date',
-  'sobrietydate',
 ];
 
 const LEADS_HUBSPOT_CONTACT_OPTIONAL_COLUMNS = [
+  'annual_revenue_in_dollars',
   'annual_revenue_in_usd_official',
   'annual_revenue_in_dollars__official_',
+  'annual_revenue',
+  'sobriety_date',
   'sobriety_date__official_',
+  'sober_date',
+  'clean_date',
+  'sobrietydate',
   'lastmodifieddate',
   'hs_lastmodifieddate',
   'updated_at',
+  'hubspot_updated_at',
+  'last_synced_at',
   'original_traffic_source',
+  'sync_source',
 ];
+
+const LEADS_HUBSPOT_CONTACT_SILENT_FALLBACK_COLUMNS = new Set([
+  // Legacy aliases absent in some environments.
+  'annual_revenue',
+  'sober_date',
+  'clean_date',
+  'sobrietydate',
+  'lastmodifieddate',
+  'hs_lastmodifieddate',
+  'updated_at',
+]);
 
 function extractMissingRawHubspotContactsColumn(message = '') {
   const text = String(message || '');
@@ -92,33 +106,54 @@ function extractMissingRawHubspotContactsColumn(message = '') {
 }
 
 async function fetchLeadsHubspotContactsWithSchemaFallback({ attributionStartKey }) {
-  const required = [...LEADS_HUBSPOT_CONTACT_REQUIRED_COLUMNS];
-  const optional = [...LEADS_HUBSPOT_CONTACT_OPTIONAL_COLUMNS];
-  const requestedColumns = [...required, ...optional];
+  const requestedColumns = [
+    ...LEADS_HUBSPOT_CONTACT_REQUIRED_COLUMNS,
+    ...LEADS_HUBSPOT_CONTACT_OPTIONAL_COLUMNS,
+  ];
+  const schemaWarnings = [];
+  let selectedColumns = [...requestedColumns];
+  const attemptedMissingColumns = new Set();
+  let lastError = null;
 
-  while (requestedColumns.length > 0) {
+  while (selectedColumns.length > 0) {
     const response = await supabase
       .from('raw_hubspot_contacts')
-      .select(requestedColumns.join(','))
+      .select(selectedColumns.join(','))
       .gte('createdate', `${attributionStartKey}T00:00:00.000Z`)
       .order('createdate', { ascending: false });
 
-    if (!response.error) return response;
+    if (!response.error) return { ...response, schemaWarnings };
+    lastError = response.error;
 
     const missingColumn = extractMissingRawHubspotContactsColumn(response.error?.message || response.error?.details || '');
-    if (!missingColumn) return response;
+    if (!missingColumn || !selectedColumns.includes(missingColumn) || attemptedMissingColumns.has(missingColumn)) break;
 
-    if (required.includes(missingColumn)) return response;
+    attemptedMissingColumns.add(missingColumn);
+    selectedColumns = selectedColumns.filter((columnName) => columnName !== missingColumn);
+    if (!LEADS_HUBSPOT_CONTACT_SILENT_FALLBACK_COLUMNS.has(missingColumn)) {
+      schemaWarnings.push(
+        `Leads HubSpot contacts query auto-recovered from missing optional column \`${missingColumn}\`.`,
+      );
+    }
+  }
 
-    const missingIndex = requestedColumns.indexOf(missingColumn);
-    if (missingIndex === -1) return response;
-
-    requestedColumns.splice(missingIndex, 1);
+  // Fail open to keep KPI surfaces alive when select-column drift happens.
+  const wildcardResponse = await supabase
+    .from('raw_hubspot_contacts')
+    .select('*')
+    .gte('createdate', `${attributionStartKey}T00:00:00.000Z`)
+    .order('createdate', { ascending: false });
+  if (!wildcardResponse.error) {
+    schemaWarnings.push(
+      'Leads HubSpot contacts query fell back to `select(*)` because preferred projection failed. Run schema alignment to restore lean projection safely.',
+    );
+    return { ...wildcardResponse, schemaWarnings };
   }
 
   return {
     data: null,
-    error: new Error('No selectable HubSpot contact columns remain for Leads query.'),
+    error: lastError || wildcardResponse.error || new Error('HubSpot contacts query failed in Leads after schema fallback attempts.'),
+    schemaWarnings,
   };
 }
 
@@ -945,6 +980,9 @@ export default function LeadsDashboard() {
     if (zoomR.error) errors.push(`Zoom data unavailable: ${zoomR.error.message}`);
     if (lumaR.error) errors.push(`Luma data unavailable: ${lumaR.error.message}`);
     if (hubspotR.error) errors.push(`HubSpot data unavailable: ${hubspotR.error.message}`);
+    if (Array.isArray(hubspotR.schemaWarnings) && hubspotR.schemaWarnings.length > 0) {
+      errors.push(...hubspotR.schemaWarnings);
+    }
     if (aliasR.error) errors.push(`Alias data unavailable: ${aliasR.error.message}`);
 
     // Optional additive tables for HubSpot Call coverage / attendee identity reconciliation.

@@ -103,23 +103,37 @@ const ATTENDANCE_HUBSPOT_CONTACT_REQUIRED_COLUMNS = [
   'lastname',
   'email',
   'hs_additional_emails',
-  'hs_analytics_source',
-  'lastmodifieddate',
-  'hs_lastmodifieddate',
-  'updated_at',
-  'annual_revenue_in_dollars',
-  'annual_revenue',
-  'sobriety_date',
-  'sober_date',
-  'clean_date',
-  'sobrietydate',
 ];
 
 const ATTENDANCE_HUBSPOT_CONTACT_OPTIONAL_COLUMNS = [
+  'hs_analytics_source',
+  'annual_revenue_in_dollars',
   'annual_revenue_in_usd_official',
   'annual_revenue_in_dollars__official_',
+  'annual_revenue',
+  'sobriety_date',
   'sobriety_date__official_',
+  'sober_date',
+  'clean_date',
+  'sobrietydate',
+  'lastmodifieddate',
+  'hs_lastmodifieddate',
+  'updated_at',
+  'hubspot_updated_at',
+  'last_synced_at',
+  'sync_source',
 ];
+
+const ATTENDANCE_HUBSPOT_CONTACT_SILENT_FALLBACK_COLUMNS = new Set([
+  // Legacy aliases absent in some environments.
+  'annual_revenue',
+  'sober_date',
+  'clean_date',
+  'sobrietydate',
+  'lastmodifieddate',
+  'hs_lastmodifieddate',
+  'updated_at',
+]);
 
 function extractMissingRawHubspotContactsColumn(message = '') {
   const text = String(message || '');
@@ -135,27 +149,45 @@ function extractMissingRawHubspotContactsColumn(message = '') {
 }
 
 async function resolveAttendanceHubspotContactSelectColumns() {
-  const required = [...ATTENDANCE_HUBSPOT_CONTACT_REQUIRED_COLUMNS];
-  const requestedColumns = [...required, ...ATTENDANCE_HUBSPOT_CONTACT_OPTIONAL_COLUMNS];
+  const requestedColumns = [
+    ...ATTENDANCE_HUBSPOT_CONTACT_REQUIRED_COLUMNS,
+    ...ATTENDANCE_HUBSPOT_CONTACT_OPTIONAL_COLUMNS,
+  ];
+  const schemaWarnings = [];
+  let selectedColumns = [...requestedColumns];
+  const attemptedMissingColumns = new Set();
 
-  while (requestedColumns.length > 0) {
+  while (selectedColumns.length > 0) {
     const probe = await supabase
       .from('raw_hubspot_contacts')
-      .select(requestedColumns.join(','))
+      .select(selectedColumns.join(','))
       .limit(1);
 
-    if (!probe.error) return requestedColumns;
+    if (!probe.error) return { columns: selectedColumns, schemaWarnings };
 
     const missingColumn = extractMissingRawHubspotContactsColumn(probe.error?.message || probe.error?.details || '');
-    if (!missingColumn) return required;
-    if (required.includes(missingColumn)) return required;
-
-    const missingIndex = requestedColumns.indexOf(missingColumn);
-    if (missingIndex === -1) return required;
-    requestedColumns.splice(missingIndex, 1);
+    if (!missingColumn || !selectedColumns.includes(missingColumn) || attemptedMissingColumns.has(missingColumn)) break;
+    attemptedMissingColumns.add(missingColumn);
+    selectedColumns = selectedColumns.filter((columnName) => columnName !== missingColumn);
+    if (!ATTENDANCE_HUBSPOT_CONTACT_SILENT_FALLBACK_COLUMNS.has(missingColumn)) {
+      schemaWarnings.push(
+        `Attendance HubSpot contacts query auto-recovered from missing optional column \`${missingColumn}\`.`,
+      );
+    }
   }
 
-  return required;
+  const wildcardProbe = await supabase
+    .from('raw_hubspot_contacts')
+    .select('*')
+    .limit(1);
+  if (!wildcardProbe.error) {
+    schemaWarnings.push(
+      'Attendance HubSpot contacts query fell back to `select(*)` because preferred projection failed. Run schema alignment to restore lean projection safely.',
+    );
+    return { columns: ['*'], schemaWarnings };
+  }
+
+  return { columns: [...ATTENDANCE_HUBSPOT_CONTACT_REQUIRED_COLUMNS], schemaWarnings };
 }
 function firstPresentHubspotField(row = {}, fieldNames = []) {
   if (!row || !Array.isArray(fieldNames)) return null;
@@ -2568,7 +2600,11 @@ const AttendanceDashboard = () => {
     const identityStartIso = `${identityStartDate}T00:00:00.000Z`;
 
     // ── PRIMARY: HubSpot meeting activity groups (call-type, group sessions) ──
-    const contactSelectColumns = await resolveAttendanceHubspotContactSelectColumns();
+    const {
+      columns: contactSelectColumns,
+      schemaWarnings: contactSchemaWarnings = [],
+    } = await resolveAttendanceHubspotContactSelectColumns();
+    if (contactSchemaWarnings.length > 0) identityWarnings.push(...contactSchemaWarnings);
     const contactSelectClause = contactSelectColumns.join(',');
 
     const [
