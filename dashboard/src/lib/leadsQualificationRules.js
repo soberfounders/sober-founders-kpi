@@ -151,7 +151,8 @@ export function hasOneYearSobrietyByDate(sobrietyDateInput, referenceDate = new 
   const reference = toUtcDayStart(referenceDate);
   if (!sobrietyDate || !reference) return false;
   const anniversary = addUtcYears(sobrietyDate, 1);
-  return !!anniversary && anniversary.getTime() <= reference.getTime();
+  // Canonical rule is strictly greater than 1 year (not inclusive of exact anniversary day).
+  return !!anniversary && anniversary.getTime() < reference.getTime();
 }
 
 export function isQualifiedLead({

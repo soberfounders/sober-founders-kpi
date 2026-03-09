@@ -4,7 +4,7 @@ import { evaluateLeadQualification } from '../src/lib/leadsQualificationRules.js
 
 const REFERENCE_DATE = new Date('2026-03-09T00:00:00.000Z');
 
-test('official revenue >= 250k with sobriety >= 1 year qualifies (official basis)', () => {
+test('official revenue >= 250k with sobriety > 1 year qualifies (official basis)', () => {
   const result = evaluateLeadQualification({
     revenue: {
       annual_revenue_in_dollars__official_: 275000,
@@ -16,6 +16,32 @@ test('official revenue >= 250k with sobriety >= 1 year qualifies (official basis
 
   assert.equal(result.qualified, true);
   assert.equal(result.qualificationBasis, 'official');
+});
+
+test('exactly 1 year sobriety does not qualify', () => {
+  const result = evaluateLeadQualification({
+    revenue: {
+      annual_revenue_in_dollars__official_: 275000,
+    },
+    sobrietyDate: '2025-03-09',
+    referenceDate: REFERENCE_DATE,
+  });
+
+  assert.equal(result.qualified, false);
+  assert.equal(result.sobrietyEligible, false);
+});
+
+test('1 year and 1 day sobriety qualifies', () => {
+  const result = evaluateLeadQualification({
+    revenue: {
+      annual_revenue_in_dollars__official_: 275000,
+    },
+    sobrietyDate: '2025-03-08',
+    referenceDate: REFERENCE_DATE,
+  });
+
+  assert.equal(result.qualified, true);
+  assert.equal(result.sobrietyEligible, true);
 });
 
 test('official below 250k does not qualify even when fallback is higher', () => {

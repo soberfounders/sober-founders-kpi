@@ -1333,7 +1333,7 @@ const DashboardOverview = () => {
       let recommendation = '';
 
       if (spendUpMaterially && volumeRoughlyFlat && highQualityDeltaAbs <= 0) {
-        diagnosis = `We spent ${formatCurrencySignedDelta(spendDeltaAbs)} on lead-gen campaigns for roughly the same paid-social lead volume, but qualified output (sobriety 1y + revenue >= $250k, official first with fallback only when official is missing) did not improve. That pattern usually signals creative fatigue, audience saturation, or weaker qualification signal quality.`;
+        diagnosis = `We spent ${formatCurrencySignedDelta(spendDeltaAbs)} on lead-gen campaigns for roughly the same paid-social lead volume, but qualified output (sobriety >1y + revenue >= $250k, official first with fallback only when official is missing) did not improve. That pattern usually signals creative fatigue, audience saturation, or weaker qualification signal quality.`;
         recommendation = 'Management call: refresh creative + qualification hooks on the highest-spend ad sets before scaling budget.';
       } else if (spendUpMaterially && greatDeltaAbs < 0) {
         diagnosis = `Lead-gen spend increased ${changeLabel(spendDelta)} while great-lead output moved ${changeLabel(greatDelta)}. This is a quality regression, not just a volume wobble.`;
@@ -1875,7 +1875,7 @@ const DashboardOverview = () => {
           pillBg: '#ccfbf1',
           pillText: '#115e59',
         },
-        scopeLabel: `HubSpot contacts + Meta Ads (${periodMeta.asOfLabel} as of) | Qualified = sobriety (1y) and revenue >= $250k (official first, fallback only if official missing); Good/Great = revenue-only`,
+        scopeLabel: `HubSpot contacts + Meta Ads (${periodMeta.asOfLabel} as of) | Qualified = sobriety > 1y and revenue >= $250k (official first, fallback only if official missing); Good/Great = revenue-only`,
         sectionFocus: 'Lead quality, source mix, and acquisition efficiency across Phoenix Forum and feeder campaigns',
         analysisContext: leadsAnalysisContext,
         summaries: {
@@ -2914,7 +2914,7 @@ const DashboardOverview = () => {
             <p style={{ fontSize: '12px', textTransform: 'uppercase', fontWeight: 700, color: 'var(--color-dark-green)' }}>Unified KPI Snapshot</p>
             <h3 style={{ fontSize: '18px', marginTop: '6px' }}>North-star contract, qualification basis, and lineage</h3>
             <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-              Qualified = sobriety 1 year + revenue {'>='} $250K (official first, fallback only if official is missing).
+              Qualified = sobriety {'>'} 1 year + revenue {'>='} $250K (official first, fallback only if official is missing).
             </p>
           </div>
           <div style={{ textAlign: 'right' }}>

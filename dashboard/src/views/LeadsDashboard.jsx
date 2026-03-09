@@ -3950,7 +3950,7 @@ export default function LeadsDashboard() {
       value: Number(qualificationCurrent?.qualified || 0),
       previous: dateWindows?.previous ? Number(qualificationPrevious?.qualified || 0) : null,
       format: 'count',
-      note: 'Sobriety >= 1 year and revenue >= $250K (official first, fallback only if official is missing)',
+      note: 'Sobriety > 1 year and revenue >= $250K (official first, fallback only if official is missing)',
       color: '#2563eb',
     },
     {
@@ -4161,7 +4161,7 @@ export default function LeadsDashboard() {
             </p>
             <h3 style={{ margin: '6px 0 0', fontSize: '16px', color: '#0f172a' }}>Qualified basis, freshness, and source lineage</h3>
             <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#475569' }}>
-              Qualified = sobriety at least 1 year and revenue {'>='} $250K (official first, fallback only if official is missing).
+              Qualified = sobriety {'>'} 1 year and revenue {'>='} $250K (official first, fallback only if official is missing).
             </p>
           </div>
           <div style={{ ...subCard, border: '1px solid #cbd5e1', minWidth: '220px', backgroundColor: '#ffffffb3' }}>
@@ -4295,7 +4295,7 @@ export default function LeadsDashboard() {
           </p>
           <h3 style={{ margin: '6px 0 0', fontSize: '17px', color: '#0f172a' }}>Free Group Qualified vs Non-Qualified and quality tiers</h3>
           <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#64748b' }}>
-            Qualified = sobriety date at least 1 year old and revenue {'>='} $250K (official first, fallback only if official is missing). Good/Great tiers are revenue-only.
+            Qualified = sobriety age {'>'} 1 year and revenue {'>='} $250K (official first, fallback only if official is missing). Good/Great tiers are revenue-only.
           </p>
           <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: '10px' }}>
             <div style={{ ...subCard, border: '1px solid #dbeafe', backgroundColor: '#f8fbff' }}>
