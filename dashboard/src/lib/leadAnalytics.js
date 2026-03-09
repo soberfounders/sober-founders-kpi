@@ -679,9 +679,6 @@ function getSnapshot({ adsRows, paidLeads, zoomDaily, lumaRegistrations, hasDire
 
   const qualifiedLeads = leadsInRange.filter((row) => row.isQualified).length;
   const greatLeads = leadsInRange.filter((row) => row.tier === 'great').length;
-  const okLeads = leadsInRange.filter((row) => row.tier === 'ok').length;
-  const badLeads = leadsInRange.filter((row) => row.tier === 'bad').length;
-  const unknownLeads = leadsInRange.filter((row) => row.tier === 'unknown').length;
   const standardLeads = Math.max(leads - qualifiedLeads, 0);
 
   const tuesdayShowUps = showupsInRange.reduce((acc, row) => acc + row.tuesday, 0);
@@ -1468,6 +1465,5 @@ export function buildLeadAnalytics({
     },
   };
 }
-
 
 

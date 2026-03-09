@@ -74,11 +74,11 @@ export default function LeadsExperimentAnalyzerPanel({ data, isLoading = false }
   const [sortKey, setSortKey] = useState('cpql');
   const [sortDir, setSortDir] = useState('asc');
 
-  const rawRows = level === 'campaign'
-    ? (Array.isArray(data?.campaign_rows) ? data.campaign_rows : [])
-    : (Array.isArray(data?.adset_rows) ? data.adset_rows : []);
-
   const rows = useMemo(() => {
+    const rawRows = level === 'campaign'
+      ? (Array.isArray(data?.campaign_rows) ? data.campaign_rows : [])
+      : (Array.isArray(data?.adset_rows) ? data.adset_rows : []);
+
     const normalized = rawRows.map((row) => ({
       ...row,
       name: level === 'campaign'
@@ -101,7 +101,7 @@ export default function LeadsExperimentAnalyzerPanel({ data, isLoading = false }
       if (rightNum === null) return -1 * direction;
       return (leftNum - rightNum) * direction;
     });
-  }, [rawRows, level, sortKey, sortDir]);
+  }, [data, level, sortKey, sortDir]);
 
   const onSort = (key) => {
     if (sortKey === key) {
