@@ -95,6 +95,68 @@ const HUBSPOT_SOBRIETY_FIELDS = [
   'sobrietydate',
 ];
 
+
+const ATTENDANCE_HUBSPOT_CONTACT_REQUIRED_COLUMNS = [
+  'hubspot_contact_id',
+  'createdate',
+  'firstname',
+  'lastname',
+  'email',
+  'hs_additional_emails',
+  'hs_analytics_source',
+  'lastmodifieddate',
+  'hs_lastmodifieddate',
+  'updated_at',
+  'annual_revenue_in_dollars',
+  'annual_revenue',
+  'sobriety_date',
+  'sober_date',
+  'clean_date',
+  'sobrietydate',
+];
+
+const ATTENDANCE_HUBSPOT_CONTACT_OPTIONAL_COLUMNS = [
+  'annual_revenue_in_usd_official',
+  'annual_revenue_in_dollars__official_',
+  'sobriety_date__official_',
+];
+
+function extractMissingRawHubspotContactsColumn(message = '') {
+  const text = String(message || '');
+  const patterns = [
+    /column\s+(?:"?[a-zA-Z0-9_]+"?\.)?(?:"?raw_hubspot_contacts"?\.)?"?([a-zA-Z0-9_]+)"?\s+does not exist/i,
+    /Could not find the\s+'([a-zA-Z0-9_]+)'\s+column\s+of\s+'raw_hubspot_contacts'/i,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+  return null;
+}
+
+async function resolveAttendanceHubspotContactSelectColumns() {
+  const required = [...ATTENDANCE_HUBSPOT_CONTACT_REQUIRED_COLUMNS];
+  const requestedColumns = [...required, ...ATTENDANCE_HUBSPOT_CONTACT_OPTIONAL_COLUMNS];
+
+  while (requestedColumns.length > 0) {
+    const probe = await supabase
+      .from('raw_hubspot_contacts')
+      .select(requestedColumns.join(','))
+      .limit(1);
+
+    if (!probe.error) return requestedColumns;
+
+    const missingColumn = extractMissingRawHubspotContactsColumn(probe.error?.message || probe.error?.details || '');
+    if (!missingColumn) return required;
+    if (required.includes(missingColumn)) return required;
+
+    const missingIndex = requestedColumns.indexOf(missingColumn);
+    if (missingIndex === -1) return required;
+    requestedColumns.splice(missingIndex, 1);
+  }
+
+  return required;
+}
 function firstPresentHubspotField(row = {}, fieldNames = []) {
   if (!row || !Array.isArray(fieldNames)) return null;
   for (const fieldName of fieldNames) {
@@ -2506,6 +2568,9 @@ const AttendanceDashboard = () => {
     const identityStartIso = `${identityStartDate}T00:00:00.000Z`;
 
     // ── PRIMARY: HubSpot meeting activity groups (call-type, group sessions) ──
+    const contactSelectColumns = await resolveAttendanceHubspotContactSelectColumns();
+    const contactSelectClause = contactSelectColumns.join(',');
+
     const [
       hsActivitiesResult,
       hubspotContactsResult,
@@ -2522,7 +2587,7 @@ const AttendanceDashboard = () => {
       selectAllRows((from, to) => (
         supabase
           .from('raw_hubspot_contacts')
-          .select('*')
+          .select(contactSelectClause)
           .gte('createdate', identityStartIso)
           .order('createdate', { ascending: false })
           .range(from, to)
@@ -2604,7 +2669,7 @@ const AttendanceDashboard = () => {
         for (const idChunk of chunkArray(missingContactIds, 200)) {
           const backfillResult = await supabase
             .from('raw_hubspot_contacts')
-            .select('*')
+            .select(contactSelectClause)
             .in('hubspot_contact_id', idChunk);
           if (backfillResult.error) {
             backfillErrors.push(backfillResult.error.message || 'read failed');

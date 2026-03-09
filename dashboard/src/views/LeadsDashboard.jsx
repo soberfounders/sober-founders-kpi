@@ -40,6 +40,84 @@ const ATTRIBUTION_HISTORY_DAYS = LEADS_ATTRIBUTION_HISTORY_DAYS;
 const MIN_GROUP_ATTENDEES = 3;
 const EXPECTED_ZERO_GROUP_SESSION_KEYS = new Set(['2025-12-25|Thursday']);
 
+
+const LEADS_HUBSPOT_CONTACT_REQUIRED_COLUMNS = [
+  'hubspot_contact_id',
+  'createdate',
+  'firstname',
+  'lastname',
+  'email',
+  'hs_additional_emails',
+  'hs_analytics_source',
+  'hs_analytics_source_data_1',
+  'hs_analytics_source_data_2',
+  'hs_latest_source',
+  'hs_latest_source_data_2',
+  'campaign',
+  'campaign_source',
+  'membership_s',
+  'annual_revenue_in_dollars',
+  'annual_revenue',
+  'sobriety_date',
+  'sober_date',
+  'clean_date',
+  'sobrietydate',
+];
+
+const LEADS_HUBSPOT_CONTACT_OPTIONAL_COLUMNS = [
+  'annual_revenue_in_usd_official',
+  'annual_revenue_in_dollars__official_',
+  'sobriety_date__official_',
+  'lastmodifieddate',
+  'hs_lastmodifieddate',
+  'updated_at',
+  'original_traffic_source',
+];
+
+function extractMissingRawHubspotContactsColumn(message = '') {
+  const text = String(message || '');
+  const patterns = [
+    /column\s+(?:"?[a-zA-Z0-9_]+"?\.)?(?:"?raw_hubspot_contacts"?\.)?"?([a-zA-Z0-9_]+)"?\s+does not exist/i,
+    /Could not find the\s+'([a-zA-Z0-9_]+)'\s+column\s+of\s+'raw_hubspot_contacts'/i,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+  return null;
+}
+
+async function fetchLeadsHubspotContactsWithSchemaFallback({ attributionStartKey }) {
+  const required = [...LEADS_HUBSPOT_CONTACT_REQUIRED_COLUMNS];
+  const optional = [...LEADS_HUBSPOT_CONTACT_OPTIONAL_COLUMNS];
+  const requestedColumns = [...required, ...optional];
+
+  while (requestedColumns.length > 0) {
+    const response = await supabase
+      .from('raw_hubspot_contacts')
+      .select(requestedColumns.join(','))
+      .gte('createdate', `${attributionStartKey}T00:00:00.000Z`)
+      .order('createdate', { ascending: false });
+
+    if (!response.error) return response;
+
+    const missingColumn = extractMissingRawHubspotContactsColumn(response.error?.message || response.error?.details || '');
+    if (!missingColumn) return response;
+
+    if (required.includes(missingColumn)) return response;
+
+    const missingIndex = requestedColumns.indexOf(missingColumn);
+    if (missingIndex === -1) return response;
+
+    requestedColumns.splice(missingIndex, 1);
+  }
+
+  return {
+    data: null,
+    error: new Error('No selectable HubSpot contact columns remain for Leads query.'),
+  };
+}
+
 // ─── Formatters ──────────────────────────────────────────────────────────────
 const fmt = {
   currency: (v) => {
@@ -822,9 +900,7 @@ export default function LeadsDashboard() {
         .select('metric_name,metric_value,metric_date,metadata')
         .eq('metric_name', 'Zoom Meeting Attendees')
         .gte('metric_date', startKey).order('metric_date', { ascending: true }),
-      supabase.from('raw_hubspot_contacts')
-        .select('*')
-        .gte('createdate', `${attributionStartKey}T00:00:00.000Z`).order('createdate', { ascending: false }),
+      fetchLeadsHubspotContactsWithSchemaFallback({ attributionStartKey }),
       supabase.from('attendee_aliases').select('original_name,target_name'),
     ]);
 
