@@ -10,8 +10,28 @@ import {
   THURSDAY_MEETING_ID,
   TUESDAY_MEETING_ID,
   buildDateRangeWindows,
-  computeChangePct,
 } from '../lib/leadsGroupAnalytics';
+import {
+  KPI_DIRECTION,
+  addDays,
+  averageFinite,
+  buildCompletedWeekWindows,
+  buildDirectionalComparison,
+  countInterviewUniqueAttendees,
+  createMeetingNameMatcher,
+  createTokenMatcher,
+  dateInRange,
+  directionToneForDelta,
+  formatCurrency,
+  formatDecimal,
+  formatInt,
+  formatPercent,
+  formatValueByType,
+  normalizeInterviewActivities,
+  normalizePersonKey,
+  normalizeText,
+  toDateKey,
+} from '../lib/dashboardKpiHelpers';
 
 const RANGE_OPTIONS = [
   { value: 'week', label: 'Week' },
@@ -21,14 +41,12 @@ const RANGE_OPTIONS = [
   { value: 'custom', label: 'Custom Range' },
 ];
 
-const INTERVIEW_MATCH_TOKENS = {
-  free: ['meetings.hubspot.com/andrew-lassise/interview'],
-  phoenix: [
-    'meetings.hubspot.com/andrew-lassise/phoenix-forum-interview',
-    'meetings.hubspot.com/andrew-lassise/phoenix-forum-learn-more',
-    'meetings.hubspot.com/andrew-lassise/phoenix-forum-good-fit',
-  ],
-};
+const FREE_GROUP_INTERVIEW_MEETING_NAME = 'Sober Founders Intro Meeting';
+const PHOENIX_INTERVIEW_MATCH_TOKENS = [
+  'meetings.hubspot.com/andrew-lassise/phoenix-forum-interview',
+  'meetings.hubspot.com/andrew-lassise/phoenix-forum-learn-more',
+  'meetings.hubspot.com/andrew-lassise/phoenix-forum-good-fit',
+];
 
 const DONATION_EXCLUDED_STATUSES = new Set(['refunded', 'refund', 'failed', 'void', 'voided', 'canceled', 'cancelled']);
 
@@ -67,25 +85,226 @@ const cardGridStyle = {
   gap: '14px',
 };
 
-function toDateKey(value) {
-  if (!value) return null;
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString().slice(0, 10);
-}
+const KPI_CARD_DEFINITIONS = {
+  freeMeetings: {
+    key: 'freeMeetings',
+    section: 'free',
+    metric: 'meetings',
+    title: 'Free Meetings',
+    format: 'count',
+    direction: KPI_DIRECTION.HIGHER_IS_BETTER,
+    source: 'ads',
+    note: 'Meta free-group lead form submissions',
+    color: '#0f766e',
+  },
+  freeQualified: {
+    key: 'freeQualified',
+    section: 'free',
+    metric: 'qualified',
+    title: 'New Qualified Leads',
+    format: 'count',
+    direction: KPI_DIRECTION.HIGHER_IS_BETTER,
+    source: 'contacts',
+    note: 'Revenue >= $250k and sobriety > 1 year',
+    color: '#166534',
+  },
+  freeCpql: {
+    key: 'freeCpql',
+    section: 'free',
+    metric: 'cpql',
+    title: 'Cost Per Qualified Lead (CPQL)',
+    format: 'currency',
+    direction: KPI_DIRECTION.LOWER_IS_BETTER,
+    source: ['ads', 'contacts'],
+    note: 'Free Group Ad Spend / New Qualified Leads',
+    color: '#0369a1',
+  },
+  freeGreat: {
+    key: 'freeGreat',
+    section: 'free',
+    metric: 'great',
+    title: 'New Great Leads',
+    format: 'count',
+    direction: KPI_DIRECTION.HIGHER_IS_BETTER,
+    source: 'contacts',
+    note: 'Revenue >= $1M',
+    color: '#4f46e5',
+  },
+  freeCpgl: {
+    key: 'freeCpgl',
+    section: 'free',
+    metric: 'cpgl',
+    title: 'Cost Per Great Lead (CPGL)',
+    format: 'currency',
+    direction: KPI_DIRECTION.LOWER_IS_BETTER,
+    source: ['ads', 'contacts'],
+    note: 'Free Group Ad Spend / New Great Leads',
+    color: '#7c3aed',
+  },
+  freeInterviews: {
+    key: 'freeInterviews',
+    section: 'free',
+    metric: 'interviews',
+    title: 'Free Group Interviews',
+    format: 'count',
+    direction: KPI_DIRECTION.HIGHER_IS_BETTER,
+    source: 'interviews',
+    note: null,
+    color: '#0ea5e9',
+  },
+  phoenixLeads: {
+    key: 'phoenixLeads',
+    section: 'phoenix',
+    metric: 'leads',
+    title: 'Phoenix Forum Leads',
+    format: 'count',
+    direction: KPI_DIRECTION.HIGHER_IS_BETTER,
+    source: 'ads',
+    note: 'Campaign name contains "Phoenix"',
+    color: '#0f766e',
+  },
+  phoenixQualified: {
+    key: 'phoenixQualified',
+    section: 'phoenix',
+    metric: 'qualified',
+    title: 'Phoenix Qualified Leads',
+    format: 'count',
+    direction: KPI_DIRECTION.HIGHER_IS_BETTER,
+    source: 'contacts',
+    note: 'Revenue >= $250k and sobriety > 1 year',
+    color: '#166534',
+  },
+  phoenixGreat: {
+    key: 'phoenixGreat',
+    section: 'phoenix',
+    metric: 'great',
+    title: 'Phoenix Great Leads',
+    format: 'count',
+    direction: KPI_DIRECTION.HIGHER_IS_BETTER,
+    source: 'contacts',
+    note: 'Revenue >= $1M',
+    color: '#4f46e5',
+  },
+  phoenixCpql: {
+    key: 'phoenixCpql',
+    section: 'phoenix',
+    metric: 'cpql',
+    title: 'Phoenix CPQL',
+    format: 'currency',
+    direction: KPI_DIRECTION.LOWER_IS_BETTER,
+    source: ['ads', 'contacts'],
+    note: 'Phoenix Ad Spend / Phoenix Qualified Leads',
+    color: '#0369a1',
+  },
+  phoenixCpgl: {
+    key: 'phoenixCpgl',
+    section: 'phoenix',
+    metric: 'cpgl',
+    title: 'Phoenix CPGL',
+    format: 'currency',
+    direction: KPI_DIRECTION.LOWER_IS_BETTER,
+    source: ['ads', 'contacts'],
+    note: 'Phoenix Ad Spend / Phoenix Great Leads',
+    color: '#7c3aed',
+  },
+  phoenixInterviews: {
+    key: 'phoenixInterviews',
+    section: 'phoenix',
+    metric: 'interviews',
+    title: 'Phoenix Forum Interviews',
+    format: 'count',
+    direction: KPI_DIRECTION.HIGHER_IS_BETTER,
+    source: 'interviews',
+    note: null,
+    color: '#0ea5e9',
+  },
+  attendanceNetNewTue: {
+    key: 'attendanceNetNewTue',
+    section: 'attendance',
+    metric: 'netNewTue',
+    title: 'Net New Attendees (Tuesday)',
+    format: 'count',
+    direction: KPI_DIRECTION.HIGHER_IS_BETTER,
+    source: 'sessions',
+    note: 'First-time Tuesday attendees in selected range',
+    color: '#0ea5e9',
+  },
+  attendanceAvgVisitsTue: {
+    key: 'attendanceAvgVisitsTue',
+    section: 'attendance',
+    metric: 'avgVisitsTue',
+    title: 'Avg Visits (Tuesday)',
+    format: 'decimal',
+    direction: KPI_DIRECTION.HIGHER_IS_BETTER,
+    source: 'sessions',
+    note: 'Total Tuesday visits / unique Tuesday attendees',
+    color: '#38bdf8',
+  },
+  attendanceNetNewThu: {
+    key: 'attendanceNetNewThu',
+    section: 'attendance',
+    metric: 'netNewThu',
+    title: 'Net New Attendees (Thursday)',
+    format: 'count',
+    direction: KPI_DIRECTION.HIGHER_IS_BETTER,
+    source: 'sessions',
+    note: 'First-time Thursday attendees in selected range',
+    color: '#6366f1',
+  },
+  attendanceAvgVisitsThu: {
+    key: 'attendanceAvgVisitsThu',
+    section: 'attendance',
+    metric: 'avgVisitsThu',
+    title: 'Avg Visits (Thursday)',
+    format: 'decimal',
+    direction: KPI_DIRECTION.HIGHER_IS_BETTER,
+    source: 'sessions',
+    note: 'Total Thursday visits / unique Thursday attendees',
+    color: '#818cf8',
+  },
+  donationsCount: {
+    key: 'donationsCount',
+    section: 'donations',
+    metric: 'count',
+    title: '# Donations',
+    format: 'count',
+    direction: KPI_DIRECTION.HIGHER_IS_BETTER,
+    source: 'donations',
+    note: 'Count of donations in selected range',
+    color: '#16a34a',
+  },
+  donationsAmount: {
+    key: 'donationsAmount',
+    section: 'donations',
+    metric: 'amount',
+    title: '$ Donations',
+    format: 'currency',
+    direction: KPI_DIRECTION.HIGHER_IS_BETTER,
+    source: 'donations',
+    note: 'Total donation amount in selected range',
+    color: '#15803d',
+  },
+  operationsCompletedItems: {
+    key: 'operationsCompletedItems',
+    section: 'operations',
+    metric: 'completedItems',
+    title: 'Completed Items',
+    format: 'count',
+    direction: KPI_DIRECTION.HIGHER_IS_BETTER,
+    source: 'todos',
+    note: 'Notion status changed to Done in selected range',
+    color: '#f97316',
+  },
+};
+
+const FREE_CARD_KEYS = ['freeMeetings', 'freeQualified', 'freeCpql', 'freeGreat', 'freeCpgl', 'freeInterviews'];
+const PHOENIX_CARD_KEYS = ['phoenixLeads', 'phoenixQualified', 'phoenixGreat', 'phoenixCpql', 'phoenixCpgl', 'phoenixInterviews'];
+const ATTENDANCE_CARD_KEYS = ['attendanceNetNewTue', 'attendanceAvgVisitsTue', 'attendanceNetNewThu', 'attendanceAvgVisitsThu'];
+const DONATION_CARD_KEYS = ['donationsCount', 'donationsAmount'];
+const OPERATIONS_CARD_KEYS = ['operationsCompletedItems'];
 
 function toUtcDate(dateKey) {
   return new Date(`${dateKey}T00:00:00.000Z`);
-}
-
-function addDays(dateKey, days) {
-  const date = toUtcDate(dateKey);
-  date.setUTCDate(date.getUTCDate() + days);
-  return toDateKey(date);
-}
-
-function dateInRange(dateKey, start, end) {
-  return !!dateKey && dateKey >= start && dateKey <= end;
 }
 
 function toFiniteNumber(value, fallback = 0) {
@@ -96,36 +315,6 @@ function toFiniteNumber(value, fallback = 0) {
 function safeDivide(numerator, denominator) {
   if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) return null;
   return numerator / denominator;
-}
-
-function normalizeText(value) {
-  return String(value || '').trim().toLowerCase();
-}
-
-function normalizePersonKey(value) {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '');
-}
-
-function formatInt(value) {
-  if (!Number.isFinite(Number(value))) return '0';
-  return Math.round(Number(value)).toLocaleString();
-}
-
-function formatDecimal(value, digits = 2) {
-  if (!Number.isFinite(Number(value))) return '0.00';
-  return Number(value).toFixed(digits);
-}
-
-function formatCurrency(value) {
-  if (!Number.isFinite(Number(value))) return 'N/A';
-  return `$${Number(value).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-}
-
-function formatPercent(value) {
-  if (!Number.isFinite(Number(value))) return 'N/A';
-  return `${(Number(value) * 100).toFixed(1)}%`;
 }
 
 function formatTimestamp(value) {
@@ -326,25 +515,8 @@ function normalizeHubspotContacts(rows = []) {
     .filter((row) => row.createdDateKey);
 }
 
-function normalizeInterviewRows(rows = []) {
-  return rows
-    .map((row, index) => {
-      const dateKey = toDateKey(row?.hs_timestamp || row?.created_at_hubspot);
-      if (!dateKey) return null;
-      const activityId = Number.isFinite(Number(row?.hubspot_activity_id))
-        ? String(Math.trunc(Number(row.hubspot_activity_id)))
-        : `idx-${index}-${dateKey}`;
-      const textBlob = [
-        row?.title,
-        row?.body_preview,
-        JSON.stringify(row?.metadata || {}),
-      ]
-        .map((value) => normalizeText(value))
-        .join(' ');
-      return { dateKey, activityId, textBlob };
-    })
-    .filter(Boolean);
-}
+const matchesFreeGroupInterview = createMeetingNameMatcher(FREE_GROUP_INTERVIEW_MEETING_NAME);
+const matchesPhoenixInterview = createTokenMatcher(PHOENIX_INTERVIEW_MATCH_TOKENS);
 
 function detectZoomDayType(row, dateKey) {
   const groupName = normalizeText(row?.metadata?.group_name);
@@ -469,16 +641,6 @@ function aggregateLeadContacts(rows, window, funnel) {
   }, { total: 0, qualified: 0, great: 0 });
 }
 
-function countInterviewBookings(rows, window, matchTokens) {
-  const matchedIds = new Set();
-  rows.forEach((row) => {
-    if (!dateInRange(row.dateKey, window.start, window.end)) return;
-    const matched = matchTokens.some((token) => row.textBlob.includes(token));
-    if (matched) matchedIds.add(row.activityId);
-  });
-  return matchedIds.size;
-}
-
 function aggregateDonations(rows, window) {
   return rows.reduce((acc, row) => {
     if (!dateInRange(row.dateKey, window.start, window.end)) return acc;
@@ -542,97 +704,186 @@ function buildAttendanceSnapshots(sessions, currentWindow, previousWindow) {
   };
 }
 
-function computeKpiSnapshot(rawData, windows) {
-  const adsRows = normalizeAdsRows(rawData.adsRows || []);
-  const contacts = normalizeHubspotContacts(rawData.contacts || []);
-  const interviewRows = normalizeInterviewRows(rawData.activities || []);
-  const zoomSessions = normalizeZoomSessions(rawData.zoomRows || []);
-  const donationRows = normalizeDonationRows(rawData.donationRows || []);
-  const todoRows = normalizeTodoRows(rawData.todoRows || []);
+function buildWindowMetrics(normalizedData, window) {
+  const {
+    adsRows,
+    contacts,
+    interviewRows,
+    zoomSessions,
+    donationRows,
+    todoRows,
+  } = normalizedData;
 
-  const freeAdsCurrent = aggregateAds(adsRows, windows.current, 'free');
-  const freeAdsPrevious = aggregateAds(adsRows, windows.previous, 'free');
-  const freeLeadsCurrent = aggregateLeadContacts(contacts, windows.current, 'free');
-  const freeLeadsPrevious = aggregateLeadContacts(contacts, windows.previous, 'free');
-
-  const phoenixAdsCurrent = aggregateAds(adsRows, windows.current, 'phoenix');
-  const phoenixAdsPrevious = aggregateAds(adsRows, windows.previous, 'phoenix');
-  const phoenixLeadsCurrent = aggregateLeadContacts(contacts, windows.current, 'phoenix');
-  const phoenixLeadsPrevious = aggregateLeadContacts(contacts, windows.previous, 'phoenix');
-
-  const freeInterviewCurrent = countInterviewBookings(interviewRows, windows.current, INTERVIEW_MATCH_TOKENS.free);
-  const freeInterviewPrevious = countInterviewBookings(interviewRows, windows.previous, INTERVIEW_MATCH_TOKENS.free);
-  const phoenixInterviewCurrent = countInterviewBookings(interviewRows, windows.current, INTERVIEW_MATCH_TOKENS.phoenix);
-  const phoenixInterviewPrevious = countInterviewBookings(interviewRows, windows.previous, INTERVIEW_MATCH_TOKENS.phoenix);
-
-  const attendance = buildAttendanceSnapshots(zoomSessions, windows.current, windows.previous);
-  const donationsCurrent = aggregateDonations(donationRows, windows.current);
-  const donationsPrevious = aggregateDonations(donationRows, windows.previous);
-  const completedItemsCurrent = aggregateCompletedItems(todoRows, windows.current);
-  const completedItemsPrevious = aggregateCompletedItems(todoRows, windows.previous);
+  const freeAds = aggregateAds(adsRows, window, 'free');
+  const freeLeads = aggregateLeadContacts(contacts, window, 'free');
+  const phoenixAds = aggregateAds(adsRows, window, 'phoenix');
+  const phoenixLeads = aggregateLeadContacts(contacts, window, 'phoenix');
+  const freeInterviews = countInterviewUniqueAttendees(interviewRows, window, matchesFreeGroupInterview);
+  const phoenixInterviews = countInterviewUniqueAttendees(interviewRows, window, matchesPhoenixInterview);
+  const donations = aggregateDonations(donationRows, window);
+  const completedItems = aggregateCompletedItems(todoRows, window);
+  const attendance = buildAttendanceSnapshots(zoomSessions, window, { start: '0000-01-01', end: '0000-01-01' }).current;
 
   return {
     free: {
-      current: {
-        meetings: freeAdsCurrent.leads,
-        qualified: freeLeadsCurrent.qualified,
-        great: freeLeadsCurrent.great,
-        cpql: safeDivide(freeAdsCurrent.spend, freeLeadsCurrent.qualified),
-        cpgl: safeDivide(freeAdsCurrent.spend, freeLeadsCurrent.great),
-        interviews: freeInterviewCurrent,
-        spend: freeAdsCurrent.spend,
-      },
-      previous: {
-        meetings: freeAdsPrevious.leads,
-        qualified: freeLeadsPrevious.qualified,
-        great: freeLeadsPrevious.great,
-        cpql: safeDivide(freeAdsPrevious.spend, freeLeadsPrevious.qualified),
-        cpgl: safeDivide(freeAdsPrevious.spend, freeLeadsPrevious.great),
-        interviews: freeInterviewPrevious,
-        spend: freeAdsPrevious.spend,
-      },
+      meetings: freeAds.leads,
+      qualified: freeLeads.qualified,
+      great: freeLeads.great,
+      cpql: safeDivide(freeAds.spend, freeLeads.qualified),
+      cpgl: safeDivide(freeAds.spend, freeLeads.great),
+      interviews: freeInterviews,
+      spend: freeAds.spend,
     },
     phoenix: {
-      current: {
-        leads: phoenixAdsCurrent.leads,
-        qualified: phoenixLeadsCurrent.qualified,
-        great: phoenixLeadsCurrent.great,
-        cpql: safeDivide(phoenixAdsCurrent.spend, phoenixLeadsCurrent.qualified),
-        cpgl: safeDivide(phoenixAdsCurrent.spend, phoenixLeadsCurrent.great),
-        interviews: phoenixInterviewCurrent,
-        spend: phoenixAdsCurrent.spend,
-      },
-      previous: {
-        leads: phoenixAdsPrevious.leads,
-        qualified: phoenixLeadsPrevious.qualified,
-        great: phoenixLeadsPrevious.great,
-        cpql: safeDivide(phoenixAdsPrevious.spend, phoenixLeadsPrevious.qualified),
-        cpgl: safeDivide(phoenixAdsPrevious.spend, phoenixLeadsPrevious.great),
-        interviews: phoenixInterviewPrevious,
-        spend: phoenixAdsPrevious.spend,
-      },
+      leads: phoenixAds.leads,
+      qualified: phoenixLeads.qualified,
+      great: phoenixLeads.great,
+      cpql: safeDivide(phoenixAds.spend, phoenixLeads.qualified),
+      cpgl: safeDivide(phoenixAds.spend, phoenixLeads.great),
+      interviews: phoenixInterviews,
+      spend: phoenixAds.spend,
     },
     attendance,
+    donations,
+    operations: { completedItems },
+  };
+}
+
+function flattenMetricValues(metrics) {
+  return {
+    freeMeetings: metrics.free.meetings,
+    freeQualified: metrics.free.qualified,
+    freeCpql: metrics.free.cpql,
+    freeGreat: metrics.free.great,
+    freeCpgl: metrics.free.cpgl,
+    freeInterviews: metrics.free.interviews,
+    phoenixLeads: metrics.phoenix.leads,
+    phoenixQualified: metrics.phoenix.qualified,
+    phoenixGreat: metrics.phoenix.great,
+    phoenixCpql: metrics.phoenix.cpql,
+    phoenixCpgl: metrics.phoenix.cpgl,
+    phoenixInterviews: metrics.phoenix.interviews,
+    attendanceNetNewTue: metrics.attendance.netNewTue,
+    attendanceAvgVisitsTue: metrics.attendance.avgVisitsTue,
+    attendanceNetNewThu: metrics.attendance.netNewThu,
+    attendanceAvgVisitsThu: metrics.attendance.avgVisitsThu,
+    donationsCount: metrics.donations.count,
+    donationsAmount: metrics.donations.amount,
+    operationsCompletedItems: metrics.operations.completedItems,
+  };
+}
+
+function earliestDateKey(rows, field) {
+  const keys = rows
+    .map((row) => row?.[field])
+    .filter(Boolean)
+    .sort();
+  return keys[0] || null;
+}
+
+function buildWeeklyComparisons(normalizedData, todayKey) {
+  const { lastWeek, lastFourCompletedWeeks } = buildCompletedWeekWindows(todayKey);
+  const weekMetrics = lastFourCompletedWeeks.map((window) => flattenMetricValues(buildWindowMetrics(normalizedData, window)));
+  const oldestRequiredWeekStart = lastFourCompletedWeeks[lastFourCompletedWeeks.length - 1]?.start || null;
+
+  const sourceEarliest = {
+    ads: earliestDateKey(normalizedData.adsRows, 'dateKey'),
+    contacts: earliestDateKey(normalizedData.contacts, 'createdDateKey'),
+    interviews: earliestDateKey(normalizedData.interviewRows, 'dateKey'),
+    sessions: earliestDateKey(normalizedData.zoomSessions, 'dateKey'),
+    donations: earliestDateKey(normalizedData.donationRows, 'dateKey'),
+    todos: earliestDateKey(normalizedData.todoRows, 'doneDateKey'),
+  };
+
+  const lastWeekByKey = {};
+  const fourWeekAvgByKey = {};
+  Object.values(KPI_CARD_DEFINITIONS).forEach((definition) => {
+    const sourceKeys = Array.isArray(definition.source) ? definition.source : [definition.source];
+    const sourceStarts = sourceKeys.map((sourceKey) => sourceEarliest[sourceKey]);
+    const hasLastWeekCoverage = sourceStarts.every((startKey) => !!startKey && startKey <= lastWeek.start);
+    const hasFourWeekCoverage = sourceStarts.every(
+      (startKey) => !!startKey && !!oldestRequiredWeekStart && startKey <= oldestRequiredWeekStart,
+    );
+
+    if (!hasLastWeekCoverage || weekMetrics.length < 1) {
+      lastWeekByKey[definition.key] = null;
+    } else {
+      lastWeekByKey[definition.key] = Number.isFinite(Number(weekMetrics[0]?.[definition.key]))
+        ? Number(weekMetrics[0][definition.key])
+        : null;
+    }
+
+    if (!hasFourWeekCoverage || weekMetrics.length < 4) {
+      fourWeekAvgByKey[definition.key] = null;
+      return;
+    }
+
+    const values = weekMetrics
+      .map((metricRow) => metricRow[definition.key])
+      .filter((value) => Number.isFinite(Number(value)));
+
+    fourWeekAvgByKey[definition.key] = values.length === 4 ? averageFinite(values) : null;
+  });
+
+  return {
+    lastWeek,
+    lastWeekByKey,
+    fourWeekAvgByKey,
+  };
+}
+
+function computeKpiSnapshot(rawData, windows, todayKey) {
+  const normalizedData = {
+    adsRows: normalizeAdsRows(rawData.adsRows || []),
+    contacts: normalizeHubspotContacts(rawData.contacts || []),
+    interviewRows: normalizeInterviewActivities(rawData.activities || []),
+    zoomSessions: normalizeZoomSessions(rawData.zoomRows || []),
+    donationRows: normalizeDonationRows(rawData.donationRows || []),
+    todoRows: normalizeTodoRows(rawData.todoRows || []),
+  };
+
+  const currentMetrics = buildWindowMetrics(normalizedData, windows.current);
+  const previousMetrics = buildWindowMetrics(normalizedData, windows.previous);
+  const weeklyComparisons = buildWeeklyComparisons(normalizedData, todayKey);
+
+  return {
+    free: {
+      current: currentMetrics.free,
+      previous: previousMetrics.free,
+    },
+    phoenix: {
+      current: currentMetrics.phoenix,
+      previous: previousMetrics.phoenix,
+    },
+    attendance: {
+      current: currentMetrics.attendance,
+      previous: previousMetrics.attendance,
+    },
     donations: {
-      current: donationsCurrent,
-      previous: donationsPrevious,
+      current: currentMetrics.donations,
+      previous: previousMetrics.donations,
     },
     operations: {
-      current: { completedItems: completedItemsCurrent },
-      previous: { completedItems: completedItemsPrevious },
+      current: currentMetrics.operations,
+      previous: previousMetrics.operations,
     },
+    metricValues: {
+      current: flattenMetricValues(currentMetrics),
+      previous: flattenMetricValues(previousMetrics),
+    },
+    weeklyComparisons,
     sourceRows: {
-      ads: adsRows.length,
-      contacts: contacts.length,
-      interviews: interviewRows.length,
-      sessions: zoomSessions.length,
-      donations: donationRows.length,
-      todos: todoRows.length,
+      ads: normalizedData.adsRows.length,
+      contacts: normalizedData.contacts.length,
+      interviews: normalizedData.interviewRows.length,
+      sessions: normalizedData.zoomSessions.length,
+      donations: normalizedData.donationRows.length,
+      todos: normalizedData.todoRows.length,
     },
   };
 }
 
-function calculateDisplayChange(current, previous, invertColor = false) {
+function calculateDisplayChange(current, previous, direction = KPI_DIRECTION.HIGHER_IS_BETTER) {
   const currentNumber = Number(current);
   const previousNumber = Number(previous);
   if (!Number.isFinite(currentNumber) || !Number.isFinite(previousNumber)) return null;
@@ -640,16 +891,18 @@ function calculateDisplayChange(current, previous, invertColor = false) {
     if (currentNumber === 0) return 0;
     return null;
   }
-  const { pct } = computeChangePct(currentNumber, previousNumber);
-  if (pct === null || pct === undefined) return null;
-  return invertColor ? -pct : pct;
-}
-
-function toTrendDirection(displayChange) {
-  if (displayChange === null || displayChange === undefined) return 'neutral';
-  if (displayChange > 0) return 'up';
-  if (displayChange < 0) return 'down';
-  return 'neutral';
+  const comparison = buildDirectionalComparison({
+    label: 'tmp',
+    current: currentNumber,
+    baseline: previousNumber,
+    format: 'decimal',
+    direction,
+  });
+  if (!Number.isFinite(Number(comparison.pct))) return null;
+  const tone = comparison.tone;
+  if (tone === 'better') return Math.abs(comparison.pct);
+  if (tone === 'worse') return -Math.abs(comparison.pct);
+  return 0;
 }
 
 function toTrendValue(displayChange) {
@@ -657,40 +910,54 @@ function toTrendValue(displayChange) {
   return `${displayChange >= 0 ? '+' : ''}${(displayChange * 100).toFixed(1)}%`;
 }
 
-function formatValueByType(value, format) {
-  if (format === 'currency') return formatCurrency(value);
-  if (format === 'decimal') return formatDecimal(value);
-  if (format === 'percent') return formatPercent(value);
-  return formatInt(value);
-}
+function buildCardModel({ metricKey, snapshot }) {
+  const definition = KPI_CARD_DEFINITIONS[metricKey];
+  if (!definition) return null;
 
-function buildCardModel({ title, current, previous, format, note, color, invertColor = false }) {
-  const displayChange = calculateDisplayChange(current, previous, invertColor);
-  const trend = toTrendDirection(displayChange);
-  const trendValue = toTrendValue(displayChange);
-  const value = formatValueByType(current, format);
-  const previousValue = Number.isFinite(Number(previous)) ? formatValueByType(previous, format) : null;
-  const previousTone = displayChange === null
-    ? 'neutral'
-    : displayChange > 0
-      ? 'better'
-      : displayChange < 0
-        ? 'worse'
-        : 'neutral';
+  const current = snapshot.metricValues.current[metricKey];
+  const previous = snapshot.metricValues.previous[metricKey];
+  const value = formatValueByType(current, definition.format);
+  const previousValue = Number.isFinite(Number(previous)) ? formatValueByType(previous, definition.format) : null;
+  const rawDelta = Number.isFinite(Number(current)) && Number.isFinite(Number(previous))
+    ? Number(current) - Number(previous)
+    : null;
+  const previousTone = directionToneForDelta(rawDelta, definition.direction);
+
+  const lastWeekComparison = buildDirectionalComparison({
+    label: 'vs Last Week',
+    current,
+    baseline: snapshot.weeklyComparisons.lastWeekByKey[metricKey],
+    format: definition.format,
+    direction: definition.direction,
+  });
+  const fourWeekAverageComparison = buildDirectionalComparison({
+    label: 'vs 4 Week Avg',
+    current,
+    baseline: snapshot.weeklyComparisons.fourWeekAvgByKey[metricKey],
+    format: definition.format,
+    direction: definition.direction,
+  });
+  const trend = lastWeekComparison.tone === 'better'
+    ? 'up'
+    : lastWeekComparison.tone === 'worse'
+      ? 'down'
+      : 'neutral';
+  const trendValue = Number.isFinite(Number(lastWeekComparison.pct))
+    ? toTrendValue(lastWeekComparison.pct)
+    : 'N/A';
 
   return {
-    title,
+    title: definition.title,
     value,
-    subvalue: note,
+    subvalue: definition.note,
     previousValue,
     previousLabel: 'Prior',
     previousTone,
     trend,
     trendValue,
-    // `displayChange` already normalizes "good" direction (including cost-down improvements),
-    // so card coloring should always treat trend-up as positive.
     invertColor: false,
-    color,
+    color: definition.color,
+    comparisonRows: [lastWeekComparison, fourWeekAverageComparison],
     showChart: false,
   };
 }
@@ -719,22 +986,34 @@ function buildAiNarrative(snapshot) {
   const trendRows = [
     {
       label: 'Free qualified leads',
-      delta: calculateDisplayChange(snapshot.free.current.qualified, snapshot.free.previous.qualified, false),
+      delta: calculateDisplayChange(
+        snapshot.free.current.qualified,
+        snapshot.free.previous.qualified,
+        KPI_DIRECTION.HIGHER_IS_BETTER,
+      ),
     },
     {
       label: 'Phoenix qualified leads',
-      delta: calculateDisplayChange(snapshot.phoenix.current.qualified, snapshot.phoenix.previous.qualified, false),
+      delta: calculateDisplayChange(
+        snapshot.phoenix.current.qualified,
+        snapshot.phoenix.previous.qualified,
+        KPI_DIRECTION.HIGHER_IS_BETTER,
+      ),
     },
     {
       label: 'CPQL efficiency',
       delta: calculateDisplayChange(blendedCPQL, safeDivide(
         snapshot.free.previous.spend + snapshot.phoenix.previous.spend,
         snapshot.free.previous.qualified + snapshot.phoenix.previous.qualified,
-      ), true),
+      ), KPI_DIRECTION.LOWER_IS_BETTER),
     },
     {
       label: 'Donations amount',
-      delta: calculateDisplayChange(snapshot.donations.current.amount, snapshot.donations.previous.amount, false),
+      delta: calculateDisplayChange(
+        snapshot.donations.current.amount,
+        snapshot.donations.previous.amount,
+        KPI_DIRECTION.HIGHER_IS_BETTER,
+      ),
     },
   ];
 
@@ -880,7 +1159,7 @@ function buildMustDoToday(snapshot, sectionRecommendations) {
   const leadsQualifiedDelta = calculateDisplayChange(
     snapshot.free.current.qualified + snapshot.phoenix.current.qualified,
     snapshot.free.previous.qualified + snapshot.phoenix.previous.qualified,
-    false,
+    KPI_DIRECTION.HIGHER_IS_BETTER,
   );
   const leadsCPQLDelta = calculateDisplayChange(
     safeDivide(
@@ -891,22 +1170,22 @@ function buildMustDoToday(snapshot, sectionRecommendations) {
       snapshot.free.previous.spend + snapshot.phoenix.previous.spend,
       snapshot.free.previous.qualified + snapshot.phoenix.previous.qualified,
     ),
-    true,
+    KPI_DIRECTION.LOWER_IS_BETTER,
   );
   const attendanceDelta = calculateDisplayChange(
     snapshot.attendance.current.netNewTue + snapshot.attendance.current.netNewThu,
     snapshot.attendance.previous.netNewTue + snapshot.attendance.previous.netNewThu,
-    false,
+    KPI_DIRECTION.HIGHER_IS_BETTER,
   );
   const donationsDelta = calculateDisplayChange(
     snapshot.donations.current.amount,
     snapshot.donations.previous.amount,
-    false,
+    KPI_DIRECTION.HIGHER_IS_BETTER,
   );
   const operationsDelta = calculateDisplayChange(
     snapshot.operations.current.completedItems,
     snapshot.operations.previous.completedItems,
-    false,
+    KPI_DIRECTION.HIGHER_IS_BETTER,
   );
 
   const sectionRiskRows = [
@@ -1087,179 +1366,29 @@ function DashboardOverview() {
     }
   }, [recommendationFeedback]);
 
-  const snapshot = useMemo(() => computeKpiSnapshot(rawData, windows), [rawData, windows]);
+  const snapshot = useMemo(() => computeKpiSnapshot(rawData, windows, todayKey), [rawData, windows, todayKey]);
   const aiNarrative = useMemo(() => buildAiNarrative(snapshot), [snapshot]);
 
-  const freeCards = useMemo(() => ([
-    buildCardModel({
-      title: 'Free Meetings',
-      current: snapshot.free.current.meetings,
-      previous: snapshot.free.previous.meetings,
-      format: 'count',
-      note: 'Meta free-group lead form submissions',
-      color: '#0f766e',
-    }),
-    buildCardModel({
-      title: 'New Qualified Leads',
-      current: snapshot.free.current.qualified,
-      previous: snapshot.free.previous.qualified,
-      format: 'count',
-      note: 'Revenue >= $250k and sobriety > 1 year',
-      color: '#166534',
-    }),
-    buildCardModel({
-      title: 'Cost Per Qualified Lead (CPQL)',
-      current: snapshot.free.current.cpql,
-      previous: snapshot.free.previous.cpql,
-      format: 'currency',
-      note: 'Free Group Ad Spend / New Qualified Leads',
-      color: '#0369a1',
-      invertColor: true,
-    }),
-    buildCardModel({
-      title: 'New Great Leads',
-      current: snapshot.free.current.great,
-      previous: snapshot.free.previous.great,
-      format: 'count',
-      note: 'Revenue >= $1M',
-      color: '#4f46e5',
-    }),
-    buildCardModel({
-      title: 'Cost Per Great Lead (CPGL)',
-      current: snapshot.free.current.cpgl,
-      previous: snapshot.free.previous.cpgl,
-      format: 'currency',
-      note: 'Free Group Ad Spend / New Great Leads',
-      color: '#7c3aed',
-      invertColor: true,
-    }),
-    buildCardModel({
-      title: 'Free Group Interviews',
-      current: snapshot.free.current.interviews,
-      previous: snapshot.free.previous.interviews,
-      format: 'count',
-      note: null,
-      color: '#0ea5e9',
-    }),
-  ]), [snapshot.free]);
-
-  const phoenixCards = useMemo(() => ([
-    buildCardModel({
-      title: 'Phoenix Forum Leads',
-      current: snapshot.phoenix.current.leads,
-      previous: snapshot.phoenix.previous.leads,
-      format: 'count',
-      note: 'Campaign name contains "Phoenix"',
-      color: '#0f766e',
-    }),
-    buildCardModel({
-      title: 'Phoenix Qualified Leads',
-      current: snapshot.phoenix.current.qualified,
-      previous: snapshot.phoenix.previous.qualified,
-      format: 'count',
-      note: 'Revenue >= $250k and sobriety > 1 year',
-      color: '#166534',
-    }),
-    buildCardModel({
-      title: 'Phoenix Great Leads',
-      current: snapshot.phoenix.current.great,
-      previous: snapshot.phoenix.previous.great,
-      format: 'count',
-      note: 'Revenue >= $1M',
-      color: '#4f46e5',
-    }),
-    buildCardModel({
-      title: 'Phoenix CPQL',
-      current: snapshot.phoenix.current.cpql,
-      previous: snapshot.phoenix.previous.cpql,
-      format: 'currency',
-      note: 'Phoenix Ad Spend / Phoenix Qualified Leads',
-      color: '#0369a1',
-      invertColor: true,
-    }),
-    buildCardModel({
-      title: 'Phoenix CPGL',
-      current: snapshot.phoenix.current.cpgl,
-      previous: snapshot.phoenix.previous.cpgl,
-      format: 'currency',
-      note: 'Phoenix Ad Spend / Phoenix Great Leads',
-      color: '#7c3aed',
-      invertColor: true,
-    }),
-    buildCardModel({
-      title: 'Phoenix Forum Interviews',
-      current: snapshot.phoenix.current.interviews,
-      previous: snapshot.phoenix.previous.interviews,
-      format: 'count',
-      note: null,
-      color: '#0ea5e9',
-    }),
-  ]), [snapshot.phoenix]);
-
-  const attendanceCards = useMemo(() => ([
-    buildCardModel({
-      title: 'Net New Attendees (Tuesday)',
-      current: snapshot.attendance.current.netNewTue,
-      previous: snapshot.attendance.previous.netNewTue,
-      format: 'count',
-      note: 'First-time Tuesday attendees in selected range',
-      color: '#0ea5e9',
-    }),
-    buildCardModel({
-      title: 'Avg Visits (Tuesday)',
-      current: snapshot.attendance.current.avgVisitsTue,
-      previous: snapshot.attendance.previous.avgVisitsTue,
-      format: 'decimal',
-      note: 'Total Tuesday visits / unique Tuesday attendees',
-      color: '#38bdf8',
-    }),
-    buildCardModel({
-      title: 'Net New Attendees (Thursday)',
-      current: snapshot.attendance.current.netNewThu,
-      previous: snapshot.attendance.previous.netNewThu,
-      format: 'count',
-      note: 'First-time Thursday attendees in selected range',
-      color: '#6366f1',
-    }),
-    buildCardModel({
-      title: 'Avg Visits (Thursday)',
-      current: snapshot.attendance.current.avgVisitsThu,
-      previous: snapshot.attendance.previous.avgVisitsThu,
-      format: 'decimal',
-      note: 'Total Thursday visits / unique Thursday attendees',
-      color: '#818cf8',
-    }),
-  ]), [snapshot.attendance]);
-
-  const donationCards = useMemo(() => ([
-    buildCardModel({
-      title: '# Donations',
-      current: snapshot.donations.current.count,
-      previous: snapshot.donations.previous.count,
-      format: 'count',
-      note: 'Total donation transactions in selected range',
-      color: '#15803d',
-    }),
-    buildCardModel({
-      title: '$ Donations',
-      current: snapshot.donations.current.amount,
-      previous: snapshot.donations.previous.amount,
-      format: 'currency',
-      note: 'Total donated amount in selected range',
-      color: '#16a34a',
-    }),
-  ]), [snapshot.donations]);
-
-  const operationCards = useMemo(() => ([
-    buildCardModel({
-      title: 'Completed Items',
-      current: snapshot.operations.current.completedItems,
-      previous: snapshot.operations.previous.completedItems,
-      format: 'count',
-      note: 'Notion To-Do status moved to Done in selected range',
-      color: '#ea580c',
-    }),
-  ]), [snapshot.operations]);
+  const freeCards = useMemo(
+    () => FREE_CARD_KEYS.map((metricKey) => buildCardModel({ metricKey, snapshot })).filter(Boolean),
+    [snapshot],
+  );
+  const phoenixCards = useMemo(
+    () => PHOENIX_CARD_KEYS.map((metricKey) => buildCardModel({ metricKey, snapshot })).filter(Boolean),
+    [snapshot],
+  );
+  const attendanceCards = useMemo(
+    () => ATTENDANCE_CARD_KEYS.map((metricKey) => buildCardModel({ metricKey, snapshot })).filter(Boolean),
+    [snapshot],
+  );
+  const donationCards = useMemo(
+    () => DONATION_CARD_KEYS.map((metricKey) => buildCardModel({ metricKey, snapshot })).filter(Boolean),
+    [snapshot],
+  );
+  const operationCards = useMemo(
+    () => OPERATIONS_CARD_KEYS.map((metricKey) => buildCardModel({ metricKey, snapshot })).filter(Boolean),
+    [snapshot],
+  );
 
   const sectionRecommendations = useMemo(
     () => buildSectionRecommendations(snapshot, windows, aiNarrative),

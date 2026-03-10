@@ -15,6 +15,7 @@ const KPICard = ({
   previousValue,
   previousLabel = 'Previous',
   previousTone = 'neutral',
+  comparisonRows = [],
   showChart = true,
 }) => {
   const isUp = trend === 'up';
@@ -27,6 +28,7 @@ const KPICard = ({
     : previousTone === 'worse'
       ? '#dc2626'
       : '#334155';
+  const renderComparisonRows = Array.isArray(comparisonRows) && comparisonRows.length > 0;
 
   return (
     <motion.div
@@ -78,6 +80,23 @@ const KPICard = ({
           <p style={{ fontSize: '12px', color: '#475569', marginTop: '4px', lineHeight: 1.3 }}>
             {subvalue}
           </p>
+        )}
+        {renderComparisonRows && (
+          <div style={{ marginTop: '8px', display: 'grid', gap: '4px' }}>
+            {comparisonRows.map((row) => {
+              const toneColor = row?.tone === 'better'
+                ? '#15803d'
+                : row?.tone === 'worse'
+                  ? '#b91c1c'
+                  : '#334155';
+              return (
+                <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '11px', lineHeight: 1.3 }}>
+                  <span style={{ color: '#475569', fontWeight: 600 }}>{row.label}</span>
+                  <span style={{ color: toneColor, fontWeight: 700 }}>{row.display}</span>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
