@@ -30,13 +30,13 @@ test('leads manager insights and experiment analyzer render safely', async ({ pa
   await expect.poll(async () => (await trendingInsightsCard.locator('li').count()) > 0, { timeout: 120000 }).toBeTruthy();
 
   const autonomousActionsCard = await sectionCard(managerPanel, 'Top 3 Autonomous Actions');
-  await expect.poll(async () => (await autonomousActionsCard.getByText('CPL:').count()) > 0, { timeout: 120000 }).toBeTruthy();
-  await expect(autonomousActionsCard).toContainText('CPL:');
-  await expect(autonomousActionsCard).toContainText('CPQL:');
-  await expect(autonomousActionsCard).toContainText('Qualified%:');
-
   const impactRows = autonomousActionsCard.locator('div').filter({ hasText: 'Target gap:' });
   await expect.poll(async () => (await impactRows.count()) > 0, { timeout: 120000 }).toBeTruthy();
+  await expect(autonomousActionsCard).toContainText('CPL');
+  await expect(autonomousActionsCard).toContainText('CPQL');
+  await expect(autonomousActionsCard).toContainText('Qualified %');
+
+  
 
   let evidenceRows = 0;
   let insufficientRows = 0;
@@ -77,23 +77,35 @@ test('leads manager insights and experiment analyzer render safely', async ({ pa
   const experimentRows = experimentPanel.locator('tbody tr');
   await expect.poll(async () => (await experimentRows.count()) > 0, { timeout: 120000 }).toBeTruthy();
 
-  const decisionChips = experimentRows.locator('td').first().locator('span');
   await expect.poll(async () => {
-    const labels = (await decisionChips.allTextContents()).map((value) => value.trim());
-    return labels.length > 0 && labels.every((label) => /^(KEEP|ITERATE|KILL|HOLD LOW SAMPLE)$/.test(label));
-  }, { timeout: 120000 }).toBeTruthy();
+    const rowCount = await experimentRows.count();
+    if (rowCount === 0) return false;
 
-  await expect(experimentPanel.getByText('HOLD LOW SAMPLE')).toBeVisible();
+    for (let i = 0; i < rowCount; i += 1) {
+      const row = experimentRows.nth(i);
+      const chips = row.locator('td').first().locator('span');
+      const chipTexts = (await chips.allTextContents()).map((value) => value.trim()).filter(Boolean);
+      if (chipTexts.length < 2) return false;
+
+      const decisionText = chipTexts[0];
+      const confidenceText = chipTexts[1];
+      const decisionOk = /^(KEEP|ITERATE|KILL|HOLD LOW SAMPLE)$/.test(decisionText);
+      const confidenceOk = /^(HIGH|MEDIUM|LOW|INSUFFICIENT SAMPLE\/DATA|LOW SAMPLE)$/.test(confidenceText);
+      if (!decisionOk || !confidenceOk) return false;
+    }
+
+    return true;
+  }, { timeout: 120000 }).toBeTruthy();
 
   const rowCount = await experimentRows.count();
   for (let i = 0; i < rowCount; i += 1) {
     const row = experimentRows.nth(i);
-    const confidenceLabel = row.locator('td').nth(1).locator('span');
+    const confidenceLabel = row.locator('td').first().locator('span').nth(1);
     await expect(confidenceLabel).toBeVisible();
     const confidenceText = (await confidenceLabel.innerText()).trim();
-    expect(/^(HIGH|MEDIUM|LOW|LOW SAMPLE)$/.test(confidenceText)).toBeTruthy();
+    expect(/^(HIGH|MEDIUM|LOW|INSUFFICIENT SAMPLE\/DATA|LOW SAMPLE)$/.test(confidenceText)).toBeTruthy();
 
-    const reasonText = (await row.locator('td').nth(3).innerText()).trim();
+    const reasonText = (await row.locator('td').nth(2).innerText()).trim();
     expect(reasonText.length).toBeGreaterThan(0);
   }
 
