@@ -1,0 +1,2316 @@
+{
+  "generatedAt": "2026-03-10T02:45:18.294Z",
+  "git": {
+    "head": "3be2fe2",
+    "originMain": "3be2fe2"
+  },
+  "db": {
+    "projectRef": "ldnucnghzpkuixmnfjbs",
+    "database": "postgres",
+    "tables": [
+      "ai_briefings",
+      "ai_module_analyses",
+      "attendee_aliases",
+      "audit_log",
+      "dim_funnel",
+      "dim_kpi",
+      "dim_week",
+      "donor_events",
+      "fact_attendance_event",
+      "fact_kpi_weekly",
+      "fact_kpi_weekly_overrides",
+      "fact_kpi_weekly_versions",
+      "fb_funnel_rules",
+      "funnel_rules",
+      "hubspot_activity_contact_associations",
+      "hubspot_sync_errors",
+      "hubspot_sync_runs",
+      "hubspot_sync_state",
+      "hubspot_webhook_events",
+      "integration_credentials",
+      "kpi_goals",
+      "kpi_metrics",
+      "mailchimp_campaigns",
+      "manual_donation_entries",
+      "manual_money_event",
+      "notion_todos",
+      "profiles",
+      "raw_fb_ads_insights_daily",
+      "raw_hubspot_call_logs",
+      "raw_hubspot_contacts",
+      "raw_hubspot_deals",
+      "raw_hubspot_meeting_activities",
+      "raw_hubspot_meetings",
+      "raw_hubspot_meetings_v3",
+      "raw_luma_registrations",
+      "raw_social_weekly",
+      "raw_zeffy_donations",
+      "raw_zeffy_supporter_profiles",
+      "recovery_events",
+      "supported_integrations",
+      "user_integrations",
+      "zoom_attendance",
+      "zoom_attendee_hubspot_mappings",
+      "zoom_identities",
+      "zoom_merge_log",
+      "zoom_notetaker_blocklist",
+      "zoom_pending_review",
+      "zoom_session_hubspot_activity_matches"
+    ],
+    "views": [
+      "donation_transactions_unified",
+      "hubspot_call_contact_rows_v1",
+      "hubspot_contact_identity_emails_v1",
+      "v_kpi_weekly_final",
+      "vw_donor_health",
+      "vw_hubspot_contacts_est",
+      "vw_hubspot_deals_est",
+      "vw_hubspot_meeting_activities_est",
+      "vw_hubspot_sync_health",
+      "vw_kpi_trend",
+      "vw_noshow_candidates",
+      "vw_seo_ai_traffic_estimate",
+      "vw_seo_channel_daily",
+      "vw_seo_opportunity_pages",
+      "vw_seo_organic_zoom_attendees",
+      "vw_seo_ranking_drops",
+      "vw_seo_search_performance",
+      "zoom_meeting_attendee_rows_v1"
+    ],
+    "functions": [
+      {
+        "name": "apply_fb_funnel_rules",
+        "args": "p_start date, p_end date",
+        "signature": "apply_fb_funnel_rules(p_start date, p_end date)"
+      },
+      {
+        "name": "ensure_week",
+        "args": "p_week_start date",
+        "signature": "ensure_week(p_week_start date)"
+      },
+      {
+        "name": "hubspot_claim_webhook_events",
+        "args": "p_limit integer",
+        "signature": "hubspot_claim_webhook_events(p_limit integer)"
+      },
+      {
+        "name": "hubspot_guard_stale_update",
+        "args": "",
+        "signature": "hubspot_guard_stale_update()"
+      },
+      {
+        "name": "hubspot_touch_updated_at",
+        "args": "",
+        "signature": "hubspot_touch_updated_at()"
+      },
+      {
+        "name": "ingest_attendance_from_calls",
+        "args": "p_week_start date",
+        "signature": "ingest_attendance_from_calls(p_week_start date)"
+      },
+      {
+        "name": "ingest_attendance_from_calls",
+        "args": "p_week_start date, p_title_ilike text, p_day_key text",
+        "signature": "ingest_attendance_from_calls(p_week_start date, p_title_ilike text, p_day_key text)"
+      },
+      {
+        "name": "recompute_all",
+        "args": "p_week_start date",
+        "signature": "recompute_all(p_week_start date)"
+      },
+      {
+        "name": "recompute_week",
+        "args": "p_week_start date",
+        "signature": "recompute_week(p_week_start date)"
+      },
+      {
+        "name": "set_updated_at",
+        "args": "",
+        "signature": "set_updated_at()"
+      },
+      {
+        "name": "set_week_start_from_occurred_at",
+        "args": "",
+        "signature": "set_week_start_from_occurred_at()"
+      },
+      {
+        "name": "upsert_intro_meetings_hs",
+        "args": "p_week_start date",
+        "signature": "upsert_intro_meetings_hs(p_week_start date)"
+      },
+      {
+        "name": "week_start_est",
+        "args": "ts timestamp with time zone",
+        "signature": "week_start_est(ts timestamp with time zone)"
+      }
+    ],
+    "policies": [
+      {
+        "table": "ai_briefings",
+        "policy": "public read ai_briefings"
+      },
+      {
+        "table": "ai_briefings",
+        "policy": "service role write ai_briefings"
+      },
+      {
+        "table": "ai_module_analyses",
+        "policy": "public read ai_module_analyses"
+      },
+      {
+        "table": "attendee_aliases",
+        "policy": "enable read access for authenticated users"
+      },
+      {
+        "table": "attendee_aliases",
+        "policy": "service role write attendee_aliases"
+      },
+      {
+        "table": "audit_log",
+        "policy": "public read audit_log"
+      },
+      {
+        "table": "audit_log",
+        "policy": "service role write audit_log"
+      },
+      {
+        "table": "dim_funnel",
+        "policy": "public read dim_funnel"
+      },
+      {
+        "table": "dim_funnel",
+        "policy": "service role write dim_funnel"
+      },
+      {
+        "table": "dim_kpi",
+        "policy": "public read dim_kpi"
+      },
+      {
+        "table": "dim_kpi",
+        "policy": "service role write dim_kpi"
+      },
+      {
+        "table": "dim_week",
+        "policy": "public read dim_week"
+      },
+      {
+        "table": "dim_week",
+        "policy": "service role write dim_week"
+      },
+      {
+        "table": "donor_events",
+        "policy": "donor_events_insert"
+      },
+      {
+        "table": "donor_events",
+        "policy": "donor_events_select"
+      },
+      {
+        "table": "fact_attendance_event",
+        "policy": "public read fact_attendance_event"
+      },
+      {
+        "table": "fact_attendance_event",
+        "policy": "service role write fact_attendance_event"
+      },
+      {
+        "table": "fact_kpi_weekly",
+        "policy": "public read fact_kpi_weekly"
+      },
+      {
+        "table": "fact_kpi_weekly",
+        "policy": "service role write fact_kpi_weekly"
+      },
+      {
+        "table": "fact_kpi_weekly_overrides",
+        "policy": "public read fact_kpi_weekly_overrides"
+      },
+      {
+        "table": "fact_kpi_weekly_overrides",
+        "policy": "service role write fact_kpi_weekly_overrides"
+      },
+      {
+        "table": "fact_kpi_weekly_versions",
+        "policy": "public read fact_kpi_weekly_versions"
+      },
+      {
+        "table": "fact_kpi_weekly_versions",
+        "policy": "service role write fact_kpi_weekly_versions"
+      },
+      {
+        "table": "fb_funnel_rules",
+        "policy": "public read fb_funnel_rules"
+      },
+      {
+        "table": "fb_funnel_rules",
+        "policy": "service role write fb_funnel_rules"
+      },
+      {
+        "table": "funnel_rules",
+        "policy": "public read funnel_rules"
+      },
+      {
+        "table": "funnel_rules",
+        "policy": "service role write funnel_rules"
+      },
+      {
+        "table": "hubspot_activity_contact_associations",
+        "policy": "public read hubspot_activity_contact_associations"
+      },
+      {
+        "table": "hubspot_sync_errors",
+        "policy": "public read hubspot_sync_errors"
+      },
+      {
+        "table": "hubspot_sync_runs",
+        "policy": "public read hubspot_sync_runs"
+      },
+      {
+        "table": "hubspot_sync_state",
+        "policy": "public read hubspot_sync_state"
+      },
+      {
+        "table": "integration_credentials",
+        "policy": "users view own credentials"
+      },
+      {
+        "table": "kpi_goals",
+        "policy": "kpi_goals_delete_all"
+      },
+      {
+        "table": "kpi_goals",
+        "policy": "kpi_goals_insert_all"
+      },
+      {
+        "table": "kpi_goals",
+        "policy": "kpi_goals_select_all"
+      },
+      {
+        "table": "kpi_goals",
+        "policy": "kpi_goals_update_all"
+      },
+      {
+        "table": "kpi_metrics",
+        "policy": "public read access for metrics"
+      },
+      {
+        "table": "kpi_metrics",
+        "policy": "users manage own metrics"
+      },
+      {
+        "table": "mailchimp_campaigns",
+        "policy": "public read mailchimp_campaigns"
+      },
+      {
+        "table": "mailchimp_campaigns",
+        "policy": "service role write mailchimp_campaigns"
+      },
+      {
+        "table": "manual_donation_entries",
+        "policy": "public read manual_donation_entries"
+      },
+      {
+        "table": "manual_donation_entries",
+        "policy": "service role write manual_donation_entries"
+      },
+      {
+        "table": "manual_money_event",
+        "policy": "public read manual_money_event"
+      },
+      {
+        "table": "manual_money_event",
+        "policy": "service role write manual_money_event"
+      },
+      {
+        "table": "notion_todos",
+        "policy": "public read access for todos"
+      },
+      {
+        "table": "notion_todos",
+        "policy": "users manage own todos"
+      },
+      {
+        "table": "profiles",
+        "policy": "public read profiles"
+      },
+      {
+        "table": "profiles",
+        "policy": "service role write profiles"
+      },
+      {
+        "table": "raw_fb_ads_insights_daily",
+        "policy": "public read raw_fb_ads_insights_daily"
+      },
+      {
+        "table": "raw_fb_ads_insights_daily",
+        "policy": "service role write raw_fb_ads_insights_daily"
+      },
+      {
+        "table": "raw_hubspot_call_logs",
+        "policy": "public read raw_hubspot_call_logs"
+      },
+      {
+        "table": "raw_hubspot_call_logs",
+        "policy": "service role write raw_hubspot_call_logs"
+      },
+      {
+        "table": "raw_hubspot_contacts",
+        "policy": "public read raw_hubspot_contacts"
+      },
+      {
+        "table": "raw_hubspot_contacts",
+        "policy": "service role write raw_hubspot_contacts"
+      },
+      {
+        "table": "raw_hubspot_meeting_activities",
+        "policy": "public read raw_hubspot_meeting_activities"
+      },
+      {
+        "table": "raw_hubspot_meetings",
+        "policy": "public read raw_hubspot_meetings"
+      },
+      {
+        "table": "raw_hubspot_meetings",
+        "policy": "service role write raw_hubspot_meetings"
+      },
+      {
+        "table": "raw_hubspot_meetings_v3",
+        "policy": "public read raw_hubspot_meetings_v3"
+      },
+      {
+        "table": "raw_hubspot_meetings_v3",
+        "policy": "service role write raw_hubspot_meetings_v3"
+      },
+      {
+        "table": "raw_luma_registrations",
+        "policy": "public read raw_luma_registrations"
+      },
+      {
+        "table": "raw_social_weekly",
+        "policy": "public read raw_social_weekly"
+      },
+      {
+        "table": "raw_social_weekly",
+        "policy": "service role write raw_social_weekly"
+      },
+      {
+        "table": "raw_zeffy_donations",
+        "policy": "public read raw_zeffy_donations"
+      },
+      {
+        "table": "raw_zeffy_donations",
+        "policy": "service role write raw_zeffy_donations"
+      },
+      {
+        "table": "raw_zeffy_supporter_profiles",
+        "policy": "public read raw_zeffy_supporter_profiles"
+      },
+      {
+        "table": "raw_zeffy_supporter_profiles",
+        "policy": "service role write raw_zeffy_supporter_profiles"
+      },
+      {
+        "table": "recovery_events",
+        "policy": "recovery_events_insert"
+      },
+      {
+        "table": "recovery_events",
+        "policy": "recovery_events_select"
+      },
+      {
+        "table": "supported_integrations",
+        "policy": "public read supported_integrations"
+      },
+      {
+        "table": "user_integrations",
+        "policy": "users view own integrations"
+      },
+      {
+        "table": "zoom_attendance",
+        "policy": "public read zoom_attendance"
+      },
+      {
+        "table": "zoom_attendance",
+        "policy": "service role write zoom_attendance"
+      },
+      {
+        "table": "zoom_attendee_hubspot_mappings",
+        "policy": "public read zoom_attendee_hubspot_mappings"
+      },
+      {
+        "table": "zoom_identities",
+        "policy": "public read zoom_identities"
+      },
+      {
+        "table": "zoom_identities",
+        "policy": "service role write zoom_identities"
+      },
+      {
+        "table": "zoom_merge_log",
+        "policy": "public read zoom_merge_log"
+      },
+      {
+        "table": "zoom_merge_log",
+        "policy": "service role write zoom_merge_log"
+      },
+      {
+        "table": "zoom_notetaker_blocklist",
+        "policy": "public read zoom_notetaker_blocklist"
+      },
+      {
+        "table": "zoom_notetaker_blocklist",
+        "policy": "service role write zoom_notetaker_blocklist"
+      },
+      {
+        "table": "zoom_pending_review",
+        "policy": "public read zoom_pending_review"
+      },
+      {
+        "table": "zoom_pending_review",
+        "policy": "service role write zoom_pending_review"
+      },
+      {
+        "table": "zoom_session_hubspot_activity_matches",
+        "policy": "public read zoom_session_hubspot_activity_matches"
+      }
+    ],
+    "indexes": [
+      {
+        "table": "ai_briefings",
+        "index": "ai_briefings_pkey"
+      },
+      {
+        "table": "ai_briefings",
+        "index": "idx_ai_briefings_created_at"
+      },
+      {
+        "table": "ai_briefings",
+        "index": "idx_ai_briefings_type_created"
+      },
+      {
+        "table": "ai_module_analyses",
+        "index": "ai_module_analyses_pkey"
+      },
+      {
+        "table": "ai_module_analyses",
+        "index": "idx_ai_module_analyses_generated_at"
+      },
+      {
+        "table": "attendee_aliases",
+        "index": "attendee_aliases_original_name_key"
+      },
+      {
+        "table": "attendee_aliases",
+        "index": "attendee_aliases_pkey"
+      },
+      {
+        "table": "audit_log",
+        "index": "audit_log_pkey"
+      },
+      {
+        "table": "dim_funnel",
+        "index": "dim_funnel_pkey"
+      },
+      {
+        "table": "dim_kpi",
+        "index": "dim_kpi_pkey"
+      },
+      {
+        "table": "dim_week",
+        "index": "dim_week_pkey"
+      },
+      {
+        "table": "donor_events",
+        "index": "donor_events_pkey"
+      },
+      {
+        "table": "fact_attendance_event",
+        "index": "fact_attendance_event_pkey"
+      },
+      {
+        "table": "fact_attendance_event",
+        "index": "idx_attendance_contact"
+      },
+      {
+        "table": "fact_attendance_event",
+        "index": "idx_attendance_week_day"
+      },
+      {
+        "table": "fact_attendance_event",
+        "index": "ux_attendance_hs_engagement_contact"
+      },
+      {
+        "table": "fact_kpi_weekly",
+        "index": "fact_kpi_weekly_pkey"
+      },
+      {
+        "table": "fact_kpi_weekly_overrides",
+        "index": "fact_kpi_weekly_overrides_pkey"
+      },
+      {
+        "table": "fact_kpi_weekly_versions",
+        "index": "fact_kpi_weekly_versions_pkey"
+      },
+      {
+        "table": "fact_kpi_weekly_versions",
+        "index": "idx_kpi_versions_week"
+      },
+      {
+        "table": "fb_funnel_rules",
+        "index": "fb_funnel_rules_pkey"
+      },
+      {
+        "table": "fb_funnel_rules",
+        "index": "idx_fb_funnel_rules_active_priority"
+      },
+      {
+        "table": "fb_funnel_rules",
+        "index": "idx_fb_funnel_rules_funnel_key"
+      },
+      {
+        "table": "funnel_rules",
+        "index": "funnel_rules_pkey"
+      },
+      {
+        "table": "funnel_rules",
+        "index": "idx_funnel_rules_active_priority"
+      },
+      {
+        "table": "funnel_rules",
+        "index": "idx_funnel_rules_funnel_key"
+      },
+      {
+        "table": "hubspot_activity_contact_associations",
+        "index": "hubspot_activity_contact_asso_hubspot_activity_id_activity__key"
+      },
+      {
+        "table": "hubspot_activity_contact_associations",
+        "index": "hubspot_activity_contact_associations_pkey"
+      },
+      {
+        "table": "hubspot_activity_contact_associations",
+        "index": "idx_hubspot_activity_contact_associations_activity"
+      },
+      {
+        "table": "hubspot_activity_contact_associations",
+        "index": "idx_hubspot_activity_contact_associations_contact"
+      },
+      {
+        "table": "hubspot_activity_contact_associations",
+        "index": "idx_hubspot_activity_contact_associations_email"
+      },
+      {
+        "table": "hubspot_sync_errors",
+        "index": "hubspot_sync_errors_pkey"
+      },
+      {
+        "table": "hubspot_sync_errors",
+        "index": "idx_hubspot_sync_errors_created"
+      },
+      {
+        "table": "hubspot_sync_errors",
+        "index": "idx_hubspot_sync_errors_run_id"
+      },
+      {
+        "table": "hubspot_sync_runs",
+        "index": "hubspot_sync_runs_pkey"
+      },
+      {
+        "table": "hubspot_sync_runs",
+        "index": "idx_hubspot_sync_runs_object_type"
+      },
+      {
+        "table": "hubspot_sync_runs",
+        "index": "idx_hubspot_sync_runs_run_type_status"
+      },
+      {
+        "table": "hubspot_sync_runs",
+        "index": "idx_hubspot_sync_runs_started_at"
+      },
+      {
+        "table": "hubspot_sync_state",
+        "index": "hubspot_sync_state_pkey"
+      },
+      {
+        "table": "hubspot_webhook_events",
+        "index": "hubspot_webhook_events_dedupe_key_key"
+      },
+      {
+        "table": "hubspot_webhook_events",
+        "index": "hubspot_webhook_events_pkey"
+      },
+      {
+        "table": "hubspot_webhook_events",
+        "index": "idx_hubspot_webhook_events_object"
+      },
+      {
+        "table": "hubspot_webhook_events",
+        "index": "idx_hubspot_webhook_events_occurred"
+      },
+      {
+        "table": "hubspot_webhook_events",
+        "index": "idx_hubspot_webhook_events_pending"
+      },
+      {
+        "table": "integration_credentials",
+        "index": "integration_credentials_pkey"
+      },
+      {
+        "table": "integration_credentials",
+        "index": "integration_credentials_user_integration_id_credential_key_key"
+      },
+      {
+        "table": "kpi_goals",
+        "index": "kpi_goals_pkey"
+      },
+      {
+        "table": "kpi_metrics",
+        "index": "idx_kpi_metrics_source_metric_date"
+      },
+      {
+        "table": "kpi_metrics",
+        "index": "idx_kpi_metrics_user_id"
+      },
+      {
+        "table": "kpi_metrics",
+        "index": "kpi_metrics_pkey"
+      },
+      {
+        "table": "mailchimp_campaigns",
+        "index": "idx_mailchimp_campaign_group"
+      },
+      {
+        "table": "mailchimp_campaigns",
+        "index": "idx_mailchimp_send_time"
+      },
+      {
+        "table": "mailchimp_campaigns",
+        "index": "mailchimp_campaigns_pkey"
+      },
+      {
+        "table": "manual_donation_entries",
+        "index": "idx_manual_donation_entries_donated_at"
+      },
+      {
+        "table": "manual_donation_entries",
+        "index": "idx_manual_donation_entries_donor_email"
+      },
+      {
+        "table": "manual_donation_entries",
+        "index": "manual_donation_entries_pkey"
+      },
+      {
+        "table": "manual_money_event",
+        "index": "idx_money_week_type"
+      },
+      {
+        "table": "manual_money_event",
+        "index": "manual_money_event_pkey"
+      },
+      {
+        "table": "notion_todos",
+        "index": "notion_todos_notion_page_id_key"
+      },
+      {
+        "table": "notion_todos",
+        "index": "notion_todos_pkey"
+      },
+      {
+        "table": "profiles",
+        "index": "profiles_pkey"
+      },
+      {
+        "table": "raw_fb_ads_insights_daily",
+        "index": "idx_fb_daily_rollup"
+      },
+      {
+        "table": "raw_fb_ads_insights_daily",
+        "index": "idx_raw_fb_ads_funnel_key_date"
+      },
+      {
+        "table": "raw_fb_ads_insights_daily",
+        "index": "raw_fb_ads_insights_daily_pkey"
+      },
+      {
+        "table": "raw_fb_ads_insights_daily",
+        "index": "raw_fb_ads_insights_daily_unique"
+      },
+      {
+        "table": "raw_hubspot_call_logs",
+        "index": "idx_raw_hubspot_call_logs_eng"
+      },
+      {
+        "table": "raw_hubspot_call_logs",
+        "index": "idx_raw_hubspot_call_logs_occ"
+      },
+      {
+        "table": "raw_hubspot_call_logs",
+        "index": "raw_hubspot_call_logs_pkey"
+      },
+      {
+        "table": "raw_hubspot_contacts",
+        "index": "idx_hs_contacts_createdate"
+      },
+      {
+        "table": "raw_hubspot_contacts",
+        "index": "idx_hs_contacts_email"
+      },
+      {
+        "table": "raw_hubspot_contacts",
+        "index": "idx_raw_hubspot_contacts_deleted"
+      },
+      {
+        "table": "raw_hubspot_contacts",
+        "index": "idx_raw_hubspot_contacts_last_synced"
+      },
+      {
+        "table": "raw_hubspot_contacts",
+        "index": "idx_raw_hubspot_contacts_updated"
+      },
+      {
+        "table": "raw_hubspot_contacts",
+        "index": "raw_hubspot_contacts_hubspot_contact_id_uk"
+      },
+      {
+        "table": "raw_hubspot_contacts",
+        "index": "raw_hubspot_contacts_pkey"
+      },
+      {
+        "table": "raw_hubspot_deals",
+        "index": "idx_raw_hubspot_deals_deleted"
+      },
+      {
+        "table": "raw_hubspot_deals",
+        "index": "idx_raw_hubspot_deals_last_synced"
+      },
+      {
+        "table": "raw_hubspot_deals",
+        "index": "idx_raw_hubspot_deals_pipeline_stage"
+      },
+      {
+        "table": "raw_hubspot_deals",
+        "index": "idx_raw_hubspot_deals_updated"
+      },
+      {
+        "table": "raw_hubspot_deals",
+        "index": "raw_hubspot_deals_pkey"
+      },
+      {
+        "table": "raw_hubspot_meeting_activities",
+        "index": "idx_raw_hs_activities_type_timestamp"
+      },
+      {
+        "table": "raw_hubspot_meeting_activities",
+        "index": "idx_raw_hubspot_meeting_activities_created_at"
+      },
+      {
+        "table": "raw_hubspot_meeting_activities",
+        "index": "idx_raw_hubspot_meeting_activities_deleted"
+      },
+      {
+        "table": "raw_hubspot_meeting_activities",
+        "index": "idx_raw_hubspot_meeting_activities_hs_timestamp"
+      },
+      {
+        "table": "raw_hubspot_meeting_activities",
+        "index": "idx_raw_hubspot_meeting_activities_last_synced"
+      },
+      {
+        "table": "raw_hubspot_meeting_activities",
+        "index": "idx_raw_hubspot_meeting_activities_type"
+      },
+      {
+        "table": "raw_hubspot_meeting_activities",
+        "index": "idx_raw_hubspot_meeting_activities_updated"
+      },
+      {
+        "table": "raw_hubspot_meeting_activities",
+        "index": "raw_hubspot_meeting_activitie_hubspot_activity_id_activity__key"
+      },
+      {
+        "table": "raw_hubspot_meeting_activities",
+        "index": "raw_hubspot_meeting_activities_pkey"
+      },
+      {
+        "table": "raw_hubspot_meetings",
+        "index": "idx_hs_meetings_createdate"
+      },
+      {
+        "table": "raw_hubspot_meetings",
+        "index": "raw_hubspot_meetings_pkey"
+      },
+      {
+        "table": "raw_hubspot_meetings_v3",
+        "index": "idx_raw_hs_meetings_v3_created"
+      },
+      {
+        "table": "raw_hubspot_meetings_v3",
+        "index": "idx_raw_hs_meetings_v3_start"
+      },
+      {
+        "table": "raw_hubspot_meetings_v3",
+        "index": "raw_hubspot_meetings_v3_pkey"
+      },
+      {
+        "table": "raw_hubspot_meetings_v3",
+        "index": "ux_raw_hs_meetings_v3_meeting_id"
+      },
+      {
+        "table": "raw_luma_registrations",
+        "index": "idx_raw_luma_reg_email"
+      },
+      {
+        "table": "raw_luma_registrations",
+        "index": "idx_raw_luma_reg_event_date"
+      },
+      {
+        "table": "raw_luma_registrations",
+        "index": "idx_raw_luma_reg_hubspot"
+      },
+      {
+        "table": "raw_luma_registrations",
+        "index": "idx_raw_luma_reg_zoom"
+      },
+      {
+        "table": "raw_luma_registrations",
+        "index": "idx_raw_luma_reg_zoom_meeting_id"
+      },
+      {
+        "table": "raw_luma_registrations",
+        "index": "raw_luma_registrations_event_api_id_guest_api_id_key"
+      },
+      {
+        "table": "raw_luma_registrations",
+        "index": "raw_luma_registrations_pkey"
+      },
+      {
+        "table": "raw_social_weekly",
+        "index": "raw_social_weekly_pkey"
+      },
+      {
+        "table": "raw_zeffy_donations",
+        "index": "idx_raw_zeffy_donations_campaign_name"
+      },
+      {
+        "table": "raw_zeffy_donations",
+        "index": "idx_raw_zeffy_donations_donated_at"
+      },
+      {
+        "table": "raw_zeffy_donations",
+        "index": "idx_raw_zeffy_donations_donor_email"
+      },
+      {
+        "table": "raw_zeffy_donations",
+        "index": "idx_raw_zeffy_donations_payment_method"
+      },
+      {
+        "table": "raw_zeffy_donations",
+        "index": "idx_raw_zeffy_donations_source_file"
+      },
+      {
+        "table": "raw_zeffy_donations",
+        "index": "raw_zeffy_donations_pkey"
+      },
+      {
+        "table": "raw_zeffy_donations",
+        "index": "raw_zeffy_donations_source_event_id_key"
+      },
+      {
+        "table": "raw_zeffy_supporter_profiles",
+        "index": "idx_raw_zeffy_supporter_profiles_email"
+      },
+      {
+        "table": "raw_zeffy_supporter_profiles",
+        "index": "raw_zeffy_supporter_profiles_donor_email_key"
+      },
+      {
+        "table": "raw_zeffy_supporter_profiles",
+        "index": "raw_zeffy_supporter_profiles_pkey"
+      },
+      {
+        "table": "recovery_events",
+        "index": "recovery_events_pkey"
+      },
+      {
+        "table": "supported_integrations",
+        "index": "supported_integrations_name_key"
+      },
+      {
+        "table": "supported_integrations",
+        "index": "supported_integrations_pkey"
+      },
+      {
+        "table": "supported_integrations",
+        "index": "supported_integrations_slug_key"
+      },
+      {
+        "table": "user_integrations",
+        "index": "user_integrations_pkey"
+      },
+      {
+        "table": "user_integrations",
+        "index": "user_integrations_user_id_integration_id_key"
+      },
+      {
+        "table": "zoom_attendance",
+        "index": "idx_zoom_attendance_canonical"
+      },
+      {
+        "table": "zoom_attendance",
+        "index": "idx_zoom_attendance_session"
+      },
+      {
+        "table": "zoom_attendance",
+        "index": "zoom_attendance_canonical_id_session_date_meeting_id_key"
+      },
+      {
+        "table": "zoom_attendance",
+        "index": "zoom_attendance_pkey"
+      },
+      {
+        "table": "zoom_attendee_hubspot_mappings",
+        "index": "idx_zoom_attendee_hubspot_mappings_contact"
+      },
+      {
+        "table": "zoom_attendee_hubspot_mappings",
+        "index": "idx_zoom_attendee_hubspot_mappings_name"
+      },
+      {
+        "table": "zoom_attendee_hubspot_mappings",
+        "index": "idx_zoom_attendee_hubspot_mappings_session"
+      },
+      {
+        "table": "zoom_attendee_hubspot_mappings",
+        "index": "zoom_attendee_hubspot_mapping_zoom_session_key_zoom_attende_key"
+      },
+      {
+        "table": "zoom_attendee_hubspot_mappings",
+        "index": "zoom_attendee_hubspot_mappings_pkey"
+      },
+      {
+        "table": "zoom_identities",
+        "index": "idx_zoom_identities_email"
+      },
+      {
+        "table": "zoom_identities",
+        "index": "idx_zoom_identities_name_aliases"
+      },
+      {
+        "table": "zoom_identities",
+        "index": "idx_zoom_identities_zoom_user_ids"
+      },
+      {
+        "table": "zoom_identities",
+        "index": "zoom_identities_pkey"
+      },
+      {
+        "table": "zoom_merge_log",
+        "index": "idx_zoom_merge_log_created"
+      },
+      {
+        "table": "zoom_merge_log",
+        "index": "zoom_merge_log_pkey"
+      },
+      {
+        "table": "zoom_notetaker_blocklist",
+        "index": "zoom_notetaker_blocklist_pkey"
+      },
+      {
+        "table": "zoom_pending_review",
+        "index": "idx_zoom_pending_status"
+      },
+      {
+        "table": "zoom_pending_review",
+        "index": "zoom_pending_review_pkey"
+      },
+      {
+        "table": "zoom_session_hubspot_activity_matches",
+        "index": "idx_zoom_session_hubspot_activity_matches_activity"
+      },
+      {
+        "table": "zoom_session_hubspot_activity_matches",
+        "index": "idx_zoom_session_hubspot_activity_matches_session"
+      },
+      {
+        "table": "zoom_session_hubspot_activity_matches",
+        "index": "zoom_session_hubspot_activity_matches_pkey"
+      },
+      {
+        "table": "zoom_session_hubspot_activity_matches",
+        "index": "zoom_session_hubspot_activity_zoom_session_key_hubspot_acti_key"
+      }
+    ]
+  },
+  "migrations": {
+    "files": [
+      "20240217000000_kpi_infrastructure.sql",
+      "20260218090000_add_funnel_rules.sql",
+      "20260218100000_create_attendee_aliases.sql",
+      "20260218120000_add_funnel_rules.sql",
+      "20260218130000_add_phoenix_rule.sql",
+      "20260218173000_add_hubspot_attribution_columns.sql",
+      "20260219100000_zoom_identity_tables.sql",
+      "20260219113000_add_luma_registrations.sql",
+      "20260219120000_mailchimp_campaign_tables.sql",
+      "20260219163000_seed_attendee_aliases_for_known_variants.sql",
+      "20260221190500_add_hubspot_sobriety_and_additional_emails.sql",
+      "20260222200000_seo_views.sql",
+      "20260222223936_seo_views.sql",
+      "20260223110000_add_hubspot_meeting_activity_mapping_tables.sql",
+      "20260223124500_add_leads_funnel_unification_helper_views.sql",
+      "20260226111420_create_ai_briefings_table.sql",
+      "20260226152000_reschedule_master_sync_twice_daily.sql",
+      "20260226194000_add_donations_module.sql",
+      "20260226202000_add_post_meeting_attendance_sync_jobs.sql",
+      "20260227001000_add_ai_module_analyses.sql",
+      "20260227012000_add_post_meeting_attendance_retry_jobs.sql",
+      "20260302170000_add_weekly_historical_hubspot_attendance_backfill.sql",
+      "20260302184500_expand_donations_for_zeffy_exports.sql",
+      "20260303113000_harden_attendance_post_meeting_schedule.sql",
+      "20260304052707_optimize_analytics_query_indexes.sql",
+      "20260304131739_harden_supabase_rls_and_view_security.sql",
+      "20260305070314_add_kpi_goals_and_trend_view.sql",
+      "20260305072852_add_donor_intelligence_infrastructure.sql",
+      "20260305080649_add_recovery_events_table.sql",
+      "20260305080708_add_noshow_candidates_view.sql",
+      "20260305170000_add_recovery_events_table.sql",
+      "20260305170100_add_noshow_candidates_view.sql",
+      "20260306123000_shift_thursday_primary_sync_to_1230_et.sql",
+      "20260306170000_add_hubspot_trust_sync_architecture.sql",
+      "20260306193000_fix_hubspot_sync_cron_headers.sql",
+      "20260306194000_enable_pg_net_for_cron_http.sql",
+      "20260306195000_reschedule_hubspot_sync_jobs_without_service_role_setting.sql",
+      "20260307010000_add_hubspot_sync_health_view.sql",
+      "20260308090000_add_hubspot_revenue_legacy_alias_column.sql",
+      "20260308101500_add_hubspot_sobriety_legacy_alias_column.sql"
+    ],
+    "localVersions": [
+      "20240217000000",
+      "20260218090000",
+      "20260218100000",
+      "20260218120000",
+      "20260218130000",
+      "20260218173000",
+      "20260219100000",
+      "20260219113000",
+      "20260219120000",
+      "20260219163000",
+      "20260221190500",
+      "20260222200000",
+      "20260222223936",
+      "20260223110000",
+      "20260223124500",
+      "20260226111420",
+      "20260226152000",
+      "20260226194000",
+      "20260226202000",
+      "20260227001000",
+      "20260227012000",
+      "20260302170000",
+      "20260302184500",
+      "20260303113000",
+      "20260304052707",
+      "20260304131739",
+      "20260305070314",
+      "20260305072852",
+      "20260305080649",
+      "20260305080708",
+      "20260305170000",
+      "20260305170100",
+      "20260306123000",
+      "20260306170000",
+      "20260306193000",
+      "20260306194000",
+      "20260306195000",
+      "20260307010000",
+      "20260308090000",
+      "20260308101500"
+    ],
+    "appliedVersions": [
+      "20240217000000",
+      "20260218090000",
+      "20260218100000",
+      "20260218120000",
+      "20260218130000",
+      "20260218173000",
+      "20260219100000",
+      "20260219113000",
+      "20260219120000",
+      "20260219163000",
+      "20260221190500",
+      "20260222200000",
+      "20260222223936",
+      "20260223110000",
+      "20260223124500",
+      "20260226111420",
+      "20260226152000",
+      "20260226194000",
+      "20260226202000",
+      "20260227001000",
+      "20260227012000",
+      "20260302170000",
+      "20260302184500",
+      "20260303113000",
+      "20260304052707",
+      "20260304131739",
+      "20260305070314",
+      "20260305072852",
+      "20260305080649",
+      "20260305080708",
+      "20260305170000",
+      "20260305170100",
+      "20260306123000",
+      "20260306170000",
+      "20260306193000",
+      "20260306194000",
+      "20260306195000"
+    ],
+    "pendingLocalNotApplied": [
+      "20260307010000",
+      "20260308090000",
+      "20260308101500"
+    ],
+    "appliedNotInRepo": [],
+    "creates": {
+      "table": {
+        "ai_briefings": [
+          "20260226111420_create_ai_briefings_table.sql"
+        ],
+        "ai_module_analyses": [
+          "20260227001000_add_ai_module_analyses.sql"
+        ],
+        "attendee_aliases": [
+          "20260218100000_create_attendee_aliases.sql"
+        ],
+        "donor_events": [
+          "20260305072852_add_donor_intelligence_infrastructure.sql"
+        ],
+        "hubspot_activity_contact_associations": [
+          "20260223110000_add_hubspot_meeting_activity_mapping_tables.sql"
+        ],
+        "hubspot_sync_errors": [
+          "20260306170000_add_hubspot_trust_sync_architecture.sql"
+        ],
+        "hubspot_sync_runs": [
+          "20260306170000_add_hubspot_trust_sync_architecture.sql"
+        ],
+        "hubspot_sync_state": [
+          "20260306170000_add_hubspot_trust_sync_architecture.sql"
+        ],
+        "hubspot_webhook_events": [
+          "20260306170000_add_hubspot_trust_sync_architecture.sql"
+        ],
+        "integration_credentials": [
+          "20240217000000_kpi_infrastructure.sql"
+        ],
+        "kpi_goals": [
+          "20260305070314_add_kpi_goals_and_trend_view.sql"
+        ],
+        "kpi_metrics": [
+          "20240217000000_kpi_infrastructure.sql"
+        ],
+        "mailchimp_campaigns": [
+          "20260219120000_mailchimp_campaign_tables.sql"
+        ],
+        "manual_donation_entries": [
+          "20260226194000_add_donations_module.sql"
+        ],
+        "notion_todos": [
+          "20240217000000_kpi_infrastructure.sql"
+        ],
+        "raw_hubspot_deals": [
+          "20260306170000_add_hubspot_trust_sync_architecture.sql"
+        ],
+        "raw_hubspot_meeting_activities": [
+          "20260223110000_add_hubspot_meeting_activity_mapping_tables.sql"
+        ],
+        "raw_luma_registrations": [
+          "20260219113000_add_luma_registrations.sql"
+        ],
+        "raw_zeffy_donations": [
+          "20260226194000_add_donations_module.sql"
+        ],
+        "raw_zeffy_supporter_profiles": [
+          "20260302184500_expand_donations_for_zeffy_exports.sql"
+        ],
+        "recovery_events": [
+          "20260305080649_add_recovery_events_table.sql",
+          "20260305170000_add_recovery_events_table.sql"
+        ],
+        "supported_integrations": [
+          "20240217000000_kpi_infrastructure.sql"
+        ],
+        "user_integrations": [
+          "20240217000000_kpi_infrastructure.sql"
+        ],
+        "zoom_attendance": [
+          "20260219100000_zoom_identity_tables.sql"
+        ],
+        "zoom_attendee_hubspot_mappings": [
+          "20260223110000_add_hubspot_meeting_activity_mapping_tables.sql"
+        ],
+        "zoom_identities": [
+          "20260219100000_zoom_identity_tables.sql"
+        ],
+        "zoom_merge_log": [
+          "20260219100000_zoom_identity_tables.sql"
+        ],
+        "zoom_notetaker_blocklist": [
+          "20260219100000_zoom_identity_tables.sql"
+        ],
+        "zoom_pending_review": [
+          "20260219100000_zoom_identity_tables.sql"
+        ],
+        "zoom_session_hubspot_activity_matches": [
+          "20260223110000_add_hubspot_meeting_activity_mapping_tables.sql"
+        ]
+      },
+      "view": {
+        "donation_transactions_unified": [
+          "20260226194000_add_donations_module.sql",
+          "20260302184500_expand_donations_for_zeffy_exports.sql"
+        ],
+        "hubspot_call_contact_rows_v1": [
+          "20260223124500_add_leads_funnel_unification_helper_views.sql"
+        ],
+        "hubspot_contact_identity_emails_v1": [
+          "20260223124500_add_leads_funnel_unification_helper_views.sql"
+        ],
+        "vw_donor_health": [
+          "20260305072852_add_donor_intelligence_infrastructure.sql"
+        ],
+        "vw_hubspot_contacts_est": [
+          "20260306170000_add_hubspot_trust_sync_architecture.sql"
+        ],
+        "vw_hubspot_deals_est": [
+          "20260306170000_add_hubspot_trust_sync_architecture.sql"
+        ],
+        "vw_hubspot_meeting_activities_est": [
+          "20260306170000_add_hubspot_trust_sync_architecture.sql"
+        ],
+        "vw_hubspot_sync_health": [
+          "20260306170000_add_hubspot_trust_sync_architecture.sql"
+        ],
+        "vw_hubspot_sync_health_observability": [
+          "20260307010000_add_hubspot_sync_health_view.sql"
+        ],
+        "vw_kpi_trend": [
+          "20260305070314_add_kpi_goals_and_trend_view.sql"
+        ],
+        "vw_noshow_candidates": [
+          "20260305080708_add_noshow_candidates_view.sql",
+          "20260305170100_add_noshow_candidates_view.sql"
+        ],
+        "vw_seo_ai_traffic_estimate": [
+          "20260222200000_seo_views.sql",
+          "20260222223936_seo_views.sql"
+        ],
+        "vw_seo_channel_daily": [
+          "20260222200000_seo_views.sql",
+          "20260222223936_seo_views.sql"
+        ],
+        "vw_seo_opportunity_pages": [
+          "20260222200000_seo_views.sql",
+          "20260222223936_seo_views.sql"
+        ],
+        "vw_seo_organic_zoom_attendees": [
+          "20260222200000_seo_views.sql",
+          "20260222223936_seo_views.sql"
+        ],
+        "vw_seo_ranking_drops": [
+          "20260222200000_seo_views.sql",
+          "20260222223936_seo_views.sql"
+        ],
+        "vw_seo_search_performance": [
+          "20260222200000_seo_views.sql",
+          "20260222223936_seo_views.sql"
+        ],
+        "zoom_meeting_attendee_rows_v1": [
+          "20260223124500_add_leads_funnel_unification_helper_views.sql"
+        ]
+      },
+      "function": {
+        "hubspot_claim_webhook_events": [
+          "20260306170000_add_hubspot_trust_sync_architecture.sql"
+        ],
+        "hubspot_guard_stale_update": [
+          "20260306170000_add_hubspot_trust_sync_architecture.sql"
+        ],
+        "hubspot_touch_updated_at": [
+          "20260306170000_add_hubspot_trust_sync_architecture.sql"
+        ],
+        "set_updated_at": [
+          "20260305070314_add_kpi_goals_and_trend_view.sql"
+        ],
+        "sync_hubspot_revenue_legacy_alias": [
+          "20260308090000_add_hubspot_revenue_legacy_alias_column.sql"
+        ],
+        "sync_hubspot_sobriety_legacy_alias": [
+          "20260308101500_add_hubspot_sobriety_legacy_alias_column.sql"
+        ]
+      }
+    }
+  },
+  "references": {
+    "filesScanned": [
+      "dashboard/e2e/dashboard-overview-board-wiring.spec.js",
+      "dashboard/e2e/example.spec.js",
+      "dashboard/e2e/leads-confidence-action.spec.js",
+      "dashboard/e2e/leads-manager-experiment-panels.spec.js",
+      "dashboard/e2e/leads-parity-guard.spec.js",
+      "dashboard/e2e/leads-qualified-parity.spec.js",
+      "dashboard/e2e/marketing.spec.js",
+      "dashboard/e2e/perf-load-smoke.spec.js",
+      "dashboard/src/App.jsx",
+      "dashboard/src/components/AIAnalysisCard.jsx",
+      "dashboard/src/components/AddToNotionButton.jsx",
+      "dashboard/src/components/CohortUnitEconomicsPreviewPanel.jsx",
+      "dashboard/src/components/DrillDownModal.jsx",
+      "dashboard/src/components/Header.jsx",
+      "dashboard/src/components/KPICard.jsx",
+      "dashboard/src/components/LeadsConfidenceActionPanel.jsx",
+      "dashboard/src/components/LeadsExperimentAnalyzerPanel.jsx",
+      "dashboard/src/components/LeadsManagerInsightsPanel.jsx",
+      "dashboard/src/components/LeadsParityGuardPanel.jsx",
+      "dashboard/src/components/LeadsQualificationParityPanel.jsx",
+      "dashboard/src/components/SendToNotionModal.jsx",
+      "dashboard/src/components/Sidebar.jsx",
+      "dashboard/src/components/TrendIntelligencePanel.jsx",
+      "dashboard/src/data/metaAdTrainingInstructionPack.js",
+      "dashboard/src/data/metaCohortUnitEconPreview.json",
+      "dashboard/src/lib/attendeeCanonicalization.js",
+      "dashboard/src/lib/env.js",
+      "dashboard/src/lib/kpiSnapshot.js",
+      "dashboard/src/lib/leadAnalytics.js",
+      "dashboard/src/lib/leadsActionQueue.js",
+      "dashboard/src/lib/leadsConfidenceModel.js",
+      "dashboard/src/lib/leadsExperimentAnalyzer.js",
+      "dashboard/src/lib/leadsExperimentRubric.js",
+      "dashboard/src/lib/leadsGroupAnalytics.js",
+      "dashboard/src/lib/leadsManagerInsights.js",
+      "dashboard/src/lib/leadsParityGuard.js",
+      "dashboard/src/lib/leadsQualificationRules.js",
+      "dashboard/src/lib/supabaseClient.js",
+      "dashboard/src/lib/zoomAttributionOverrides.js",
+      "dashboard/src/main.jsx",
+      "dashboard/src/views/AIBriefingDashboard.jsx",
+      "dashboard/src/views/AttendanceDashboard.jsx",
+      "dashboard/src/views/DashboardOverview.jsx",
+      "dashboard/src/views/DataCleaning.jsx",
+      "dashboard/src/views/DonationsDashboard.jsx",
+      "dashboard/src/views/EmailDashboard.jsx",
+      "dashboard/src/views/EmailMarketingDashboard.jsx",
+      "dashboard/src/views/LeadsDashboard.jsx",
+      "dashboard/src/views/TodosDashboard.jsx",
+      "dashboard/src/views/WebsiteTrafficDashboard.jsx",
+      "dashboard/tests/kpiDataIntegrityHelpers.test.mjs",
+      "dashboard/tests/kpiSnapshotContract.test.mjs",
+      "dashboard/tests/leadsQualificationRules.test.mjs",
+      "scripts/analyze_live_meeting.ts",
+      "scripts/apply_mailchimp_migration.js",
+      "scripts/audit_repo_db_simplification.mjs",
+      "scripts/bridge.ts",
+      "scripts/check_business_mastermind.ts",
+      "scripts/check_lead_analytics_readiness.ts",
+      "scripts/check_today_meeting.ts",
+      "scripts/deep_search_thursday.ts",
+      "scripts/diagnose_sam.ts",
+      "scripts/diagnose_zoom_history.ts",
+      "scripts/find_current_meeting.ts",
+      "scripts/find_id_in_recordings.ts",
+      "scripts/find_old_meeting_ids.ts",
+      "scripts/inspect_sam.ts",
+      "scripts/lib/kpiDataIntegrity.mjs",
+      "scripts/meta_cohort_unit_econ_analysis.js",
+      "scripts/query_thursday_metrics.ts",
+      "scripts/reset_identities.ts",
+      "scripts/test_hubspot.ts",
+      "scripts/test_mailchimp_sync.js",
+      "scripts/thursday_baseline.ts",
+      "scripts/topic_search.ts",
+      "scripts/trigger_luma_sync.ts",
+      "scripts/trigger_zoom_sync.ts",
+      "scripts/verify_all_thursday.ts",
+      "scripts/verify_fix.ts",
+      "scripts/verify_hubspot_sync_health.sql",
+      "scripts/verify_kpi_data_integrity.mjs",
+      "scripts/verify_kpi_data_integrity.sql",
+      "scripts/verify_legacy_id.ts",
+      "scripts/verify_may_june.ts",
+      "scripts/verify_results.ts",
+      "supabase/functions/_shared/hubspot_sync.ts",
+      "supabase/functions/ai-briefing/index.ts",
+      "supabase/functions/ai-module-analysis/index.ts",
+      "supabase/functions/analyze-leads-insights/index.ts",
+      "supabase/functions/donor-intelligence-agent/index.ts",
+      "supabase/functions/hubspot_bootstrap_backfill/index.ts",
+      "supabase/functions/hubspot_incremental_sync/index.ts",
+      "supabase/functions/hubspot_reconcile_sync/index.ts",
+      "supabase/functions/hubspot_webhook_ingest/index.ts",
+      "supabase/functions/hubspot_webhook_worker/index.ts",
+      "supabase/functions/ingest_zeffy_donations/index.ts",
+      "supabase/functions/manage_attendee_aliases/index.ts",
+      "supabase/functions/master-sync/index.ts",
+      "supabase/functions/no-show-recovery-agent/index.ts",
+      "supabase/functions/reconcile_zoom_attendee_hubspot_mappings/index.ts",
+      "supabase/functions/sync-metrics/index.ts",
+      "supabase/functions/sync_attendance_from_hubspot/index.ts",
+      "supabase/functions/sync_fb_ads/index.ts",
+      "supabase/functions/sync_google_analytics/index.ts",
+      "supabase/functions/sync_hubspot_meeting_activities/index.ts",
+      "supabase/functions/sync_kpis/deno.json",
+      "supabase/functions/sync_kpis/index.ts",
+      "supabase/functions/sync_luma_registrations/index.ts",
+      "supabase/functions/sync_mailchimp/index.ts",
+      "supabase/functions/sync_search_console/index.ts",
+      "supabase/functions/sync_zoom_attendance/index.ts"
+    ],
+    "tables": {
+      "ai_briefings": {
+        "count": 2,
+        "files": [
+          "dashboard/src/views/AIBriefingDashboard.jsx",
+          "supabase/functions/ai-briefing/index.ts"
+        ]
+      },
+      "ai_module_analyses": {
+        "count": 1,
+        "files": [
+          "supabase/functions/ai-module-analysis/index.ts"
+        ]
+      },
+      "attendee_aliases": {
+        "count": 8,
+        "files": [
+          "dashboard/src/views/AttendanceDashboard.jsx",
+          "dashboard/src/views/DataCleaning.jsx",
+          "dashboard/src/views/LeadsDashboard.jsx",
+          "supabase/functions/manage_attendee_aliases/index.ts",
+          "supabase/functions/reconcile_zoom_attendee_hubspot_mappings/index.ts",
+          "supabase/functions/sync-metrics/index.ts",
+          "supabase/functions/sync_zoom_attendance/index.ts",
+          "scripts/diagnose_sam.ts"
+        ]
+      },
+      "audit_log": {
+        "count": 0,
+        "files": []
+      },
+      "dim_funnel": {
+        "count": 0,
+        "files": []
+      },
+      "dim_kpi": {
+        "count": 0,
+        "files": []
+      },
+      "dim_week": {
+        "count": 0,
+        "files": []
+      },
+      "donor_events": {
+        "count": 1,
+        "files": [
+          "supabase/functions/donor-intelligence-agent/index.ts"
+        ]
+      },
+      "fact_attendance_event": {
+        "count": 0,
+        "files": []
+      },
+      "fact_kpi_weekly": {
+        "count": 0,
+        "files": []
+      },
+      "fact_kpi_weekly_overrides": {
+        "count": 0,
+        "files": []
+      },
+      "fact_kpi_weekly_versions": {
+        "count": 0,
+        "files": []
+      },
+      "fb_funnel_rules": {
+        "count": 1,
+        "files": [
+          "supabase/functions/sync_fb_ads/index.ts"
+        ]
+      },
+      "funnel_rules": {
+        "count": 0,
+        "files": []
+      },
+      "hubspot_activity_contact_associations": {
+        "count": 11,
+        "files": [
+          "dashboard/src/views/AttendanceDashboard.jsx",
+          "dashboard/src/views/DashboardOverview.jsx",
+          "dashboard/src/views/LeadsDashboard.jsx",
+          "supabase/functions/reconcile_zoom_attendee_hubspot_mappings/index.ts",
+          "supabase/functions/sync_attendance_from_hubspot/index.ts",
+          "supabase/functions/sync_hubspot_meeting_activities/index.ts",
+          "supabase/functions/_shared/hubspot_sync.ts",
+          "scripts/audit_repo_db_simplification.mjs",
+          "scripts/meta_cohort_unit_econ_analysis.js",
+          "scripts/verify_kpi_data_integrity.mjs",
+          "scripts/verify_kpi_data_integrity.sql"
+        ]
+      },
+      "hubspot_sync_errors": {
+        "count": 2,
+        "files": [
+          "supabase/functions/_shared/hubspot_sync.ts",
+          "scripts/verify_hubspot_sync_health.sql"
+        ]
+      },
+      "hubspot_sync_runs": {
+        "count": 2,
+        "files": [
+          "supabase/functions/_shared/hubspot_sync.ts",
+          "scripts/verify_hubspot_sync_health.sql"
+        ]
+      },
+      "hubspot_sync_state": {
+        "count": 1,
+        "files": [
+          "supabase/functions/_shared/hubspot_sync.ts"
+        ]
+      },
+      "hubspot_webhook_events": {
+        "count": 2,
+        "files": [
+          "supabase/functions/hubspot_webhook_ingest/index.ts",
+          "supabase/functions/hubspot_webhook_worker/index.ts"
+        ]
+      },
+      "integration_credentials": {
+        "count": 1,
+        "files": [
+          "supabase/functions/sync-metrics/index.ts"
+        ]
+      },
+      "kpi_goals": {
+        "count": 1,
+        "files": [
+          "dashboard/src/components/TrendIntelligencePanel.jsx"
+        ]
+      },
+      "kpi_metrics": {
+        "count": 14,
+        "files": [
+          "dashboard/src/views/DashboardOverview.jsx",
+          "dashboard/src/views/LeadsDashboard.jsx",
+          "dashboard/src/views/WebsiteTrafficDashboard.jsx",
+          "supabase/functions/ai-briefing/index.ts",
+          "supabase/functions/reconcile_zoom_attendee_hubspot_mappings/index.ts",
+          "supabase/functions/sync_google_analytics/index.ts",
+          "supabase/functions/sync_luma_registrations/index.ts",
+          "supabase/functions/sync_search_console/index.ts",
+          "supabase/functions/sync_zoom_attendance/index.ts",
+          "scripts/check_lead_analytics_readiness.ts",
+          "scripts/query_thursday_metrics.ts",
+          "scripts/verify_all_thursday.ts",
+          "scripts/verify_may_june.ts",
+          "scripts/verify_results.ts"
+        ]
+      },
+      "mailchimp_campaigns": {
+        "count": 5,
+        "files": [
+          "dashboard/src/views/EmailDashboard.jsx",
+          "supabase/functions/ai-briefing/index.ts",
+          "supabase/functions/sync_mailchimp/index.ts",
+          "scripts/apply_mailchimp_migration.js",
+          "scripts/test_mailchimp_sync.js"
+        ]
+      },
+      "manual_donation_entries": {
+        "count": 0,
+        "files": []
+      },
+      "manual_money_event": {
+        "count": 0,
+        "files": []
+      },
+      "notion_todos": {
+        "count": 4,
+        "files": [
+          "dashboard/src/views/TodosDashboard.jsx",
+          "supabase/functions/ai-briefing/index.ts",
+          "supabase/functions/master-sync/index.ts",
+          "supabase/functions/sync-metrics/index.ts"
+        ]
+      },
+      "profiles": {
+        "count": 1,
+        "files": [
+          "dashboard/src/views/DonationsDashboard.jsx"
+        ]
+      },
+      "raw_fb_ads_insights_daily": {
+        "count": 8,
+        "files": [
+          "dashboard/src/data/metaCohortUnitEconPreview.json",
+          "dashboard/src/views/DashboardOverview.jsx",
+          "dashboard/src/views/LeadsDashboard.jsx",
+          "supabase/functions/ai-briefing/index.ts",
+          "supabase/functions/sync_fb_ads/index.ts",
+          "scripts/audit_repo_db_simplification.mjs",
+          "scripts/check_lead_analytics_readiness.ts",
+          "scripts/meta_cohort_unit_econ_analysis.js"
+        ]
+      },
+      "raw_hubspot_call_logs": {
+        "count": 0,
+        "files": []
+      },
+      "raw_hubspot_contacts": {
+        "count": 14,
+        "files": [
+          "dashboard/src/lib/zoomAttributionOverrides.js",
+          "dashboard/src/views/AttendanceDashboard.jsx",
+          "dashboard/src/views/DashboardOverview.jsx",
+          "dashboard/src/views/LeadsDashboard.jsx",
+          "supabase/functions/ai-briefing/index.ts",
+          "supabase/functions/sync_hubspot_meeting_activities/index.ts",
+          "supabase/functions/sync_kpis/index.ts",
+          "supabase/functions/sync_luma_registrations/index.ts",
+          "supabase/functions/_shared/hubspot_sync.ts",
+          "scripts/audit_repo_db_simplification.mjs",
+          "scripts/check_lead_analytics_readiness.ts",
+          "scripts/meta_cohort_unit_econ_analysis.js",
+          "scripts/verify_kpi_data_integrity.mjs",
+          "scripts/verify_kpi_data_integrity.sql"
+        ]
+      },
+      "raw_hubspot_deals": {
+        "count": 1,
+        "files": [
+          "supabase/functions/_shared/hubspot_sync.ts"
+        ]
+      },
+      "raw_hubspot_meeting_activities": {
+        "count": 12,
+        "files": [
+          "dashboard/src/views/AttendanceDashboard.jsx",
+          "dashboard/src/views/DashboardOverview.jsx",
+          "dashboard/src/views/LeadsDashboard.jsx",
+          "supabase/functions/ai-briefing/index.ts",
+          "supabase/functions/reconcile_zoom_attendee_hubspot_mappings/index.ts",
+          "supabase/functions/sync_attendance_from_hubspot/index.ts",
+          "supabase/functions/sync_hubspot_meeting_activities/index.ts",
+          "supabase/functions/_shared/hubspot_sync.ts",
+          "scripts/audit_repo_db_simplification.mjs",
+          "scripts/meta_cohort_unit_econ_analysis.js",
+          "scripts/verify_kpi_data_integrity.mjs",
+          "scripts/verify_kpi_data_integrity.sql"
+        ]
+      },
+      "raw_hubspot_meetings": {
+        "count": 0,
+        "files": []
+      },
+      "raw_hubspot_meetings_v3": {
+        "count": 0,
+        "files": []
+      },
+      "raw_luma_registrations": {
+        "count": 6,
+        "files": [
+          "dashboard/src/data/metaCohortUnitEconPreview.json",
+          "dashboard/src/views/LeadsDashboard.jsx",
+          "supabase/functions/ai-briefing/index.ts",
+          "supabase/functions/sync_luma_registrations/index.ts",
+          "scripts/check_lead_analytics_readiness.ts",
+          "scripts/meta_cohort_unit_econ_analysis.js"
+        ]
+      },
+      "raw_social_weekly": {
+        "count": 0,
+        "files": []
+      },
+      "raw_zeffy_donations": {
+        "count": 1,
+        "files": [
+          "supabase/functions/ingest_zeffy_donations/index.ts"
+        ]
+      },
+      "raw_zeffy_supporter_profiles": {
+        "count": 1,
+        "files": [
+          "dashboard/src/views/DonationsDashboard.jsx"
+        ]
+      },
+      "recovery_events": {
+        "count": 1,
+        "files": [
+          "supabase/functions/no-show-recovery-agent/index.ts"
+        ]
+      },
+      "supported_integrations": {
+        "count": 1,
+        "files": [
+          "supabase/functions/sync-metrics/index.ts"
+        ]
+      },
+      "user_integrations": {
+        "count": 1,
+        "files": [
+          "supabase/functions/sync-metrics/index.ts"
+        ]
+      },
+      "zoom_attendance": {
+        "count": 2,
+        "files": [
+          "dashboard/src/views/DataCleaning.jsx",
+          "scripts/reset_identities.ts"
+        ]
+      },
+      "zoom_attendee_hubspot_mappings": {
+        "count": 2,
+        "files": [
+          "dashboard/src/views/LeadsDashboard.jsx",
+          "supabase/functions/reconcile_zoom_attendee_hubspot_mappings/index.ts"
+        ]
+      },
+      "zoom_identities": {
+        "count": 5,
+        "files": [
+          "dashboard/src/views/DataCleaning.jsx",
+          "scripts/diagnose_sam.ts",
+          "scripts/inspect_sam.ts",
+          "scripts/reset_identities.ts",
+          "scripts/verify_fix.ts"
+        ]
+      },
+      "zoom_merge_log": {
+        "count": 2,
+        "files": [
+          "dashboard/src/views/DataCleaning.jsx",
+          "scripts/reset_identities.ts"
+        ]
+      },
+      "zoom_notetaker_blocklist": {
+        "count": 1,
+        "files": [
+          "dashboard/src/views/DataCleaning.jsx"
+        ]
+      },
+      "zoom_pending_review": {
+        "count": 2,
+        "files": [
+          "dashboard/src/views/DataCleaning.jsx",
+          "scripts/reset_identities.ts"
+        ]
+      },
+      "zoom_session_hubspot_activity_matches": {
+        "count": 1,
+        "files": [
+          "supabase/functions/reconcile_zoom_attendee_hubspot_mappings/index.ts"
+        ]
+      }
+    },
+    "views": {
+      "donation_transactions_unified": {
+        "count": 2,
+        "files": [
+          "dashboard/src/views/DashboardOverview.jsx",
+          "dashboard/src/views/DonationsDashboard.jsx"
+        ]
+      },
+      "hubspot_call_contact_rows_v1": {
+        "count": 0,
+        "files": []
+      },
+      "hubspot_contact_identity_emails_v1": {
+        "count": 0,
+        "files": []
+      },
+      "v_kpi_weekly_final": {
+        "count": 0,
+        "files": []
+      },
+      "vw_donor_health": {
+        "count": 2,
+        "files": [
+          "dashboard/src/views/DonationsDashboard.jsx",
+          "supabase/functions/donor-intelligence-agent/index.ts"
+        ]
+      },
+      "vw_hubspot_contacts_est": {
+        "count": 0,
+        "files": []
+      },
+      "vw_hubspot_deals_est": {
+        "count": 0,
+        "files": []
+      },
+      "vw_hubspot_meeting_activities_est": {
+        "count": 0,
+        "files": []
+      },
+      "vw_hubspot_sync_health": {
+        "count": 0,
+        "files": []
+      },
+      "vw_kpi_trend": {
+        "count": 2,
+        "files": [
+          "dashboard/src/components/TrendIntelligencePanel.jsx",
+          "supabase/functions/ai-briefing/index.ts"
+        ]
+      },
+      "vw_noshow_candidates": {
+        "count": 1,
+        "files": [
+          "supabase/functions/no-show-recovery-agent/index.ts"
+        ]
+      },
+      "vw_seo_ai_traffic_estimate": {
+        "count": 0,
+        "files": []
+      },
+      "vw_seo_channel_daily": {
+        "count": 0,
+        "files": []
+      },
+      "vw_seo_opportunity_pages": {
+        "count": 1,
+        "files": [
+          "dashboard/src/views/WebsiteTrafficDashboard.jsx"
+        ]
+      },
+      "vw_seo_organic_zoom_attendees": {
+        "count": 1,
+        "files": [
+          "dashboard/src/views/WebsiteTrafficDashboard.jsx"
+        ]
+      },
+      "vw_seo_ranking_drops": {
+        "count": 1,
+        "files": [
+          "dashboard/src/views/WebsiteTrafficDashboard.jsx"
+        ]
+      },
+      "vw_seo_search_performance": {
+        "count": 0,
+        "files": []
+      },
+      "zoom_meeting_attendee_rows_v1": {
+        "count": 0,
+        "files": []
+      }
+    },
+    "functions": {
+      "apply_fb_funnel_rules": {
+        "count": 0,
+        "files": []
+      },
+      "ensure_week": {
+        "count": 0,
+        "files": []
+      },
+      "hubspot_claim_webhook_events": {
+        "count": 1,
+        "files": [
+          "supabase/functions/hubspot_webhook_worker/index.ts"
+        ]
+      },
+      "hubspot_guard_stale_update": {
+        "count": 0,
+        "files": []
+      },
+      "hubspot_touch_updated_at": {
+        "count": 0,
+        "files": []
+      },
+      "ingest_attendance_from_calls": {
+        "count": 0,
+        "files": []
+      },
+      "recompute_all": {
+        "count": 0,
+        "files": []
+      },
+      "recompute_week": {
+        "count": 0,
+        "files": []
+      },
+      "set_updated_at": {
+        "count": 0,
+        "files": []
+      },
+      "set_week_start_from_occurred_at": {
+        "count": 0,
+        "files": []
+      },
+      "upsert_intro_meetings_hs": {
+        "count": 0,
+        "files": []
+      },
+      "week_start_est": {
+        "count": 0,
+        "files": []
+      }
+    }
+  },
+  "findings": {
+    "highConfidenceLegacyCandidates": [
+      {
+        "type": "function",
+        "name": "apply_fb_funnel_rules",
+        "signature": "apply_fb_funnel_rules(p_start date, p_end date)",
+        "inMigrations": false,
+        "referencedInCode": false
+      },
+      {
+        "type": "function",
+        "name": "ensure_week",
+        "signature": "ensure_week(p_week_start date)",
+        "inMigrations": false,
+        "referencedInCode": false
+      },
+      {
+        "type": "function",
+        "name": "ingest_attendance_from_calls",
+        "signature": "ingest_attendance_from_calls(p_week_start date)",
+        "inMigrations": false,
+        "referencedInCode": false
+      },
+      {
+        "type": "function",
+        "name": "ingest_attendance_from_calls",
+        "signature": "ingest_attendance_from_calls(p_week_start date, p_title_ilike text, p_day_key text)",
+        "inMigrations": false,
+        "referencedInCode": false
+      },
+      {
+        "type": "function",
+        "name": "recompute_all",
+        "signature": "recompute_all(p_week_start date)",
+        "inMigrations": false,
+        "referencedInCode": false
+      },
+      {
+        "type": "function",
+        "name": "recompute_week",
+        "signature": "recompute_week(p_week_start date)",
+        "inMigrations": false,
+        "referencedInCode": false
+      },
+      {
+        "type": "function",
+        "name": "set_week_start_from_occurred_at",
+        "signature": "set_week_start_from_occurred_at()",
+        "inMigrations": false,
+        "referencedInCode": false
+      },
+      {
+        "type": "function",
+        "name": "upsert_intro_meetings_hs",
+        "signature": "upsert_intro_meetings_hs(p_week_start date)",
+        "inMigrations": false,
+        "referencedInCode": false
+      },
+      {
+        "type": "function",
+        "name": "week_start_est",
+        "signature": "week_start_est(ts timestamp with time zone)",
+        "inMigrations": false,
+        "referencedInCode": false
+      },
+      {
+        "type": "table",
+        "name": "audit_log",
+        "inMigrations": false,
+        "referencedInCode": false
+      },
+      {
+        "type": "table",
+        "name": "dim_funnel",
+        "inMigrations": false,
+        "referencedInCode": false
+      },
+      {
+        "type": "table",
+        "name": "dim_kpi",
+        "inMigrations": false,
+        "referencedInCode": false
+      },
+      {
+        "type": "table",
+        "name": "dim_week",
+        "inMigrations": false,
+        "referencedInCode": false
+      },
+      {
+        "type": "table",
+        "name": "fact_attendance_event",
+        "inMigrations": false,
+        "referencedInCode": false
+      },
+      {
+        "type": "table",
+        "name": "fact_kpi_weekly",
+        "inMigrations": false,
+        "referencedInCode": false
+      },
+      {
+        "type": "table",
+        "name": "fact_kpi_weekly_overrides",
+        "inMigrations": false,
+        "referencedInCode": false
+      },
+      {
+        "type": "table",
+        "name": "fact_kpi_weekly_versions",
+        "inMigrations": false,
+        "referencedInCode": false
+      },
+      {
+        "type": "table",
+        "name": "funnel_rules",
+        "inMigrations": false,
+        "referencedInCode": false
+      },
+      {
+        "type": "table",
+        "name": "manual_money_event",
+        "inMigrations": false,
+        "referencedInCode": false
+      },
+      {
+        "type": "table",
+        "name": "raw_hubspot_call_logs",
+        "inMigrations": false,
+        "referencedInCode": false
+      },
+      {
+        "type": "table",
+        "name": "raw_hubspot_meetings",
+        "inMigrations": false,
+        "referencedInCode": false
+      },
+      {
+        "type": "table",
+        "name": "raw_hubspot_meetings_v3",
+        "inMigrations": false,
+        "referencedInCode": false
+      },
+      {
+        "type": "table",
+        "name": "raw_social_weekly",
+        "inMigrations": false,
+        "referencedInCode": false
+      },
+      {
+        "type": "view",
+        "name": "v_kpi_weekly_final",
+        "inMigrations": false,
+        "referencedInCode": false
+      }
+    ],
+    "potentiallyUnused": [
+      {
+        "type": "function",
+        "name": "hubspot_guard_stale_update",
+        "signature": "hubspot_guard_stale_update()",
+        "inMigrations": true,
+        "referencedInCode": false
+      },
+      {
+        "type": "function",
+        "name": "hubspot_touch_updated_at",
+        "signature": "hubspot_touch_updated_at()",
+        "inMigrations": true,
+        "referencedInCode": false
+      },
+      {
+        "type": "function",
+        "name": "set_updated_at",
+        "signature": "set_updated_at()",
+        "inMigrations": true,
+        "referencedInCode": false
+      },
+      {
+        "type": "table",
+        "name": "manual_donation_entries",
+        "inMigrations": true,
+        "referencedInCode": false
+      },
+      {
+        "type": "view",
+        "name": "hubspot_call_contact_rows_v1",
+        "inMigrations": true,
+        "referencedInCode": false
+      },
+      {
+        "type": "view",
+        "name": "hubspot_contact_identity_emails_v1",
+        "inMigrations": true,
+        "referencedInCode": false
+      },
+      {
+        "type": "view",
+        "name": "vw_hubspot_contacts_est",
+        "inMigrations": true,
+        "referencedInCode": false
+      },
+      {
+        "type": "view",
+        "name": "vw_hubspot_deals_est",
+        "inMigrations": true,
+        "referencedInCode": false
+      },
+      {
+        "type": "view",
+        "name": "vw_hubspot_meeting_activities_est",
+        "inMigrations": true,
+        "referencedInCode": false
+      },
+      {
+        "type": "view",
+        "name": "vw_hubspot_sync_health",
+        "inMigrations": true,
+        "referencedInCode": false
+      },
+      {
+        "type": "view",
+        "name": "vw_seo_ai_traffic_estimate",
+        "inMigrations": true,
+        "referencedInCode": false
+      },
+      {
+        "type": "view",
+        "name": "vw_seo_channel_daily",
+        "inMigrations": true,
+        "referencedInCode": false
+      },
+      {
+        "type": "view",
+        "name": "vw_seo_search_performance",
+        "inMigrations": true,
+        "referencedInCode": false
+      },
+      {
+        "type": "view",
+        "name": "zoom_meeting_attendee_rows_v1",
+        "inMigrations": true,
+        "referencedInCode": false
+      }
+    ],
+    "duplicateMigrationObjects": [
+      {
+        "type": "table",
+        "name": "recovery_events",
+        "files": [
+          "20260305080649_add_recovery_events_table.sql",
+          "20260305170000_add_recovery_events_table.sql"
+        ]
+      },
+      {
+        "type": "view",
+        "name": "donation_transactions_unified",
+        "files": [
+          "20260226194000_add_donations_module.sql",
+          "20260302184500_expand_donations_for_zeffy_exports.sql"
+        ]
+      },
+      {
+        "type": "view",
+        "name": "vw_noshow_candidates",
+        "files": [
+          "20260305080708_add_noshow_candidates_view.sql",
+          "20260305170100_add_noshow_candidates_view.sql"
+        ]
+      },
+      {
+        "type": "view",
+        "name": "vw_seo_ai_traffic_estimate",
+        "files": [
+          "20260222200000_seo_views.sql",
+          "20260222223936_seo_views.sql"
+        ]
+      },
+      {
+        "type": "view",
+        "name": "vw_seo_channel_daily",
+        "files": [
+          "20260222200000_seo_views.sql",
+          "20260222223936_seo_views.sql"
+        ]
+      },
+      {
+        "type": "view",
+        "name": "vw_seo_opportunity_pages",
+        "files": [
+          "20260222200000_seo_views.sql",
+          "20260222223936_seo_views.sql"
+        ]
+      },
+      {
+        "type": "view",
+        "name": "vw_seo_organic_zoom_attendees",
+        "files": [
+          "20260222200000_seo_views.sql",
+          "20260222223936_seo_views.sql"
+        ]
+      },
+      {
+        "type": "view",
+        "name": "vw_seo_ranking_drops",
+        "files": [
+          "20260222200000_seo_views.sql",
+          "20260222223936_seo_views.sql"
+        ]
+      },
+      {
+        "type": "view",
+        "name": "vw_seo_search_performance",
+        "files": [
+          "20260222200000_seo_views.sql",
+          "20260222223936_seo_views.sql"
+        ]
+      }
+    ],
+    "orphanPolicies": [],
+    "orphanIndexes": [],
+    "environmentIssues": [
+      {
+        "severity": "warning",
+        "message": "10 edge functions have verify_jwt=false; validate each endpoint against explicit secret/header guards."
+      },
+      {
+        "severity": "warning",
+        "message": "supabase/config.toml enables db.seed but supabase/seed.sql is missing."
+      }
+    ]
+  },
+  "recommendations": {
+    "schemaSimplification": [
+      "Promote `raw_hubspot_contacts`, `raw_hubspot_meeting_activities`, `hubspot_activity_contact_associations`, and `raw_fb_ads_insights_daily` as the only core KPI ingest tables.",
+      "Move high-confidence legacy objects to `archive` schema first; avoid immediate drops.",
+      "Keep qualification logic in one canonical module (`dashboard/src/lib/leadsQualificationRules.js`) and reference it from all KPI snapshots.",
+      "Publish a single `north_star_kpi_snapshot` contract document and reject undocumented metric formulas.",
+      "Consolidate duplicate object-creation migrations into one canonical migration per object."
+    ],
+    "migrationCleanup": [
+      "Create a consolidation migration that supersedes duplicate object definitions and marks legacy files as archived (do not delete applied history).",
+      "Apply missing local migrations in staging, run integrity checks, then apply to production after PASS.",
+      "Add CI check to fail when local migration versions diverge from expected production snapshot.",
+      "Pending local migrations not applied remotely: 20260307010000, 20260308090000, 20260308101500."
+    ],
+    "targetArchitecture": [
+      "Layer 1 (Ingest): HubSpot/Meta raw tables with source IDs + sync timestamps + idempotency keys.",
+      "Layer 2 (Canonical): deterministic SQL views/materialized views for leads, attendance, and spend.",
+      "Layer 3 (Contract): dashboard reads from versioned KPI snapshot helpers with explicit date-window and timezone policy.",
+      "Layer 4 (Integrity): scheduled reconciliation (`npm run integrity:check:strict`) with alerts on mismatch or stale sync.",
+      "Environment split: separate secrets and project refs for local/staging/prod; no shared production credentials in local files."
+    ]
+  },
+  "paths": {
+    "reportPath": "docs/audits/repo-db-simplification-audit.md",
+    "jsonPath": "docs/audits/repo-db-simplification-audit.json",
+    "sqlPlanPath": "docs/data-integrity/proposed-db-cleanup.sql"
+  }
+}

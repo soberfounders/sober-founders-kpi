@@ -31,17 +31,21 @@ and Supabase.
 
 ### Environment Variables
 
-Create a `.env` file in the root and in `/dashboard` with the following (see
-`.env.example`):
+Use templates:
+
+- root: `.env.example` -> `.env` (server-side scripts + edge function secrets)
+- frontend: `dashboard/.env.example` -> `dashboard/.env.local` (Vite client vars only)
+
+Common variables:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 - `VITE_ENABLE_REMOTE_AI_MODULE_ANALYSIS` (`true` to enable live AI module analysis calls)
-- `VITE_DASHBOARD_LOOKBACK_DAYS` (recommended: `730`)
-- `VITE_HUBSPOT_CONTACT_LOOKBACK_DAYS` (recommended: `730`)
-- `VITE_LEADS_LOOKBACK_DAYS` (recommended: `730`)
-- `VITE_LEADS_ATTRIBUTION_HISTORY_DAYS` (recommended: `730`)
-- `VITE_ATTENDANCE_BACKFILL_DAYS` (recommended: `730`)
+- `VITE_DASHBOARD_LOOKBACK_DAYS` (default/recommended: `365`)
+- `VITE_HUBSPOT_CONTACT_LOOKBACK_DAYS` (default/recommended: `365`)
+- `VITE_LEADS_LOOKBACK_DAYS` (default/recommended: `365`)
+- `VITE_LEADS_ATTRIBUTION_HISTORY_DAYS` (default/recommended: `120`)
+- `VITE_ATTENDANCE_BACKFILL_DAYS` (default/recommended: `365`)
 - `META_ACCESS_TOKEN`
 - `HUBSPOT_PRIVATE_APP_TOKEN`
 - `LUMA_API_KEY` (for `sync_luma_registrations` function)
@@ -70,11 +74,11 @@ The wrapper auto-loads root `.env`, so you can keep moving without manual `expor
   - `VITE_SUPABASE_URL`
   - `VITE_SUPABASE_ANON_KEY`
   - `VITE_ENABLE_REMOTE_AI_MODULE_ANALYSIS` (`false` by default unless `ai-module-analysis` is deployed and reachable)
-  - `VITE_DASHBOARD_LOOKBACK_DAYS` (`730`)
-  - `VITE_HUBSPOT_CONTACT_LOOKBACK_DAYS` (`730`)
-  - `VITE_LEADS_LOOKBACK_DAYS` (`730`)
-  - `VITE_LEADS_ATTRIBUTION_HISTORY_DAYS` (`730`)
-  - `VITE_ATTENDANCE_BACKFILL_DAYS` (`730`)
+  - `VITE_DASHBOARD_LOOKBACK_DAYS` (`365`)
+  - `VITE_HUBSPOT_CONTACT_LOOKBACK_DAYS` (`365`)
+  - `VITE_LEADS_LOOKBACK_DAYS` (`365`)
+  - `VITE_LEADS_ATTRIBUTION_HISTORY_DAYS` (`120`)
+  - `VITE_ATTENDANCE_BACKFILL_DAYS` (`365`)
 
 ### Supabase Deploy Notes (Edge + Migrations)
 
@@ -143,11 +147,14 @@ Commands:
 - `npm run integrity:check`
 - `npm run integrity:check:strict` (requires `HUBSPOT_PRIVATE_APP_TOKEN`)
 - `npm run integrity:check:json`
+- `npm run integrity:audit:repo-db` (schema/object usage audit + cleanup SQL plan)
 
 Artifacts:
 
 - `docs/audits/kpi-data-integrity-latest.md`
 - `docs/audits/kpi-data-integrity-latest.json` (when using `integrity:check:json`)
+- `docs/audits/repo-db-simplification-audit.md`
+- `docs/data-integrity/proposed-db-cleanup.sql`
 
 Documentation:
 

@@ -6,6 +6,7 @@
 ## Required Commands
 ```bash
 npm run integrity:check
+npm run integrity:audit:repo-db
 node --test "dashboard/tests/**/*.test.mjs"
 npm --prefix dashboard run test:e2e -- leads --reporter=line
 npm --prefix dashboard run test:e2e -- dashboard-overview-board-wiring.spec.js --reporter=line
@@ -40,6 +41,10 @@ npm run integrity:check:strict
 ## Evidence Log
 - Integrity report path:
   - `docs/audits/kpi-data-integrity-latest.md`
+- Repo/schema audit path:
+  - `docs/audits/repo-db-simplification-audit.md`
+- Cleanup SQL plan path:
+  - `docs/data-integrity/proposed-db-cleanup.sql`
 - Optional JSON report path:
   - `docs/audits/kpi-data-integrity-latest.json`
 

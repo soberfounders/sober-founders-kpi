@@ -61,6 +61,11 @@ JSON artifact:
 npm run integrity:check:json
 ```
 
+Repository/schema simplification audit:
+```bash
+npm run integrity:audit:repo-db
+```
+
 Behavior:
 - Pulls raw contacts/activities/associations from Supabase Postgres.
 - Computes 7/30/90 window KPIs with canonical dashboard logic.
@@ -68,6 +73,8 @@ Behavior:
 - Runs duplicate and sync-health guard rails.
 - Optionally runs row-level HubSpot parity sample checks.
 - Writes markdown report to `docs/audits/kpi-data-integrity-latest.md`.
+- Writes schema/object cleanup audit to `docs/audits/repo-db-simplification-audit.md`.
+- Writes non-destructive cleanup SQL plan to `docs/data-integrity/proposed-db-cleanup.sql`.
 
 ### 2) SQL pack (manual DB verification)
 Use:
