@@ -178,16 +178,25 @@ const checkSecurityHooks = () => {
 };
 
 const runCommand = (label, command, commandArgs) => {
-  const run = spawnSync(command, commandArgs, {
-    cwd: ROOT,
-    stdio: "pipe",
-    shell: process.platform === "win32",
-    encoding: "utf8",
-  });
+  const isWindows = process.platform === "win32";
+  const run = isWindows
+    ? spawnSync("cmd.exe", ["/d", "/s", "/c", [command, ...commandArgs].join(" ")], {
+      cwd: ROOT,
+      stdio: "pipe",
+      shell: false,
+      encoding: "utf8",
+    })
+    : spawnSync(command, commandArgs, {
+      cwd: ROOT,
+      stdio: "pipe",
+      shell: false,
+      encoding: "utf8",
+    });
 
   const ok = run.status === 0;
   const output = `${run.stdout || ""}${run.stderr || ""}`.trim();
-  addResult(label, ok, ok ? "passed" : output.slice(0, 1600));
+  const errorText = run.error ? `\n${String(run.error.message || run.error)}` : "";
+  addResult(label, ok, ok ? "passed" : `${output}${errorText}`.slice(0, 1600));
 };
 
 const checkCommands = () => {

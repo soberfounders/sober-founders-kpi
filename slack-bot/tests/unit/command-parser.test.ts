@@ -22,7 +22,7 @@ describe("parseKpiCommand", () => {
     expect(parsed.subcommand).toBe("tasks");
     expect(parsed.owner).toBe("Andrew");
     expect(parsed.team).toBe("ops");
-    expect(parsed.priority).toBe("High");
+    expect(parsed.priority).toBe("High Priority");
   });
 
   it("parses followup owner and due date", () => {

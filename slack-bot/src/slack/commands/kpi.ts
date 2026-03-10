@@ -21,6 +21,7 @@ const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const parseKeyValueTokens = (tokens: string[]): { values: Record<string, string>; freeText: string[] } => {
   const values: Record<string, string> = {};
   const freeText: string[] = [];
+  let activeKey: string | null = null;
 
   for (const token of tokens) {
     const idx = token.indexOf("=");
@@ -29,9 +30,16 @@ const parseKeyValueTokens = (tokens: string[]): { values: Record<string, string>
       const value = token.slice(idx + 1).trim();
       if (key && value) {
         values[key] = value;
+        activeKey = key;
         continue;
       }
     }
+
+    if (activeKey) {
+      values[activeKey] = `${values[activeKey]} ${token}`.trim();
+      continue;
+    }
+
     freeText.push(token);
   }
 

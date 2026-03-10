@@ -9,6 +9,7 @@
     "slack:start": "npm --prefix slack-bot run start",
     "slack:test": "npm --prefix slack-bot run test",
     "slack:lint": "npm --prefix slack-bot run lint",
+    "qa:slack-bot": "node scripts/qa_slack_bot_integration.mjs",
     "integrity:check": "node scripts/verify_kpi_data_integrity.mjs",
     "integrity:check:strict": "node scripts/verify_kpi_data_integrity.mjs --strict-hubspot-parity",
     "integrity:check:json": "node scripts/verify_kpi_data_integrity.mjs --json=docs/audits/kpi-data-integrity-latest.json",
