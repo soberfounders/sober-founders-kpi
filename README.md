@@ -8,6 +8,7 @@ and Supabase.
 - `/dashboard`: The React frontend application.
 - `/supabase`: Supabase Edge Functions and configuration.
 - `/docs`: Analytics framework and implementation notes.
+- `/slack-bot`: Slack KPI Copilot worker (Bolt + Socket Mode + OpenAI Responses API).
 - Root: Backend scripts for data ingestion and processing.
 
 ## Tech Stack
@@ -28,6 +29,22 @@ and Supabase.
 1. `cd dashboard`
 2. `npm install`
 3. `npm run dev`
+
+### Slack Bot Setup
+
+1. `npm --prefix slack-bot install`
+2. Copy `slack-bot/.env.example` to `slack-bot/.env` and fill credentials
+3. Apply Supabase migration `20260310170000_add_slack_kpi_copilot_tables.sql`
+4. `npm run slack:dev`
+
+Useful commands:
+
+- `npm run slack:dev`
+- `npm run slack:start`
+- `npm run slack:lint`
+- `npm run slack:test`
+
+See `slack-bot/README.md` for full Slack app setup checklist, scopes, slash command registration, and Railway deployment instructions.
 
 ### Environment Variables
 
