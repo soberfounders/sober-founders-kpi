@@ -40,14 +40,15 @@ test('dashboard overview KPI contract renders and remains stable', async ({ page
   await expect(page.getByText('Attendance (3 Suggestions)', { exact: true })).toBeVisible();
   await expect(page.getByText('Donations (3 Suggestions)', { exact: true })).toBeVisible();
   await expect(page.getByText('Operations (3 Suggestions)', { exact: true })).toBeVisible();
+  await expect(page.getByText('Finished looks like:', { exact: false }).first()).toBeVisible();
 
   const rangeSelect = page.getByTestId('dashboard-time-range-select');
   await expect(rangeSelect).toBeVisible();
   await rangeSelect.selectOption('last_month');
   await expect(page.locator('main')).toContainText('Current period: Month of');
 
-  await expect(page.getByRole('button', { name: /Thumbs up/i }).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /Thumbs down/i }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'approve suggestion' }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'reject suggestion' }).first()).toBeVisible();
 
   const addToNotionButton = page.getByRole('button', { name: 'Add to Notion' }).first();
   await expect(addToNotionButton).toBeVisible();

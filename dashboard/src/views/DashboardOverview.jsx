@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Bot, CheckCircle2, Loader2, RefreshCw, Sparkles } from 'lucide-react';
 import KPICard from '../components/KPICard';
 import SendToNotionModal from '../components/SendToNotionModal';
+import notionLogo from '../assets/notion-logo.png';
 import { supabase } from '../lib/supabaseClient';
 import { DASHBOARD_LOOKBACK_DAYS } from '../lib/env';
 import { evaluateLeadQualification, parseOfficialRevenue } from '../lib/leadsQualificationRules';
@@ -686,7 +687,9 @@ function buildCardModel({ title, current, previous, format, note, color, invertC
     previousTone,
     trend,
     trendValue,
-    invertColor,
+    // `displayChange` already normalizes "good" direction (including cost-down improvements),
+    // so card coloring should always treat trend-up as positive.
+    invertColor: false,
     color,
     showChart: false,
   };
@@ -773,6 +776,7 @@ function buildSectionRecommendations(snapshot, windows, aiNarrative) {
         description: `Qualified leads are ${formatInt(leadsQualifiedCurrent)} vs ${formatInt(leadsQualifiedPrevious)} in the prior period. Shift spend toward ad sets with higher qualified conversion and pause low-quality segments.`,
         taskName: `Leads: reallocate spend based on qualified lead conversion (${windows.current.label})`,
         priority: 'High Priority',
+        definitionOfDone: 'Budget plan approved and at least two low-quality ad sets paused while top-quality sets receive additional spend.',
       },
       {
         id: 'leads-fix-cpql',
@@ -780,6 +784,7 @@ function buildSectionRecommendations(snapshot, windows, aiNarrative) {
         description: `Current blended CPQL is ${formatCurrency(blendedCPQLCurrent)} (prior ${formatCurrency(blendedCPQLPrevious)}). Prioritize creative/audience combinations with lower CPQL and stable quality.`,
         taskName: `Leads: reduce blended CPQL from ${formatCurrency(blendedCPQLCurrent)}`,
         priority: 'High Priority',
+        definitionOfDone: 'At least one active campaign variant shows lower CPQL than current baseline while qualified lead count is not lower.',
       },
       {
         id: 'leads-great-share',
@@ -787,6 +792,7 @@ function buildSectionRecommendations(snapshot, windows, aiNarrative) {
         description: `Great leads are ${formatInt(snapshot.free.current.great + snapshot.phoenix.current.great)} this period. Push messaging and retargeting for $1M+ revenue segments.`,
         taskName: `Leads: improve Great lead share in ${windows.current.label}`,
         priority: 'Medium Priority',
+        definitionOfDone: 'Great lead count increases versus prior equivalent period with at least one validated ad message focused on $1M+ segment.',
       },
     ],
     Attendance: [
@@ -796,6 +802,7 @@ function buildSectionRecommendations(snapshot, windows, aiNarrative) {
         description: `Net new is Tue ${formatInt(snapshot.attendance.current.netNewTue)} / Thu ${formatInt(snapshot.attendance.current.netNewThu)}. Add a same-day follow-up sequence for first-time attendees.`,
         taskName: `Attendance: launch same-day follow-up for net-new attendees (${windows.current.label})`,
         priority: 'High Priority',
+        definitionOfDone: 'Same-day follow-up is live for all new attendees and second-visit rate is tracked daily.',
       },
       {
         id: 'attendance-tuesday-repeat',
@@ -803,6 +810,7 @@ function buildSectionRecommendations(snapshot, windows, aiNarrative) {
         description: `Tuesday avg visits is ${formatDecimal(snapshot.attendance.current.avgVisitsTue)} (prior ${formatDecimal(snapshot.attendance.previous.avgVisitsTue)}). Test reminder cadence and host outreach scripts.`,
         taskName: 'Attendance: improve Tuesday avg visits per attendee',
         priority: 'Medium Priority',
+        definitionOfDone: 'Tuesday average visits improves versus prior equivalent period.',
       },
       {
         id: 'attendance-thursday-repeat',
@@ -810,6 +818,7 @@ function buildSectionRecommendations(snapshot, windows, aiNarrative) {
         description: `Thursday avg visits is ${formatDecimal(snapshot.attendance.current.avgVisitsThu)} (prior ${formatDecimal(snapshot.attendance.previous.avgVisitsThu)}). Focus on second-visit conversion for Thursday newcomers.`,
         taskName: 'Attendance: improve Thursday avg visits per attendee',
         priority: 'Medium Priority',
+        definitionOfDone: 'Thursday average visits improves versus prior equivalent period.',
       },
     ],
     Donations: [
@@ -819,6 +828,7 @@ function buildSectionRecommendations(snapshot, windows, aiNarrative) {
         description: `Donations amount is ${formatCurrency(snapshot.donations.current.amount)} vs ${formatCurrency(snapshot.donations.previous.amount)} previously. Run a targeted reactivation outreach to prior donors.`,
         taskName: `Donations: reactivation campaign (${windows.current.label})`,
         priority: 'High Priority',
+        definitionOfDone: 'Reactivation campaign is sent and donation amount from reactivated donors is tracked in dashboard.',
       },
       {
         id: 'donations-average-gift',
@@ -826,6 +836,7 @@ function buildSectionRecommendations(snapshot, windows, aiNarrative) {
         description: `Transactions are ${formatInt(snapshot.donations.current.count)} this period. Add a higher-anchor ask ladder to increase average contribution size.`,
         taskName: 'Donations: test higher ask ladder for average gift lift',
         priority: 'Medium Priority',
+        definitionOfDone: 'Average gift value improves versus prior equivalent period.',
       },
       {
         id: 'donations-campaign-attribution',
@@ -833,6 +844,7 @@ function buildSectionRecommendations(snapshot, windows, aiNarrative) {
         description: 'Tag campaign source consistently so donation uplift can be attributed to specific paid, referral, and organic initiatives.',
         taskName: 'Donations: enforce campaign source attribution hygiene',
         priority: 'Medium Priority',
+        definitionOfDone: 'At least 95% of donation rows include valid campaign/source attribution fields.',
       },
     ],
     Operations: [
@@ -842,6 +854,7 @@ function buildSectionRecommendations(snapshot, windows, aiNarrative) {
         description: `Completed items are ${formatInt(snapshot.operations.current.completedItems)} vs ${formatInt(snapshot.operations.previous.completedItems)} in the prior period. Reduce bottlenecks in the Done handoff process.`,
         taskName: `Operations: improve Done throughput (${windows.current.label})`,
         priority: 'High Priority',
+        definitionOfDone: 'At least 10 tasks are moved to Done this week and blocker owners are assigned for any stalled work.',
       },
       {
         id: 'operations-prioritize',
@@ -849,6 +862,7 @@ function buildSectionRecommendations(snapshot, windows, aiNarrative) {
         description: `Focus leadership execution on ${aiNarrative.weakestLabel} first, then sequence secondary work by impact on CPQL and qualified lead volume.`,
         taskName: `Operations: assign owner + deadline for ${aiNarrative.weakestLabel}`,
         priority: 'Medium Priority',
+        definitionOfDone: 'Each top KPI blocker has one owner, one due date, and one explicit next action.',
       },
       {
         id: 'operations-sla',
@@ -856,6 +870,7 @@ function buildSectionRecommendations(snapshot, windows, aiNarrative) {
         description: 'Set explicit response SLAs when qualified leads, attendance, or donations fall below trend so action happens the same day.',
         taskName: 'Operations: define KPI response SLA playbook',
         priority: 'Medium Priority',
+        definitionOfDone: 'SLA rules are documented and shared, with alert-to-owner routing tested end to end.',
       },
     ],
   };
@@ -907,13 +922,15 @@ function buildMustDoToday(snapshot, sectionRecommendations) {
       section: 'Donations',
       score: Math.max(0, -(donationsDelta ?? 0)),
     },
+    // Operations is important but should not dominate Must Do Today selection.
     {
       section: 'Operations',
-      score: Math.max(0, -(operationsDelta ?? 0)),
+      score: Math.max(0, -(operationsDelta ?? 0)) * 0.15,
     },
   ];
 
-  const topRiskSection = [...sectionRiskRows].sort((a, b) => b.score - a.score)[0]?.section || 'Leads';
+  const preferredSections = sectionRiskRows.filter((row) => row.section !== 'Operations');
+  const topRiskSection = [...preferredSections].sort((a, b) => b.score - a.score)[0]?.section || 'Leads';
   const recommendation = (sectionRecommendations[topRiskSection] || [])[0] || null;
   if (!recommendation) return null;
   return {
@@ -1121,7 +1138,7 @@ function DashboardOverview() {
       current: snapshot.free.current.interviews,
       previous: snapshot.free.previous.interviews,
       format: 'count',
-      note: 'Bookings on the Free Group interview link',
+      note: null,
       color: '#0ea5e9',
     }),
   ]), [snapshot.free]);
@@ -1174,7 +1191,7 @@ function DashboardOverview() {
       current: snapshot.phoenix.current.interviews,
       previous: snapshot.phoenix.previous.interviews,
       format: 'count',
-      note: 'Bookings across all Phoenix Forum interview links',
+      note: null,
       color: '#0ea5e9',
     }),
   ]), [snapshot.phoenix]);
@@ -1490,6 +1507,11 @@ function DashboardOverview() {
               {mustDoToday.section}: {mustDoToday.title}
             </p>
             <p style={{ marginTop: '6px', fontSize: '13px', color: '#334155' }}>{mustDoToday.description}</p>
+            {mustDoToday.definitionOfDone && (
+              <p style={{ marginTop: '6px', fontSize: '12px', fontWeight: 700, color: '#166534' }}>
+                Finished looks like: {mustDoToday.definitionOfDone}
+              </p>
+            )}
             <button
               type="button"
               className="btn-primary"
@@ -1518,6 +1540,11 @@ function DashboardOverview() {
                     <div key={recommendation.id} style={{ border: '1px solid rgba(148,163,184,0.35)', borderRadius: '8px', padding: '9px', backgroundColor: 'rgba(255,255,255,0.96)' }}>
                       <p style={{ fontWeight: 700, fontSize: '13px', color: '#0f172a' }}>{recommendation.title}</p>
                       <p style={{ marginTop: '4px', color: '#334155', fontSize: '12px', lineHeight: 1.45 }}>{recommendation.description}</p>
+                      {recommendation.definitionOfDone && (
+                        <p style={{ marginTop: '4px', color: '#166534', fontSize: '11px', fontWeight: 700, lineHeight: 1.4 }}>
+                          Finished looks like: {recommendation.definitionOfDone}
+                        </p>
+                      )}
                       <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                         <button
                           type="button"
@@ -1532,36 +1559,73 @@ function DashboardOverview() {
                         <button
                           type="button"
                           className="btn-glass"
+                          aria-label="Add to Notion"
+                          title="Add to Notion"
                           style={{ padding: '6px 10px', fontSize: '12px', color: '#0f172a', borderColor: '#94a3b8' }}
                           onClick={() => setNotionModal({ open: true, taskName: recommendation.taskName })}
                         >
-                          Add to Notion
+                          <span
+                            aria-hidden="true"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                            }}
+                          >
+                            <img
+                              src={notionLogo}
+                              alt=""
+                              style={{
+                                width: '18px',
+                                height: '18px',
+                                borderRadius: '4px',
+                                display: 'block',
+                              }}
+                            />
+                            <span
+                              style={{
+                                color: '#111827',
+                                display: 'inline-block',
+                                fontSize: '16px',
+                                lineHeight: 1,
+                                fontWeight: 800,
+                              }}
+                            >
+                              +
+                            </span>
+                          </span>
                         </button>
                         <button
                           type="button"
                           className="btn-glass"
+                          aria-label="approve suggestion"
                           style={{
                             padding: '6px 8px',
-                            fontSize: '12px',
-                            color: feedback.vote === 'up' ? '#15803d' : '#0f172a',
-                            borderColor: feedback.vote === 'up' ? '#16a34a' : '#94a3b8',
+                            fontSize: '16px',
+                            lineHeight: 1,
+                            color: '#166534',
+                            borderColor: feedback.vote === 'up' ? '#16a34a' : '#86efac',
+                            backgroundColor: feedback.vote === 'up' ? '#dcfce7' : '#f0fdf4',
                           }}
                           onClick={() => setRecommendationVote(recommendation.id, 'up')}
                         >
-                          Thumbs Up
+                          👍
                         </button>
                         <button
                           type="button"
                           className="btn-glass"
+                          aria-label="reject suggestion"
                           style={{
                             padding: '6px 8px',
-                            fontSize: '12px',
-                            color: feedback.vote === 'down' ? '#b91c1c' : '#0f172a',
-                            borderColor: feedback.vote === 'down' ? '#dc2626' : '#94a3b8',
+                            fontSize: '16px',
+                            lineHeight: 1,
+                            color: '#b91c1c',
+                            borderColor: feedback.vote === 'down' ? '#dc2626' : '#fca5a5',
+                            backgroundColor: feedback.vote === 'down' ? '#fee2e2' : '#fef2f2',
                           }}
                           onClick={() => setRecommendationVote(recommendation.id, 'down')}
                         >
-                          Thumbs Down
+                          👎
                         </button>
                         <span style={{ fontSize: '11px', color: state.status === 'error' ? '#b91c1c' : '#334155' }}>
                           {state.message || 'Ready'}
@@ -1607,7 +1671,7 @@ function DashboardOverview() {
           ))}
         </div>
         <div style={{ marginTop: '10px', fontSize: '11px', color: 'var(--color-text-muted)' }}>
-          Every recommendation has thumbs up/down feedback. Downvotes require a reason so suggestion quality can improve over time.
+          Every recommendation has 👍 / 👎 feedback. Downvotes require a reason so suggestion quality can improve over time.
         </div>
       </section>
 
