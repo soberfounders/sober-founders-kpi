@@ -1,54 +1,47 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { supabase, hasSupabaseConfig } from '../lib/supabaseClient';
-import {
-  DASHBOARD_LOOKBACK_DAYS,
-  ENABLE_REMOTE_AI_MODULE_ANALYSIS,
-  HUBSPOT_CONTACT_LOOKBACK_DAYS,
-  USE_DUMMY_DONATIONS,
-} from '../lib/env';
-import {
-  evaluateLeadQualification,
-  extractRevenueSignals,
-  leadQualityTierFromOfficialRevenue,
-  parseOfficialRevenue,
-  parseSobrietyDate,
-} from '../lib/leadsQualificationRules';
-import { buildLeadsQualificationSnapshot, buildUnifiedKpiSnapshot } from '../lib/kpiSnapshot';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, Bot, CheckCircle2, Loader2, RefreshCw, Sparkles } from 'lucide-react';
+import KPICard from '../components/KPICard';
 import SendToNotionModal from '../components/SendToNotionModal';
+import { supabase } from '../lib/supabaseClient';
+import { DASHBOARD_LOOKBACK_DAYS } from '../lib/env';
+import { evaluateLeadQualification, parseOfficialRevenue } from '../lib/leadsQualificationRules';
 import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  Legend,
-} from 'recharts';
-import {
-  AlertTriangle,
-  Bot,
-  CheckCircle2,
-  Clock3,
-  Globe,
-  Loader2,
-  RefreshCw,
-  Search,
-  Sparkles,
-  Users,
-} from 'lucide-react';
+  THURSDAY_MEETING_ID,
+  TUESDAY_MEETING_ID,
+  buildDateRangeWindows,
+  computeChangePct,
+} from '../lib/leadsGroupAnalytics';
 
-const SOURCE_KEYS = ['zoom'];
-const LOOKBACK_DAYS = DASHBOARD_LOOKBACK_DAYS;
-const MODULE_ANALYSIS_TTL_HOURS = 24;
-const REMOTE_AI_MODULE_ANALYSIS_ENABLED = ENABLE_REMOTE_AI_MODULE_ANALYSIS;
+const RANGE_OPTIONS = [
+  { value: 'week', label: 'Week' },
+  { value: 'last_month', label: 'Last Month' },
+  { value: 'last_30_days', label: 'Last 30 Days' },
+  { value: 'last_90_days', label: 'Last 90 Days' },
+  { value: 'custom', label: 'Custom Range' },
+];
+
+const FREE_INTERVIEW_URL = 'https://meetings.hubspot.com/andrew-lassise/interview';
+const PHOENIX_INTERVIEW_URLS = [
+  'https://meetings.hubspot.com/andrew-lassise/phoenix-forum-interview',
+  'https://meetings.hubspot.com/andrew-lassise/phoenix-forum-learn-more',
+  'https://meetings.hubspot.com/andrew-lassise/phoenix-forum-good-fit',
+];
+
+const INTERVIEW_MATCH_TOKENS = {
+  free: ['meetings.hubspot.com/andrew-lassise/interview'],
+  phoenix: [
+    'meetings.hubspot.com/andrew-lassise/phoenix-forum-interview',
+    'meetings.hubspot.com/andrew-lassise/phoenix-forum-learn-more',
+    'meetings.hubspot.com/andrew-lassise/phoenix-forum-good-fit',
+  ],
+};
+
+const DONATION_EXCLUDED_STATUSES = new Set(['refunded', 'refund', 'failed', 'void', 'voided', 'canceled', 'cancelled']);
+
 const HUBSPOT_CONTACT_SELECT_COLUMNS = [
   'hubspot_contact_id',
   'createdate',
   'email',
-  'firstname',
-  'lastname',
-  'original_traffic_source',
   'hs_analytics_source',
   'hs_latest_source',
   'hs_analytics_source_data_2',
@@ -56,62 +49,97 @@ const HUBSPOT_CONTACT_SELECT_COLUMNS = [
   'campaign',
   'campaign_source',
   'membership_s',
-  // Canonical HubSpot source-of-truth property.
   'annual_revenue_in_dollars__official_',
   'annual_revenue_in_dollars',
   'sobriety_date',
   'sobriety_date__official_',
+  'is_deleted',
+  'hubspot_archived',
+  'merged_into_hubspot_contact_id',
 ];
-const HUBSPOT_CONTACT_SILENT_FALLBACK_COLUMNS = new Set([
-  'annual_revenue_in_usd_official',
+
+const HUBSPOT_OPTIONAL_COLUMNS = new Set([
+  'campaign_source',
   'sobriety_date__official_',
 ]);
-const DUMMY_DONATION_ROWS = [
-  {
-    source_system: 'dummy',
-    amount: 5000,
-    currency: 'USD',
-    is_recurring: false,
-    status: 'posted',
-    campaign_name: 'Dummy Campaign - Scholarship',
-    donated_at: '2026-02-20T15:30:00.000Z',
-  },
-  {
-    source_system: 'dummy',
-    amount: 1200,
-    currency: 'USD',
-    is_recurring: true,
-    status: 'posted',
-    campaign_name: 'Dummy Campaign - Recurring Circle',
-    donated_at: '2026-02-18T13:00:00.000Z',
-  },
-  {
-    source_system: 'dummy',
-    amount: 750,
-    currency: 'USD',
-    is_recurring: false,
-    status: 'posted',
-    campaign_name: 'Dummy Campaign - Monthly Support',
-    donated_at: '2026-01-25T09:15:00.000Z',
-  },
-];
-const ET_TIMEZONE = 'America/New_York';
-const GROUP_CALL_ET_MINUTES = {
-  Tuesday: 12 * 60,
-  Thursday: 11 * 60,
+
+const LOOKBACK_DAYS_SAFE = Number.isFinite(Number(DASHBOARD_LOOKBACK_DAYS))
+  ? Math.max(90, Math.trunc(Number(DASHBOARD_LOOKBACK_DAYS)))
+  : 365;
+
+const cardGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+  gap: '14px',
 };
-const GROUP_CALL_TIME_TOLERANCE_MINUTES = 120;
-const MIN_GROUP_ATTENDEES = 3;
-const EXPECTED_ZERO_GROUP_SESSION_KEYS = new Set(['Thursday|2025-12-25']);
-const KPI_BOARD_SYSTEM_ROLE = [
-  'You are an autonomous AI Board of Directors responsible for analyzing organizational KPI dashboards and recommending strategic actions.',
-  'The board consists of world-class entrepreneurs, investors, operators, and strategists.',
-  'The board must analyze KPI performance, detect trends/anomalies, identify strengths/weaknesses, recommend improvements, stop ineffective initiatives, and propose strategic experiments.',
-  'Each board member independently evaluates data with their worldview before synthesis.',
-  'Board members: Warren Buffett, Charlie Munger, Elon Musk, Jeff Bezos, Steve Jobs, Gary Vaynerchuk, Mark Cuban, Kevin O\'Leary, Dan Martell, Tony Robbins, Henry Ford, Bob Iger, Naval Ravikant, Peter Thiel, Sam Altman, Marc Andreessen, Reid Hoffman, Ray Dalio, Ben Horowitz.',
-  'Required response sections: KPI Observations; per-member Keep/Improve/Stop/Experiment; Board Synthesis (agreements/disagreements/top priorities); Execution Plan (immediate actions + next-month metrics).',
-  'Use concrete KPI evidence in every recommendation and prioritize actions leadership can execute immediately.',
-].join(' ');
+
+function toDateKey(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
+}
+
+function toUtcDate(dateKey) {
+  return new Date(`${dateKey}T00:00:00.000Z`);
+}
+
+function addDays(dateKey, days) {
+  const date = toUtcDate(dateKey);
+  date.setUTCDate(date.getUTCDate() + days);
+  return toDateKey(date);
+}
+
+function dateInRange(dateKey, start, end) {
+  return !!dateKey && dateKey >= start && dateKey <= end;
+}
+
+function toFiniteNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function safeDivide(numerator, denominator) {
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) return null;
+  return numerator / denominator;
+}
+
+function normalizeText(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizePersonKey(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function formatInt(value) {
+  if (!Number.isFinite(Number(value))) return '0';
+  return Math.round(Number(value)).toLocaleString();
+}
+
+function formatDecimal(value, digits = 2) {
+  if (!Number.isFinite(Number(value))) return '0.00';
+  return Number(value).toFixed(digits);
+}
+
+function formatCurrency(value) {
+  if (!Number.isFinite(Number(value))) return 'N/A';
+  return `$${Number(value).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+}
+
+function formatPercent(value) {
+  if (!Number.isFinite(Number(value))) return 'N/A';
+  return `${(Number(value) * 100).toFixed(1)}%`;
+}
+
+function formatTimestamp(value) {
+  if (!value) return 'N/A';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'N/A';
+  return date.toLocaleString();
+}
 
 function parseMissingSupabaseColumn(errorMessage = '') {
   const message = String(errorMessage || '');
@@ -128,25 +156,19 @@ function parseMissingSupabaseColumn(errorMessage = '') {
   return null;
 }
 
-async function fetchHubspotContactsWithSchemaFallback(contactStartDate) {
-  const requestedColumns = [...HUBSPOT_CONTACT_SELECT_COLUMNS];
+async function fetchHubspotContactsWithSchemaFallback(startKey) {
   const schemaWarnings = [];
-  const runQuery = (columns) => (
-    supabase
-      .from('raw_hubspot_contacts')
-      .select(columns.join(','))
-      .gte('createdate', `${contactStartDate}T00:00:00.000Z`)
-      .order('createdate', { ascending: true })
-  );
-
-  let selectedColumns = [...requestedColumns];
   const attemptedMissingColumns = new Set();
+  let selectedColumns = [...HUBSPOT_CONTACT_SELECT_COLUMNS];
 
   while (selectedColumns.length > 0) {
-    const result = await runQuery(selectedColumns);
-    if (!result.error) {
-      return { ...result, schemaWarnings };
-    }
+    const result = await supabase
+      .from('raw_hubspot_contacts')
+      .select(selectedColumns.join(','))
+      .gte('createdate', `${startKey}T00:00:00.000Z`)
+      .order('createdate', { ascending: true });
+
+    if (!result.error) return { ...result, schemaWarnings };
 
     const missingColumn = parseMissingSupabaseColumn(result.error?.message);
     if (!missingColumn || !selectedColumns.includes(missingColumn) || attemptedMissingColumns.has(missingColumn)) {
@@ -154,2941 +176,1212 @@ async function fetchHubspotContactsWithSchemaFallback(contactStartDate) {
     }
 
     attemptedMissingColumns.add(missingColumn);
-    selectedColumns = selectedColumns.filter((columnName) => columnName !== missingColumn);
-    if (!HUBSPOT_CONTACT_SILENT_FALLBACK_COLUMNS.has(missingColumn)) {
-      schemaWarnings.push(
-        `HubSpot contacts query auto-recovered from missing optional column \`${missingColumn}\`. Run schema migrations to restore full compatibility across deployments.`,
-      );
+    selectedColumns = selectedColumns.filter((column) => column !== missingColumn);
+    if (!HUBSPOT_OPTIONAL_COLUMNS.has(missingColumn)) {
+      schemaWarnings.push(`HubSpot contacts query removed missing optional column \`${missingColumn}\` to continue loading.`);
     }
   }
 
   return {
-    data: null,
+    data: [],
     error: { message: 'HubSpot contacts query failed after removing all selectable columns.' },
     schemaWarnings,
   };
 }
 
-const etWeekdayFormatter = new Intl.DateTimeFormat('en-US', {
-  timeZone: ET_TIMEZONE,
-  weekday: 'short',
-});
-
-const etTimePartsFormatter = new Intl.DateTimeFormat('en-US', {
-  timeZone: ET_TIMEZONE,
-  hour12: false,
-  hour: '2-digit',
-  minute: '2-digit',
-});
-
-function dateToUtc(dateStr) {
-  return new Date(`${dateStr}T00:00:00.000Z`);
-}
-
-function shiftUtcDays(date, days) {
-  const d = new Date(date);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d;
-}
-
-function parseMaybeDate(value) {
-  if (!value) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function etWeekdayGroupFromDate(dateLike) {
-  const d = parseMaybeDate(dateLike);
-  if (!d) return null;
-  const weekdayShort = etWeekdayFormatter.format(d);
-  if (weekdayShort === 'Tue') return 'Tuesday';
-  if (weekdayShort === 'Thu') return 'Thursday';
-  return null;
-}
-
-function etGroupTimingFromDate(dateLike) {
-  const d = parseMaybeDate(dateLike);
-  if (!d) return null;
-  const dayType = etWeekdayGroupFromDate(d);
-  if (!dayType) return null;
-
-  const parts = etTimePartsFormatter.formatToParts(d);
-  const hour = Number(parts.find((p) => p.type === 'hour')?.value || NaN);
-  const minute = Number(parts.find((p) => p.type === 'minute')?.value || NaN);
-  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
-
-  const minuteOfDay = (hour * 60) + minute;
-  const expectedMinute = GROUP_CALL_ET_MINUTES[dayType];
-  const minutesFromExpected = Math.abs(minuteOfDay - expectedMinute);
+function buildMatchingWindow(startKey, endKey, currentLabel, previousLabelPrefix = 'Previous matching') {
+  const startDate = toUtcDate(startKey);
+  const endDate = toUtcDate(endKey);
+  const spanDays = Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / 86400000) + 1);
+  const previousEnd = addDays(startKey, -1);
+  const previousStart = addDays(previousEnd, -(spanDays - 1));
   return {
-    dayType,
-    minuteOfDay,
-    expectedMinute,
-    minutesFromExpected,
-    isNearScheduled: Number.isFinite(minutesFromExpected) && minutesFromExpected <= GROUP_CALL_TIME_TOLERANCE_MINUTES,
+    current: { start: startKey, end: endKey, label: currentLabel },
+    previous: {
+      start: previousStart,
+      end: previousEnd,
+      label: `${previousLabelPrefix} ${spanDays}-day period`,
+    },
   };
 }
 
-function safeNum(value) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
+function buildOverviewWindows(rangeType, customStart, customEnd, todayKey) {
+  if (rangeType === 'week') {
+    return buildDateRangeWindows('last_week', null, null, todayKey);
+  }
+  if (rangeType === 'last_month') {
+    return buildDateRangeWindows('last_month', null, null, todayKey);
+  }
+  if (rangeType === 'last_30_days') {
+    const start = addDays(todayKey, -29);
+    return buildMatchingWindow(start, todayKey, 'Last 30 Days');
+  }
+  if (rangeType === 'last_90_days') {
+    const start = addDays(todayKey, -89);
+    return buildMatchingWindow(start, todayKey, 'Last 90 Days');
+  }
+
+  const fallbackStart = addDays(todayKey, -6);
+  const fallbackEnd = todayKey;
+  const start = /^\d{4}-\d{2}-\d{2}$/.test(String(customStart || '')) ? customStart : fallbackStart;
+  const end = /^\d{4}-\d{2}-\d{2}$/.test(String(customEnd || '')) ? customEnd : fallbackEnd;
+  const sortedStart = start <= end ? start : end;
+  const sortedEnd = start <= end ? end : start;
+  return buildMatchingWindow(sortedStart, sortedEnd, `${sortedStart} to ${sortedEnd}`);
 }
 
-function pct(value) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) return 'N/A';
-  return `${(Number(value) * 100).toFixed(1)}%`;
+function classifyAdFunnel(row) {
+  const funnelKey = normalizeText(row?.funnel_key);
+  if (funnelKey === 'phoenix') return 'phoenix';
+  if (funnelKey === 'free') return 'free';
+
+  const blob = [
+    row?.campaign_name,
+    row?.adset_name,
+    row?.ad_name,
+  ]
+    .map((value) => normalizeText(value))
+    .join(' ');
+
+  return blob.includes('phoenix') ? 'phoenix' : 'free';
 }
 
-function pctDelta(value) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) return 'N/A';
-  const n = Number(value) * 100;
-  return `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
-}
-
-function formatInt(value) {
-  const n = Number(value || 0);
-  return Number.isFinite(n) ? Math.round(n).toLocaleString() : '0';
-}
-
-function formatCurrency(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return 'N/A';
-  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-}
-
-function changeLabel(delta, { positiveIsGood = true } = {}) {
-  if (delta === null || delta === undefined || Number.isNaN(Number(delta))) return 'flat / insufficient comparison';
-  const n = Number(delta);
-  if (Math.abs(n) < 0.03) return 'roughly flat';
-  const direction = n > 0 ? 'up' : 'down';
-  const pctText = `${Math.abs(n * 100).toFixed(0)}%`;
-  if (positiveIsGood) return `${direction} ${pctText}`;
-  return `${direction} ${pctText}${n < 0 ? ' (better)' : ' (worse)'}`;
-}
-
-function comparePeriod(current, previous) {
-  const c = Number(current);
-  const p = Number(previous);
-  if (!Number.isFinite(c) || !Number.isFinite(p) || p === 0) return null;
-  return (c - p) / p;
-}
-
-function normalizeEmail(value) {
-  return String(value || '').trim().toLowerCase();
-}
-
-function isPhoenixText(value) {
-  return String(value || '').toLowerCase().includes('phoenix');
-}
-
-function isPaidSocialHubspotContact(row) {
-  const text = [
-    row?.original_traffic_source,
-    row?.hs_analytics_source,
-    row?.hs_latest_source,
-  ].join(' ').toLowerCase();
-  return /paid[\s_-]*social/.test(text);
-}
-
-function isPhoenixHubspotContact(row) {
-  const text = [
+function classifyHubspotFunnel(row) {
+  const blob = [
     row?.campaign,
     row?.campaign_source,
     row?.membership_s,
     row?.hs_analytics_source_data_2,
-  ].join(' ').toLowerCase();
-  return text.includes('phoenix');
-}
-
-function classifyGroupCall(activity, attendeeCount) {
-  const title = String(activity?.title || '').toLowerCase();
-  const start = parseMaybeDate(activity?.hs_timestamp || activity?.created_at_hubspot);
-  if (!start) return null;
-
-  const hasAny = (needles) => needles.some((needle) => title.includes(needle));
-  const isLikelyFreeGroupTitle = hasAny([
-    'tactic tuesday',
-    'mastermind on zoom',
-    'all are welcome',
-    "entrepreneur's big book",
-    'big book',
-    'sober founders mastermind',
-    'sober founders free group',
-    'free group call',
-    'free group meeting',
-  ]);
-  const explicitTuesday = hasAny(['tactic tuesday', ' tuesday']);
-  const explicitThursday = hasAny(['thursday', 'mastermind on zoom', 'all are welcome', "entrepreneur's big book", 'big book']);
-  const isPhoenixForum = hasAny(['phoenix forum']);
-
-  const timing = etGroupTimingFromDate(start);
-  const titleType =
-    explicitTuesday ? 'Tuesday' :
-      explicitThursday ? 'Thursday' :
-        (title.includes('sober founders mastermind') && !title.includes('intro')) ? 'Thursday' :
-          null;
-
-  if (timing?.isNearScheduled && timing?.dayType) return timing.dayType;
-  if (titleType && attendeeCount >= MIN_GROUP_ATTENDEES) return titleType;
-  if (timing?.dayType && attendeeCount >= MIN_GROUP_ATTENDEES) return timing.dayType;
-
-  // Defensive fallback for known naming drift on free-group calls.
-  if (!isPhoenixForum && attendeeCount >= MIN_GROUP_ATTENDEES && isLikelyFreeGroupTitle && timing?.dayType) {
-    return timing.dayType;
-  }
-
-  if (titleType) return titleType;
-
-  return null;
-}
-
-function calcStatus(value, thresholds) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) return 'watch';
-  const n = Number(value);
-  if (n < thresholds.critical) return 'critical';
-  if (n < thresholds.watch) return 'watch';
-  return 'healthy';
-}
-
-function calcTrendStatus(value, thresholds) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) return 'watch';
-  const n = Number(value);
-  if (n <= thresholds.critical) return 'critical';
-  if (n <= thresholds.watch) return 'watch';
-  return 'healthy';
-}
-
-function toUtcDayStart(input) {
-  const d = input instanceof Date ? input : parseMaybeDate(input);
-  if (!d) return null;
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-}
-
-function hubspotActivityFreshnessDay(row, todayUtcDay = null) {
-  const createdAtDay = toUtcDayStart(row?.created_at_hubspot);
-  const scheduledDay = toUtcDayStart(row?.hs_timestamp);
-  if (scheduledDay && todayUtcDay && scheduledDay <= todayUtcDay) return scheduledDay;
-  return createdAtDay || scheduledDay;
-}
-
-function formatDateShort(input) {
-  const d = toUtcDayStart(input);
-  if (!d) return 'N/A';
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
-}
-
-function formatDateRange(start, end) {
-  return `${formatDateShort(start)} to ${formatDateShort(end)}`;
-}
-
-function inUtcDayRange(input, start, end) {
-  const d = toUtcDayStart(input);
-  if (!d || !start || !end) return false;
-  return d >= start && d <= end;
-}
-
-function sumBy(rows, predicate, valueGetter) {
-  return rows.reduce((acc, row) => (predicate(row) ? acc + safeNum(valueGetter(row)) : acc), 0);
-}
-
-function ratioOrNull(numerator, denominator) {
-  const n = Number(numerator);
-  const d = Number(denominator);
-  if (!Number.isFinite(n) || !Number.isFinite(d) || d <= 0) return null;
-  return n / d;
-}
-
-function formatAttendanceAvgVisits(avgVisits, uniqueAttendees) {
-  const visits = Number(avgVisits);
-  const unique = Number(uniqueAttendees);
-  if (Number.isFinite(unique) && unique > 0 && Number.isFinite(visits)) {
-    return visits.toFixed(2);
-  }
-  return '0.00 (No attendance recorded)';
-}
-
-function formatAttendanceCpna(cpna, freeSpend, newAttendees) {
-  if (Number.isFinite(cpna)) return formatCurrency(cpna);
-  const spend = Number(freeSpend);
-  const netNew = Number(newAttendees);
-  if (Number.isFinite(spend) && spend > 0 && (!Number.isFinite(netNew) || netNew <= 0)) {
-    return `Unavailable (${formatCurrency(spend)} spend / ${formatInt(netNew)} net-new)`;
-  }
-  if (!Number.isFinite(spend) || spend <= 0) {
-    return 'Unavailable (Meta free-group spend not connected)';
-  }
-  return 'Unavailable';
-}
-
-function attendeeAssocKey(assoc) {
-  const id = Number(assoc?.hubspot_contact_id);
-  if (Number.isFinite(id)) return `id:${id}`;
-  const email = normalizeEmail(assoc?.contact_email);
-  if (email) return `email:${email}`;
-  const name = [assoc?.contact_firstname, assoc?.contact_lastname]
-    .map((v) => String(v || '').trim().toLowerCase())
-    .filter(Boolean)
+    row?.hs_latest_source_data_2,
+  ]
+    .map((value) => normalizeText(value))
     .join(' ');
-  if (name) return `name:${name}`;
+
+  return blob.includes('phoenix') ? 'phoenix' : 'free';
+}
+
+function isPaidSocialContact(row) {
+  const source = normalizeText(row?.hs_analytics_source || row?.hs_latest_source);
+  return source.includes('paid_social') || source.includes('paid social');
+}
+
+function isActiveHubspotContact(row) {
+  if (row?.is_deleted === true) return false;
+  if (row?.hubspot_archived === true) return false;
+  const mergedIntoRaw = row?.merged_into_hubspot_contact_id;
+  const mergedIntoNumber = Number(mergedIntoRaw);
+  const hasMergedInto = mergedIntoRaw !== null
+    && mergedIntoRaw !== undefined
+    && mergedIntoRaw !== ''
+    && Number.isFinite(mergedIntoNumber)
+    && mergedIntoNumber > 0;
+  return !hasMergedInto;
+}
+
+function contactCreatedAtTs(row) {
+  const ts = Date.parse(row?.createdate || '');
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+function chooseNewerContact(previous, next) {
+  if (!previous) return next;
+  if (!next) return previous;
+  return contactCreatedAtTs(next) > contactCreatedAtTs(previous) ? next : previous;
+}
+
+function normalizeAdsRows(rows = []) {
+  return rows
+    .map((row) => ({
+      dateKey: toDateKey(row?.date_day),
+      spend: toFiniteNumber(row?.spend, 0),
+      leads: toFiniteNumber(row?.leads, 0),
+      funnel: classifyAdFunnel(row),
+    }))
+    .filter((row) => row.dateKey);
+}
+
+function normalizeHubspotContacts(rows = []) {
+  const deduped = new Map();
+
+  rows.forEach((row) => {
+    if (!isActiveHubspotContact(row)) return;
+    if (!isPaidSocialContact(row)) return;
+    const createdDateKey = toDateKey(row?.createdate);
+    if (!createdDateKey) return;
+
+    const key = Number.isFinite(Number(row?.hubspot_contact_id)) && Number(row.hubspot_contact_id) > 0
+      ? `id:${Number(row.hubspot_contact_id)}`
+      : `email:${normalizeText(row?.email)}`;
+    if (!key || key === 'email:') return;
+
+    deduped.set(key, chooseNewerContact(deduped.get(key), row));
+  });
+
+  return Array.from(deduped.values())
+    .map((row) => {
+      const createdDateKey = toDateKey(row?.createdate);
+      const qualification = evaluateLeadQualification({ revenue: row, sobrietyDate: row });
+      const revenue = parseOfficialRevenue(row);
+      return {
+        createdDateKey,
+        funnel: classifyHubspotFunnel(row),
+        qualified: qualification.qualified,
+        great: Number.isFinite(Number(revenue)) && Number(revenue) >= 1_000_000,
+      };
+    })
+    .filter((row) => row.createdDateKey);
+}
+
+function normalizeInterviewRows(rows = []) {
+  return rows
+    .map((row, index) => {
+      const dateKey = toDateKey(row?.hs_timestamp || row?.created_at_hubspot);
+      if (!dateKey) return null;
+      const activityId = Number.isFinite(Number(row?.hubspot_activity_id))
+        ? String(Math.trunc(Number(row.hubspot_activity_id)))
+        : `idx-${index}-${dateKey}`;
+      const textBlob = [
+        row?.title,
+        row?.body_preview,
+        JSON.stringify(row?.metadata || {}),
+      ]
+        .map((value) => normalizeText(value))
+        .join(' ');
+      return { dateKey, activityId, textBlob };
+    })
+    .filter(Boolean);
+}
+
+function detectZoomDayType(row, dateKey) {
+  const groupName = normalizeText(row?.metadata?.group_name);
+  if (groupName === 'tuesday') return 'Tuesday';
+  if (groupName === 'thursday') return 'Thursday';
+
+  const meetingId = String(row?.metadata?.meeting_id || row?.metadata?.zoom_meeting_id || '').trim();
+  if (meetingId === TUESDAY_MEETING_ID) return 'Tuesday';
+  if (meetingId === THURSDAY_MEETING_ID) return 'Thursday';
+
+  const date = toUtcDate(dateKey);
+  const weekday = date.getUTCDay();
+  if (weekday === 2) return 'Tuesday';
+  if (weekday === 4) return 'Thursday';
   return null;
 }
 
-function buildNotionTaskProperties(taskName) {
+function normalizeZoomSessions(rows = []) {
+  const sessions = [];
+  rows.forEach((row) => {
+    const dateKey = toDateKey(row?.metadata?.start_time || row?.metric_date);
+    if (!dateKey) return;
+
+    const dayType = detectZoomDayType(row, dateKey);
+    if (!dayType) return;
+
+    const attendeesRaw = Array.isArray(row?.metadata?.attendees)
+      ? row.metadata.attendees
+      : Array.isArray(row?.metadata?.participant_names)
+        ? row.metadata.participant_names
+        : [];
+
+    const attendeeSet = new Set();
+    attendeesRaw.forEach((entry) => {
+      const source = typeof entry === 'string'
+        ? entry
+        : entry?.name || entry?.display_name || entry?.email || '';
+      const key = normalizePersonKey(source);
+      if (key) attendeeSet.add(key);
+    });
+
+    const startTsRaw = row?.metadata?.start_time || `${dateKey}T00:00:00.000Z`;
+    const startTs = Date.parse(startTsRaw);
+    sessions.push({
+      dateKey,
+      dayType,
+      attendees: Array.from(attendeeSet),
+      startTs: Number.isFinite(startTs) ? startTs : Date.parse(`${dateKey}T00:00:00.000Z`),
+    });
+  });
+
+  sessions.sort((a, b) => {
+    if (a.startTs !== b.startTs) return a.startTs - b.startTs;
+    return a.dateKey.localeCompare(b.dateKey);
+  });
+  return sessions;
+}
+
+function normalizeDonationRows(rows = []) {
+  return rows
+    .map((row) => ({
+      dateKey: toDateKey(row?.donated_at),
+      amount: toFiniteNumber(row?.amount, 0),
+      status: normalizeText(row?.status),
+    }))
+    .filter((row) => row.dateKey && row.amount > 0 && !DONATION_EXCLUDED_STATUSES.has(row.status));
+}
+
+function parseTodoDoneDate(row) {
+  const metadata = row?.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+  const candidateValues = [
+    metadata.done_at,
+    metadata.completed_at,
+    metadata.completed_time,
+    metadata.status_changed_at,
+    metadata.status_last_changed_at,
+    metadata.doneAt,
+    metadata.completedAt,
+    metadata?.status_history?.done_at,
+    metadata?.statusHistory?.doneAt,
+    row?.last_updated_at,
+    row?.created_at,
+  ];
+
+  for (const candidate of candidateValues) {
+    const dateKey = toDateKey(candidate);
+    if (dateKey) return dateKey;
+  }
+  return null;
+}
+
+function normalizeTodoRows(rows = []) {
+  return rows
+    .map((row) => {
+      const status = normalizeText(row?.status);
+      if (status !== 'done' && status !== 'completed') return null;
+      const doneDateKey = parseTodoDoneDate(row);
+      if (!doneDateKey) return null;
+      return { doneDateKey };
+    })
+    .filter(Boolean);
+}
+
+function aggregateAds(rows, window, funnel) {
+  return rows.reduce((acc, row) => {
+    if (row.funnel !== funnel) return acc;
+    if (!dateInRange(row.dateKey, window.start, window.end)) return acc;
+    acc.leads += row.leads;
+    acc.spend += row.spend;
+    return acc;
+  }, { leads: 0, spend: 0 });
+}
+
+function aggregateLeadContacts(rows, window, funnel) {
+  return rows.reduce((acc, row) => {
+    if (row.funnel !== funnel) return acc;
+    if (!dateInRange(row.createdDateKey, window.start, window.end)) return acc;
+    acc.total += 1;
+    if (row.qualified) acc.qualified += 1;
+    if (row.great) acc.great += 1;
+    return acc;
+  }, { total: 0, qualified: 0, great: 0 });
+}
+
+function countInterviewBookings(rows, window, matchTokens) {
+  const matchedIds = new Set();
+  rows.forEach((row) => {
+    if (!dateInRange(row.dateKey, window.start, window.end)) return;
+    const matched = matchTokens.some((token) => row.textBlob.includes(token));
+    if (matched) matchedIds.add(row.activityId);
+  });
+  return matchedIds.size;
+}
+
+function aggregateDonations(rows, window) {
+  return rows.reduce((acc, row) => {
+    if (!dateInRange(row.dateKey, window.start, window.end)) return acc;
+    acc.count += 1;
+    acc.amount += row.amount;
+    return acc;
+  }, { count: 0, amount: 0 });
+}
+
+function aggregateCompletedItems(rows, window) {
+  return rows.reduce((acc, row) => {
+    if (!dateInRange(row.doneDateKey, window.start, window.end)) return acc;
+    return acc + 1;
+  }, 0);
+}
+
+function buildAttendanceSnapshots(sessions, currentWindow, previousWindow) {
+  const seen = {
+    Tuesday: new Set(),
+    Thursday: new Set(),
+  };
+
+  const initWindowState = () => ({
+    Tuesday: { netNew: 0, visits: 0, unique: new Set() },
+    Thursday: { netNew: 0, visits: 0, unique: new Set() },
+  });
+  const state = {
+    current: initWindowState(),
+    previous: initWindowState(),
+  };
+
+  sessions.forEach((session) => {
+    const day = session.dayType;
+    const isCurrent = dateInRange(session.dateKey, currentWindow.start, currentWindow.end);
+    const isPrevious = dateInRange(session.dateKey, previousWindow.start, previousWindow.end);
+    const bucketKey = isCurrent ? 'current' : (isPrevious ? 'previous' : null);
+
+    session.attendees.forEach((personKey) => {
+      const daySeenSet = seen[day];
+      const isNetNew = !daySeenSet.has(personKey);
+      if (bucketKey) {
+        const bucket = state[bucketKey][day];
+        bucket.visits += 1;
+        bucket.unique.add(personKey);
+        if (isNetNew) bucket.netNew += 1;
+      }
+      if (isNetNew) daySeenSet.add(personKey);
+    });
+  });
+
+  const toSnapshot = (bucket) => ({
+    netNewTue: bucket.Tuesday.netNew,
+    avgVisitsTue: bucket.Tuesday.unique.size > 0 ? bucket.Tuesday.visits / bucket.Tuesday.unique.size : 0,
+    netNewThu: bucket.Thursday.netNew,
+    avgVisitsThu: bucket.Thursday.unique.size > 0 ? bucket.Thursday.visits / bucket.Thursday.unique.size : 0,
+  });
+
+  return {
+    current: toSnapshot(state.current),
+    previous: toSnapshot(state.previous),
+  };
+}
+
+function computeKpiSnapshot(rawData, windows) {
+  const adsRows = normalizeAdsRows(rawData.adsRows || []);
+  const contacts = normalizeHubspotContacts(rawData.contacts || []);
+  const interviewRows = normalizeInterviewRows(rawData.activities || []);
+  const zoomSessions = normalizeZoomSessions(rawData.zoomRows || []);
+  const donationRows = normalizeDonationRows(rawData.donationRows || []);
+  const todoRows = normalizeTodoRows(rawData.todoRows || []);
+
+  const freeAdsCurrent = aggregateAds(adsRows, windows.current, 'free');
+  const freeAdsPrevious = aggregateAds(adsRows, windows.previous, 'free');
+  const freeLeadsCurrent = aggregateLeadContacts(contacts, windows.current, 'free');
+  const freeLeadsPrevious = aggregateLeadContacts(contacts, windows.previous, 'free');
+
+  const phoenixAdsCurrent = aggregateAds(adsRows, windows.current, 'phoenix');
+  const phoenixAdsPrevious = aggregateAds(adsRows, windows.previous, 'phoenix');
+  const phoenixLeadsCurrent = aggregateLeadContacts(contacts, windows.current, 'phoenix');
+  const phoenixLeadsPrevious = aggregateLeadContacts(contacts, windows.previous, 'phoenix');
+
+  const freeInterviewCurrent = countInterviewBookings(interviewRows, windows.current, INTERVIEW_MATCH_TOKENS.free);
+  const freeInterviewPrevious = countInterviewBookings(interviewRows, windows.previous, INTERVIEW_MATCH_TOKENS.free);
+  const phoenixInterviewCurrent = countInterviewBookings(interviewRows, windows.current, INTERVIEW_MATCH_TOKENS.phoenix);
+  const phoenixInterviewPrevious = countInterviewBookings(interviewRows, windows.previous, INTERVIEW_MATCH_TOKENS.phoenix);
+
+  const attendance = buildAttendanceSnapshots(zoomSessions, windows.current, windows.previous);
+  const donationsCurrent = aggregateDonations(donationRows, windows.current);
+  const donationsPrevious = aggregateDonations(donationRows, windows.previous);
+  const completedItemsCurrent = aggregateCompletedItems(todoRows, windows.current);
+  const completedItemsPrevious = aggregateCompletedItems(todoRows, windows.previous);
+
+  return {
+    free: {
+      current: {
+        meetings: freeAdsCurrent.leads,
+        qualified: freeLeadsCurrent.qualified,
+        great: freeLeadsCurrent.great,
+        cpql: safeDivide(freeAdsCurrent.spend, freeLeadsCurrent.qualified),
+        cpgl: safeDivide(freeAdsCurrent.spend, freeLeadsCurrent.great),
+        interviews: freeInterviewCurrent,
+        spend: freeAdsCurrent.spend,
+      },
+      previous: {
+        meetings: freeAdsPrevious.leads,
+        qualified: freeLeadsPrevious.qualified,
+        great: freeLeadsPrevious.great,
+        cpql: safeDivide(freeAdsPrevious.spend, freeLeadsPrevious.qualified),
+        cpgl: safeDivide(freeAdsPrevious.spend, freeLeadsPrevious.great),
+        interviews: freeInterviewPrevious,
+        spend: freeAdsPrevious.spend,
+      },
+    },
+    phoenix: {
+      current: {
+        leads: phoenixAdsCurrent.leads,
+        qualified: phoenixLeadsCurrent.qualified,
+        great: phoenixLeadsCurrent.great,
+        cpql: safeDivide(phoenixAdsCurrent.spend, phoenixLeadsCurrent.qualified),
+        cpgl: safeDivide(phoenixAdsCurrent.spend, phoenixLeadsCurrent.great),
+        interviews: phoenixInterviewCurrent,
+        spend: phoenixAdsCurrent.spend,
+      },
+      previous: {
+        leads: phoenixAdsPrevious.leads,
+        qualified: phoenixLeadsPrevious.qualified,
+        great: phoenixLeadsPrevious.great,
+        cpql: safeDivide(phoenixAdsPrevious.spend, phoenixLeadsPrevious.qualified),
+        cpgl: safeDivide(phoenixAdsPrevious.spend, phoenixLeadsPrevious.great),
+        interviews: phoenixInterviewPrevious,
+        spend: phoenixAdsPrevious.spend,
+      },
+    },
+    attendance,
+    donations: {
+      current: donationsCurrent,
+      previous: donationsPrevious,
+    },
+    operations: {
+      current: { completedItems: completedItemsCurrent },
+      previous: { completedItems: completedItemsPrevious },
+    },
+    sourceRows: {
+      ads: adsRows.length,
+      contacts: contacts.length,
+      interviews: interviewRows.length,
+      sessions: zoomSessions.length,
+      donations: donationRows.length,
+      todos: todoRows.length,
+    },
+  };
+}
+
+function calculateDisplayChange(current, previous, invertColor = false) {
+  const currentNumber = Number(current);
+  const previousNumber = Number(previous);
+  if (!Number.isFinite(currentNumber) || !Number.isFinite(previousNumber)) return null;
+  if (previousNumber === 0) {
+    if (currentNumber === 0) return 0;
+    return null;
+  }
+  const { pct } = computeChangePct(currentNumber, previousNumber);
+  if (pct === null || pct === undefined) return null;
+  return invertColor ? -pct : pct;
+}
+
+function toTrendDirection(displayChange) {
+  if (displayChange === null || displayChange === undefined) return 'neutral';
+  if (displayChange > 0) return 'up';
+  if (displayChange < 0) return 'down';
+  return 'neutral';
+}
+
+function toTrendValue(displayChange) {
+  if (displayChange === null || displayChange === undefined) return 'N/A';
+  return `${displayChange >= 0 ? '+' : ''}${(displayChange * 100).toFixed(1)}%`;
+}
+
+function buildCardModel({ title, current, previous, format, note, color, invertColor = false }) {
+  const displayChange = calculateDisplayChange(current, previous, invertColor);
+  const trend = toTrendDirection(displayChange);
+  const trendValue = toTrendValue(displayChange);
+
+  let value = 'N/A';
+  if (format === 'currency') value = formatCurrency(current);
+  else if (format === 'decimal') value = formatDecimal(current);
+  else if (format === 'percent') value = formatPercent(current);
+  else value = formatInt(current);
+
+  return {
+    title,
+    value,
+    subvalue: note,
+    trend,
+    trendValue,
+    invertColor,
+    color,
+    chartData: [
+      { name: 'Prior', value: Number.isFinite(Number(previous)) ? Number(previous) : 0 },
+      { name: 'Current', value: Number.isFinite(Number(current)) ? Number(current) : 0 },
+    ],
+  };
+}
+
+function buildAiNarrative(snapshot) {
+  const freeQualifiedRate = safeDivide(snapshot.free.current.qualified, snapshot.free.current.meetings);
+  const phoenixQualifiedRate = safeDivide(snapshot.phoenix.current.qualified, snapshot.phoenix.current.leads);
+  const freeInterviewRate = safeDivide(snapshot.free.current.interviews, snapshot.free.current.qualified);
+  const phoenixInterviewRate = safeDivide(snapshot.phoenix.current.interviews, snapshot.phoenix.current.qualified);
+  const blendedCPQL = safeDivide(
+    snapshot.free.current.spend + snapshot.phoenix.current.spend,
+    snapshot.free.current.qualified + snapshot.phoenix.current.qualified,
+  );
+
+  const bottlenecks = [
+    { key: 'free-qualified', label: 'Free funnel lead to qualified conversion', value: freeQualifiedRate },
+    { key: 'phoenix-qualified', label: 'Phoenix funnel lead to qualified conversion', value: phoenixQualifiedRate },
+    { key: 'free-interview', label: 'Free funnel qualified to interview conversion', value: freeInterviewRate },
+    { key: 'phoenix-interview', label: 'Phoenix funnel qualified to interview conversion', value: phoenixInterviewRate },
+  ].filter((item) => Number.isFinite(Number(item.value)));
+
+  const weakest = bottlenecks.length > 0
+    ? [...bottlenecks].sort((a, b) => Number(a.value) - Number(b.value))[0]
+    : null;
+
+  const trendRows = [
+    {
+      label: 'Free qualified leads',
+      delta: calculateDisplayChange(snapshot.free.current.qualified, snapshot.free.previous.qualified, false),
+    },
+    {
+      label: 'Phoenix qualified leads',
+      delta: calculateDisplayChange(snapshot.phoenix.current.qualified, snapshot.phoenix.previous.qualified, false),
+    },
+    {
+      label: 'CPQL efficiency',
+      delta: calculateDisplayChange(blendedCPQL, safeDivide(
+        snapshot.free.previous.spend + snapshot.phoenix.previous.spend,
+        snapshot.free.previous.qualified + snapshot.phoenix.previous.qualified,
+      ), true),
+    },
+    {
+      label: 'Donations amount',
+      delta: calculateDisplayChange(snapshot.donations.current.amount, snapshot.donations.previous.amount, false),
+    },
+  ];
+
+  const improving = trendRows.filter((row) => row.delta !== null && row.delta > 0).map((row) => row.label);
+  const deteriorating = trendRows.filter((row) => row.delta !== null && row.delta < 0).map((row) => row.label);
+
+  const healthLine = `Qualified lead volume is ${formatInt(snapshot.free.current.qualified + snapshot.phoenix.current.qualified)} with blended CPQL ${formatCurrency(blendedCPQL)} and donation volume ${formatCurrency(snapshot.donations.current.amount)}.`;
+  const bottleneckLine = weakest
+    ? `Primary funnel break is ${weakest.label} at ${formatPercent(weakest.value)}.`
+    : 'No single bottleneck is reliable yet because one or more funnel stages have insufficient denominator data.';
+  const trendLine = [
+    improving.length > 0 ? `Improving: ${improving.join(', ')}` : 'Improving: none with strong signal yet',
+    deteriorating.length > 0 ? `Deteriorating: ${deteriorating.join(', ')}` : 'Deteriorating: none with strong signal yet',
+  ].join('. ');
+
+  return {
+    healthLine,
+    bottleneckLine,
+    trendLine,
+    weakestLabel: weakest?.label || 'Qualified conversion',
+  };
+}
+
+function buildNotionCreateTaskProperties(taskName, priority = 'Medium Priority') {
   return {
     'Task name': { title: [{ text: { content: taskName } }] },
     Status: { status: { name: 'Not started' } },
-    Priority: { select: { name: 'Medium Priority' } },
+    Priority: { select: { name: priority } },
     'Effort level': { select: { name: 'Medium Effort' } },
   };
 }
 
-function hubspotOfficialRevenue(row) {
-  return extractRevenueSignals(row).officialRevenue;
-}
-
-function hubspotEffectiveRevenue(row) {
-  return parseOfficialRevenue(row);
-}
-
-function hubspotSobrietyDateUtc(row) {
-  return parseSobrietyDate(row);
-}
-
-function leadQualityFlags(row) {
-  const officialRevenue = hubspotOfficialRevenue(row);
-  const revenue = hubspotEffectiveRevenue(row);
-  const qualityTier = leadQualityTierFromOfficialRevenue(revenue);
-  const hasSobriety = !!hubspotSobrietyDateUtc(row);
-  const qualification = evaluateLeadQualification({ revenue: row, sobrietyDate: row });
-  const sober1yToday = qualification.sobrietyEligible;
-  const greatLead = qualityTier === 'great';
-  const qualifiedLead = qualification.qualified;
-  const highQualityLead = qualifiedLead;
-  return {
-    officialRevenue,
-    revenue,
-    hasOfficialRevenue: Number.isFinite(officialRevenue),
-    hasRevenue: Number.isFinite(officialRevenue),
-    hasSobriety,
-    sober1yAtLead: sober1yToday,
-    sober1yToday,
-    qualityTier,
-    greatLead,
-    qualifiedLead,
-    highQualityLead,
-  };
-}
-
-function summarizeLeadQuality(rows) {
-  const annotated = rows.map((row) => ({ row, q: leadQualityFlags(row) }));
-  const count = annotated.length;
-  const hasOfficialRevenue = annotated.filter((x) => x.q.hasOfficialRevenue).length;
-  const hasRevenue = annotated.filter((x) => x.q.hasRevenue).length;
-  const hasSobriety = annotated.filter((x) => x.q.hasSobriety).length;
-  const qualityCoverageRows = annotated.filter((x) => x.q.hasRevenue && x.q.hasSobriety).length;
-  const qualified = annotated.filter((x) => x.q.qualifiedLead).length;
-  const great = annotated.filter((x) => x.q.greatLead).length;
-  const highQuality = annotated.filter((x) => x.q.highQualityLead).length;
-  return {
-    count,
-    great,
-    qualified,
-    highQuality,
-    hasOfficialRevenue,
-    hasRevenue,
-    hasSobriety,
-    qualityCoverageRows,
-    officialRevenueCoverage: ratioOrNull(hasOfficialRevenue, count),
-    revenueCoverage: ratioOrNull(hasRevenue, count),
-    sobrietyCoverage: ratioOrNull(hasSobriety, count),
-    qualityCoverage: ratioOrNull(qualityCoverageRows, count),
-    greatRate: ratioOrNull(great, count),
-    qualifiedRate: ratioOrNull(qualified, count),
-    highQualityRate: ratioOrNull(highQuality, count),
-  };
-}
-
-function pluralize(count, singular, plural = `${singular}s`) {
-  return Number(count) === 1 ? singular : plural;
-}
-
-function formatCurrencySignedDelta(delta) {
-  if (!Number.isFinite(Number(delta))) return 'N/A';
-  const n = Number(delta);
-  return `${n >= 0 ? '+' : '-'}${formatCurrency(Math.abs(n))}`;
-}
-
-function splitInsightSummary(summary) {
-  if (Array.isArray(summary)) {
-    return summary.flatMap((item) => splitInsightSummary(item));
-  }
-
-  const text = String(summary || '').replace(/\s+/g, ' ').trim();
-  if (!text) return [];
-
-  return text
-    .split(/(?<=[.!?])\s+(?=[A-Z0-9])/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-}
-
-function classifyInsightBullet(sentence) {
-  const raw = String(sentence || '').trim();
-  if (!raw) return null;
-
-  const patterns = [
-    { regex: /^Management call:\s*/i, kind: 'action', label: 'Action' },
-    { regex: /^Operationally:\s*/i, kind: 'action', label: 'Action' },
-    { regex: /^Supporting signal\b[^:]*:\s*/i, kind: 'evidence', label: 'Evidence' },
-    { regex: /^Data quality note:\s*/i, kind: 'note', label: 'Data note' },
-    { regex: /^Schedule signal note:\s*/i, kind: 'note', label: 'Data note' },
-  ];
-
-  for (const pattern of patterns) {
-    if (pattern.regex.test(raw)) {
-      return {
-        kind: pattern.kind,
-        label: pattern.label,
-        text: raw.replace(pattern.regex, '').trim(),
-      };
-    }
-  }
-
-  return { kind: 'insight', label: '', text: raw };
-}
-
-function summaryToInsightBullets(summary) {
-  return splitInsightSummary(summary)
-    .map(classifyInsightBullet)
-    .filter(Boolean);
-}
-
-function managerFallbackSummaryBullets(manager) {
-  const buckets = [
-    ...(summaryToInsightBullets(manager?.summaries?.bigPicture).map((b) => b.text)),
-    ...(summaryToInsightBullets(manager?.summaries?.month).map((b) => b.text)),
-    ...(summaryToInsightBullets(manager?.summaries?.week).map((b) => b.text)),
-  ];
-  return buckets
-    .map((text) => String(text || '').trim())
-    .filter(Boolean)
-    .slice(0, 5);
-}
-
-function managerAnalysisContextSignature(manager) {
-  return JSON.stringify(manager?.analysisContext || {});
-}
-
-function actionCompletionMessage(action, payload) {
-  const result = payload || {};
-  const isNotionTask = action?.kind === 'create_notion_task';
-  if (isNotionTask) return 'Done — task sent to Notion.';
-
-  if (Array.isArray(result?.results)) {
-    const okCount = result.results.filter((row) => row?.status === 'success').length;
-    const failCount = result.results.filter((row) => row?.status && row.status !== 'success').length;
-    if (okCount > 0 || failCount > 0) {
-      if (failCount > 0) return `Done — ${okCount} sync step(s) succeeded, ${failCount} had issues.`;
-      return `Done — ${okCount} sync step(s) completed.`;
-    }
-  }
-
-  const numericFields = [
-    'count',
-    'rows_written',
-    'sessions_written',
-    'attendee_mappings_written',
-    'raw_hubspot_meeting_activities_upserted',
-    'hubspot_activity_contact_associations_upserted',
-    'raw_hubspot_contacts_upserted',
-  ];
-  for (const field of numericFields) {
-    const value = Number(result?.[field]);
-    if (Number.isFinite(value) && value > 0) {
-      return `Done — ${Math.round(value)} item(s) updated.`;
-    }
-  }
-
-  return 'Done — action completed.';
-}
-
-const baseCardStyle = {
-  background: 'var(--color-card)',
-  backdropFilter: 'blur(16px)',
-  WebkitBackdropFilter: 'blur(16px)',
-  border: '1px solid var(--color-border)',
-  borderRadius: '16px',
-  padding: '18px',
-  boxShadow: 'var(--glass-shadow)',
-};
-
-const DashboardOverview = () => {
+function DashboardOverview() {
+  const [rangeType, setRangeType] = useState('week');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+  const [rawData, setRawData] = useState({
+    adsRows: [],
+    contacts: [],
+    activities: [],
+    zoomRows: [],
+    donationRows: [],
+    todoRows: [],
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [warnings, setWarnings] = useState([]);
-  const [metrics, setMetrics] = useState([]);
-  const [hubspotContacts, setHubspotContacts] = useState([]);
-  const [fbAdsRows, setFbAdsRows] = useState([]);
-  const [donationRows, setDonationRows] = useState([]);
-  const [hubspotActivities, setHubspotActivities] = useState([]);
-  const [hubspotActivityAssocs, setHubspotActivityAssocs] = useState([]);
+  const [lastLoadedAt, setLastLoadedAt] = useState(null);
   const [actionState, setActionState] = useState({});
-  const [moduleAnalysisState, setModuleAnalysisState] = useState({});
   const [notionModal, setNotionModal] = useState({ open: false, taskName: '' });
-  const [deferredInsightsReady, setDeferredInsightsReady] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const todayKey = useMemo(() => toDateKey(new Date()), []);
+  const windows = useMemo(
+    () => buildOverviewWindows(rangeType, customStart, customEnd, todayKey),
+    [rangeType, customStart, customEnd, todayKey],
+  );
 
-  useEffect(() => {
-    if (loading) {
-      setDeferredInsightsReady(false);
-      return undefined;
-    }
-    const timer = setTimeout(() => setDeferredInsightsReady(true), 0);
-    return () => clearTimeout(timer);
-  }, [loading, metrics.length, hubspotContacts.length, fbAdsRows.length, hubspotActivities.length]);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError('');
     setWarnings([]);
 
-    const start = new Date();
-    start.setUTCDate(start.getUTCDate() - LOOKBACK_DAYS);
-    const startDate = start.toISOString().slice(0, 10);
-    const contactStart = new Date();
-    contactStart.setUTCDate(contactStart.getUTCDate() - HUBSPOT_CONTACT_LOOKBACK_DAYS);
-    const contactStartDate = contactStart.toISOString().slice(0, 10);
-
+    const startKey = addDays(todayKey, -Math.max(LOOKBACK_DAYS_SAFE, 120));
     const nextWarnings = [];
+
     const [
-      metricsRes,
-      hubspotContactsRes,
-      fbAdsRes,
-      donationsRes,
-      hubspotActivitiesRes,
+      adsResponse,
+      contactsResponse,
+      activitiesResponse,
+      zoomResponse,
+      donationsResponse,
+      todosResponse,
     ] = await Promise.all([
       supabase
-        .from('kpi_metrics')
-        .select('metric_name,metric_value,metric_date,source_slug,metadata')
-        .in('source_slug', SOURCE_KEYS)
-        .gte('metric_date', startDate)
-        .order('metric_date', { ascending: true }),
-      fetchHubspotContactsWithSchemaFallback(contactStartDate),
-      supabase
         .from('raw_fb_ads_insights_daily')
-        .select('date_day,spend,leads,funnel_key,campaign_name')
-        .gte('date_day', startDate)
+        .select('date_day,funnel_key,campaign_name,adset_name,ad_name,spend,leads')
+        .gte('date_day', startKey)
         .order('date_day', { ascending: true }),
-      USE_DUMMY_DONATIONS
-        ? Promise.resolve({ data: DUMMY_DONATION_ROWS, error: null, isDummy: true })
-        : supabase
-          .from('donation_transactions_unified')
-          .select('source_system,amount,currency,is_recurring,status,campaign_name,donated_at')
-          .gte('donated_at', `${startDate}T00:00:00.000Z`)
-          .order('donated_at', { ascending: true }),
+      fetchHubspotContactsWithSchemaFallback(startKey),
       supabase
         .from('raw_hubspot_meeting_activities')
-        .select('hubspot_activity_id,activity_type,hs_timestamp,created_at_hubspot,title')
-        .or(`hs_timestamp.gte.${startDate},created_at_hubspot.gte.${startDate}`)
+        .select('hubspot_activity_id,activity_type,hs_timestamp,created_at_hubspot,title,body_preview,metadata')
+        .or(`hs_timestamp.gte.${startKey}T00:00:00.000Z,created_at_hubspot.gte.${startKey}T00:00:00.000Z`)
         .order('hs_timestamp', { ascending: true }),
+      supabase
+        .from('kpi_metrics')
+        .select('metric_date,metadata')
+        .eq('metric_name', 'Zoom Meeting Attendees')
+        .gte('metric_date', startKey)
+        .order('metric_date', { ascending: true }),
+      supabase
+        .from('donation_transactions_unified')
+        .select('amount,status,donated_at')
+        .gte('donated_at', `${startKey}T00:00:00.000Z`)
+        .order('donated_at', { ascending: true }),
+      supabase
+        .from('notion_todos')
+        .select('notion_page_id,task_title,status,last_updated_at,created_at,metadata')
+        .gte('last_updated_at', `${startKey}T00:00:00.000Z`)
+        .order('last_updated_at', { ascending: true }),
     ]);
 
-    if (metricsRes.error) {
-      setError(metricsRes.error.message || 'Failed to load dashboard metrics.');
+    if (adsResponse.error) {
+      setError(`Failed to load Meta ads data: ${adsResponse.error.message}`);
       setLoading(false);
       return;
     }
-
-    if (hubspotContactsRes.error) {
-      nextWarnings.push(`HubSpot contacts unavailable for Leads manager: ${hubspotContactsRes.error.message}`);
-    } else if (Array.isArray(hubspotContactsRes.schemaWarnings) && hubspotContactsRes.schemaWarnings.length > 0) {
-      nextWarnings.push(...hubspotContactsRes.schemaWarnings);
-    }
-    if (fbAdsRes.error) {
-      nextWarnings.push(`Meta Ads rows unavailable for Leads manager: ${fbAdsRes.error.message}`);
-    }
-    if (donationsRes.error) {
-      nextWarnings.push(`Donations rows unavailable for Donations manager: ${donationsRes.error.message}`);
-    } else if (donationsRes.isDummy) {
-      nextWarnings.push('Donations manager is currently using dummy data.');
-    }
-    if (hubspotActivitiesRes.error) {
-      nextWarnings.push(`HubSpot call/meeting activities unavailable for Attendance manager: ${hubspotActivitiesRes.error.message}`);
-    }
-    if (!hubspotContactsRes.error && (hubspotContactsRes.data || []).length === 0) {
-      nextWarnings.push('HubSpot contacts query returned 0 rows for the configured lookback window. Verify Vercel Supabase environment variables and RLS policies.');
-    }
-    if (!fbAdsRes.error && (fbAdsRes.data || []).length === 0) {
-      nextWarnings.push('Meta Ads query returned 0 rows for the configured lookback window. Verify Supabase project/env alignment for production.');
-    }
-
-    let assocRows = [];
-    const activityRows = (hubspotActivitiesRes.data || []).filter((row) => {
-      const type = String(row?.activity_type || '').toLowerCase();
-      return type === 'call' || type === 'meeting';
-    });
-    if (!hubspotActivitiesRes.error && activityRows.length === 0) {
-      nextWarnings.push('HubSpot call/meeting query returned 0 rows for the configured lookback window. Verify activity_type values, RLS, and production project configuration.');
-    }
-    if (!hubspotActivitiesRes.error && activityRows.length > 0) {
-      const recentActivityIds = Array.from(new Set(
-        activityRows.map((row) => Number(row?.hubspot_activity_id)).filter((id) => Number.isFinite(id))
-      ));
-      const assocChunks = [];
-      for (let i = 0; i < recentActivityIds.length; i += 200) {
-        const chunk = recentActivityIds.slice(i, i + 200);
-        const assocRes = await supabase
-          .from('hubspot_activity_contact_associations')
-          .select('hubspot_activity_id,activity_type,hubspot_contact_id,contact_email,contact_firstname,contact_lastname')
-          .in('hubspot_activity_id', chunk);
-        if (assocRes.error) {
-          nextWarnings.push(`HubSpot call/meeting associations unavailable for Attendance manager: ${assocRes.error.message}`);
-          assocChunks.length = 0;
-          break;
-        }
-        assocChunks.push(
-          ...(assocRes.data || []).filter((assoc) => {
-            const type = String(assoc?.activity_type || '').toLowerCase();
-            return type === 'call' || type === 'meeting';
-          })
-        );
-      }
-      assocRows = assocChunks;
-    }
-
-    setMetrics(metricsRes.data || []);
-    setHubspotContacts(hubspotContactsRes.data || []);
-    setFbAdsRows(fbAdsRes.data || []);
-    setDonationRows(donationsRes.data || []);
-    setHubspotActivities(activityRows);
-    setHubspotActivityAssocs(assocRows);
-    setWarnings(nextWarnings);
-    setLoading(false);
-  }
-
-  const dashboard = useMemo(() => {
-    const byMetric = new Map();
-    const bySource = new Map();
-    let latestDate = null;
-
-    metrics.forEach((row) => {
-      if (!byMetric.has(row.metric_name)) byMetric.set(row.metric_name, []);
-      byMetric.get(row.metric_name).push(row);
-
-      if (!bySource.has(row.source_slug)) bySource.set(row.source_slug, []);
-      bySource.get(row.source_slug).push(row);
-
-      if (!latestDate || row.metric_date > latestDate) latestDate = row.metric_date;
-    });
-
-    const endDate = latestDate ? dateToUtc(latestDate) : new Date();
-
-    function metricRows(metricName) {
-      return (byMetric.get(metricName) || []).slice().sort((a, b) => a.metric_date.localeCompare(b.metric_date));
-    }
-
-    function inRange(dateStr, start, end) {
-      const d = dateToUtc(dateStr);
-      return d >= start && d <= end;
-    }
-
-    function sumWindow(metricName, days) {
-      const rows = metricRows(metricName);
-      const start = shiftUtcDays(endDate, -(days - 1));
-      return rows.filter((r) => inRange(r.metric_date, start, endDate)).reduce((acc, r) => acc + Number(r.metric_value || 0), 0);
-    }
-
-    function avgWindow(metricName, days) {
-      const rows = metricRows(metricName);
-      const start = shiftUtcDays(endDate, -(days - 1));
-      const bucket = rows.filter((r) => inRange(r.metric_date, start, endDate));
-      if (bucket.length === 0) return null;
-      return bucket.reduce((acc, r) => acc + Number(r.metric_value || 0), 0) / bucket.length;
-    }
-
-    function compareWindow(metricName, days, mode = 'sum') {
-      const rows = metricRows(metricName);
-      const curStart = shiftUtcDays(endDate, -(days - 1));
-      const prevEnd = shiftUtcDays(endDate, -days);
-      const prevStart = shiftUtcDays(endDate, -(days * 2 - 1));
-
-      const curRows = rows.filter((r) => inRange(r.metric_date, curStart, endDate));
-      const prevRows = rows.filter((r) => inRange(r.metric_date, prevStart, prevEnd));
-      if (curRows.length === 0 || prevRows.length === 0) return null;
-
-      const curValue = mode === 'avg'
-        ? curRows.reduce((acc, r) => acc + Number(r.metric_value || 0), 0) / curRows.length
-        : curRows.reduce((acc, r) => acc + Number(r.metric_value || 0), 0);
-      const prevValue = mode === 'avg'
-        ? prevRows.reduce((acc, r) => acc + Number(r.metric_value || 0), 0) / prevRows.length
-        : prevRows.reduce((acc, r) => acc + Number(r.metric_value || 0), 0);
-
-      if (prevValue === 0) return null;
-      return (curValue - prevValue) / prevValue;
-    }
-
-    const zoomRows = metricRows('Zoom Meeting Attendees');
-    const recentZoom = zoomRows.slice(-12);
-    const repeatMap = new Map();
-    recentZoom.forEach((row) => {
-      const attendees = Array.isArray(row.metadata?.attendees) ? row.metadata.attendees : [];
-      attendees.forEach((name) => {
-        const key = String(name || '').toLowerCase().trim();
-        if (!key) return;
-        repeatMap.set(key, (repeatMap.get(key) || 0) + 1);
-      });
-    });
-    const uniquePeople = repeatMap.size;
-    const repeaters = Array.from(repeatMap.values()).filter((count) => count > 1).length;
-    const repeatRate = uniquePeople > 0 ? repeaters / uniquePeople : null;
-    const avgAttendance = recentZoom.length > 0
-      ? recentZoom.reduce((acc, r) => acc + Number(r.metric_value || 0), 0) / recentZoom.length
-      : null;
-
-    const sessions7d = sumWindow('GA Sessions', 7);
-    const sessionsTrend = compareWindow('GA Sessions', 7, 'sum');
-    const sessions30d = sumWindow('GA Sessions', 30);
-    const sessions30dTrend = compareWindow('GA Sessions', 30, 'sum');
-    const users7d = sumWindow('GA Users', 7);
-    const users30d = sumWindow('GA Users', 30);
-    const engagement7d = avgWindow('GA Engagement Rate', 7);
-    const engagement30d = avgWindow('GA Engagement Rate', 30);
-
-    const clicks7d = sumWindow('GSC Clicks', 7);
-    const clicksTrend = compareWindow('GSC Clicks', 7, 'sum');
-    const clicks30d = sumWindow('GSC Clicks', 30);
-    const clicks30dTrend = compareWindow('GSC Clicks', 30, 'sum');
-    const impressions7d = sumWindow('GSC Impressions', 7);
-    const impressions30d = sumWindow('GSC Impressions', 30);
-    const ctr7d = avgWindow('GSC CTR', 7);
-    const ctr30d = avgWindow('GSC CTR', 30);
-    const position7d = avgWindow('GSC Avg Position', 7);
-    const position30d = avgWindow('GSC Avg Position', 30);
-
-    const trendMap = new Map();
-    metricRows('GA Sessions').forEach((r) => {
-      if (!trendMap.has(r.metric_date)) trendMap.set(r.metric_date, { date: r.metric_date, sessions: 0, clicks: 0 });
-      trendMap.get(r.metric_date).sessions = Number(r.metric_value || 0);
-    });
-    metricRows('GSC Clicks').forEach((r) => {
-      if (!trendMap.has(r.metric_date)) trendMap.set(r.metric_date, { date: r.metric_date, sessions: 0, clicks: 0 });
-      trendMap.get(r.metric_date).clicks = Number(r.metric_value || 0);
-    });
-    const trendData = Array.from(trendMap.values())
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .slice(-30)
-      .map((d) => ({ ...d, label: d.date.slice(5) }));
-
-    const priorityRows = [
-      {
-        area: 'Traffic',
-        metric: 'GA Sessions (7d)',
-        value: formatInt(sessions7d),
-        target: 'Keep week-over-week trend >= 0%',
-        status: calcTrendStatus(sessionsTrend, { critical: -0.2, watch: 0 }),
-        note: `WoW ${pctDelta(sessionsTrend)}`,
-      },
-      {
-        area: 'Organic',
-        metric: 'Search Clicks (7d)',
-        value: formatInt(clicks7d),
-        target: 'Keep week-over-week trend >= 0%',
-        status: calcTrendStatus(clicksTrend, { critical: -0.2, watch: 0 }),
-        note: `WoW ${pctDelta(clicksTrend)}`,
-      },
-      {
-        area: 'Engagement',
-        metric: 'GA Engagement Rate (7d avg)',
-        value: pct(engagement7d),
-        target: '>= 60%',
-        status: calcStatus(engagement7d, { critical: 0.45, watch: 0.6 }),
-        note: `Users 7d ${formatInt(users7d)}`,
-      },
-      {
-        area: 'Community',
-        metric: 'Zoom Repeat Rate (last 12 meetings)',
-        value: pct(repeatRate),
-        target: '>= 55%',
-        status: calcStatus(repeatRate, { critical: 0.35, watch: 0.55 }),
-        note: `Avg attendance ${avgAttendance ? avgAttendance.toFixed(1) : 'N/A'}`,
-      },
-    ];
-
-    const sourceCoverage = SOURCE_KEYS.map((source) => {
-      const rows = bySource.get(source) || [];
-      const sourceLatest = rows.reduce((max, r) => (!max || r.metric_date > max ? r.metric_date : max), null);
-      return { source, count: rows.length, latest: sourceLatest };
-    });
-
-    return {
-      latestDate,
-      cards: {
-        sessions7d,
-        sessions30d,
-        clicks7d,
-        clicks30d,
-        engagement7d,
-        engagement30d,
-        avgAttendance,
-        repeatRate,
-        ctr7d,
-        ctr30d,
-        impressions7d,
-        impressions30d,
-        position7d,
-        position30d,
-        users7d,
-        users30d,
-      },
-      trends: {
-        sessionsTrend,
-        sessions30dTrend,
-        clicksTrend,
-        clicks30dTrend,
-      },
-      trendData,
-      priorityRows,
-      sourceCoverage,
-      hasGscData: (bySource.get('google_search_console') || []).length > 0,
-    };
-  }, [metrics]);
-
-  const aiManagers = useMemo(() => {
-    const todayUtcDay = toUtcDayStart(new Date());
-    const dateCandidates = [];
-    if (dashboard.latestDate) {
-      const d = toUtcDayStart(dashboard.latestDate);
-      if (d) dateCandidates.push(d);
-    }
-
-    hubspotContacts.forEach((row) => {
-      const d = toUtcDayStart(row?.createdate);
-      if (d) dateCandidates.push(d);
-    });
-    fbAdsRows.forEach((row) => {
-      const d = toUtcDayStart(row?.date_day);
-      if (d) dateCandidates.push(d);
-    });
-    hubspotActivities.forEach((row) => {
-      const d = hubspotActivityFreshnessDay(row, todayUtcDay);
-      if (d) dateCandidates.push(d);
-    });
-
-    const referenceDateRaw = dateCandidates.length
-      ? new Date(Math.max(...dateCandidates.map((d) => d.getTime())))
-      : todayUtcDay;
-    const referenceDate = (todayUtcDay && referenceDateRaw && referenceDateRaw > todayUtcDay)
-      ? todayUtcDay
-      : referenceDateRaw;
-    const lastWeekEnd = referenceDate;
-    const lastWeekStart = shiftUtcDays(lastWeekEnd, -6);
-    const prevWeekEnd = shiftUtcDays(lastWeekStart, -1);
-    const prevWeekStart = shiftUtcDays(prevWeekEnd, -6);
-
-    const monthEnd = referenceDate;
-    const monthStart = shiftUtcDays(monthEnd, -29);
-    const prevMonthEnd = shiftUtcDays(monthStart, -1);
-    const prevMonthStart = shiftUtcDays(prevMonthEnd, -29);
-
-    const periodMeta = {
-      lastWeekLabel: formatDateRange(lastWeekStart, lastWeekEnd),
-      lastMonthLabel: `${formatDateRange(monthStart, monthEnd)} (30d)`,
-      asOfLabel: formatDateShort(referenceDate),
-    };
-    const attendanceWindowEnd = todayUtcDay || referenceDate;
-    const attendanceWeekEnd = attendanceWindowEnd;
-    const attendanceWeekStart = shiftUtcDays(attendanceWeekEnd, -6);
-    const attendancePrevWeekEnd = shiftUtcDays(attendanceWeekStart, -1);
-    const attendancePrevWeekStart = shiftUtcDays(attendancePrevWeekEnd, -6);
-    const attendanceMonthEnd = attendanceWindowEnd;
-    const attendanceMonthStart = shiftUtcDays(attendanceMonthEnd, -29);
-    const attendancePrevMonthEnd = shiftUtcDays(attendanceMonthStart, -1);
-    const attendancePrevMonthStart = shiftUtcDays(attendancePrevMonthEnd, -29);
-    const attendancePeriodMeta = {
-      lastWeekLabel: formatDateRange(attendanceWeekStart, attendanceWeekEnd),
-      lastMonthLabel: `${formatDateRange(attendanceMonthStart, attendanceMonthEnd)} (30d completed meetings)`,
-      asOfLabel: formatDateShort(attendanceWindowEnd),
-    };
-    const warningList = Array.isArray(warnings) ? warnings : [];
-    const leadsSourceWarnings = warningList.filter((warning) =>
-      warning.includes('HubSpot contacts') || warning.includes('Meta Ads')
-    );
-    const attendanceSourceWarnings = warningList.filter((warning) =>
-      warning.includes('HubSpot call/meeting')
-    );
-    const leadsDataUnavailable = leadsSourceWarnings.some((warning) =>
-      warning.includes('unavailable') || warning.includes('returned 0 rows')
-    );
-    const attendanceDataUnavailable = attendanceSourceWarnings.some((warning) =>
-      warning.includes('unavailable') || warning.includes('returned 0 rows')
-    );
-
-    const parsedContacts = hubspotContacts
-      .map((row) => ({ ...row, _createdAt: toUtcDayStart(row?.createdate) }))
-      .filter((row) => row._createdAt);
-
-    const contactStats = (start, end) => {
-      const rows = parsedContacts.filter((row) => inUtcDayRange(row._createdAt, start, end));
-      const paidSocial = rows.filter(isPaidSocialHubspotContact);
-      const paidPhoenix = paidSocial.filter(isPhoenixHubspotContact);
-      const paidFree = paidSocial.filter((row) => !isPhoenixHubspotContact(row));
-      const allPhoenix = rows.filter(isPhoenixHubspotContact);
-      return {
-        total: rows.length,
-        paidSocial: paidSocial.length,
-        paidPhoenix: paidPhoenix.length,
-        paidFree: paidFree.length,
-        allPhoenix: allPhoenix.length,
-        quality: summarizeLeadQuality(rows),
-        paidSocialQuality: summarizeLeadQuality(paidSocial),
-        paidPhoenixQuality: summarizeLeadQuality(paidPhoenix),
-        paidFreeQuality: summarizeLeadQuality(paidFree),
-      };
-    };
-
-    const parsedAds = fbAdsRows
-      .map((row) => {
-        const date = toUtcDayStart(row?.date_day);
-        const funnelKey = String(row?.funnel_key || '').trim().toLowerCase();
-        const text = `${row?.funnel_key || ''} ${row?.campaign_name || ''}`.toLowerCase();
-        const isPhoenix = funnelKey === 'phoenix' || (funnelKey === '' && (isPhoenixText(text) || text.includes('forum')));
-        const isDonation = funnelKey === 'donation' || (funnelKey === '' && text.includes('donat'));
-        const isFreeGroup = funnelKey === 'free' || (!funnelKey && !isPhoenix && !isDonation);
-        return {
-          ...row,
-          _date: date,
-          _funnelKey: funnelKey,
-          _isPhoenix: isPhoenix,
-          _isDonation: isDonation,
-          _isFreeGroup: isFreeGroup,
-        };
-      })
-      .filter((row) => row._date);
-
-    const adStats = (start, end) => {
-      const rows = parsedAds.filter((row) => inUtcDayRange(row._date, start, end));
-      const spend = rows.reduce((acc, row) => acc + safeNum(row.spend), 0);
-      const leads = rows.reduce((acc, row) => acc + safeNum(row.leads), 0);
-      const freeSpend = sumBy(rows, (row) => row._isFreeGroup, (row) => row.spend);
-      const freeLeads = sumBy(rows, (row) => row._isFreeGroup, (row) => row.leads);
-      const phoenixSpend = sumBy(rows, (row) => row._isPhoenix, (row) => row.spend);
-      const phoenixLeads = sumBy(rows, (row) => row._isPhoenix, (row) => row.leads);
-      const donationSpend = sumBy(rows, (row) => row._isDonation, (row) => row.spend);
-      const leadGenSpend = freeSpend + phoenixSpend;
-      const leadGenLeads = freeLeads + phoenixLeads;
-      return {
-        spend,
-        leads,
-        freeSpend,
-        freeLeads,
-        phoenixSpend,
-        phoenixLeads,
-        donationSpend,
-        leadGenSpend,
-        leadGenLeads,
-        freeCpl: ratioOrNull(freeSpend, freeLeads),
-        phoenixCpl: ratioOrNull(phoenixSpend, phoenixLeads),
-        leadGenCpl: ratioOrNull(leadGenSpend, leadGenLeads),
-      };
-    };
-
-    const activityAssocKey = (activityId, activityType) => `${String(activityType || '').toLowerCase()}:${String(activityId || '')}`;
-    const assocByActivityId = new Map();
-    hubspotActivityAssocs.forEach((assoc) => {
-      const id = Number(assoc?.hubspot_activity_id);
-      const activityType = String(assoc?.activity_type || '').toLowerCase();
-      if (!Number.isFinite(id)) return;
-      const key = activityAssocKey(id, activityType);
-      if (!assocByActivityId.has(key)) assocByActivityId.set(key, []);
-      assocByActivityId.get(key).push(assoc);
-    });
-
-    const parsedCalls = hubspotActivities
-      .map((activity) => {
-        const id = Number(activity?.hubspot_activity_id);
-        const activityType = String(activity?.activity_type || '').toLowerCase();
-        const startedAtInstant = parseMaybeDate(activity?.hs_timestamp || activity?.created_at_hubspot);
-        const startedAt = toUtcDayStart(startedAtInstant);
-        if (!startedAt || !Number.isFinite(id)) return null;
-        // Exclude upcoming sessions from attendance metrics; keep window strictly completed meetings.
-        if (startedAtInstant && startedAtInstant.getTime() > Date.now()) return null;
-        const timing = etGroupTimingFromDate(activity?.hs_timestamp || activity?.created_at_hubspot);
-        const assocs = assocByActivityId.get(activityAssocKey(id, activityType)) || [];
-        const attendeeKeys = Array.from(new Set(
-          assocs.map(attendeeAssocKey).filter(Boolean)
-        ));
-        const attendeeCount = attendeeKeys.length;
-        const title = String(activity?.title || '');
-        const lowerTitle = title.toLowerCase();
-        const groupType = classifyGroupCall(activity, attendeeCount);
-        const isPhoenixForum = lowerTitle.includes('phoenix forum');
-        return {
-          id,
-          startedAt,
-          title,
-          lowerTitle,
-          attendeeKeys,
-          attendeeCount,
-          groupType,
-          minutesFromExpected: Number(timing?.minutesFromExpected ?? Number.POSITIVE_INFINITY),
-          isNearScheduled: !!timing?.isNearScheduled,
-          isPhoenixForum,
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
-
-    const freeGroupEventsAll = parsedCalls.filter((e) => !!e.groupType && Number(e.attendeeCount || 0) >= MIN_GROUP_ATTENDEES);
-    const freeGroupByDate = new Map();
-    const compareSessionCandidates = (candidate, existing) => {
-      if (!!candidate.isNearScheduled !== !!existing.isNearScheduled) {
-        return candidate.isNearScheduled ? 1 : -1;
-      }
-      if (candidate.isNearScheduled && existing.isNearScheduled) {
-        const candidateDiff = Number(candidate?.minutesFromExpected || Number.POSITIVE_INFINITY);
-        const existingDiff = Number(existing?.minutesFromExpected || Number.POSITIVE_INFINITY);
-        if (candidateDiff !== existingDiff) return candidateDiff < existingDiff ? 1 : -1;
-      }
-      const candidateCount = Number(candidate?.attendeeCount || 0);
-      const existingCount = Number(existing?.attendeeCount || 0);
-      if (candidateCount !== existingCount) return candidateCount > existingCount ? 1 : -1;
-      return 0;
-    };
-    freeGroupEventsAll.forEach((event) => {
-      const dateKey = event.startedAt.toISOString().slice(0, 10);
-      const key = `${event.groupType}|${dateKey}`;
-      const existing = freeGroupByDate.get(key);
-      if (!existing || compareSessionCandidates(event, existing) > 0) {
-        freeGroupByDate.set(key, event);
-      }
-    });
-    EXPECTED_ZERO_GROUP_SESSION_KEYS.forEach((key) => {
-      const [groupType, dateKey] = key.split('|');
-      const startedAt = toUtcDayStart(dateKey);
-      if (!startedAt) return;
-      freeGroupByDate.set(key, {
-        id: `expected-zero-${key}`,
-        startedAt,
-        title: 'Holiday (no session)',
-        lowerTitle: 'holiday',
-        attendeeKeys: [],
-        attendeeCount: 0,
-        groupType,
-        minutesFromExpected: 0,
-        isNearScheduled: true,
-        isPhoenixForum: false,
-        isExpectedZero: true,
-      });
-    });
-    const freeGroupEvents = Array.from(freeGroupByDate.values())
-      .sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
-    const phoenixForumCalls = parsedCalls.filter((e) => e.isPhoenixForum);
-    const unclassifiedLargeCalls = parsedCalls.filter((e) => !e.groupType && !e.isPhoenixForum && e.attendeeCount >= MIN_GROUP_ATTENDEES).length;
-
-    const firstSeenFreeGroup = new Map();
-    freeGroupEvents.forEach((event) => {
-      event.attendeeKeys.forEach((key) => {
-        if (!firstSeenFreeGroup.has(key)) firstSeenFreeGroup.set(key, event.startedAt);
-      });
-    });
-
-    const freeGroupAttendanceStats = (start, end) => {
-      const events = freeGroupEvents.filter((event) => inUtcDayRange(event.startedAt, start, end));
-      const visitCounts = new Map();
-      let attendanceParticipations = 0;
-      let tuesdaySessions = 0;
-      let thursdaySessions = 0;
-      events.forEach((event) => {
-        if (event.groupType === 'Tuesday') tuesdaySessions += 1;
-        if (event.groupType === 'Thursday') thursdaySessions += 1;
-        event.attendeeKeys.forEach((key) => {
-          attendanceParticipations += 1;
-          visitCounts.set(key, (visitCounts.get(key) || 0) + 1);
-        });
-      });
-
-      let newAttendees = 0;
-      firstSeenFreeGroup.forEach((date) => {
-        if (inUtcDayRange(date, start, end)) newAttendees += 1;
-      });
-
-      const uniqueAttendees = visitCounts.size;
-      const repeaters = Array.from(visitCounts.values()).filter((count) => count > 1).length;
-      const avgVisits = uniqueAttendees > 0 ? attendanceParticipations / uniqueAttendees : 0;
-      const repeatRate = uniqueAttendees > 0 ? repeaters / uniqueAttendees : 0;
-      return {
-        sessions: events.length,
-        tuesdaySessions,
-        thursdaySessions,
-        attendanceParticipations,
-        uniqueAttendees,
-        newAttendees,
-        repeaters,
-        avgVisits,
-        repeatRate,
-      };
-    };
-
-    const phoenixCallStats = (start, end) => {
-      const events = phoenixForumCalls.filter((event) => inUtcDayRange(event.startedAt, start, end));
-      const unique = new Set();
-      let attendanceParticipations = 0;
-      events.forEach((event) => {
-        event.attendeeKeys.forEach((key) => {
-          unique.add(key);
-          attendanceParticipations += 1;
-        });
-      });
-      return {
-        sessions: events.length,
-        uniqueAttendees: unique.size,
-        attendanceParticipations,
-      };
-    };
-
-    const leadsWeek = contactStats(lastWeekStart, lastWeekEnd);
-    const leadsPrevWeek = contactStats(prevWeekStart, prevWeekEnd);
-    const leadsMonth = contactStats(monthStart, monthEnd);
-    const leadsPrevMonth = contactStats(prevMonthStart, prevMonthEnd);
-    const adsWeek = adStats(lastWeekStart, lastWeekEnd);
-    const adsPrevWeek = adStats(prevWeekStart, prevWeekEnd);
-    const adsMonth = adStats(monthStart, monthEnd);
-    const adsPrevMonth = adStats(prevMonthStart, prevMonthEnd);
-
-    const attendeesWeek = freeGroupAttendanceStats(attendanceWeekStart, attendanceWeekEnd);
-    const attendeesPrevWeek = freeGroupAttendanceStats(attendancePrevWeekStart, attendancePrevWeekEnd);
-    const attendeesMonth = freeGroupAttendanceStats(attendanceMonthStart, attendanceMonthEnd);
-    const attendeesPrevMonth = freeGroupAttendanceStats(attendancePrevMonthStart, attendancePrevMonthEnd);
-    const phoenixCallsMonth = phoenixCallStats(attendanceMonthStart, attendanceMonthEnd);
-    const attendanceAdsWeek = adStats(attendanceWeekStart, attendanceWeekEnd);
-    const attendanceAdsPrevWeek = adStats(attendancePrevWeekStart, attendancePrevWeekEnd);
-    const attendanceAdsMonth = adStats(attendanceMonthStart, attendanceMonthEnd);
-    const attendanceAdsPrevMonth = adStats(attendancePrevMonthStart, attendancePrevMonthEnd);
-
-    const weekFreeCostPerNewAttendee = ratioOrNull(attendanceAdsWeek.freeSpend, attendeesWeek.newAttendees);
-    const prevWeekFreeCostPerNewAttendee = ratioOrNull(attendanceAdsPrevWeek.freeSpend, attendeesPrevWeek.newAttendees);
-    const monthFreeCostPerNewAttendee = ratioOrNull(attendanceAdsMonth.freeSpend, attendeesMonth.newAttendees);
-    const prevMonthFreeCostPerNewAttendee = ratioOrNull(attendanceAdsPrevMonth.freeSpend, attendeesPrevMonth.newAttendees);
-
-    const newAttendeeWeekDelta = comparePeriod(attendeesWeek.newAttendees, attendeesPrevWeek.newAttendees);
-    const avgVisitsWeekDelta = comparePeriod(attendeesWeek.avgVisits, attendeesPrevWeek.avgVisits);
-    const cpnaWeekDelta = comparePeriod(weekFreeCostPerNewAttendee, prevWeekFreeCostPerNewAttendee);
-    const newAttendeeMonthDelta = comparePeriod(attendeesMonth.newAttendees, attendeesPrevMonth.newAttendees);
-    const avgVisitsMonthDelta = comparePeriod(attendeesMonth.avgVisits, attendeesPrevMonth.avgVisits);
-    const cpnaMonthDelta = comparePeriod(monthFreeCostPerNewAttendee, prevMonthFreeCostPerNewAttendee);
-
-    const phoenixPaidShareMonth = ratioOrNull(leadsMonth.paidPhoenix, leadsMonth.paidSocial);
-
-    const seoWeekSessions = dashboard.cards.sessions7d;
-    const seoWeekClicks = dashboard.cards.clicks7d;
-    const seoMonthSessions = dashboard.cards.sessions30d;
-    const seoMonthClicks = dashboard.cards.clicks30d;
-
-    const weekPaidQuality = leadsWeek.paidSocialQuality;
-    const prevWeekPaidQuality = leadsPrevWeek.paidSocialQuality;
-    const monthPaidQuality = leadsMonth.paidSocialQuality;
-    const prevMonthPaidQuality = leadsPrevMonth.paidSocialQuality;
-
-    const cpqlWeek = ratioOrNull(adsWeek.leadGenSpend, weekPaidQuality.qualified);
-    const cpqlPrevWeek = ratioOrNull(adsPrevWeek.leadGenSpend, prevWeekPaidQuality.qualified);
-    const cpqlMonth = ratioOrNull(adsMonth.leadGenSpend, monthPaidQuality.qualified);
-    const cpqlPrevMonth = ratioOrNull(adsPrevMonth.leadGenSpend, prevMonthPaidQuality.qualified);
-
-    const cpglWeek = ratioOrNull(adsWeek.leadGenSpend, weekPaidQuality.great);
-    const cpglPrevWeek = ratioOrNull(adsPrevWeek.leadGenSpend, prevWeekPaidQuality.great);
-    const cpglMonth = ratioOrNull(adsMonth.leadGenSpend, monthPaidQuality.great);
-    const cpglPrevMonth = ratioOrNull(adsPrevMonth.leadGenSpend, prevMonthPaidQuality.great);
-
-    const paidHighQualityWeekDelta = comparePeriod(weekPaidQuality.highQuality, prevWeekPaidQuality.highQuality);
-    const paidHighQualityMonthDelta = comparePeriod(monthPaidQuality.highQuality, prevMonthPaidQuality.highQuality);
-    const paidGreatWeekDelta = comparePeriod(weekPaidQuality.great, prevWeekPaidQuality.great);
-    const paidGreatMonthDelta = comparePeriod(monthPaidQuality.great, prevMonthPaidQuality.great);
-    const paidQualityRateWeekDelta = comparePeriod(weekPaidQuality.highQualityRate, prevWeekPaidQuality.highQualityRate);
-    const paidQualityRateMonthDelta = comparePeriod(monthPaidQuality.highQualityRate, prevMonthPaidQuality.highQualityRate);
-    const cpqlWeekDelta = comparePeriod(cpqlWeek, cpqlPrevWeek);
-    const cpqlMonthDelta = comparePeriod(cpqlMonth, cpqlPrevMonth);
-    const cpglWeekDelta = comparePeriod(cpglWeek, cpglPrevWeek);
-    const cpglMonthDelta = comparePeriod(cpglMonth, cpglPrevMonth);
-
-    function leadManagerPeriodNarrative({ label, currentLeads, previousLeads, currentAds, previousAds, cpql, cpqlDelta, cpgl, cpglDelta, greatDelta, highQualityDelta, qualityRateDelta }) {
-      const q = currentLeads.paidSocialQuality;
-      const prevQ = previousLeads.paidSocialQuality;
-      const spendDeltaAbs = safeNum(currentAds.leadGenSpend) - safeNum(previousAds.leadGenSpend);
-      const spendDelta = comparePeriod(currentAds.leadGenSpend, previousAds.leadGenSpend);
-      const paidVolumeDeltaAbs = safeNum(currentLeads.paidSocial) - safeNum(previousLeads.paidSocial);
-      const greatDeltaAbs = safeNum(q.great) - safeNum(prevQ.great);
-      const highQualityDeltaAbs = safeNum(q.highQuality) - safeNum(prevQ.highQuality);
-
-      const leadVolumeSimilarityThreshold = Math.max(2, Math.round(Math.max(1, previousLeads.paidSocial) * 0.1));
-      const volumeRoughlyFlat = Math.abs(paidVolumeDeltaAbs) <= leadVolumeSimilarityThreshold;
-      const spendUpMaterially = spendDeltaAbs >= 250;
-      const spendDownMaterially = spendDeltaAbs <= -250;
-      const qualityCoverageLow = (q.qualityCoverage || 0) < 0.7;
-      const qualityCoverageWatch = (q.qualityCoverage || 0) >= 0.7 && (q.qualityCoverage || 0) < 0.9;
-
-      let diagnosis = '';
-      let recommendation = '';
-
-      if (spendUpMaterially && volumeRoughlyFlat && highQualityDeltaAbs <= 0) {
-        diagnosis = `We spent ${formatCurrencySignedDelta(spendDeltaAbs)} on lead-gen campaigns for roughly the same paid-social lead volume, but qualified output (sobriety >1y + revenue >= $250k, official first with fallback only when official is missing) did not improve. That pattern usually signals creative fatigue, audience saturation, or weaker qualification signal quality.`;
-        recommendation = 'Management call: refresh creative + qualification hooks on the highest-spend ad sets before scaling budget.';
-      } else if (spendUpMaterially && greatDeltaAbs < 0) {
-        diagnosis = `Lead-gen spend increased ${changeLabel(spendDelta)} while great-lead output moved ${changeLabel(greatDelta)}. This is a quality regression, not just a volume wobble.`;
-        recommendation = 'Management call: reallocate spend toward campaigns/angles producing great leads and cap budgets on broad-volume ad sets.';
-      } else if (spendDownMaterially && highQualityDeltaAbs >= 0) {
-        diagnosis = `Lead-gen spend is lower (${formatCurrencySignedDelta(spendDeltaAbs)}) while high-quality output held or improved. That suggests targeting/creative efficiency is improving and can likely be scaled carefully.`;
-        recommendation = 'Management call: preserve the winning segments and increase budget only where great/qualified lead share stays strong.';
-      } else if (paidVolumeDeltaAbs > leadVolumeSimilarityThreshold && highQualityDeltaAbs <= 0) {
-        diagnosis = `Top-of-funnel volume increased, but qualified/great output did not rise with it. Volume is growing faster than fit, which usually means the targeting or messaging is broadening beyond the ICP.`;
-        recommendation = 'Management call: tighten ad copy and landing-page qualification around revenue + sobriety + founder identity.';
-      } else if (greatDeltaAbs > 0 && ((cpqlDelta !== null && cpqlDelta < 0) || (cpglDelta !== null && cpglDelta < 0))) {
-        diagnosis = 'Quality and efficiency improved together: great leads increased while cost per qualified/great lead improved. This is the pattern worth scaling.';
-        recommendation = 'Management call: scale the best-performing campaigns incrementally and document the winning creative/message combinations.';
-      } else {
-        diagnosis = 'This period is mixed: lead volume, spend, and quality moved in different directions, so the priority is to protect great-lead output before chasing more volume.';
-        recommendation = 'Management call: review campaign-level quality mix (great vs qualified vs low-fit) before making spend changes.';
-      }
-
-      const qualityCoverageNote = qualityCoverageLow
-        ? `Data quality note: only ${pct(q.qualityCoverage)} of paid-social leads have both revenue and sobriety data, so qualified/great counts may be understated.`
-        : qualityCoverageWatch
-          ? `Data quality note: ${pct(q.qualityCoverage)} of paid-social leads have both revenue and sobriety data; keep improving form/CRM completion to trust CPQL trends.`
-          : '';
-
-      const phoenixShare = ratioOrNull(currentLeads.paidPhoenix, currentLeads.paidSocial);
-      const phoenixGreatShare = ratioOrNull(currentLeads.paidPhoenixQuality.great, q.great);
-      const mixNote = q.great > 0 && Number.isFinite(phoenixGreatShare)
-        ? `Phoenix-related paid leads were ${pct(phoenixShare)} of paid volume and generated ${pct(phoenixGreatShare)} of great leads this period.`
-        : Number.isFinite(phoenixShare)
-          ? `Phoenix-related paid leads were ${pct(phoenixShare)} of paid-social volume this period.`
-          : '';
-
-      const hasCpql = Number.isFinite(cpql);
-      const hasCpgl = Number.isFinite(cpgl);
-      const hasMetaLeadGenCpl = Number.isFinite(currentAds.leadGenCpl);
-      return `${diagnosis} ${recommendation} Supporting signal (${label}): paid social generated ${formatInt(q.great)} great ${pluralize(q.great, 'lead')} (${changeLabel(greatDelta)} vs prior period) and ${formatInt(q.highQuality)} high-quality ${pluralize(q.highQuality, 'lead')} total (${changeLabel(highQualityDelta)}). Meta reported lead-gen CPL was ${hasMetaLeadGenCpl ? formatCurrency(currentAds.leadGenCpl) : 'not available'}${hasMetaLeadGenCpl ? ` across ${formatInt(currentAds.leadGenLeads)} ad leads` : ''}. CPQL was ${hasCpql ? formatCurrency(cpql) : 'not available'}${hasCpql ? ` (${changeLabel(cpqlDelta, { positiveIsGood: false })})` : ''}${hasCpgl ? ` and CPGL was ${formatCurrency(cpgl)} (${changeLabel(cpglDelta, { positiveIsGood: false })})` : ''}. Paid-social quality rate was ${pct(q.highQualityRate)} (${changeLabel(qualityRateDelta)}). ${mixNote}${qualityCoverageNote ? ` ${qualityCoverageNote}` : ''}`;
-    }
-
-    const leadsWeekSummary = leadManagerPeriodNarrative({
-      label: `the last 7 days (${periodMeta.lastWeekLabel})`,
-      currentLeads: leadsWeek,
-      previousLeads: leadsPrevWeek,
-      currentAds: adsWeek,
-      previousAds: adsPrevWeek,
-      cpql: cpqlWeek,
-      cpqlDelta: cpqlWeekDelta,
-      cpgl: cpglWeek,
-      cpglDelta: cpglWeekDelta,
-      greatDelta: paidGreatWeekDelta,
-      highQualityDelta: paidHighQualityWeekDelta,
-      qualityRateDelta: paidQualityRateWeekDelta,
-    });
-
-    const leadsMonthSummary = leadManagerPeriodNarrative({
-      label: `the last 30 days (${periodMeta.lastMonthLabel})`,
-      currentLeads: leadsMonth,
-      previousLeads: leadsPrevMonth,
-      currentAds: adsMonth,
-      previousAds: adsPrevMonth,
-      cpql: cpqlMonth,
-      cpqlDelta: cpqlMonthDelta,
-      cpgl: cpglMonth,
-      cpglDelta: cpglMonthDelta,
-      greatDelta: paidGreatMonthDelta,
-      highQualityDelta: paidHighQualityMonthDelta,
-      qualityRateDelta: paidQualityRateMonthDelta,
-    });
-
-    const monthPhoenixGreatShare = ratioOrNull(leadsMonth.paidPhoenixQuality.great, monthPaidQuality.great);
-    const monthFreeGreatShare = ratioOrNull(leadsMonth.paidFreeQuality.great, monthPaidQuality.great);
-    const monthCpqlBetterThanCpgl = Number.isFinite(cpqlMonth) && Number.isFinite(cpglMonth) && cpglMonth > cpqlMonth;
-    const leadsBigPictureSummaryComputed = [
-      'This lead report weights quality first, so volume gains do not mask deterioration in fit.',
-      `Over the last 30 days, paid-social produced ${formatInt(monthPaidQuality.great)} great ${pluralize(monthPaidQuality.great, 'lead')} and ${formatInt(monthPaidQuality.qualified)} qualified ${pluralize(monthPaidQuality.qualified, 'lead')}; CPQL is ${Number.isFinite(cpqlMonth) ? formatCurrency(cpqlMonth) : 'N/A'} and CPGL is ${Number.isFinite(cpglMonth) ? formatCurrency(cpglMonth) : 'N/A'}.`,
-      Number.isFinite(monthPhoenixGreatShare)
-        ? `Phoenix-related campaigns are ${pct(phoenixPaidShareMonth)} of paid-social lead volume and ${pct(monthPhoenixGreatShare)} of great leads${Number.isFinite(monthFreeGreatShare) ? ` (free/non-Phoenix contributes ${pct(monthFreeGreatShare)} of great leads)` : ''}, which should guide budget allocation.`
-        : `Phoenix-related campaigns are ${pct(phoenixPaidShareMonth)} of paid-social lead volume; great-lead counts are too low this month to infer reliable mix advantage.`,
-      monthCpqlBetterThanCpgl
-        ? 'Operationally: scale what is producing great leads, while using CPQL as the faster day-to-day guardrail because great-lead counts are lower and noisier.'
-        : 'Operationally: monitor both CPQL and CPGL together; CPQL moves faster, but great-lead output is the quality check that prevents budget drift.',
-    ].join(' ');
-    const leadsWeekSummaryFinal = leadsDataUnavailable
-      ? 'Lead KPI summary unavailable for this refresh because HubSpot contacts and/or Meta Ads source rows did not load. Verify Supabase environment, RLS policies, and ingestion sync health before interpreting quality metrics.'
-      : leadsWeekSummary;
-    const leadsMonthSummaryFinal = leadsDataUnavailable
-      ? 'Lead 30-day KPI summary unavailable for this refresh because HubSpot contacts and/or Meta Ads source rows did not load. Run source sync and confirm production data access before reviewing CPQL/CPGL.'
-      : leadsMonthSummary;
-    const leadsBigPictureSummary = leadsDataUnavailable
-      ? 'Leads AI Manager summary is temporarily unavailable because HubSpot contacts and/or Meta Ads source data did not load for this refresh. Fix source connectivity and permissions, then refresh so 30-day quality KPIs are recomputed from live data.'
-      : leadsBigPictureSummaryComputed;
-
-    const repeatRateWeekDelta = comparePeriod(attendeesWeek.repeatRate, attendeesPrevWeek.repeatRate);
-    const repeatRateMonthDelta = comparePeriod(attendeesMonth.repeatRate, attendeesPrevMonth.repeatRate);
-
-    function attendeesManagerPeriodNarrative({ label, current, previous, currentAds, previousAds, cpna, cpnaDelta, newDelta, avgVisitsDelta, repeatDelta }) {
-      const newDeltaAbs = safeNum(current.newAttendees) - safeNum(previous.newAttendees);
-      const spendDeltaAbs = safeNum(currentAds.freeSpend) - safeNum(previousAds.freeSpend);
-      const cpnaWorsening = cpnaDelta !== null && cpnaDelta > 0.15;
-      const cpnaImproving = cpnaDelta !== null && cpnaDelta < -0.1;
-      const retentionSoftening = avgVisitsDelta !== null && avgVisitsDelta < -0.08;
-      const retentionImproving = avgVisitsDelta !== null && avgVisitsDelta > 0.08;
-      const scheduleGap = current.tuesdaySessions === 0 || current.thursdaySessions === 0;
-
-      let diagnosis = '';
-      let recommendation = '';
-
-      if (cpnaWorsening && newDeltaAbs <= 0) {
-        diagnosis = `Acquisition efficiency is weakening: free-group spend moved ${formatCurrencySignedDelta(spendDeltaAbs)} while net-new attendees were ${changeLabel(newDelta)}. Paying more for the same (or fewer) new people usually points to ad fatigue, weaker audience fit, or landing-page/message slippage.`;
-        recommendation = 'Management call: refresh free-group creatives and tighten audience targeting before increasing spend.';
-      } else if (newDeltaAbs > 0 && retentionSoftening) {
-        diagnosis = 'Top-of-funnel pull improved, but repeat behavior softened. More people are coming in, yet they are not sticking at the same rate, which can dilute downstream Phoenix Forum pipeline quality.';
-        recommendation = 'Management call: strengthen first-session follow-up and session-to-session invites so new attendees return quickly.';
-      } else if (newDeltaAbs < 0 && retentionImproving) {
-        diagnosis = 'Acquisition volume dipped, but attendee stickiness improved. This often means session quality or audience fit improved even while top-of-funnel reach softened.';
-        recommendation = 'Management call: protect the current session format and focus on restoring acquisition volume without broadening targeting too far.';
-      } else if (newDeltaAbs > 0 && retentionImproving && (cpnaDelta === null || cpnaImproving)) {
-        diagnosis = 'This is a healthy pattern: new-attendee growth and repeat behavior improved together while acquisition cost held or improved.';
-        recommendation = 'Management call: maintain the current follow-up cadence and scale acquisition carefully while monitoring classification/data quality.';
-      } else {
-        diagnosis = 'The free-group funnel is mixed right now: acquisition and retention signals are not moving in the same direction, so the risk is optimizing one while degrading the other.';
-        recommendation = 'Management call: review acquisition efficiency and repeat-visit trends together before adjusting ad budget or session format.';
-      }
-
-      const scheduleNote = scheduleGap
-        ? `Schedule signal note: one of the expected Tue/Thu sessions is missing in this reporting window, which can materially skew comparisons (sync delay or call-title classification issue).`
-        : '';
-      const avgVisitsText = formatAttendanceAvgVisits(current.avgVisits, current.uniqueAttendees);
-      const cpnaText = formatAttendanceCpna(cpna, currentAds.freeSpend, current.newAttendees);
-      const cpnaDeltaText = Number.isFinite(cpna) ? ` (${changeLabel(cpnaDelta, { positiveIsGood: false })})` : '';
-      const cpnaFallback = !Number.isFinite(cpna)
-        ? ` Returning attendee rate is ${pct(current.repeatRate)} (${formatInt(current.repeaters)} repeaters of ${formatInt(current.uniqueAttendees)} unique attendees).`
-        : '';
-
-      return `${diagnosis} ${recommendation} Supporting signal (${label}): free groups recorded ${formatInt(current.newAttendees)} net-new ${pluralize(current.newAttendees, 'attendee')} (${changeLabel(newDelta)}), ${formatInt(current.attendanceParticipations)} total attendances, ${avgVisitsText} average visits per attendee (${changeLabel(avgVisitsDelta)}), and repeat participation ${pct(current.repeatRate)} (${changeLabel(repeatDelta)}). Estimated Meta cost per new attendee was ${cpnaText}${cpnaDeltaText}.${cpnaFallback}${scheduleNote ? ` ${scheduleNote}` : ''}`;
-    }
-
-    const attendeesWeekSummary = attendeesManagerPeriodNarrative({
-      label: `the last 7 days (${attendancePeriodMeta.lastWeekLabel})`,
-      current: attendeesWeek,
-      previous: attendeesPrevWeek,
-      currentAds: attendanceAdsWeek,
-      previousAds: attendanceAdsPrevWeek,
-      cpna: weekFreeCostPerNewAttendee,
-      cpnaDelta: cpnaWeekDelta,
-      newDelta: newAttendeeWeekDelta,
-      avgVisitsDelta: avgVisitsWeekDelta,
-      repeatDelta: repeatRateWeekDelta,
-    });
-
-    const attendeesMonthSummary = attendeesManagerPeriodNarrative({
-      label: `the last 30 days (${attendancePeriodMeta.lastMonthLabel})`,
-      current: attendeesMonth,
-      previous: attendeesPrevMonth,
-      currentAds: attendanceAdsMonth,
-      previousAds: attendanceAdsPrevMonth,
-      cpna: monthFreeCostPerNewAttendee,
-      cpnaDelta: cpnaMonthDelta,
-      newDelta: newAttendeeMonthDelta,
-      avgVisitsDelta: avgVisitsMonthDelta,
-      repeatDelta: repeatRateMonthDelta,
-    });
-    const attendeesMonthCostOrFallback = Number.isFinite(monthFreeCostPerNewAttendee)
-      ? `estimated Meta cost per new attendee at ${formatCurrency(monthFreeCostPerNewAttendee)}`
-      : `returning attendee rate at ${pct(attendeesMonth.repeatRate)} (${formatInt(attendeesMonth.repeaters)} repeaters of ${formatInt(attendeesMonth.uniqueAttendees)} unique attendees)`;
-
-    const attendeesBigPictureSummaryComputed = [
-      'Attendance reporting here is driven by HubSpot call/meeting attendance (not the legacy Zoom metric), which keeps the manager aligned with the current attendance pipeline.',
-      `Over the last 30 days, completed free-group meetings generated ${formatInt(attendeesMonth.newAttendees)} net-new attendees, ${formatInt(attendeesMonth.attendanceParticipations)} total attendances, and ${formatAttendanceAvgVisits(attendeesMonth.avgVisits, attendeesMonth.uniqueAttendees)} average visits per attendee with ${attendeesMonthCostOrFallback}.`,
-      `Raw calculation inputs (30d): net-new numerator ${formatInt(attendeesMonth.newAttendees)} first-seen attendees, total attendance numerator ${formatInt(attendeesMonth.attendanceParticipations)} attendee participations across ${formatInt(attendeesMonth.sessions)} completed sessions, avg visits numerator/denominator ${formatInt(attendeesMonth.attendanceParticipations)}/${formatInt(attendeesMonth.uniqueAttendees)}, Meta CPNA numerator/denominator ${formatCurrency(attendanceAdsMonth.freeSpend)}/${formatInt(attendeesMonth.newAttendees)}.`,
-      `${phoenixCallsMonth.sessions > 0 ? `Phoenix Forum-tagged calls in the same period: ${formatInt(phoenixCallsMonth.sessions)} sessions and ${formatInt(phoenixCallsMonth.attendanceParticipations)} attendances.` : 'Phoenix Forum-tagged call titles were not detected in the last 30 days from HubSpot call/meeting activity.'}`,
-      unclassifiedLargeCalls > 0
-        ? `${formatInt(unclassifiedLargeCalls)} high-attendance calls are still unclassified, which can understate free-group counts until titles are standardized.`
-        : 'Classification coverage looks clean for high-attendance calls in the current window.',
-    ].join(' ');
-    const attendeesWeekSummaryFinal = attendanceDataUnavailable
-      ? 'Attendance KPI summary unavailable for this refresh because HubSpot call/meeting activity and/or attendee associations did not load. Verify Supabase environment, RLS policies, and attendance sync jobs before interpreting KPI trends.'
-      : attendeesWeekSummary;
-    const attendeesMonthSummaryFinal = attendanceDataUnavailable
-      ? 'Attendance 30-day KPI summary unavailable for this refresh because HubSpot call/meeting activity and/or attendee associations did not load. Run attendance sync and confirm production data access before reviewing attendance metrics.'
-      : attendeesMonthSummary;
-    const attendeesBigPictureSummary = attendanceDataUnavailable
-      ? 'Attendance AI Manager summary is temporarily unavailable because HubSpot attendance source data did not load for this refresh. Fix source connectivity and permissions, then refresh so completed-meeting KPIs are recomputed from live HubSpot data.'
-      : attendeesBigPictureSummaryComputed;
-
-    function seoManagerPeriodNarrative({ label, sessions, clicks, sessionsDelta, clicksDelta, ctr, position, impressions, engagement }) {
-      const clicksDown = clicksDelta !== null && clicksDelta < -0.08;
-      const clicksUp = clicksDelta !== null && clicksDelta > 0.08;
-      const sessionsDown = sessionsDelta !== null && sessionsDelta < -0.08;
-      const sessionsUp = sessionsDelta !== null && sessionsDelta > 0.08;
-      const ctrLow = Number.isFinite(ctr) && ctr < 0.02;
-      const ctrStrong = Number.isFinite(ctr) && ctr >= 0.035;
-      const positionWeak = Number.isFinite(position) && position > 18;
-      const positionStrong = Number.isFinite(position) && position <= 10;
-      const impressionScale = Number.isFinite(impressions) && impressions > 0 ? ` on ${formatInt(impressions)} impressions` : '';
-
-      let diagnosis = '';
-      let recommendation = '';
-
-      if (clicksDown && !sessionsDown) {
-        diagnosis = 'Search demand/visibility softened, but overall sessions held up, which usually means non-organic channels are masking SEO softness.';
-        recommendation = 'Management call: inspect query-level declines in GSC before this becomes a lead-quality problem upstream.';
-      } else if (clicksUp && !sessionsUp) {
-        diagnosis = 'Organic search is improving, but total sessions are not keeping pace. That usually points to channel mix offsetting the gain or landing-page/on-site friction limiting the impact.';
-        recommendation = 'Management call: review top organic landing pages for conversion friction and match content intent to Phoenix Forum pathways.';
-      } else if (clicksDown && sessionsDown) {
-        diagnosis = 'Both organic clicks and sessions are declining, which is a broad discovery softness signal rather than a single-channel anomaly.';
-        recommendation = 'Management call: prioritize pages/queries with the largest click losses and refresh titles, descriptions, and content depth first.';
-      } else if (clicksUp && sessionsUp && (ctrStrong || positionStrong)) {
-        diagnosis = 'Discovery momentum looks healthy: traffic and organic clicks are rising together, with search quality metrics in a supportive range.';
-        recommendation = 'Management call: double down on topics and pages already generating qualified discovery and strengthen CTAs into Phoenix Forum.';
-      } else if (ctrLow && !positionWeak) {
-        diagnosis = 'Visibility is present, but click-through is weak. This is more of a snippet/messaging issue than a ranking issue.';
-        recommendation = 'Management call: rewrite titles/meta descriptions on high-impression pages to improve intent match and click quality.';
-      } else {
-        diagnosis = 'SEO signals are mixed, so the key is to watch discovery growth and on-site engagement together instead of optimizing one in isolation.';
-        recommendation = 'Management call: review GSC and landing-page performance together before shipping content or metadata changes.';
-      }
-
-      return `${diagnosis} ${recommendation} Supporting signal (${label}): ${formatInt(sessions)} sessions and ${formatInt(clicks)} organic clicks${impressionScale}; sessions ${changeLabel(sessionsDelta)} and clicks ${changeLabel(clicksDelta)} vs prior period, with CTR ${pct(ctr)}, average position ${Number.isFinite(position) ? position.toFixed(1) : 'N/A'}, and engagement rate ${pct(engagement)}.`;
-    }
-
-    const seoWeekSummary = seoManagerPeriodNarrative({
-      label: `the last 7 days (${periodMeta.lastWeekLabel})`,
-      sessions: seoWeekSessions,
-      clicks: seoWeekClicks,
-      sessionsDelta: dashboard.trends.sessionsTrend,
-      clicksDelta: dashboard.trends.clicksTrend,
-      ctr: dashboard.cards.ctr7d,
-      position: dashboard.cards.position7d,
-      impressions: dashboard.cards.impressions7d,
-      engagement: dashboard.cards.engagement7d,
-    });
-
-    const seoMonthSummary = seoManagerPeriodNarrative({
-      label: `the last 30 days (${periodMeta.lastMonthLabel})`,
-      sessions: seoMonthSessions,
-      clicks: seoMonthClicks,
-      sessionsDelta: dashboard.trends.sessions30dTrend,
-      clicksDelta: dashboard.trends.clicks30dTrend,
-      ctr: dashboard.cards.ctr30d,
-      position: dashboard.cards.position30d,
-      impressions: dashboard.cards.impressions30d,
-      engagement: dashboard.cards.engagement30d,
-    });
-
-    const seoBigPictureSummary = [
-      'SEO is the compounding, lower-cost discovery channel for the nonprofit, but the manager tracks it as a conversion-path system, not just a traffic counter.',
-      `The current 30-day picture is ${changeLabel(dashboard.trends.clicks30dTrend)} in organic clicks and ${changeLabel(dashboard.trends.sessions30dTrend)} in sessions, with CTR ${pct(dashboard.cards.ctr30d)} and average position ${Number.isFinite(dashboard.cards.position30d) ? dashboard.cards.position30d.toFixed(1) : 'N/A'}.`,
-      'The strongest SEO wins are the ones that route qualified visitors into Phoenix Forum while preparing a clean, compliant path for future donation intent.',
-      'If clicks rise without downstream quality, treat it as an intent/conversion-path problem; if clicks fall, treat it as a discovery/ranking problem.',
-    ].join(' ');
-
-    const parsedDonations = (donationRows || [])
-      .map((row) => {
-        const donatedAt = toUtcDayStart(row?.donated_at);
-        return {
-          ...row,
-          _donatedAt: donatedAt,
-          _amount: Number(row?.amount || 0),
-          _isRecurring: !!row?.is_recurring,
-        };
-      })
-      .filter((row) => row._donatedAt && Number.isFinite(row._amount));
-
-    const donationStats = (start, end) => {
-      const rows = parsedDonations.filter((row) => inUtcDayRange(row._donatedAt, start, end));
-      const totalAmount = rows.reduce((acc, row) => acc + safeNum(row._amount), 0);
-      const recurringCount = rows.filter((row) => row._isRecurring).length;
-      return {
-        transactions: rows.length,
-        totalAmount,
-        recurringCount,
-        avgGift: ratioOrNull(totalAmount, rows.length),
-      };
-    };
-
-    const donationsMonth = donationStats(monthStart, monthEnd);
-    const donationsPrevMonth = donationStats(prevMonthStart, prevMonthEnd);
-    const donationAmountDelta = comparePeriod(donationsMonth.totalAmount, donationsPrevMonth.totalAmount);
-    const donationTxnDelta = comparePeriod(donationsMonth.transactions, donationsPrevMonth.transactions);
-    const donationRecurringDelta = comparePeriod(donationsMonth.recurringCount, donationsPrevMonth.recurringCount);
-
-    const leadsAnalysisContext = {
-      module_key: 'leads',
-      as_of: periodMeta.asOfLabel,
-      windows: {
-        last_7_days: periodMeta.lastWeekLabel,
-        last_30_days: periodMeta.lastMonthLabel,
-      },
-      current_7d: {
-        paid_social_leads: leadsWeek.paidSocial,
-        great_leads: weekPaidQuality.great,
-        high_quality_leads: weekPaidQuality.highQuality,
-        high_quality_rate: weekPaidQuality.highQualityRate,
-        lead_gen_spend: adsWeek.leadGenSpend,
-        cpql: cpqlWeek,
-        cpgl: cpglWeek,
-      },
-      previous_7d: {
-        paid_social_leads: leadsPrevWeek.paidSocial,
-        great_leads: prevWeekPaidQuality.great,
-        high_quality_leads: prevWeekPaidQuality.highQuality,
-        high_quality_rate: prevWeekPaidQuality.highQualityRate,
-        lead_gen_spend: adsPrevWeek.leadGenSpend,
-        cpql: cpqlPrevWeek,
-        cpgl: cpglPrevWeek,
-      },
-      current_30d: {
-        paid_social_leads: leadsMonth.paidSocial,
-        great_leads: monthPaidQuality.great,
-        qualified_leads: monthPaidQuality.qualified,
-        high_quality_leads: monthPaidQuality.highQuality,
-        high_quality_rate: monthPaidQuality.highQualityRate,
-        lead_gen_spend: adsMonth.leadGenSpend,
-        cpql: cpqlMonth,
-        cpgl: cpglMonth,
-        phoenix_paid_lead_share: phoenixPaidShareMonth,
-      },
-      diagnostics: {
-        data_availability: {
-          source_ready: !leadsDataUnavailable,
-          source_warnings: leadsSourceWarnings,
-        },
-        quality_coverage_rate_30d: monthPaidQuality.qualityCoverage,
-      },
-    };
-
-    const attendanceAnalysisContext = {
-      module_key: 'attendance',
-      as_of: attendancePeriodMeta.asOfLabel,
-      windows: {
-        last_7_days: attendancePeriodMeta.lastWeekLabel,
-        last_30_days: attendancePeriodMeta.lastMonthLabel,
-      },
-      current_7d: {
-        sessions: attendeesWeek.sessions,
-        tuesday_sessions: attendeesWeek.tuesdaySessions,
-        thursday_sessions: attendeesWeek.thursdaySessions,
-        new_attendees: attendeesWeek.newAttendees,
-        attendance_participations: attendeesWeek.attendanceParticipations,
-        unique_attendees: attendeesWeek.uniqueAttendees,
-        repeaters: attendeesWeek.repeaters,
-        avg_visits: attendeesWeek.avgVisits,
-        repeat_rate: attendeesWeek.repeatRate,
-        free_group_ad_spend: attendanceAdsWeek.freeSpend,
-        cost_per_new_attendee: weekFreeCostPerNewAttendee,
-      },
-      previous_7d: {
-        sessions: attendeesPrevWeek.sessions,
-        tuesday_sessions: attendeesPrevWeek.tuesdaySessions,
-        thursday_sessions: attendeesPrevWeek.thursdaySessions,
-        new_attendees: attendeesPrevWeek.newAttendees,
-        attendance_participations: attendeesPrevWeek.attendanceParticipations,
-        unique_attendees: attendeesPrevWeek.uniqueAttendees,
-        repeaters: attendeesPrevWeek.repeaters,
-        avg_visits: attendeesPrevWeek.avgVisits,
-        repeat_rate: attendeesPrevWeek.repeatRate,
-        free_group_ad_spend: attendanceAdsPrevWeek.freeSpend,
-        cost_per_new_attendee: prevWeekFreeCostPerNewAttendee,
-      },
-      current_30d: {
-        sessions: attendeesMonth.sessions,
-        tuesday_sessions: attendeesMonth.tuesdaySessions,
-        thursday_sessions: attendeesMonth.thursdaySessions,
-        new_attendees: attendeesMonth.newAttendees,
-        attendance_participations: attendeesMonth.attendanceParticipations,
-        unique_attendees: attendeesMonth.uniqueAttendees,
-        repeaters: attendeesMonth.repeaters,
-        avg_visits: attendeesMonth.avgVisits,
-        repeat_rate: attendeesMonth.repeatRate,
-        free_group_ad_spend: attendanceAdsMonth.freeSpend,
-        cost_per_new_attendee: monthFreeCostPerNewAttendee,
-      },
-      diagnostics: {
-        data_availability: {
-          source_ready: !attendanceDataUnavailable,
-          source_warnings: attendanceSourceWarnings,
-        },
-        lineage: {
-          attendance_events_table: 'raw_hubspot_meeting_activities',
-          attendance_associations_table: 'hubspot_activity_contact_associations',
-          spend_table: 'raw_fb_ads_insights_daily',
-          include_filter: 'completed Tuesday/Thursday free-group calls only',
-        },
-        raw_counts_30d: {
-          net_new_numerator: attendeesMonth.newAttendees,
-          total_attendance_numerator: attendeesMonth.attendanceParticipations,
-          average_visits_numerator: attendeesMonth.attendanceParticipations,
-          average_visits_denominator: attendeesMonth.uniqueAttendees,
-          cpna_numerator_spend: attendanceAdsMonth.freeSpend,
-          cpna_denominator_net_new: attendeesMonth.newAttendees,
-        },
-        unclassified_large_calls: unclassifiedLargeCalls,
-        phoenix_sessions_30d: phoenixCallsMonth.sessions,
-      },
-    };
-
-    const seoAnalysisContext = {
-      module_key: 'seo',
-      as_of: periodMeta.asOfLabel,
-      windows: {
-        last_7_days: periodMeta.lastWeekLabel,
-        last_30_days: periodMeta.lastMonthLabel,
-      },
-      current_7d: {
-        ga_sessions: dashboard.cards.sessions7d,
-        ga_users: dashboard.cards.users7d,
-        ga_engagement_rate: dashboard.cards.engagement7d,
-        gsc_clicks: dashboard.cards.clicks7d,
-        gsc_impressions: dashboard.cards.impressions7d,
-        gsc_ctr: dashboard.cards.ctr7d,
-        gsc_avg_position: dashboard.cards.position7d,
-      },
-      current_30d: {
-        ga_sessions: dashboard.cards.sessions30d,
-        ga_users: dashboard.cards.users30d,
-        ga_engagement_rate: dashboard.cards.engagement30d,
-        gsc_clicks: dashboard.cards.clicks30d,
-        gsc_impressions: dashboard.cards.impressions30d,
-        gsc_ctr: dashboard.cards.ctr30d,
-        gsc_avg_position: dashboard.cards.position30d,
-      },
-      trends: {
-        sessions_7d_change: dashboard.trends.sessionsTrend,
-        clicks_7d_change: dashboard.trends.clicksTrend,
-        sessions_30d_change: dashboard.trends.sessions30dTrend,
-        clicks_30d_change: dashboard.trends.clicks30dTrend,
-      },
-    };
-
-    const donationsAnalysisContext = {
-      module_key: 'donations',
-      as_of: periodMeta.asOfLabel,
-      windows: {
-        last_30_days: periodMeta.lastMonthLabel,
-        previous_30_days: formatDateRange(prevMonthStart, prevMonthEnd),
-      },
-      current_30d: donationsMonth,
-      previous_30d: donationsPrevMonth,
-      trends: {
-        total_amount_change: donationAmountDelta,
-        transaction_change: donationTxnDelta,
-        recurring_count_change: donationRecurringDelta,
-      },
-      data_rows_loaded: parsedDonations.length,
-    };
-    const boardAnalysisContext = {
-      module_key: 'board',
-      as_of: periodMeta.asOfLabel,
-      system_role: KPI_BOARD_SYSTEM_ROLE,
-      kpi_snapshot: {
-        leads_30d: {
-          paid_social_leads: leadsMonth.paidSocial,
-          qualified_leads: monthPaidQuality.qualified,
-          great_leads: monthPaidQuality.great,
-          cpql: cpqlMonth,
-          cpgl: cpglMonth,
-          paid_phoenix_share: phoenixPaidShareMonth,
-        },
-        attendance_30d: {
-          net_new: attendeesMonth.newAttendees,
-          total_attendances: attendeesMonth.attendanceParticipations,
-          unique_attendees: attendeesMonth.uniqueAttendees,
-          avg_visits: attendeesMonth.avgVisits,
-          repeat_rate: attendeesMonth.repeatRate,
-          cost_per_new_attendee: monthFreeCostPerNewAttendee,
-        },
-        seo_30d: {
-          sessions: dashboard.cards.sessions30d,
-          clicks: dashboard.cards.clicks30d,
-          ctr: dashboard.cards.ctr30d,
-          avg_position: dashboard.cards.position30d,
-        },
-        donations_30d: {
-          transactions: donationsMonth.transactions,
-          total_amount: donationsMonth.totalAmount,
-          recurring_count: donationsMonth.recurringCount,
-        },
-      },
-      required_output_format: {
-        sections: [
-          'KPI Observations',
-          'Board member analysis with Keep/Improve/Stop/Experiment per member',
-          'Board Synthesis',
-          'Execution Plan with immediate actions and next-month metrics',
-        ],
-      },
-    };
-    const boardWeekSummary = `Board review this week: paid quality efficiency is ${Number.isFinite(cpqlWeek) ? formatCurrency(cpqlWeek) : 'N/A'} CPQL and ${Number.isFinite(cpglWeek) ? formatCurrency(cpglWeek) : 'N/A'} CPGL, while free-group net-new attendees are ${formatInt(attendeesWeek.newAttendees)} with ${formatAttendanceCpna(weekFreeCostPerNewAttendee, attendanceAdsWeek.freeSpend, attendeesWeek.newAttendees)} cost per new attendee.`;
-    const boardMonthSummary = `Board 30-day lens: ${formatInt(monthPaidQuality.great)} great leads, ${formatInt(monthPaidQuality.qualified)} qualified leads, ${formatInt(attendeesMonth.newAttendees)} net-new free-group attendees, and ${formatCurrency(donationsMonth.totalAmount)} donations across ${formatInt(donationsMonth.transactions)} transactions.`;
-    const boardBigPictureSummary = `System role active: autonomous Board of Directors. Output must include member-by-member Keep/Improve/Stop/Experiment recommendations, explicit agreements/disagreements, and a concrete 5-step execution plan leadership can run immediately.`;
-    const attendanceDiagnostics = unclassifiedLargeCalls >= 3
-      ? `${formatInt(unclassifiedLargeCalls)} high-attendance calls remain unclassified in the last 30 days and are queued for taxonomy QA follow-up.`
-      : '';
-
-    const managers = [
-      {
-        key: 'board',
-        title: 'Board of Directors AI Manager',
-        icon: Bot,
-        accent: {
-          bg: 'linear-gradient(135deg, #f5f3ff 0%, #eef2ff 100%)',
-          border: '#c4b5fd',
-          pillBg: '#ede9fe',
-          pillText: '#5b21b6',
-        },
-        scopeLabel: 'Cross-module board synthesis (Leads, Attendance, SEO, Donations) with mandated Keep/Improve/Stop/Experiment format',
-        sectionFocus: 'Leadership-level strategy, prioritization, and execution sequencing from unified KPI signals',
-        analysisContext: boardAnalysisContext,
-        summaries: {
-          week: boardWeekSummary,
-          month: boardMonthSummary,
-          bigPicture: boardBigPictureSummary,
-        },
-        autonomousActions: [
-          {
-            id: 'board-sync-all',
-            action_key: 'board_sync_all_sources',
-            label: 'Sync all sources',
-            description: 'Run full sync across HubSpot, Meta, KPI metrics, and attendance tables before board synthesis.',
-            kind: 'invoke_function',
-            functionName: 'master-sync',
-            reloadAfter: true,
-          },
-        ],
-        humanActions: [
-          'Approve top 3 board priorities and assign a single owner plus due date for each in leadership planning.',
-          'Review board disagreements and decide one explicit strategy per disagreement to avoid split execution.',
-          'Audit stop-list items weekly and confirm budget/time was reallocated to higher-return initiatives.',
-        ],
-      },
-      {
-        key: 'leads',
-        title: 'Leads AI Manager',
-        icon: Sparkles,
-        accent: {
-          bg: 'linear-gradient(135deg, #ecfeff 0%, #f0fdfa 100%)',
-          border: '#99f6e4',
-          pillBg: '#ccfbf1',
-          pillText: '#115e59',
-        },
-        scopeLabel: `HubSpot contacts + Meta Ads (${periodMeta.asOfLabel} as of) | Qualified = sobriety > 1y and revenue >= $250k (official first, fallback only if official missing); Good/Great = revenue-only`,
-        sectionFocus: 'Lead quality, source mix, and acquisition efficiency across Phoenix Forum and feeder campaigns',
-        analysisContext: leadsAnalysisContext,
-        summaries: {
-          week: leadsWeekSummaryFinal,
-          month: leadsMonthSummaryFinal,
-          bigPicture: leadsBigPictureSummary,
-        },
-        autonomousActions: [
-          {
-            id: 'leads-sync-all',
-            action_key: 'leads_sync_all',
-            label: 'Sync all data',
-            description: 'Run full master sync (HubSpot, ads, metrics, SEO, attendance support tables).',
-            kind: 'invoke_function',
-            functionName: 'master-sync',
-            reloadAfter: true,
-          },
-          {
-            id: 'leads-sync-hubspot',
-            action_key: 'leads_sync_hubspot',
-            label: 'Sync HubSpot leads',
-            description: 'Refresh HubSpot contacts/leads used by the Leads manager.',
-            kind: 'invoke_function',
-            functionName: 'sync_kpis',
-            reloadAfter: true,
-          },
-          {
-            id: 'leads-sync-meta',
-            action_key: 'leads_sync_meta_ads',
-            label: 'Sync Meta ads',
-            description: 'Refresh Meta spend/leads for CPL and mix tracking.',
-            kind: 'invoke_function',
-            functionName: 'sync_fb_ads',
-            reloadAfter: true,
-          },
-        ],
-        humanActions: [
-          'Review every Great Lead ($1M+ and >1 year sober) from the last 7 days and ensure white-glove follow-up into Phoenix Forum happens same day.',
-          'Audit campaign/ad-set quality mix: compare spend vs Great Lead and CPQL output to identify fatigue or targeting drift before changing budgets.',
-          'Tighten qualification messaging on ads + landing pages (revenue and sobriety signals) so paid volume improves fit, not just lead count.',
-        ],
-      },
-      {
-        key: 'attendance',
-        title: 'Attendance AI Manager',
-        icon: Users,
-        accent: {
-          bg: 'linear-gradient(135deg, #eff6ff 0%, #eef2ff 100%)',
-          border: '#bfdbfe',
-          pillBg: '#dbeafe',
-          pillText: '#1e3a8a',
-        },
-        scopeLabel: `HubSpot call/meeting activities + associations (free groups; not legacy Zoom attendance)`,
-        sectionFocus: 'Acquisition efficiency and repeat behavior in free groups (feeder into Phoenix Forum)',
-        analysisContext: attendanceAnalysisContext,
-        summaries: {
-          week: attendeesWeekSummaryFinal,
-          month: attendeesMonthSummaryFinal,
-          bigPicture: attendeesBigPictureSummary,
-        },
-        autonomousActions: [
-          {
-            id: 'attendees-sync-hubspot-calls',
-            action_key: 'attendance_sync_hubspot_calls',
-            label: 'Sync HubSpot attendance',
-            description: 'Refresh HubSpot call/meeting attendance activities + contact associations.',
-            kind: 'invoke_function',
-            functionName: 'sync_hubspot_meeting_activities',
-            body: { days: 45, include_calls: true, include_meetings: true },
-            reloadAfter: true,
-          },
-          {
-            id: 'attendance-create-retention-task',
-            action_key: 'attendance_create_retention_playbook_task',
-            label: 'Create retention playbook task',
-            description: 'Auto-create a Notion task to build/update the attendance retention playbook.',
-            kind: 'create_notion_task',
-            taskName: 'Build attendance retention playbook: first-time follow-up, repeat cadence, and owner assignments',
-          },
-          {
-            id: 'attendance-create-data-hygiene-task',
-            action_key: 'attendance_create_data_hygiene_task',
-            label: 'Create data hygiene task',
-            description: 'Auto-create a Notion task for HubSpot call title standardization and attendance QA.',
-            kind: 'create_notion_task',
-            taskName: 'Attendance data hygiene checklist: HubSpot call title standards, missing sessions, and classification QA',
-          },
-        ],
-        humanActions: [
-          'Follow up all first-time free-group attendees within 24 hours and invite them to the next session.',
-          'Standardize HubSpot call titles (Tuesday / Thursday / Phoenix Forum) so attendance classification stays accurate.',
-          'Review free-group session format to increase repeat attendance and average visits per attendee.',
-        ],
-        diagnostics: attendanceDiagnostics,
-      },
-      {
-        key: 'seo',
-        title: 'SEO AI Manager',
-        icon: Globe,
-        accent: {
-          bg: 'linear-gradient(135deg, #f0fdf4 0%, #ecfeff 100%)',
-          border: '#bbf7d0',
-          pillBg: '#dcfce7',
-          pillText: '#166534',
-        },
-        scopeLabel: `Google Analytics + Search Console KPI metrics (${periodMeta.asOfLabel} as of)`,
-        sectionFocus: 'Organic discovery quality and conversion-path health into Phoenix Forum (and future donations)',
-        analysisContext: seoAnalysisContext,
-        summaries: {
-          week: seoWeekSummary,
-          month: seoMonthSummary,
-          bigPicture: seoBigPictureSummary,
-        },
-        autonomousActions: [
-          {
-            id: 'seo-sync-ga',
-            action_key: 'seo_sync_ga',
-            label: 'Sync GA',
-            description: 'Refresh Google Analytics KPI metrics.',
-            kind: 'invoke_function',
-            functionName: 'sync_google_analytics',
-            reloadAfter: true,
-          },
-          {
-            id: 'seo-sync-gsc',
-            action_key: 'seo_sync_search_console',
-            label: 'Sync Search Console',
-            description: 'Refresh Search Console KPI metrics and queries.',
-            kind: 'invoke_function',
-            functionName: 'sync_search_console',
-            reloadAfter: true,
-          },
-          {
-            id: 'seo-sync-metrics',
-            action_key: 'seo_sync_kpi_metrics',
-            label: 'Sync KPI metrics',
-            description: 'Refresh derived KPI metrics and dashboard aggregates.',
-            kind: 'invoke_function',
-            functionName: 'sync-metrics',
-            reloadAfter: true,
-          },
-        ],
-        humanActions: [
-          'Publish or refresh a Phoenix Forum page/article aimed at high-intent recovery and founder-related queries.',
-          'Improve internal links and CTAs from top organic pages into Phoenix Forum and future donations.',
-          'Review low-CTR GSC queries/pages and rewrite titles/descriptions to increase qualified clicks.',
-        ],
-      },
-      {
-        key: 'donations',
-        title: 'Donations AI Manager',
-        icon: Bot,
-        accent: {
-          bg: 'linear-gradient(135deg, #fff7ed 0%, #fefce8 100%)',
-          border: '#fed7aa',
-          pillBg: '#ffedd5',
-          pillText: '#9a3412',
-        },
-        scopeLabel: `Zeffy + manual donation transactions (${periodMeta.asOfLabel} as of)`,
-        sectionFocus: 'Donations readiness, compliance setup, and launch planning',
-        analysisContext: donationsAnalysisContext,
-        summaries: {
-          week: `No 7-day donation rollup is shown in this card; donations are tracked in 30-day windows for now. Use Refresh Analysis to get AI recommendations with current donation records.`,
-          month: `Last 30 days: ${formatInt(donationsMonth.transactions)} donation transactions totaling ${formatCurrency(donationsMonth.totalAmount)} (${changeLabel(donationTxnDelta)} transactions and ${changeLabel(donationAmountDelta)} amount vs prior 30-day window). Recurring donations this period: ${formatInt(donationsMonth.recurringCount)} (${changeLabel(donationRecurringDelta)}).`,
-          bigPicture: `Donations are now ingesting from Zeffy/manual sources. Operations focus should be acknowledgment quality, recurring donor growth, and campaign-level attribution hygiene while keeping nonprofit compliance workflows clean.`,
-        },
-        autonomousActions: [
-          {
-            id: 'donations-create-spec-task',
-            action_key: 'donations_create_build_spec_task',
-            label: 'Create build spec task',
-            description: 'Auto-create a Notion task for donations module schema + event tracking spec.',
-            kind: 'create_notion_task',
-            taskName: 'Build donations module spec: data model, donation events, and dashboard metrics (compliant public charity flow)',
-          },
-          {
-            id: 'donations-create-compliance-task',
-            action_key: 'donations_create_compliance_checklist_task',
-            label: 'Create compliance checklist',
-            description: 'Auto-create a Notion task for donation compliance requirements and review.',
-            kind: 'create_notion_task',
-            taskName: 'Create donations compliance checklist for public charity requirements (receipts, acknowledgments, disclosures, storage)',
-          },
-          {
-            id: 'donations-create-ops-task',
-            action_key: 'donations_create_donor_ops_task',
-            label: 'Create donor ops task',
-            description: 'Auto-create a Notion task for donor acknowledgment and stewardship workflow.',
-            kind: 'create_notion_task',
-            taskName: 'Define donor acknowledgment and stewardship workflow (thank-you timing, segmentation, recurring follow-up)',
-          },
-        ],
-        humanActions: [
-          'Confirm legal/compliance requirements for online donations as a public charity before implementation begins.',
-          'Define the donation funnel (one-time vs recurring, campaign attribution, and acknowledgment standards).',
-          'Prioritize a minimal donation module release plan that does not slow down Phoenix Forum growth work.',
-        ],
-      },
-    ];
-
-    return {
-      referenceDate,
-      periodMeta,
-      managers: managers.filter((manager) => manager.key !== 'seo'),
-    };
-  }, [dashboard, donationRows, fbAdsRows, hubspotActivities, hubspotActivityAssocs, hubspotContacts, warnings]);
-
-  const managerByKey = useMemo(() => {
-    const out = new Map();
-    (aiManagers?.managers || []).forEach((manager) => {
-      out.set(manager.key, manager);
-    });
-    return out;
-  }, [aiManagers]);
-  const dashboardKpiSnapshot = useMemo(() => {
-    const latestDateKey = (rows, selector) => {
-      let latest = null;
-      (rows || []).forEach((row) => {
-        const raw = selector(row);
-        if (!raw) return;
-        const parsed = new Date(raw);
-        if (Number.isNaN(parsed.getTime())) return;
-        const candidate = parsed.toISOString().slice(0, 10);
-        if (!candidate) return;
-        if (!latest || candidate > latest) latest = candidate;
-      });
-      return latest;
-    };
-
-    const leadsRows = (hubspotContacts || []).filter((row) => isPaidSocialHubspotContact(row));
-    const leadsSpend = Number(managerByKey.get('leads')?.analysisContext?.current_30d?.lead_gen_spend || 0);
-    const leadsSnapshot = buildLeadsQualificationSnapshot({
-      leadRows: leadsRows,
-      spend: leadsSpend,
-      referenceDate: aiManagers?.referenceDate || new Date(),
-    });
-    const attendanceCurrent30d = managerByKey.get('attendance')?.analysisContext?.current_30d || {};
-
-    return buildUnifiedKpiSnapshot({
-      lookbackDays: LOOKBACK_DAYS,
-      generatedAt: new Date().toISOString(),
-      sourceLineage: [
-        ...(dashboard?.sourceCoverage || []).map((source) => ({
-          key: source?.source,
-          label: source?.source,
-          row_count: source?.count,
-          latest_date: source?.latest,
-        })),
-        {
-          key: 'hubspot_contacts',
-          label: 'HubSpot Contacts',
-          row_count: (hubspotContacts || []).length,
-          latest_date: latestDateKey(hubspotContacts, (row) => row?.createdate),
-        },
-        {
-          key: 'meta_ads',
-          label: 'Meta Ads',
-          row_count: (fbAdsRows || []).length,
-          latest_date: latestDateKey(fbAdsRows, (row) => row?.date_day),
-        },
-        {
-          key: 'hubspot_activities',
-          label: 'HubSpot Activities',
-          row_count: (hubspotActivities || []).length,
-          latest_date: latestDateKey(hubspotActivities, (row) => row?.hs_timestamp || row?.created_at_hubspot),
-        },
-        {
-          key: 'hubspot_activity_associations',
-          label: 'HubSpot Activity Associations',
-          row_count: (hubspotActivityAssocs || []).length,
-          latest_date: null,
-        },
-      ],
-      dashboard: {
-        sessions_7d: dashboard?.cards?.sessions7d ?? null,
-        clicks_7d: dashboard?.cards?.clicks7d ?? null,
-        engagement_7d: dashboard?.cards?.engagement7d ?? null,
-        repeat_rate: dashboard?.cards?.repeatRate ?? null,
-      },
-      leads: leadsSnapshot,
-      attendance: {
-        tuesday_count: Number(attendanceCurrent30d?.tuesday_sessions || 0),
-        thursday_count: Number(attendanceCurrent30d?.thursday_sessions || 0),
-        new_attendees_count: Number(attendanceCurrent30d?.new_attendees || 0),
-        avg_attendance_per_person: attendanceCurrent30d?.avg_visits ?? null,
-      },
-    });
-  }, [
-    aiManagers?.referenceDate,
-    dashboard,
-    hubspotContacts,
-    fbAdsRows,
-    hubspotActivities,
-    hubspotActivityAssocs,
-    managerByKey,
-  ]);
-  const disableRemoteModuleAnalysis = useMemo(() => {
-    const host = typeof window !== 'undefined' ? window.location.hostname : '';
-    const isLocalHost = host === 'localhost' || host === '127.0.0.1';
-    const isRemoteFeatureEnabled = REMOTE_AI_MODULE_ANALYSIS_ENABLED && hasSupabaseConfig;
-    return isLocalHost || !isRemoteFeatureEnabled;
-  }, []);
-
-  const executiveSynthesis = useMemo(() => {
-    if (!deferredInsightsReady) {
-      return {
-        managerSnapshots: [],
-        keySignals: [],
-        priorityFocus: [],
-        fixNow: [],
-        improvementLevers: [],
-      };
-    }
-    const managers = aiManagers?.managers || [];
-    const managerSnapshots = managers.map((manager) => {
-      const analysis = moduleAnalysisState[manager.key] || {};
-      const analysisData = analysis?.data || {};
-      const summaryBullets = Array.isArray(analysisData?.summary) && analysisData.summary.length > 0
-        ? analysisData.summary
-        : managerFallbackSummaryBullets(manager);
-      const aiAutonomous = Array.isArray(analysisData?.autonomous_actions)
-        ? analysisData.autonomous_actions
-          .map((item) => ({
-            action_key: String(item?.action_key || '').trim(),
-            description: String(item?.description || '').trim(),
-          }))
-          .filter((item) => item.action_key && item.description)
-        : [];
-      const fallbackAutonomous = (manager.autonomousActions || []).map((action) => ({
-        action_key: String(action?.action_key || '').trim(),
-        description: String(action?.description || '').trim(),
-      })).filter((item) => item.action_key && item.description);
-
-      const autonomousMap = new Map();
-      aiAutonomous.forEach((row) => autonomousMap.set(row.action_key, row));
-      fallbackAutonomous.forEach((row) => {
-        if (!autonomousMap.has(row.action_key)) autonomousMap.set(row.action_key, row);
-      });
-      const actionCatalogByKey = new Map(
-        (manager.autonomousActions || [])
-          .filter((action) => action?.action_key)
-          .map((action) => [String(action.action_key).trim(), action]),
-      );
-
-      return {
-        manager,
-        summaryBullets: summaryBullets.slice(0, 3),
-        humanActions: (Array.isArray(analysisData?.human_actions) && analysisData.human_actions.length > 0
-          ? analysisData.human_actions
-          : (manager.humanActions || [])
-        )
-          .map((item) => String(item || '').trim())
-          .filter(Boolean)
-          .slice(0, 3),
-        autonomousActions: Array.from(autonomousMap.values())
-          .map((row) => {
-            const action = actionCatalogByKey.get(String(row.action_key || '').trim());
-            if (!action) return null;
-            return {
-              ...action,
-              moduleKey: manager.key,
-              aiDescription: String(row?.description || action.description || '').trim(),
-            };
-          })
-          .filter(Boolean)
-          .slice(0, 3),
-      };
-    });
-
-    const priorityFocus = (dashboard?.priorityRows || [])
-      .filter((row) => row?.status === 'critical' || row?.status === 'watch')
-      .slice(0, 6)
-      .map((row) => `${row.area}: ${row.metric} is ${row.status}. Current ${row.value} vs target ${row.target}.`);
-    const keySignals = managerSnapshots
-      .flatMap((snapshot) => snapshot.summaryBullets.map((bullet) => `${snapshot.manager.title}: ${bullet}`))
-      .slice(0, 8);
-    const fixNow = [
-      ...(warnings || []).map((warning) => `Data warning: ${warning}`),
-    ].slice(0, 6);
-    const improvementLevers = managerSnapshots
-      .flatMap((snapshot) => snapshot.humanActions.map((item) => `${snapshot.manager.title}: ${item}`))
-      .slice(0, 8);
-
-    return {
-      managerSnapshots,
-      keySignals,
-      priorityFocus,
-      fixNow,
-      improvementLevers,
-    };
-  }, [deferredInsightsReady, aiManagers, moduleAnalysisState, dashboard, warnings]);
-
-  async function requestModuleAnalysis(manager, forceRefresh = false) {
-    if (!manager?.key) return;
-    const key = manager.key;
-    const contextSignature = managerAnalysisContextSignature(manager);
-    const fallbackSummary = managerFallbackSummaryBullets(manager);
-    const fallbackHumanActions = (manager.humanActions || []).slice(0, 3);
-    const actionCatalog = (manager.autonomousActions || [])
-      .map((action) => ({
-        action_key: String(action?.action_key || '').trim(),
-        description: String(action?.description || '').trim(),
-      }))
-      .filter((row) => row.action_key && row.description);
-
-    setModuleAnalysisState((prev) => ({
-      ...prev,
-      [key]: {
-        ...(prev[key] || {}),
-        status: 'loading',
-        error: '',
-        contextSignature,
-        requestedAt: Date.now(),
-      },
-    }));
-
-    if (disableRemoteModuleAnalysis) {
-      setModuleAnalysisState((prev) => ({
-        ...prev,
-        [key]: {
-          status: 'ready',
-          error: '',
-          requestedAt: prev[key]?.requestedAt || Date.now(),
-          generatedAt: new Date().toISOString(),
-          fromCache: false,
-          aiModel: 'local-fallback',
-          isMock: true,
-          contextSignature,
-          data: {
-            summary: fallbackSummary,
-            autonomous_actions: actionCatalog.slice(0, 3),
-            human_actions: fallbackHumanActions,
-          },
-        },
-      }));
+    if (contactsResponse.error) {
+      setError(`Failed to load HubSpot contacts: ${contactsResponse.error.message}`);
+      setLoading(false);
       return;
     }
-
-    try {
-      const systemRoleOverride = String(manager?.analysisContext?.system_role || '').trim();
-      const requestBody = {
-        module_key: key,
-        context: manager.analysisContext || {},
-        action_catalog: actionCatalog,
-        ttl_hours: MODULE_ANALYSIS_TTL_HOURS,
-        force_refresh: forceRefresh,
-        fallback_summary: fallbackSummary,
-        fallback_human_actions: fallbackHumanActions,
-        ...(systemRoleOverride ? { system_role_override: systemRoleOverride } : {}),
-      };
-      const { data, error: invokeError } = await supabase.functions.invoke('ai-module-analysis', {
-        body: requestBody,
-      });
-
-      if (invokeError) throw invokeError;
-      if (!data?.ok) throw new Error(data?.error || 'AI module analysis request failed.');
-
-      const summary = Array.isArray(data?.analysis?.summary)
-        ? data.analysis.summary.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 5)
-        : [];
-      const autonomousActions = Array.isArray(data?.analysis?.autonomous_actions)
-        ? data.analysis.autonomous_actions
-          .map((item) => ({
-            action_key: String(item?.action_key || '').trim(),
-            description: String(item?.description || '').trim(),
-          }))
-          .filter((item) => item.action_key && item.description)
-          .slice(0, 3)
-        : [];
-      const humanActions = Array.isArray(data?.analysis?.human_actions)
-        ? data.analysis.human_actions.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 3)
-        : [];
-
-      setModuleAnalysisState((prev) => ({
-        ...prev,
-        [key]: {
-          status: 'ready',
-          error: '',
-          requestedAt: prev[key]?.requestedAt || Date.now(),
-          generatedAt: String(data?.generated_at || '') || null,
-          fromCache: !!data?.from_cache,
-          aiModel: String(data?.ai_model || ''),
-          isMock: !!data?.is_mock,
-          contextSignature,
-          data: {
-            summary,
-            autonomous_actions: autonomousActions,
-            human_actions: humanActions,
-          },
-        },
-      }));
-    } catch (err) {
-      setModuleAnalysisState((prev) => ({
-        ...prev,
-        [key]: {
-          ...(prev[key] || {}),
-          status: 'error',
-          error: err?.message || 'AI module analysis failed.',
-          contextSignature,
-        },
-      }));
+    if (Array.isArray(contactsResponse.schemaWarnings) && contactsResponse.schemaWarnings.length > 0) {
+      nextWarnings.push(...contactsResponse.schemaWarnings);
     }
-  }
+
+    if (activitiesResponse.error) {
+      nextWarnings.push(`Interviews feed unavailable: ${activitiesResponse.error.message}`);
+    }
+    if (zoomResponse.error) {
+      nextWarnings.push(`Attendance feed unavailable: ${zoomResponse.error.message}`);
+    }
+    if (donationsResponse.error) {
+      nextWarnings.push(`Donations feed unavailable: ${donationsResponse.error.message}`);
+    }
+    if (todosResponse.error) {
+      nextWarnings.push(`Operations feed unavailable: ${todosResponse.error.message}`);
+    }
+
+    setWarnings(nextWarnings);
+    setRawData({
+      adsRows: adsResponse.data || [],
+      contacts: contactsResponse.data || [],
+      activities: activitiesResponse.data || [],
+      zoomRows: zoomResponse.data || [],
+      donationRows: donationsResponse.data || [],
+      todoRows: todosResponse.data || [],
+    });
+    setLastLoadedAt(new Date().toISOString());
+    setLoading(false);
+  }, [todayKey]);
 
   useEffect(() => {
-    if (loading || !deferredInsightsReady) return;
-    (aiManagers?.managers || []).forEach((manager) => {
-      const state = moduleAnalysisState[manager.key];
-      const contextSignature = managerAnalysisContextSignature(manager);
-      const hasMatchingContext = state?.contextSignature === contextSignature;
-      if (!state || !hasMatchingContext) {
-        requestModuleAnalysis(manager, false);
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, deferredInsightsReady, aiManagers]);
+    loadData();
+  }, [loadData]);
 
-  async function runAutonomousAction(action) {
-    if (!action?.id) return;
+  const snapshot = useMemo(() => computeKpiSnapshot(rawData, windows), [rawData, windows]);
+  const aiNarrative = useMemo(() => buildAiNarrative(snapshot), [snapshot]);
+
+  const freeCards = useMemo(() => ([
+    buildCardModel({
+      title: 'Free Meetings',
+      current: snapshot.free.current.meetings,
+      previous: snapshot.free.previous.meetings,
+      format: 'count',
+      note: 'Meta free-group lead form submissions',
+      color: '#0f766e',
+    }),
+    buildCardModel({
+      title: 'New Qualified Leads',
+      current: snapshot.free.current.qualified,
+      previous: snapshot.free.previous.qualified,
+      format: 'count',
+      note: 'Revenue >= $250k and sobriety > 1 year',
+      color: '#166534',
+    }),
+    buildCardModel({
+      title: 'Cost Per Qualified Lead (CPQL)',
+      current: snapshot.free.current.cpql,
+      previous: snapshot.free.previous.cpql,
+      format: 'currency',
+      note: 'Free Group Ad Spend / New Qualified Leads',
+      color: '#0369a1',
+      invertColor: true,
+    }),
+    buildCardModel({
+      title: 'New Great Leads',
+      current: snapshot.free.current.great,
+      previous: snapshot.free.previous.great,
+      format: 'count',
+      note: 'Revenue >= $1M',
+      color: '#4f46e5',
+    }),
+    buildCardModel({
+      title: 'Cost Per Great Lead (CPGL)',
+      current: snapshot.free.current.cpgl,
+      previous: snapshot.free.previous.cpgl,
+      format: 'currency',
+      note: 'Free Group Ad Spend / New Great Leads',
+      color: '#7c3aed',
+      invertColor: true,
+    }),
+    buildCardModel({
+      title: 'Free Group Interviews',
+      current: snapshot.free.current.interviews,
+      previous: snapshot.free.previous.interviews,
+      format: 'count',
+      note: 'Bookings on the Free Group interview link',
+      color: '#0ea5e9',
+    }),
+  ]), [snapshot.free]);
+
+  const phoenixCards = useMemo(() => ([
+    buildCardModel({
+      title: 'Phoenix Forum Leads',
+      current: snapshot.phoenix.current.leads,
+      previous: snapshot.phoenix.previous.leads,
+      format: 'count',
+      note: 'Campaign name contains "Phoenix"',
+      color: '#0f766e',
+    }),
+    buildCardModel({
+      title: 'Phoenix Qualified Leads',
+      current: snapshot.phoenix.current.qualified,
+      previous: snapshot.phoenix.previous.qualified,
+      format: 'count',
+      note: 'Revenue >= $250k and sobriety > 1 year',
+      color: '#166534',
+    }),
+    buildCardModel({
+      title: 'Phoenix Great Leads',
+      current: snapshot.phoenix.current.great,
+      previous: snapshot.phoenix.previous.great,
+      format: 'count',
+      note: 'Revenue >= $1M',
+      color: '#4f46e5',
+    }),
+    buildCardModel({
+      title: 'Phoenix CPQL',
+      current: snapshot.phoenix.current.cpql,
+      previous: snapshot.phoenix.previous.cpql,
+      format: 'currency',
+      note: 'Phoenix Ad Spend / Phoenix Qualified Leads',
+      color: '#0369a1',
+      invertColor: true,
+    }),
+    buildCardModel({
+      title: 'Phoenix CPGL',
+      current: snapshot.phoenix.current.cpgl,
+      previous: snapshot.phoenix.previous.cpgl,
+      format: 'currency',
+      note: 'Phoenix Ad Spend / Phoenix Great Leads',
+      color: '#7c3aed',
+      invertColor: true,
+    }),
+    buildCardModel({
+      title: 'Phoenix Forum Interviews',
+      current: snapshot.phoenix.current.interviews,
+      previous: snapshot.phoenix.previous.interviews,
+      format: 'count',
+      note: 'Bookings across all Phoenix Forum interview links',
+      color: '#0ea5e9',
+    }),
+  ]), [snapshot.phoenix]);
+
+  const attendanceCards = useMemo(() => ([
+    buildCardModel({
+      title: 'Net New Attendees (Tuesday)',
+      current: snapshot.attendance.current.netNewTue,
+      previous: snapshot.attendance.previous.netNewTue,
+      format: 'count',
+      note: 'First-time Tuesday attendees in selected range',
+      color: '#0ea5e9',
+    }),
+    buildCardModel({
+      title: 'Avg Visits (Tuesday)',
+      current: snapshot.attendance.current.avgVisitsTue,
+      previous: snapshot.attendance.previous.avgVisitsTue,
+      format: 'decimal',
+      note: 'Total Tuesday visits / unique Tuesday attendees',
+      color: '#38bdf8',
+    }),
+    buildCardModel({
+      title: 'Net New Attendees (Thursday)',
+      current: snapshot.attendance.current.netNewThu,
+      previous: snapshot.attendance.previous.netNewThu,
+      format: 'count',
+      note: 'First-time Thursday attendees in selected range',
+      color: '#6366f1',
+    }),
+    buildCardModel({
+      title: 'Avg Visits (Thursday)',
+      current: snapshot.attendance.current.avgVisitsThu,
+      previous: snapshot.attendance.previous.avgVisitsThu,
+      format: 'decimal',
+      note: 'Total Thursday visits / unique Thursday attendees',
+      color: '#818cf8',
+    }),
+  ]), [snapshot.attendance]);
+
+  const donationCards = useMemo(() => ([
+    buildCardModel({
+      title: '# Donations',
+      current: snapshot.donations.current.count,
+      previous: snapshot.donations.previous.count,
+      format: 'count',
+      note: 'Total donation transactions in selected range',
+      color: '#15803d',
+    }),
+    buildCardModel({
+      title: '$ Donations',
+      current: snapshot.donations.current.amount,
+      previous: snapshot.donations.previous.amount,
+      format: 'currency',
+      note: 'Total donated amount in selected range',
+      color: '#16a34a',
+    }),
+  ]), [snapshot.donations]);
+
+  const operationCards = useMemo(() => ([
+    buildCardModel({
+      title: 'Completed Items',
+      current: snapshot.operations.current.completedItems,
+      previous: snapshot.operations.previous.completedItems,
+      format: 'count',
+      note: 'Notion To-Do status moved to Done in selected range',
+      color: '#ea580c',
+    }),
+  ]), [snapshot.operations]);
+
+  const aiActions = useMemo(() => ([
+    {
+      id: 'sync-all-sources',
+      title: 'Refresh Source Pipelines',
+      description: 'Trigger HubSpot, Meta, attendance, and KPI sync before decision review.',
+      run: async () => supabase.functions.invoke('master-sync', {
+        method: 'GET',
+        queryString: { trigger_refresh: 'true' },
+      }),
+    },
+    {
+      id: 'queue-campaign-optimization-task',
+      title: 'Queue Campaign Optimization Task',
+      description: `Create a Notion task to improve ${aiNarrative.weakestLabel}.`,
+      run: async () => supabase.functions.invoke('master-sync', {
+        body: {
+          action: 'create_task',
+          properties: buildNotionCreateTaskProperties(
+            `Optimize campaign strategy: ${aiNarrative.weakestLabel} (${windows.current.label})`,
+            'High Priority',
+          ),
+        },
+      }),
+    },
+    {
+      id: 'queue-followup-workflow-task',
+      title: 'Queue Follow-up Workflow Task',
+      description: 'Create a Notion task for outreach/follow-up workflow updates from KPI trends.',
+      run: async () => supabase.functions.invoke('master-sync', {
+        body: {
+          action: 'create_task',
+          properties: buildNotionCreateTaskProperties(
+            `Build follow-up workflow from KPI trends (${windows.current.label})`,
+            'Medium Priority',
+          ),
+        },
+      }),
+    },
+  ]), [aiNarrative.weakestLabel, windows]);
+
+  const humanActions = useMemo(() => ([
+    {
+      id: 'human-budget-shift',
+      text: `Approve budget reallocation by comparing Free vs Phoenix CPQL and CPGL for ${windows.current.label}.`,
+      notionTask: `Leadership decision: reallocate budget based on CPQL/CPGL (${windows.current.label})`,
+    },
+    {
+      id: 'human-interview-review',
+      text: 'Review interview scheduling friction for the weakest funnel stage and choose one owner for correction.',
+      notionTask: `Review interview funnel friction and assign owner (${aiNarrative.weakestLabel})`,
+    },
+    {
+      id: 'human-ops-throughput',
+      text: 'Validate completed-item throughput from Notion and remove blockers delaying Done transitions.',
+      notionTask: 'Audit operations throughput and resolve Done-state blockers',
+    },
+  ]), [aiNarrative.weakestLabel, windows]);
+
+  const runAiAction = async (action) => {
     setActionState((prev) => ({
       ...prev,
-      [action.id]: { status: 'running', error: '' },
+      [action.id]: { status: 'running', message: 'Running...' },
     }));
 
     try {
-      let payload = null;
-      if (action.kind === 'invoke_function') {
-        const options = action.body ? { body: action.body } : {};
-        const { data: invokeData, error: invokeError } = await supabase.functions.invoke(action.functionName, options);
-        if (invokeError) throw invokeError;
-        payload = invokeData || null;
-      } else if (action.kind === 'create_notion_task') {
-        const properties = buildNotionTaskProperties(String(action.taskName || '').trim());
-        const { data: notionData, error: notionError } = await supabase.functions.invoke('master-sync', {
-          body: { action: 'create_task', properties },
-        });
-        if (notionError) throw notionError;
-        payload = notionData || null;
-      } else {
-        throw new Error(`Unsupported action type: ${action.kind || 'unknown'}`);
-      }
-
-      const message = actionCompletionMessage(action, payload);
+      const result = await action.run();
+      if (result?.error) throw result.error;
       setActionState((prev) => ({
         ...prev,
-        [action.id]: { status: 'success', error: '', at: Date.now(), message },
+        [action.id]: { status: 'done', message: 'Completed' },
       }));
-
-      if (action.reloadAfter) {
-        await loadData();
-      }
-
-      if (action.moduleKey) {
-        const manager = managerByKey.get(action.moduleKey);
-        if (manager) {
-          await requestModuleAnalysis(manager, true);
-        }
-      }
-    } catch (err) {
+    } catch (actionError) {
       setActionState((prev) => ({
         ...prev,
-        [action.id]: { status: 'error', error: err?.message || 'Failed' },
+        [action.id]: {
+          status: 'error',
+          message: actionError?.message || 'Action failed',
+        },
       }));
     }
-  }
+  };
 
-  function statusBadge(status) {
-    if (status === 'healthy') return { bg: '#ecfdf5', border: '#86efac', text: '#166534', label: 'Healthy', icon: CheckCircle2 };
-    if (status === 'critical') return { bg: '#fef2f2', border: '#fecaca', text: '#991b1b', label: 'Critical', icon: AlertTriangle };
-    return { bg: '#fffbeb', border: '#fcd34d', text: '#92400e', label: 'Watch', icon: Clock3 };
-  }
-
-  if (loading) {
+  if (loading && !lastLoadedAt) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'var(--color-dark-green)' }}>
-        <p style={{ fontSize: '18px', fontWeight: '600' }}>Loading KPI priorities...</p>
+      <div className="glass-panel" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <Loader2 size={18} className="animate-spin" />
+        <p style={{ fontWeight: 700 }}>Loading KPI overview...</p>
       </div>
     );
   }
 
-  if (error) {
+  if (error && !lastLoadedAt) {
     return (
-      <div style={{ ...baseCardStyle, color: '#b91c1c' }}>
-        <p style={{ fontWeight: 700 }}>Dashboard load failed</p>
-        <p style={{ marginTop: '6px' }}>{error}</p>
+      <div className="glass-panel" style={{ padding: '20px', border: '1px solid rgba(248,113,113,0.5)' }}>
+        <p style={{ fontWeight: 700, color: '#fecaca' }}>Dashboard load failed</p>
+        <p style={{ marginTop: '8px', color: 'var(--color-text-secondary)' }}>{error}</p>
+        <button className="btn-glass" type="button" onClick={loadData} style={{ marginTop: '12px' }}>
+          Retry
+        </button>
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div
-        style={{
-          ...baseCardStyle,
-          background: 'linear-gradient(135deg, rgba(3, 218, 198, 0.15) 0%, rgba(0, 230, 118, 0.05) 100%)',
-          border: '1px solid var(--color-border-glow)',
-          boxShadow: '0 8px 32px var(--color-brand-glow), inset 0 0 20px rgba(3, 218, 198, 0.1)',
-          color: 'var(--color-text-primary)',
-          position: 'relative',
-          overflow: 'hidden',
-        }}
-      >
-        <div style={{ position: 'relative', zIndex: 2 }}>
-          <p style={{ fontSize: '12px', color: 'var(--color-dark-green)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 600 }}>Executive Focus</p>
-          <h2 style={{ fontSize: '32px', marginTop: '6px', textShadow: '0 0 15px rgba(3, 218, 198, 0.3)' }}>What Matters Most This Week</h2>
-          <p style={{ marginTop: '8px', color: 'var(--color-text-secondary)', fontSize: '15px' }}>
-            Prioritized scorecard across traffic, organic search, engagement quality, and community retention.
-          </p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div className="glass-panel" style={{ padding: '18px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+          <div>
+            <h3 style={{ fontSize: '28px' }}>Dashboard Overview</h3>
+            <p style={{ marginTop: '6px', color: 'var(--color-text-secondary)' }}>
+              Main KPI overview for leadership decisions across Leads, Attendance, Donations, and Operations.
+            </p>
+            <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--color-text-muted)' }}>
+              Current period: {windows.current.label} ({windows.current.start} to {windows.current.end}) | Previous period: {windows.previous.label} ({windows.previous.start} to {windows.previous.end})
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div>
+              <label htmlFor="dashboard-range" style={{ display: 'block', fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>
+                Time Range
+              </label>
+              <select
+                id="dashboard-range"
+                className="neo-input"
+                data-testid="dashboard-time-range-select"
+                aria-label="Dashboard Time Range"
+                value={rangeType}
+                onChange={(event) => setRangeType(event.target.value)}
+                style={{ minWidth: '170px' }}
+              >
+                {RANGE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+            {rangeType === 'custom' && (
+              <>
+                <div>
+                  <label htmlFor="dashboard-range-start" style={{ display: 'block', fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>
+                    Start
+                  </label>
+                  <input
+                    id="dashboard-range-start"
+                    className="neo-input"
+                    type="date"
+                    value={customStart}
+                    onChange={(event) => setCustomStart(event.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="dashboard-range-end" style={{ display: 'block', fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>
+                    End
+                  </label>
+                  <input
+                    id="dashboard-range-end"
+                    className="neo-input"
+                    type="date"
+                    value={customEnd}
+                    onChange={(event) => setCustomEnd(event.target.value)}
+                  />
+                </div>
+              </>
+            )}
+            <button className="btn-glass" type="button" onClick={loadData} disabled={loading} style={{ height: '40px' }}>
+              {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+              {loading ? 'Refreshing...' : 'Refresh'}
+            </button>
+          </div>
         </div>
-        {/* Decorative elements */}
-        <div style={{ position: 'absolute', top: '-50%', right: '-10%', width: '300px', height: '300px', background: 'radial-gradient(circle, rgba(3, 218, 198, 0.1) 0%, transparent 70%)', filter: 'blur(40px)', zIndex: 1 }} />
       </div>
 
-      {!dashboard.hasGscData && (
-        <div style={{ ...baseCardStyle, borderLeft: '4px solid #f59e0b', backgroundColor: '#fffbeb' }}>
-          <p style={{ color: '#92400e', fontWeight: 700 }}>Search Console data missing</p>
-          <p style={{ marginTop: '6px', color: '#92400e' }}>
-            Run Refresh Data and ensure your Google refresh token includes scope:
-            {' '}<code>https://www.googleapis.com/auth/webmasters.readonly</code>
-          </p>
+      {error && (
+        <div className="glass-panel" style={{ padding: '12px', border: '1px solid rgba(248,113,113,0.4)', color: '#fecaca' }}>
+          <p style={{ fontWeight: 700 }}>Partial load warning</p>
+          <p style={{ marginTop: '4px', color: 'var(--color-text-secondary)' }}>{error}</p>
         </div>
       )}
 
       {warnings.length > 0 && (
-        <div style={{ ...baseCardStyle, borderLeft: '4px solid #f59e0b', backgroundColor: '#fffaf0' }}>
+        <div className="glass-panel" style={{ padding: '12px', border: '1px solid rgba(245,158,11,0.35)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <AlertTriangle size={18} color="#b45309" />
-            <p style={{ fontWeight: 700, color: '#92400e' }}>Partial data warnings</p>
+            <AlertTriangle size={16} color="#fbbf24" />
+            <p style={{ fontWeight: 700 }}>Data Quality Notes</p>
           </div>
-          <div style={{ marginTop: '8px', display: 'grid', gap: '6px' }}>
+          <ul style={{ marginTop: '8px', listStyle: 'disc', paddingLeft: '18px', color: 'var(--color-text-secondary)' }}>
             {warnings.map((warning) => (
-              <p key={warning} style={{ color: '#92400e', fontSize: '13px' }}>
-                {warning}
-              </p>
+              <li key={warning} style={{ marginTop: '4px' }}>{warning}</li>
             ))}
-          </div>
+          </ul>
         </div>
       )}
 
-      {deferredInsightsReady ? (
-        <>
-      <div style={baseCardStyle}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
-          <div>
-            <h3 style={{ fontSize: '20px' }}>Executive Summary (All KPI Sections)</h3>
-            <p style={{ marginTop: '6px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
-              Synthesized insights from Board, Leads, Attendance, and Donations AI Managers with top focus and remediation signals.
-            </p>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Reference date</p>
-            <p style={{ fontWeight: 700 }}>{aiManagers.periodMeta.asOfLabel}</p>
-          </div>
-        </div>
-
-        <div style={{ marginTop: '14px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: '12px' }}>
-          {[
-            { title: 'Need To Know', rows: executiveSynthesis.keySignals, tone: '#0f766e' },
-            { title: 'Focus This Week', rows: executiveSynthesis.priorityFocus, tone: '#2563eb' },
-            { title: 'Pay Attention / Fix', rows: executiveSynthesis.fixNow, tone: '#dc2626' },
-            { title: 'Improve The Nonprofit', rows: executiveSynthesis.improvementLevers, tone: '#d97706' },
-          ].map((group) => (
-            <div key={group.title} style={{ border: '1px solid var(--color-border)', borderRadius: '12px', padding: '12px', backgroundColor: 'rgba(0,0,0,0.18)' }}>
-              <p style={{ fontSize: '12px', fontWeight: 700, color: group.tone, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{group.title}</p>
-              <ul style={{ marginTop: '8px', paddingLeft: '18px', display: 'grid', gap: '6px' }}>
-                {(group.rows || []).slice(0, 6).map((row, idx) => (
-                  <li key={`${group.title}-${idx}`} style={{ fontSize: '12px', lineHeight: 1.45, color: 'var(--color-text-primary)' }}>{row}</li>
-                ))}
-                {(!group.rows || group.rows.length === 0) && (
-                  <li style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>No items generated yet.</li>
-                )}
-              </ul>
-            </div>
+      <section className="glass-panel" style={{ padding: '14px' }}>
+        <h4 style={{ fontSize: '18px' }}>Section 1 - Free Group Funnel</h4>
+        <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+          Interview link: <a href={FREE_INTERVIEW_URL} target="_blank" rel="noreferrer">{FREE_INTERVIEW_URL}</a>
+        </p>
+        <div style={{ ...cardGridStyle, marginTop: '12px' }}>
+          {freeCards.map((card) => (
+            <KPICard key={card.title} {...card} />
           ))}
         </div>
+      </section>
 
-        <div style={{ marginTop: '14px', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '12px' }}>
-          <p style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-dark-green)' }}>
-            AI Manager Quick Summary + 3 Do This Actions
-          </p>
-          <div style={{ marginTop: '10px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(290px,1fr))', gap: '10px' }}>
-            {executiveSynthesis.managerSnapshots.map((snapshot) => (
-              <div key={`quick-${snapshot.manager.key}`} style={{ border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px', backgroundColor: 'rgba(255,255,255,0.03)' }}>
-                <p style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{snapshot.manager.title}</p>
-                <ul style={{ marginTop: '6px', paddingLeft: '18px', display: 'grid', gap: '5px' }}>
-                  {snapshot.summaryBullets.slice(0, 2).map((item, idx) => (
-                    <li key={`quick-summary-${snapshot.manager.key}-${idx}`} style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>{item}</li>
-                  ))}
-                </ul>
-                <div style={{ marginTop: '10px', display: 'grid', gap: '6px' }}>
-                  {snapshot.autonomousActions.slice(0, 3).map((action, idx) => (
-                    <div key={`quick-action-${snapshot.manager.key}-${action.action_key}-${idx}`} style={{ border: '1px solid var(--color-border)', borderRadius: '8px', padding: '8px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                        <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{action.aiDescription || action.description}</p>
-                        <button
-                          type="button"
-                          className="btn-primary"
-                          onClick={() => runAutonomousAction(action)}
-                          disabled={actionState[action.id]?.status === 'running' || loading}
-                          style={{ padding: '5px 8px', fontSize: '10px', whiteSpace: 'nowrap' }}
-                        >
-                          {actionState[action.id]?.status === 'running' ? 'Running...' : 'Do This'}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+      <section className="glass-panel" style={{ padding: '14px' }}>
+        <h4 style={{ fontSize: '18px' }}>Section 2 - Phoenix Forum Funnel</h4>
+        <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+          Interview links: {PHOENIX_INTERVIEW_URLS.map((url) => (
+            <span key={url} style={{ marginRight: '8px' }}>
+              <a href={url} target="_blank" rel="noreferrer">{url}</a>
+            </span>
+          ))}
+        </p>
+        <div style={{ ...cardGridStyle, marginTop: '12px' }}>
+          {phoenixCards.map((card) => (
+            <KPICard key={card.title} {...card} />
+          ))}
         </div>
-      </div>
+      </section>
 
-      <div style={baseCardStyle}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '12px', marginBottom: '16px' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Sparkles size={18} color="#0f766e" />
-              <h3 style={{ fontSize: '18px' }}>AI Manager Summary by Section</h3>
+      <section className="glass-panel" style={{ padding: '14px' }}>
+        <h4 style={{ fontSize: '18px' }}>Section 3 - Attendance</h4>
+        <div style={{ ...cardGridStyle, marginTop: '12px' }}>
+          {attendanceCards.map((card) => (
+            <KPICard key={card.title} {...card} />
+          ))}
+        </div>
+      </section>
+
+      <section className="glass-panel" style={{ padding: '14px' }}>
+        <h4 style={{ fontSize: '18px' }}>Section 4 - Donations</h4>
+        <div style={{ ...cardGridStyle, marginTop: '12px' }}>
+          {donationCards.map((card) => (
+            <KPICard key={card.title} {...card} />
+          ))}
+        </div>
+      </section>
+
+      <section className="glass-panel" style={{ padding: '14px' }}>
+        <h4 style={{ fontSize: '18px' }}>Section 5 - Operations</h4>
+        <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+          Notion database: 207b3385c3e080179ff5cd3cdfdac443
+        </p>
+        <div style={{ ...cardGridStyle, marginTop: '12px' }}>
+          {operationCards.map((card) => (
+            <KPICard key={card.title} {...card} />
+          ))}
+        </div>
+      </section>
+
+      <section className="glass-panel" style={{ padding: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Bot size={17} />
+          <h4 style={{ fontSize: '18px' }}>AI Summary</h4>
+        </div>
+        <ul style={{ marginTop: '10px', listStyle: 'disc', paddingLeft: '18px', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
+          <li>{aiNarrative.healthLine}</li>
+          <li>{aiNarrative.bottleneckLine}</li>
+          <li>{aiNarrative.trendLine}</li>
+        </ul>
+
+        <div style={{ marginTop: '14px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '10px' }}>
+          <div style={{ border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Sparkles size={15} />
+              <p style={{ fontWeight: 700 }}>AI Can Execute (Top 3)</p>
             </div>
-            <p style={{ marginTop: '6px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
-              AI-generated module summaries with autonomous actions (Do This) and human-only follow-ups (For You to Do).
-            </p>
-          </div>
-          <div style={{ display: 'grid', gap: '4px', alignContent: 'start', textAlign: 'right' }}>
-            <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Reference date</p>
-            <p style={{ fontWeight: 700 }}>{aiManagers.periodMeta.asOfLabel}</p>
-            <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-              7-day window: {aiManagers.periodMeta.lastWeekLabel}
-            </p>
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
-          {aiManagers.managers.map((manager) => {
-            const Icon = manager.icon || Bot;
-            const analysis = moduleAnalysisState[manager.key] || {};
-            const analysisData = analysis?.data || {};
-            const summaryBullets = Array.isArray(analysisData?.summary) && analysisData.summary.length > 0
-              ? analysisData.summary
-              : managerFallbackSummaryBullets(manager);
-            const actionCatalogByKey = new Map(
-              (manager.autonomousActions || [])
-                .filter((action) => action?.action_key)
-                .map((action) => [action.action_key, action]),
-            );
-            const aiAutonomous = Array.isArray(analysisData?.autonomous_actions)
-              ? analysisData.autonomous_actions
-              : [];
-            const fallbackAutonomous = (manager.autonomousActions || []).map((action) => ({
-              action_key: action.action_key,
-              description: action.description,
-            }));
-            const chosenAutonomous = [...aiAutonomous, ...fallbackAutonomous];
-            const seenActionKeys = new Set();
-            const autonomousActions = chosenAutonomous
-              .map((item) => {
-                const actionKey = String(item?.action_key || '').trim();
-                if (!actionKey || seenActionKeys.has(actionKey)) return null;
-                seenActionKeys.add(actionKey);
-                const action = actionCatalogByKey.get(actionKey);
-                if (!action) return null;
-                return {
-                  ...action,
-                  moduleKey: manager.key,
-                  aiDescription: String(item?.description || action.description || '').trim(),
-                };
-              })
-              .filter(Boolean)
-              .slice(0, 3);
-            const humanActions = (
-              Array.isArray(analysisData?.human_actions) && analysisData.human_actions.length > 0
-                ? analysisData.human_actions
-                : manager.humanActions
-            )
-              .map((item) => String(item || '').trim())
-              .filter(Boolean)
-              .slice(0, 3);
-            const analysisStatusLabel = analysis?.status === 'loading'
-              ? 'Analyzing...'
-              : analysis?.generatedAt
-                ? `Updated ${new Date(analysis.generatedAt).toLocaleString()}${analysis.fromCache ? ' (cached)' : ''}`
-                : 'Analysis pending';
-            return (
-              <div
-                key={manager.key}
-                className="glass-panel"
-                style={{
-                  border: `1px solid var(--color-border)`,
-                  overflow: 'hidden',
-                  display: 'flex',
-                  flexDirection: 'column',
-                }}
-              >
-                <div
-                  style={{
-                    padding: '14px 14px 12px',
-                    background: 'rgba(0, 0, 0, 0.2)',
-                    borderBottom: '1px solid var(--color-border)',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'flex-start' }}>
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                      <div
-                        style={{
-                          width: '34px',
-                          height: '34px',
-                          borderRadius: '10px',
-                          background: 'rgba(3, 218, 198, 0.1)',
-                          border: '1px solid var(--color-border-glow)',
-                          color: 'var(--color-dark-green)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0,
-                        }}
-                      >
-                        <Icon size={18} />
-                      </div>
-                      <div>
-                        <p style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>{manager.title}</p>
-                        <p style={{ marginTop: '2px', fontSize: '12px', color: 'var(--color-text-muted)' }}>{manager.sectionFocus}</p>
-                      </div>
-                    </div>
-                    <div style={{ display: 'grid', gap: '6px', justifyItems: 'end' }}>
-                      <span
-                        style={{
-                          background: 'rgba(3, 218, 198, 0.15)',
-                          color: 'var(--color-dark-green)',
-                          border: '1px solid var(--color-border-glow)',
-                          borderRadius: '999px',
-                          padding: '5px 9px',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        AI Manager
-                      </span>
+            <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {aiActions.map((action) => {
+                const state = actionState[action.id] || {};
+                return (
+                  <div key={action.id} style={{ border: '1px solid var(--color-border)', borderRadius: '8px', padding: '8px' }}>
+                    <p style={{ fontWeight: 700, fontSize: '13px' }}>{action.title}</p>
+                    <p style={{ marginTop: '4px', color: 'var(--color-text-secondary)', fontSize: '12px' }}>{action.description}</p>
+                    <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                       <button
-                        className="btn-glass"
                         type="button"
-                        onClick={() => requestModuleAnalysis(manager, true)}
-                        disabled={analysis?.status === 'loading'}
-                        style={{
-                          padding: '6px 9px',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          cursor: analysis?.status === 'loading' ? 'not-allowed' : 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                        }}
+                        className="btn-primary"
+                        onClick={() => runAiAction(action)}
+                        disabled={state.status === 'running' || loading}
+                        style={{ padding: '6px 10px', fontSize: '12px' }}
                       >
-                        {analysis?.status === 'loading' ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={12} />}
-                        Refresh Analysis
+                        {state.status === 'running' ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                        {state.status === 'running' ? 'Running...' : 'Do This'}
                       </button>
+                      <span style={{ fontSize: '11px', color: state.status === 'error' ? '#fca5a5' : 'var(--color-text-muted)' }}>
+                        {state.message || 'Ready'}
+                      </span>
                     </div>
                   </div>
-                  <p style={{ marginTop: '10px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>{manager.scopeLabel}</p>
-                  <p style={{ marginTop: '6px', fontSize: '11px', color: 'var(--color-text-muted)' }}>{analysisStatusLabel}</p>
-                  {analysis?.status === 'error' && (
-                    <p style={{ marginTop: '6px', fontSize: '11px', color: '#ff5252' }}>
-                      Analysis failed: {analysis.error}
-                    </p>
-                  )}
-                  {manager.diagnostics && (
-                    <div style={{ marginTop: '8px', padding: '8px 10px', backgroundColor: 'rgba(148,163,184,0.12)', borderRadius: '10px', border: '1px solid rgba(148,163,184,0.35)' }}>
-                      <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                        Audit note
-                      </p>
-                      <p style={{ marginTop: '4px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>{manager.diagnostics}</p>
-                    </div>
-                  )}
+                );
+              })}
+            </div>
+          </div>
+
+          <div style={{ border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Sparkles size={15} />
+              <p style={{ fontWeight: 700 }}>Human Actions (Top 3)</p>
+            </div>
+            <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {humanActions.map((action) => (
+                <div key={action.id} style={{ border: '1px solid var(--color-border)', borderRadius: '8px', padding: '8px' }}>
+                  <p style={{ color: 'var(--color-text-secondary)', fontSize: '12px', lineHeight: 1.45 }}>{action.text}</p>
+                  <button
+                    type="button"
+                    className="btn-glass"
+                    style={{ marginTop: '8px', padding: '6px 10px', fontSize: '12px' }}
+                    onClick={() => setNotionModal({ open: true, taskName: action.notionTask })}
+                  >
+                    Add to Notion
+                  </button>
                 </div>
-
-                <div style={{ padding: '14px', display: 'grid', gap: '14px', flex: 1 }}>
-                  <div style={{ display: 'grid', gap: '10px' }}>
-                    <div style={{ border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px', backgroundColor: 'rgba(0, 0, 0, 0.2)' }}>
-                      <p style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-dark-green)', fontWeight: 600 }}>
-                        Module Summary (AI-Generated)
-                      </p>
-                      <ul style={{ marginTop: '6px', paddingLeft: '18px', display: 'grid', gap: '6px' }}>
-                        {summaryBullets.map((bullet, idx) => (
-                          <li key={`${manager.key}-summary-${idx}`} style={{ fontSize: '13px', lineHeight: 1.45, color: 'var(--color-text-primary)' }}>
-                            {bullet}
-                          </li>
-                        ))}
-                        {summaryBullets.length === 0 && (
-                          <li style={{ fontSize: '13px', lineHeight: 1.45, color: 'var(--color-text-muted)' }}>
-                            No summary generated yet for this module.
-                          </li>
-                        )}
-                      </ul>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'grid', gap: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Bot size={14} color="var(--color-text-primary)" />
-                      <p style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>Autonomous Actions</p>
-                    </div>
-                    <p style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
-                      AI-selected actions that can run immediately. Click Do This to execute.
-                    </p>
-                    {autonomousActions.map((action) => {
-                      const state = actionState[action.id] || {};
-                      const isRunning = state.status === 'running';
-                      const isSuccess = state.status === 'success';
-                      const isError = state.status === 'error';
-                      return (
-                        <div key={action.id} style={{ border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px', backgroundColor: 'rgba(255, 255, 255, 0.03)' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center' }}>
-                            <div>
-                              <p style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{action.label}</p>
-                              <p style={{ marginTop: '3px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-                                {action.aiDescription || action.description}
-                              </p>
-                            </div>
-                            <button
-                              type="button"
-                              className="btn-primary"
-                              onClick={() => runAutonomousAction(action)}
-                              disabled={isRunning || loading}
-                              style={{
-                                padding: '6px 12px',
-                                fontSize: '11px',
-                                cursor: isRunning || loading ? 'not-allowed' : 'pointer',
-                                opacity: (isRunning || loading) ? 0.6 : 1,
-                              }}
-                            >
-                              {isRunning ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Sparkles size={13} />}
-                              {isRunning ? 'Running...' : 'Do This'}
-                            </button>
-                          </div>
-                          {(isSuccess || isError) && (
-                            <p style={{ marginTop: '6px', fontSize: '12px', color: isError ? '#ff5252' : '#00e676' }}>
-                              {isError ? state.error : (state.message || 'Done')}
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })}
-                    {autonomousActions.length === 0 && (
-                      <div style={{ border: '1px dashed var(--color-border)', borderRadius: '10px', padding: '10px', backgroundColor: 'rgba(0, 0, 0, 0.2)' }}>
-                        <p style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
-                          No runnable autonomous actions available for this module yet.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  <div style={{ display: 'grid', gap: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Sparkles size={14} color="var(--color-orange)" />
-                      <p style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>For You to Do</p>
-                    </div>
-                    {humanActions.map((item) => (
-                      <div key={`${manager.key}-${item}`} style={{ border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px', backgroundColor: 'rgba(255, 255, 255, 0.03)', display: 'grid', gap: '8px' }}>
-                        <p style={{ fontSize: '13px', color: 'var(--color-text-primary)', lineHeight: 1.4 }}>{item}</p>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                          <button
-                            className="btn-glass"
-                            type="button"
-                            onClick={() => setNotionModal({ open: true, taskName: item })}
-                            style={{
-                              padding: '6px 10px',
-                              fontSize: '11px',
-                            }}
-                          >
-                            Send to Notion
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                    {humanActions.length === 0 && (
-                      <div style={{ border: '1px dashed var(--color-border)', borderRadius: '10px', padding: '10px', backgroundColor: 'rgba(0,0,0,0.2)' }}>
-                        <p style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
-                          No human-only suggestions generated yet.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-        </>
-      ) : (
-        <div style={baseCardStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-            <p style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>Loading AI manager synthesis...</p>
-          </div>
-          <p style={{ marginTop: '8px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
-            North-star KPIs below are prioritized for first render. Deeper section synthesis appears right after.
-          </p>
-        </div>
-      )}
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '16px' }}>
-        <div style={baseCardStyle}>
-          <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Website Sessions (7d)</p>
-          <p style={{ fontSize: '30px', fontWeight: 700, marginTop: '8px' }}>{formatInt(dashboard.cards.sessions7d)}</p>
-          <p style={{ marginTop: '8px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>WoW {pctDelta(dashboard.trends.sessionsTrend)}</p>
-        </div>
-        <div style={baseCardStyle}>
-          <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Organic Clicks (7d)</p>
-          <p style={{ fontSize: '30px', fontWeight: 700, marginTop: '8px' }}>{formatInt(dashboard.cards.clicks7d)}</p>
-          <p style={{ marginTop: '8px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>WoW {pctDelta(dashboard.trends.clicksTrend)}</p>
-        </div>
-        <div style={baseCardStyle}>
-          <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Engagement Rate (7d)</p>
-          <p style={{ fontSize: '30px', fontWeight: 700, marginTop: '8px' }}>{pct(dashboard.cards.engagement7d)}</p>
-          <p style={{ marginTop: '8px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>Search CTR {pct(dashboard.cards.ctr7d)}</p>
-        </div>
-        <div style={baseCardStyle}>
-          <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Zoom Avg Attendance</p>
-          <p style={{ fontSize: '30px', fontWeight: 700, marginTop: '8px' }}>
-            {dashboard.cards.avgAttendance ? dashboard.cards.avgAttendance.toFixed(1) : 'N/A'}
-          </p>
-          <p style={{ marginTop: '8px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>Last 12 meetings</p>
-        </div>
-        <div style={baseCardStyle}>
-          <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Zoom Repeat Rate</p>
-          <p style={{ fontSize: '30px', fontWeight: 700, marginTop: '8px' }}>{pct(dashboard.cards.repeatRate)}</p>
-          <p style={{ marginTop: '8px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>Last 12 meetings</p>
-        </div>
-      </div>
-
-      <div style={{ ...baseCardStyle, border: '1px solid var(--color-border-glow)' }} data-testid="dashboard-kpi-snapshot-card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-          <div>
-            <p style={{ fontSize: '12px', textTransform: 'uppercase', fontWeight: 700, color: 'var(--color-dark-green)' }}>Unified KPI Snapshot</p>
-            <h3 style={{ fontSize: '18px', marginTop: '6px' }}>North-star contract, qualification basis, and lineage</h3>
-            <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-              Qualified = sobriety {'>'} 1 year + revenue {'>='} $250K (official first, fallback only if official is missing).
-            </p>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Generated</p>
-            <p style={{ fontWeight: 700 }}>{new Date(dashboardKpiSnapshot?.meta?.generated_at || Date.now()).toLocaleString()}</p>
-            <p style={{ marginTop: '4px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-              Freshness: {String(dashboardKpiSnapshot?.meta?.freshness_status || 'unknown').toUpperCase()}
-            </p>
-          </div>
-        </div>
-
-        <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '10px' }}>
-          <div className="glass-panel" style={{ borderRadius: '10px', padding: '10px' }}>
-            <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Leads Qualified</p>
-            <p style={{ marginTop: '4px', fontSize: '22px', fontWeight: 700 }}>{formatInt(dashboardKpiSnapshot?.leads?.qualified_count || 0)}</p>
-            <p style={{ marginTop: '4px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-              Qualified %: {pct(dashboardKpiSnapshot?.leads?.qualified_pct)}
-            </p>
-            <p style={{ marginTop: '4px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-              Official {formatInt(dashboardKpiSnapshot?.leads?.qualification_basis?.official_qualified_count || 0)} | Fallback {formatInt(dashboardKpiSnapshot?.leads?.qualification_basis?.fallback_qualified_count || 0)}
-            </p>
-          </div>
-          <div className="glass-panel" style={{ borderRadius: '10px', padding: '10px' }}>
-            <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Attendance Core</p>
-            <p style={{ marginTop: '4px', fontSize: '13px', color: 'var(--color-text-primary)' }}>
-              Tuesday Count: <strong>{formatInt(dashboardKpiSnapshot?.attendance?.tuesday_count || 0)}</strong>
-            </p>
-            <p style={{ marginTop: '4px', fontSize: '13px', color: 'var(--color-text-primary)' }}>
-              Thursday Count: <strong>{formatInt(dashboardKpiSnapshot?.attendance?.thursday_count || 0)}</strong>
-            </p>
-            <p style={{ marginTop: '4px', fontSize: '13px', color: 'var(--color-text-primary)' }}>
-              New Attendees: <strong>{formatInt(dashboardKpiSnapshot?.attendance?.new_attendees_count || 0)}</strong>
-            </p>
-            <p style={{ marginTop: '4px', fontSize: '13px', color: 'var(--color-text-primary)' }}>
-              Avg Attendance / Person: <strong>{Number.isFinite(Number(dashboardKpiSnapshot?.attendance?.avg_attendance_per_person)) ? Number(dashboardKpiSnapshot.attendance.avg_attendance_per_person).toFixed(2) : 'N/A'}</strong>
-            </p>
-          </div>
-        </div>
-
-        <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: '8px' }}>
-          {(dashboardKpiSnapshot?.meta?.sources || []).map((source) => (
-            <div key={`dashboard-source-lineage-${source.key}`} className="glass-panel" style={{ borderRadius: '10px', padding: '8px' }}>
-              <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>{source.label}</p>
-              <p style={{ marginTop: '4px', fontSize: '12px', fontWeight: 700 }}>{formatInt(source.row_count || 0)} rows</p>
-              <p style={{ marginTop: '2px', fontSize: '11px', color: 'var(--color-text-secondary)' }}>Latest: {source.latest_date || 'No data'}</p>
-              <p style={{ marginTop: '2px', fontSize: '11px', color: 'var(--color-text-secondary)' }}>{String(source.freshness_status || 'unknown').toUpperCase()}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px' }}>
-        <div style={baseCardStyle}>
-          <h3 style={{ fontSize: '18px', marginBottom: '12px' }}>Traffic vs Organic Trend (Last 30 Days)</h3>
-          <div style={{ height: '300px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={dashboard.trendData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                <XAxis dataKey="label" tick={{ fill: 'var(--color-text-secondary)', fontSize: 12 }} />
-                <YAxis tick={{ fill: 'var(--color-text-secondary)', fontSize: 12 }} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: 'var(--color-card)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)' }}
-                  itemStyle={{ color: 'var(--color-text-primary)' }}
-                  labelStyle={{ color: 'var(--color-text-secondary)' }}
-                />
-                <Legend />
-                <Line type="monotone" dataKey="sessions" name="GA Sessions" stroke="#0f766e" strokeWidth={3} dot={false} />
-                <Line type="monotone" dataKey="clicks" name="GSC Clicks" stroke="#2563eb" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div style={baseCardStyle}>
-          <h3 style={{ fontSize: '18px', marginBottom: '12px' }}>Search Quality</h3>
-          <div style={{ display: 'grid', gap: '12px' }}>
-            <div className="glass-panel" style={{ borderRadius: '12px', padding: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Search size={16} color="var(--color-dark-green)" />
-                <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Impressions (7d)</p>
-              </div>
-              <p style={{ marginTop: '6px', fontSize: '24px', fontWeight: 700 }}>{formatInt(dashboard.cards.impressions7d)}</p>
-            </div>
-            <div className="glass-panel" style={{ borderRadius: '12px', padding: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Globe size={16} color="var(--color-orange)" />
-                <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Average Position (7d)</p>
-              </div>
-              <p style={{ marginTop: '6px', fontSize: '24px', fontWeight: 700 }}>
-                {dashboard.cards.position7d ? dashboard.cards.position7d.toFixed(1) : 'N/A'}
-              </p>
-            </div>
-            <div className="glass-panel" style={{ borderRadius: '12px', padding: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Users size={16} color="var(--color-brand-glow)" />
-                <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Organic CTR (7d)</p>
-              </div>
-              <p style={{ marginTop: '6px', fontSize: '24px', fontWeight: 700 }}>{pct(dashboard.cards.ctr7d)}</p>
+              ))}
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div style={baseCardStyle}>
-        <h3 style={{ fontSize: '18px', marginBottom: '12px' }}>Priority Queue</h3>
-        <div style={{ display: 'grid', gap: '10px' }}>
-          {dashboard.priorityRows.map((row) => {
-            const badge = statusBadge(row.status);
-            const Icon = badge.icon;
-            return (
-              <div
-                key={row.metric}
-                style={{
-                  border: '1px solid var(--color-border)',
-                  borderRadius: '12px',
-                  padding: '12px',
-                  display: 'grid',
-                  gridTemplateColumns: '140px 1fr auto',
-                  gap: '12px',
-                  alignItems: 'center',
-                }}
-              >
-                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>{row.area}</span>
-                <div>
-                  <p style={{ fontWeight: 700 }}>{row.metric}</p>
-                  <p style={{ marginTop: '4px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
-                    Current {row.value} | Target {row.target} | {row.note}
-                  </p>
-                </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    backgroundColor: badge.bg,
-                    border: `1px solid ${badge.border}`,
-                    color: badge.text,
-                    borderRadius: '999px',
-                    padding: '6px 10px',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                  }}
-                >
-                  <Icon size={14} />
-                  {badge.label}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div style={baseCardStyle}>
-        <h3 style={{ fontSize: '18px', marginBottom: '10px' }}>Data Coverage</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
-          {dashboard.sourceCoverage.map((source) => (
-            <div key={source.source} className="glass-panel" style={{ borderRadius: '10px', padding: '10px' }}>
-              <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>{source.source}</p>
-              <p style={{ marginTop: '6px', fontWeight: 700 }}>{source.count} rows</p>
-              <p style={{ marginTop: '2px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-                Latest: {source.latest || 'No data'}
-              </p>
-            </div>
-          ))}
-        </div>
+      <div className="glass-panel" style={{ padding: '10px', fontSize: '11px', color: 'var(--color-text-muted)' }}>
+        <p>Last loaded: {formatTimestamp(lastLoadedAt)}</p>
+        <p style={{ marginTop: '4px' }}>
+          Source rows used - Ads: {formatInt(snapshot.sourceRows.ads)}, HubSpot Contacts: {formatInt(snapshot.sourceRows.contacts)}, Interviews: {formatInt(snapshot.sourceRows.interviews)}, Attendance Sessions: {formatInt(snapshot.sourceRows.sessions)}, Donations: {formatInt(snapshot.sourceRows.donations)}, Todo Items: {formatInt(snapshot.sourceRows.todos)}
+        </p>
       </div>
 
       <SendToNotionModal
         isOpen={notionModal.open}
-        onClose={() => setNotionModal({ open: false, taskName: '' })}
         defaultTaskName={notionModal.taskName}
+        onClose={() => setNotionModal({ open: false, taskName: '' })}
       />
     </div>
   );
-};
+}
 
 export default DashboardOverview;

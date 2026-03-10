@@ -30,7 +30,7 @@ test('dashboard/leads/attendance load smoke remains usable and crash-safe', asyn
 
   await page.goto('/');
 
-  const dashboardReady = page.getByText('Website Sessions (7d)', { exact: true }).first();
+  const dashboardReady = page.getByText('Section 1 - Free Group Funnel', { exact: true }).first();
   const dashboardResult = await openModule(page, {
     navButton: 'Dashboard',
     heading: 'Dashboard Overview',
@@ -38,8 +38,8 @@ test('dashboard/leads/attendance load smoke remains usable and crash-safe', asyn
     maxRenderMs: DASHBOARD_MAX_RENDER_MS,
   });
   if (!dashboardResult.usedEnvFallback) {
-    await expect(page.getByText('Organic Clicks (7d)', { exact: true })).toBeVisible();
-    await expect(page.getByText('Engagement Rate (7d)', { exact: true })).toBeVisible();
+    await expect(page.getByText('Section 2 - Phoenix Forum Funnel', { exact: true })).toBeVisible();
+    await expect(page.getByText('AI Summary', { exact: true })).toBeVisible();
   }
   await expect(page.locator('body')).not.toContainText('[object Object]');
 
