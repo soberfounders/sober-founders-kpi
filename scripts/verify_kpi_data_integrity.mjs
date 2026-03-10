@@ -14,6 +14,7 @@ import {
 } from "../dashboard/src/lib/leadsQualificationRules.js";
 import {
   compareNumberWithTolerance,
+  dateDiffDays,
   summarizeAttendanceIntegrity,
   summarizeLeadsIntegrity,
   toDateKeyUtc,
@@ -27,6 +28,9 @@ const DEFAULT_REPORT_PATH = "docs/audits/kpi-data-integrity-latest.md";
 const DEFAULT_MAX_MISSING_REVENUE_PCT = 0.6;
 const DEFAULT_MAX_MISSING_SOBRIETY_PCT = 0.6;
 const DEFAULT_MAX_FALLBACK_SHARE_PCT = 0.5;
+const DEFAULT_HUBSPOT_PARITY_MIN_AGE_DAYS = 3;
+const DEFAULT_HUBSPOT_SYNC_LAG_GRACE_HOURS = 72;
+const DEFAULT_MAX_EXPLAINED_PARITY_MISMATCH_SHARE = 0.2;
 
 function parseArgs(argv = []) {
   const options = {
@@ -246,11 +250,21 @@ function markdownFromResult(result) {
   lines.push("## HubSpot Row Parity");
   lines.push("");
   lines.push(`- enabled: ${result.hubspot_row_parity.enabled}`);
+  lines.push(`- min_record_age_days: ${result.hubspot_row_parity.min_record_age_days}`);
+  lines.push(`- sync_lag_grace_hours: ${result.hubspot_row_parity.sync_lag_grace_hours}`);
   lines.push(`- sample_size: ${result.hubspot_row_parity.sample_size}`);
-  lines.push(`- mismatches: ${result.hubspot_row_parity.mismatch_count}`);
+  lines.push(`- mismatches_total: ${result.hubspot_row_parity.mismatch_count}`);
+  lines.push(`- mismatches_blocking: ${result.hubspot_row_parity.blocking_mismatch_count}`);
+  lines.push(`- mismatches_explained: ${result.hubspot_row_parity.explained_mismatch_count}`);
   if (Array.isArray(result.hubspot_row_parity.examples) && result.hubspot_row_parity.examples.length > 0) {
-    lines.push("- mismatch_examples:");
+    lines.push("- blocking_mismatch_examples:");
     for (const example of result.hubspot_row_parity.examples.slice(0, 10)) {
+      lines.push(`  - contact_id=${example.contact_id}: ${example.reason}`);
+    }
+  }
+  if (Array.isArray(result.hubspot_row_parity.explained_examples) && result.hubspot_row_parity.explained_examples.length > 0) {
+    lines.push("- explained_mismatch_examples:");
+    for (const example of result.hubspot_row_parity.explained_examples.slice(0, 10)) {
       lines.push(`  - contact_id=${example.contact_id}: ${example.reason}`);
     }
   }
@@ -267,6 +281,18 @@ async function run() {
   const maxMissingRevenuePct = envNumber("INTEGRITY_MAX_MISSING_REVENUE_PCT", DEFAULT_MAX_MISSING_REVENUE_PCT);
   const maxMissingSobrietyPct = envNumber("INTEGRITY_MAX_MISSING_SOBRIETY_PCT", DEFAULT_MAX_MISSING_SOBRIETY_PCT);
   const maxFallbackSharePct = envNumber("INTEGRITY_MAX_FALLBACK_SHARE_PCT", DEFAULT_MAX_FALLBACK_SHARE_PCT);
+  const minHubspotParityAgeDays = Math.max(0, Math.floor(envNumber(
+    "INTEGRITY_HUBSPOT_PARITY_MIN_AGE_DAYS",
+    DEFAULT_HUBSPOT_PARITY_MIN_AGE_DAYS,
+  )));
+  const hubspotSyncLagGraceHours = Math.max(0, envNumber(
+    "INTEGRITY_HUBSPOT_SYNC_LAG_GRACE_HOURS",
+    DEFAULT_HUBSPOT_SYNC_LAG_GRACE_HOURS,
+  ));
+  const maxExplainedParityMismatchShare = Math.max(0, Math.min(
+    1,
+    envNumber("INTEGRITY_MAX_EXPLAINED_PARITY_MISMATCH_SHARE", DEFAULT_MAX_EXPLAINED_PARITY_MISMATCH_SHARE),
+  ));
 
   const client = new Client({
     connectionString: dbUrl,
@@ -386,7 +412,7 @@ async function run() {
     const snapshotInputRows = contactRows.filter((row) => {
       const created = parseDbTimestamp(row.createdate);
       if (!created) return false;
-      const diffDays = Math.floor((referenceDate.getTime() - created.getTime()) / 86400000);
+      const diffDays = dateDiffDays(referenceDate, created);
       return diffDays >= 0 && diffDays < bucket90.window_days;
     });
     const snapshot = buildLeadsQualificationSnapshot({
@@ -494,18 +520,27 @@ async function run() {
 
     const hubspotParity = {
       enabled: !!hubspotToken,
+      min_record_age_days: minHubspotParityAgeDays,
+      sync_lag_grace_hours: hubspotSyncLagGraceHours,
       sample_size: 0,
       mismatch_count: 0,
+      blocking_mismatch_count: 0,
+      explained_mismatch_count: 0,
       examples: [],
+      explained_examples: [],
     };
     if (hubspotToken) {
-      const candidates = [...snapshotInputRows];
-      const sample = [];
-      while (sample.length < options.sampleSize && candidates.length > 0) {
-        const index = Math.floor(Math.random() * candidates.length);
-        sample.push(candidates[index]);
-        candidates.splice(index, 1);
-      }
+      const matureCandidates = snapshotInputRows.filter((row) => {
+        const created = parseDbTimestamp(row.createdate);
+        const ageDays = dateDiffDays(referenceDate, created);
+        return Number.isFinite(ageDays) && ageDays >= minHubspotParityAgeDays;
+      });
+      const sampleCandidates = matureCandidates.length >= options.sampleSize
+        ? matureCandidates
+        : snapshotInputRows;
+      const sample = [...sampleCandidates]
+        .sort((left, right) => String(left?.hubspot_contact_id || "").localeCompare(String(right?.hubspot_contact_id || "")))
+        .slice(0, options.sampleSize);
       hubspotParity.sample_size = sample.length;
 
       for (const row of sample) {
@@ -519,26 +554,67 @@ async function run() {
           const hsRevenueSignals = extractRevenueSignals(hubspotProps);
           const dbSobriety = dateKeyFromSobrietyInput(row);
           const hsSobriety = dateKeyFromSobrietyInput(hubspotProps);
+          const returnedId = String(hubspotContact?.id || "").trim();
+          const requestedId = String(contactId).trim();
+          const idRemapped = returnedId && requestedId && returnedId !== requestedId;
+
+          if (idRemapped) {
+            hubspotParity.mismatch_count += 1;
+            hubspotParity.explained_mismatch_count += 1;
+            hubspotParity.explained_examples.push({
+              contact_id: contactId,
+              reason: `hubspot_id_remapped_to=${returnedId}`,
+            });
+            continue;
+          }
 
           const officialMatch = (
             (dbRevenueSignals.officialRevenue === null && hsRevenueSignals.officialRevenue === null)
             || compareNumberWithTolerance(dbRevenueSignals.officialRevenue, hsRevenueSignals.officialRevenue, 0.01)
           );
-          const fallbackMatch = (
+          const fallbackMatchRaw = (
             (dbRevenueSignals.fallbackRevenue === null && hsRevenueSignals.fallbackRevenue === null)
             || compareNumberWithTolerance(dbRevenueSignals.fallbackRevenue, hsRevenueSignals.fallbackRevenue, 0.01)
           );
+          const officialMissingForBoth = (
+            dbRevenueSignals.officialRevenue === null
+            && hsRevenueSignals.officialRevenue === null
+          );
+          const fallbackMatch = officialMissingForBoth ? fallbackMatchRaw : true;
           const sobrietyMatch = dbSobriety === hsSobriety;
+          const dbLastSyncedAt = parseDbTimestamp(row.last_synced_at);
+          const hsUpdatedAt = parseDbTimestamp(
+            hubspotContact?.updatedAt
+            || hubspotProps?.lastmodifieddate
+            || hubspotContact?.properties?.lastmodifieddate,
+          );
+          const isWithinSyncLagGrace = (
+            !!dbLastSyncedAt
+            && !!hsUpdatedAt
+            && hsUpdatedAt.getTime() > dbLastSyncedAt.getTime()
+            && ((hsUpdatedAt.getTime() - dbLastSyncedAt.getTime()) / 3600000) <= hubspotSyncLagGraceHours
+          );
 
           if (!officialMatch || !fallbackMatch || !sobrietyMatch) {
             hubspotParity.mismatch_count += 1;
-            hubspotParity.examples.push({
-              contact_id: contactId,
-              reason: `official_match=${officialMatch}, fallback_match=${fallbackMatch}, sobriety_match=${sobrietyMatch}`,
-            });
+            const mismatchReason = `official_match=${officialMatch}, fallback_match=${fallbackMatch}, fallback_compared=${officialMissingForBoth}, sobriety_match=${sobrietyMatch}, within_sync_lag_grace=${isWithinSyncLagGrace}`;
+            if (isWithinSyncLagGrace) {
+              hubspotParity.explained_mismatch_count += 1;
+              hubspotParity.explained_examples.push({
+                contact_id: contactId,
+                reason: mismatchReason,
+              });
+            } else {
+              hubspotParity.blocking_mismatch_count += 1;
+              hubspotParity.examples.push({
+                contact_id: contactId,
+                reason: mismatchReason,
+              });
+            }
           }
         } catch (error) {
           hubspotParity.mismatch_count += 1;
+          hubspotParity.blocking_mismatch_count += 1;
           hubspotParity.examples.push({
             contact_id: contactId,
             reason: `HubSpot fetch failed: ${error.message || String(error)}`,
@@ -620,12 +696,26 @@ async function run() {
         options.strictHubspotParity ? "blocking" : "warning",
         "HUBSPOT_PRIVATE_APP_TOKEN not set; row-level HubSpot parity was not executed.",
       ));
+      checks.push(createSkipCheck(
+        "hubspot_row_level_parity_explained_share",
+        "warning",
+        "HUBSPOT_PRIVATE_APP_TOKEN not set; explained mismatch share check was not executed.",
+      ));
     } else {
+      const explainedShare = hubspotParity.sample_size > 0
+        ? hubspotParity.explained_mismatch_count / hubspotParity.sample_size
+        : 0;
       checks.push(createCheck(
         "hubspot_row_level_parity",
         options.strictHubspotParity ? "blocking" : "warning",
-        hubspotParity.mismatch_count === 0,
-        `sample_size=${hubspotParity.sample_size}, mismatch_count=${hubspotParity.mismatch_count}`,
+        hubspotParity.blocking_mismatch_count === 0,
+        `sample_size=${hubspotParity.sample_size}, total_mismatch_count=${hubspotParity.mismatch_count}, blocking_mismatch_count=${hubspotParity.blocking_mismatch_count}, explained_mismatch_count=${hubspotParity.explained_mismatch_count}`,
+      ));
+      checks.push(createCheck(
+        "hubspot_row_level_parity_explained_share",
+        "warning",
+        explainedShare <= maxExplainedParityMismatchShare,
+        `explained_mismatch_share=${(explainedShare * 100).toFixed(2)}%, threshold=${(maxExplainedParityMismatchShare * 100).toFixed(2)}%`,
       ));
     }
 
@@ -639,6 +729,9 @@ async function run() {
         max_missing_revenue_pct: maxMissingRevenuePct,
         max_missing_sobriety_pct: maxMissingSobrietyPct,
         max_fallback_share_pct: maxFallbackSharePct,
+        min_hubspot_parity_age_days: minHubspotParityAgeDays,
+        hubspot_sync_lag_grace_hours: hubspotSyncLagGraceHours,
+        max_explained_parity_mismatch_share: maxExplainedParityMismatchShare,
       },
       checks,
       check_counts: checkCounts,
