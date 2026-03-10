@@ -22,3 +22,13 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Generated diagnostics / local artifacts
+scripts/__pycache__/
+scripts/*_output*.txt
+scripts/*_output*.json
+scripts/membership_250k_group_revenue_check.json
+temp_migrations/
+dashboard/live-check.png
+docs/audits/kpi-data-integrity-latest.md
+docs/audits/kpi-data-integrity-latest.json
