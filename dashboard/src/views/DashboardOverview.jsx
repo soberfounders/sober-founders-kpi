@@ -20,13 +20,6 @@ const RANGE_OPTIONS = [
   { value: 'custom', label: 'Custom Range' },
 ];
 
-const FREE_INTERVIEW_URL = 'https://meetings.hubspot.com/andrew-lassise/interview';
-const PHOENIX_INTERVIEW_URLS = [
-  'https://meetings.hubspot.com/andrew-lassise/phoenix-forum-interview',
-  'https://meetings.hubspot.com/andrew-lassise/phoenix-forum-learn-more',
-  'https://meetings.hubspot.com/andrew-lassise/phoenix-forum-good-fit',
-];
-
 const INTERVIEW_MATCH_TOKENS = {
   free: ['meetings.hubspot.com/andrew-lassise/interview'],
   phoenix: [
@@ -663,29 +656,39 @@ function toTrendValue(displayChange) {
   return `${displayChange >= 0 ? '+' : ''}${(displayChange * 100).toFixed(1)}%`;
 }
 
+function formatValueByType(value, format) {
+  if (format === 'currency') return formatCurrency(value);
+  if (format === 'decimal') return formatDecimal(value);
+  if (format === 'percent') return formatPercent(value);
+  return formatInt(value);
+}
+
 function buildCardModel({ title, current, previous, format, note, color, invertColor = false }) {
   const displayChange = calculateDisplayChange(current, previous, invertColor);
   const trend = toTrendDirection(displayChange);
   const trendValue = toTrendValue(displayChange);
-
-  let value = 'N/A';
-  if (format === 'currency') value = formatCurrency(current);
-  else if (format === 'decimal') value = formatDecimal(current);
-  else if (format === 'percent') value = formatPercent(current);
-  else value = formatInt(current);
+  const value = formatValueByType(current, format);
+  const previousValue = Number.isFinite(Number(previous)) ? formatValueByType(previous, format) : null;
+  const previousTone = displayChange === null
+    ? 'neutral'
+    : displayChange > 0
+      ? 'better'
+      : displayChange < 0
+        ? 'worse'
+        : 'neutral';
 
   return {
     title,
     value,
     subvalue: note,
+    previousValue,
+    previousLabel: 'Prior',
+    previousTone,
     trend,
     trendValue,
     invertColor,
     color,
-    chartData: [
-      { name: 'Prior', value: Number.isFinite(Number(previous)) ? Number(previous) : 0 },
-      { name: 'Current', value: Number.isFinite(Number(current)) ? Number(current) : 0 },
-    ],
+    showChart: false,
   };
 }
 
@@ -749,6 +752,173 @@ function buildAiNarrative(snapshot) {
     bottleneckLine,
     trendLine,
     weakestLabel: weakest?.label || 'Qualified conversion',
+    blendedCPQL,
+  };
+}
+
+function buildSectionRecommendations(snapshot, windows, aiNarrative) {
+  const leadsQualifiedCurrent = snapshot.free.current.qualified + snapshot.phoenix.current.qualified;
+  const leadsQualifiedPrevious = snapshot.free.previous.qualified + snapshot.phoenix.previous.qualified;
+  const blendedCPQLCurrent = aiNarrative.blendedCPQL;
+  const blendedCPQLPrevious = safeDivide(
+    snapshot.free.previous.spend + snapshot.phoenix.previous.spend,
+    snapshot.free.previous.qualified + snapshot.phoenix.previous.qualified,
+  );
+
+  return {
+    Leads: [
+      {
+        id: 'leads-reallocate-budget',
+        title: 'Reallocate budget to higher-quality campaigns',
+        description: `Qualified leads are ${formatInt(leadsQualifiedCurrent)} vs ${formatInt(leadsQualifiedPrevious)} in the prior period. Shift spend toward ad sets with higher qualified conversion and pause low-quality segments.`,
+        taskName: `Leads: reallocate spend based on qualified lead conversion (${windows.current.label})`,
+        priority: 'High Priority',
+      },
+      {
+        id: 'leads-fix-cpql',
+        title: 'Reduce CPQL by tightening top-of-funnel targeting',
+        description: `Current blended CPQL is ${formatCurrency(blendedCPQLCurrent)} (prior ${formatCurrency(blendedCPQLPrevious)}). Prioritize creative/audience combinations with lower CPQL and stable quality.`,
+        taskName: `Leads: reduce blended CPQL from ${formatCurrency(blendedCPQLCurrent)}`,
+        priority: 'High Priority',
+      },
+      {
+        id: 'leads-great-share',
+        title: 'Increase Great lead share (>= $1M)',
+        description: `Great leads are ${formatInt(snapshot.free.current.great + snapshot.phoenix.current.great)} this period. Push messaging and retargeting for $1M+ revenue segments.`,
+        taskName: `Leads: improve Great lead share in ${windows.current.label}`,
+        priority: 'Medium Priority',
+      },
+    ],
+    Attendance: [
+      {
+        id: 'attendance-new-attendee-activation',
+        title: 'Improve next-session return rate for new attendees',
+        description: `Net new is Tue ${formatInt(snapshot.attendance.current.netNewTue)} / Thu ${formatInt(snapshot.attendance.current.netNewThu)}. Add a same-day follow-up sequence for first-time attendees.`,
+        taskName: `Attendance: launch same-day follow-up for net-new attendees (${windows.current.label})`,
+        priority: 'High Priority',
+      },
+      {
+        id: 'attendance-tuesday-repeat',
+        title: 'Raise Tuesday average visits',
+        description: `Tuesday avg visits is ${formatDecimal(snapshot.attendance.current.avgVisitsTue)} (prior ${formatDecimal(snapshot.attendance.previous.avgVisitsTue)}). Test reminder cadence and host outreach scripts.`,
+        taskName: 'Attendance: improve Tuesday avg visits per attendee',
+        priority: 'Medium Priority',
+      },
+      {
+        id: 'attendance-thursday-repeat',
+        title: 'Raise Thursday average visits',
+        description: `Thursday avg visits is ${formatDecimal(snapshot.attendance.current.avgVisitsThu)} (prior ${formatDecimal(snapshot.attendance.previous.avgVisitsThu)}). Focus on second-visit conversion for Thursday newcomers.`,
+        taskName: 'Attendance: improve Thursday avg visits per attendee',
+        priority: 'Medium Priority',
+      },
+    ],
+    Donations: [
+      {
+        id: 'donations-recover-lapsed',
+        title: 'Recover lapsed donor momentum',
+        description: `Donations amount is ${formatCurrency(snapshot.donations.current.amount)} vs ${formatCurrency(snapshot.donations.previous.amount)} previously. Run a targeted reactivation outreach to prior donors.`,
+        taskName: `Donations: reactivation campaign (${windows.current.label})`,
+        priority: 'High Priority',
+      },
+      {
+        id: 'donations-average-gift',
+        title: 'Increase average gift size',
+        description: `Transactions are ${formatInt(snapshot.donations.current.count)} this period. Add a higher-anchor ask ladder to increase average contribution size.`,
+        taskName: 'Donations: test higher ask ladder for average gift lift',
+        priority: 'Medium Priority',
+      },
+      {
+        id: 'donations-campaign-attribution',
+        title: 'Strengthen donation source attribution',
+        description: 'Tag campaign source consistently so donation uplift can be attributed to specific paid, referral, and organic initiatives.',
+        taskName: 'Donations: enforce campaign source attribution hygiene',
+        priority: 'Medium Priority',
+      },
+    ],
+    Operations: [
+      {
+        id: 'operations-throughput',
+        title: 'Increase completed-item throughput',
+        description: `Completed items are ${formatInt(snapshot.operations.current.completedItems)} vs ${formatInt(snapshot.operations.previous.completedItems)} in the prior period. Reduce bottlenecks in the Done handoff process.`,
+        taskName: `Operations: improve Done throughput (${windows.current.label})`,
+        priority: 'High Priority',
+      },
+      {
+        id: 'operations-prioritize',
+        title: 'Re-prioritize to one owner per KPI blocker',
+        description: `Focus leadership execution on ${aiNarrative.weakestLabel} first, then sequence secondary work by impact on CPQL and qualified lead volume.`,
+        taskName: `Operations: assign owner + deadline for ${aiNarrative.weakestLabel}`,
+        priority: 'Medium Priority',
+      },
+      {
+        id: 'operations-sla',
+        title: 'Define KPI response SLAs',
+        description: 'Set explicit response SLAs when qualified leads, attendance, or donations fall below trend so action happens the same day.',
+        taskName: 'Operations: define KPI response SLA playbook',
+        priority: 'Medium Priority',
+      },
+    ],
+  };
+}
+
+function buildMustDoToday(snapshot, sectionRecommendations) {
+  const leadsQualifiedDelta = calculateDisplayChange(
+    snapshot.free.current.qualified + snapshot.phoenix.current.qualified,
+    snapshot.free.previous.qualified + snapshot.phoenix.previous.qualified,
+    false,
+  );
+  const leadsCPQLDelta = calculateDisplayChange(
+    safeDivide(
+      snapshot.free.current.spend + snapshot.phoenix.current.spend,
+      snapshot.free.current.qualified + snapshot.phoenix.current.qualified,
+    ),
+    safeDivide(
+      snapshot.free.previous.spend + snapshot.phoenix.previous.spend,
+      snapshot.free.previous.qualified + snapshot.phoenix.previous.qualified,
+    ),
+    true,
+  );
+  const attendanceDelta = calculateDisplayChange(
+    snapshot.attendance.current.netNewTue + snapshot.attendance.current.netNewThu,
+    snapshot.attendance.previous.netNewTue + snapshot.attendance.previous.netNewThu,
+    false,
+  );
+  const donationsDelta = calculateDisplayChange(
+    snapshot.donations.current.amount,
+    snapshot.donations.previous.amount,
+    false,
+  );
+  const operationsDelta = calculateDisplayChange(
+    snapshot.operations.current.completedItems,
+    snapshot.operations.previous.completedItems,
+    false,
+  );
+
+  const sectionRiskRows = [
+    {
+      section: 'Leads',
+      score: Math.max(0, -(leadsQualifiedDelta ?? 0)) * 2 + Math.max(0, -(leadsCPQLDelta ?? 0)),
+    },
+    {
+      section: 'Attendance',
+      score: Math.max(0, -(attendanceDelta ?? 0)),
+    },
+    {
+      section: 'Donations',
+      score: Math.max(0, -(donationsDelta ?? 0)),
+    },
+    {
+      section: 'Operations',
+      score: Math.max(0, -(operationsDelta ?? 0)),
+    },
+  ];
+
+  const topRiskSection = [...sectionRiskRows].sort((a, b) => b.score - a.score)[0]?.section || 'Leads';
+  const recommendation = (sectionRecommendations[topRiskSection] || [])[0] || null;
+  if (!recommendation) return null;
+  return {
+    section: topRiskSection,
+    ...recommendation,
   };
 }
 
@@ -779,6 +949,8 @@ function DashboardOverview() {
   const [lastLoadedAt, setLastLoadedAt] = useState(null);
   const [actionState, setActionState] = useState({});
   const [notionModal, setNotionModal] = useState({ open: false, taskName: '' });
+  const [recommendationFeedback, setRecommendationFeedback] = useState({});
+  const [feedbackDrafts, setFeedbackDrafts] = useState({});
 
   const todayKey = useMemo(() => toDateKey(new Date()), []);
   const windows = useMemo(
@@ -874,6 +1046,29 @@ function DashboardOverview() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem('dashboard-kpi-recommendation-feedback-v1');
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        setRecommendationFeedback(parsed);
+      }
+    } catch (_) {
+      // Ignore malformed cached feedback.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem('dashboard-kpi-recommendation-feedback-v1', JSON.stringify(recommendationFeedback));
+    } catch (_) {
+      // Ignore localStorage write failures.
+    }
+  }, [recommendationFeedback]);
 
   const snapshot = useMemo(() => computeKpiSnapshot(rawData, windows), [rawData, windows]);
   const aiNarrative = useMemo(() => buildAiNarrative(snapshot), [snapshot]);
@@ -1049,86 +1244,72 @@ function DashboardOverview() {
     }),
   ]), [snapshot.operations]);
 
-  const aiActions = useMemo(() => ([
-    {
-      id: 'sync-all-sources',
-      title: 'Refresh Source Pipelines',
-      description: 'Trigger HubSpot, Meta, attendance, and KPI sync before decision review.',
-      run: async () => supabase.functions.invoke('master-sync', {
-        method: 'GET',
-        queryString: { trigger_refresh: 'true' },
-      }),
-    },
-    {
-      id: 'queue-campaign-optimization-task',
-      title: 'Queue Campaign Optimization Task',
-      description: `Create a Notion task to improve ${aiNarrative.weakestLabel}.`,
-      run: async () => supabase.functions.invoke('master-sync', {
-        body: {
-          action: 'create_task',
-          properties: buildNotionCreateTaskProperties(
-            `Optimize campaign strategy: ${aiNarrative.weakestLabel} (${windows.current.label})`,
-            'High Priority',
-          ),
-        },
-      }),
-    },
-    {
-      id: 'queue-followup-workflow-task',
-      title: 'Queue Follow-up Workflow Task',
-      description: 'Create a Notion task for outreach/follow-up workflow updates from KPI trends.',
-      run: async () => supabase.functions.invoke('master-sync', {
-        body: {
-          action: 'create_task',
-          properties: buildNotionCreateTaskProperties(
-            `Build follow-up workflow from KPI trends (${windows.current.label})`,
-            'Medium Priority',
-          ),
-        },
-      }),
-    },
-  ]), [aiNarrative.weakestLabel, windows]);
+  const sectionRecommendations = useMemo(
+    () => buildSectionRecommendations(snapshot, windows, aiNarrative),
+    [snapshot, windows, aiNarrative],
+  );
+  const mustDoToday = useMemo(
+    () => buildMustDoToday(snapshot, sectionRecommendations),
+    [snapshot, sectionRecommendations],
+  );
 
-  const humanActions = useMemo(() => ([
-    {
-      id: 'human-budget-shift',
-      text: `Approve budget reallocation by comparing Free vs Phoenix CPQL and CPGL for ${windows.current.label}.`,
-      notionTask: `Leadership decision: reallocate budget based on CPQL/CPGL (${windows.current.label})`,
-    },
-    {
-      id: 'human-interview-review',
-      text: 'Review interview scheduling friction for the weakest funnel stage and choose one owner for correction.',
-      notionTask: `Review interview funnel friction and assign owner (${aiNarrative.weakestLabel})`,
-    },
-    {
-      id: 'human-ops-throughput',
-      text: 'Validate completed-item throughput from Notion and remove blockers delaying Done transitions.',
-      notionTask: 'Audit operations throughput and resolve Done-state blockers',
-    },
-  ]), [aiNarrative.weakestLabel, windows]);
-
-  const runAiAction = async (action) => {
+  const runRecommendationAction = async (recommendation) => {
     setActionState((prev) => ({
       ...prev,
-      [action.id]: { status: 'running', message: 'Running...' },
+      [recommendation.id]: { status: 'running', message: 'Running...' },
     }));
 
     try {
-      const result = await action.run();
+      const result = await supabase.functions.invoke('master-sync', {
+        body: {
+          action: 'create_task',
+          properties: buildNotionCreateTaskProperties(
+            recommendation.taskName,
+            recommendation.priority || 'Medium Priority',
+          ),
+        },
+      });
       if (result?.error) throw result.error;
       setActionState((prev) => ({
         ...prev,
-        [action.id]: { status: 'done', message: 'Completed' },
+        [recommendation.id]: { status: 'done', message: 'Task queued' },
       }));
     } catch (actionError) {
       setActionState((prev) => ({
         ...prev,
-        [action.id]: {
+        [recommendation.id]: {
           status: 'error',
           message: actionError?.message || 'Action failed',
         },
       }));
     }
+  };
+
+  const setRecommendationVote = (recommendationId, vote) => {
+    setRecommendationFeedback((prev) => ({
+      ...prev,
+      [recommendationId]: {
+        ...(prev[recommendationId] || {}),
+        vote,
+        reason: vote === 'up' ? '' : (prev[recommendationId]?.reason || ''),
+      },
+    }));
+    if (vote === 'up') {
+      setFeedbackDrafts((prev) => ({ ...prev, [recommendationId]: '' }));
+    }
+  };
+
+  const saveDownvoteReason = (recommendationId) => {
+    const reason = String(feedbackDrafts[recommendationId] || '').trim();
+    setRecommendationFeedback((prev) => ({
+      ...prev,
+      [recommendationId]: {
+        ...(prev[recommendationId] || {}),
+        vote: 'down',
+        reason,
+        savedAt: new Date().toISOString(),
+      },
+    }));
   };
 
   if (loading && !lastLoadedAt) {
@@ -1243,9 +1424,6 @@ function DashboardOverview() {
 
       <section className="glass-panel" style={{ padding: '14px' }}>
         <h4 style={{ fontSize: '18px' }}>Section 1 - Free Group Funnel</h4>
-        <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-          Interview link: <a href={FREE_INTERVIEW_URL} target="_blank" rel="noreferrer">{FREE_INTERVIEW_URL}</a>
-        </p>
         <div style={{ ...cardGridStyle, marginTop: '12px' }}>
           {freeCards.map((card) => (
             <KPICard key={card.title} {...card} />
@@ -1255,13 +1433,6 @@ function DashboardOverview() {
 
       <section className="glass-panel" style={{ padding: '14px' }}>
         <h4 style={{ fontSize: '18px' }}>Section 2 - Phoenix Forum Funnel</h4>
-        <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-          Interview links: {PHOENIX_INTERVIEW_URLS.map((url) => (
-            <span key={url} style={{ marginRight: '8px' }}>
-              <a href={url} target="_blank" rel="noreferrer">{url}</a>
-            </span>
-          ))}
-        </p>
         <div style={{ ...cardGridStyle, marginTop: '12px' }}>
           {phoenixCards.map((card) => (
             <KPICard key={card.title} {...card} />
@@ -1304,71 +1475,143 @@ function DashboardOverview() {
           <Bot size={17} />
           <h4 style={{ fontSize: '18px' }}>AI Summary</h4>
         </div>
-        <ul style={{ marginTop: '10px', listStyle: 'disc', paddingLeft: '18px', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
+        <ul style={{ marginTop: '10px', listStyle: 'disc', paddingLeft: '18px', color: '#dbeafe', lineHeight: 1.6 }}>
           <li>{aiNarrative.healthLine}</li>
           <li>{aiNarrative.bottleneckLine}</li>
           <li>{aiNarrative.trendLine}</li>
         </ul>
 
-        <div style={{ marginTop: '14px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '10px' }}>
-          <div style={{ border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Sparkles size={15} />
-              <p style={{ fontWeight: 700 }}>AI Can Execute (Top 3)</p>
-            </div>
-            <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {aiActions.map((action) => {
-                const state = actionState[action.id] || {};
-                return (
-                  <div key={action.id} style={{ border: '1px solid var(--color-border)', borderRadius: '8px', padding: '8px' }}>
-                    <p style={{ fontWeight: 700, fontSize: '13px' }}>{action.title}</p>
-                    <p style={{ marginTop: '4px', color: 'var(--color-text-secondary)', fontSize: '12px' }}>{action.description}</p>
-                    <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                      <button
-                        type="button"
-                        className="btn-primary"
-                        onClick={() => runAiAction(action)}
-                        disabled={state.status === 'running' || loading}
-                        style={{ padding: '6px 10px', fontSize: '12px' }}
-                      >
-                        {state.status === 'running' ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                        {state.status === 'running' ? 'Running...' : 'Do This'}
-                      </button>
-                      <span style={{ fontSize: '11px', color: state.status === 'error' ? '#fca5a5' : 'var(--color-text-muted)' }}>
-                        {state.message || 'Ready'}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+        {mustDoToday && (
+          <div style={{ marginTop: '14px', backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid #f59e0b', borderRadius: '12px', padding: '12px' }}>
+            <p style={{ fontSize: '12px', fontWeight: 800, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Must Do Today
+            </p>
+            <p style={{ marginTop: '4px', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
+              {mustDoToday.section}: {mustDoToday.title}
+            </p>
+            <p style={{ marginTop: '6px', fontSize: '13px', color: '#334155' }}>{mustDoToday.description}</p>
+            <button
+              type="button"
+              className="btn-primary"
+              style={{ marginTop: '10px', padding: '7px 12px', fontSize: '12px' }}
+              onClick={() => runRecommendationAction(mustDoToday)}
+              disabled={loading || actionState[mustDoToday.id]?.status === 'running'}
+            >
+              {actionState[mustDoToday.id]?.status === 'running' ? 'Running...' : 'Do This Now'}
+            </button>
           </div>
+        )}
 
-          <div style={{ border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Sparkles size={15} />
-              <p style={{ fontWeight: 700 }}>Human Actions (Top 3)</p>
+        <div style={{ marginTop: '14px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '12px' }}>
+          {Object.entries(sectionRecommendations).map(([sectionName, recommendations]) => (
+            <div key={sectionName} style={{ border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Sparkles size={15} />
+                <p style={{ fontWeight: 700 }}>{sectionName} (3 Suggestions)</p>
+              </div>
+              <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {recommendations.map((recommendation) => {
+                  const state = actionState[recommendation.id] || {};
+                  const feedback = recommendationFeedback[recommendation.id] || {};
+                  const isDown = feedback.vote === 'down';
+                  return (
+                    <div key={recommendation.id} style={{ border: '1px solid rgba(148,163,184,0.35)', borderRadius: '8px', padding: '9px', backgroundColor: 'rgba(255,255,255,0.96)' }}>
+                      <p style={{ fontWeight: 700, fontSize: '13px', color: '#0f172a' }}>{recommendation.title}</p>
+                      <p style={{ marginTop: '4px', color: '#334155', fontSize: '12px', lineHeight: 1.45 }}>{recommendation.description}</p>
+                      <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          onClick={() => runRecommendationAction(recommendation)}
+                          disabled={state.status === 'running' || loading}
+                          style={{ padding: '6px 10px', fontSize: '12px' }}
+                        >
+                          {state.status === 'running' ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                          {state.status === 'running' ? 'Running...' : 'Do This'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-glass"
+                          style={{ padding: '6px 10px', fontSize: '12px', color: '#0f172a', borderColor: '#94a3b8' }}
+                          onClick={() => setNotionModal({ open: true, taskName: recommendation.taskName })}
+                        >
+                          Add to Notion
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-glass"
+                          style={{
+                            padding: '6px 8px',
+                            fontSize: '12px',
+                            color: feedback.vote === 'up' ? '#15803d' : '#0f172a',
+                            borderColor: feedback.vote === 'up' ? '#16a34a' : '#94a3b8',
+                          }}
+                          onClick={() => setRecommendationVote(recommendation.id, 'up')}
+                        >
+                          Thumbs Up
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-glass"
+                          style={{
+                            padding: '6px 8px',
+                            fontSize: '12px',
+                            color: feedback.vote === 'down' ? '#b91c1c' : '#0f172a',
+                            borderColor: feedback.vote === 'down' ? '#dc2626' : '#94a3b8',
+                          }}
+                          onClick={() => setRecommendationVote(recommendation.id, 'down')}
+                        >
+                          Thumbs Down
+                        </button>
+                        <span style={{ fontSize: '11px', color: state.status === 'error' ? '#b91c1c' : '#334155' }}>
+                          {state.message || 'Ready'}
+                        </span>
+                      </div>
+                      {isDown && (
+                        <div style={{ marginTop: '8px' }}>
+                          <textarea
+                            value={feedbackDrafts[recommendation.id] ?? feedback.reason ?? ''}
+                            onChange={(event) => setFeedbackDrafts((prev) => ({ ...prev, [recommendation.id]: event.target.value }))}
+                            placeholder="Tell us why this is a bad suggestion so we can improve."
+                            style={{
+                              width: '100%',
+                              minHeight: '64px',
+                              borderRadius: '8px',
+                              border: '1px solid #cbd5e1',
+                              padding: '8px',
+                              fontSize: '12px',
+                              color: '#0f172a',
+                              backgroundColor: '#fff',
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="btn-glass"
+                            style={{ marginTop: '6px', fontSize: '12px', padding: '6px 10px', color: '#0f172a', borderColor: '#94a3b8' }}
+                            onClick={() => saveDownvoteReason(recommendation.id)}
+                          >
+                            Save Feedback
+                          </button>
+                          {feedback.reason && (
+                            <p style={{ marginTop: '6px', fontSize: '11px', color: '#334155' }}>
+                              Saved feedback: {feedback.reason}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-            <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {humanActions.map((action) => (
-                <div key={action.id} style={{ border: '1px solid var(--color-border)', borderRadius: '8px', padding: '8px' }}>
-                  <p style={{ color: 'var(--color-text-secondary)', fontSize: '12px', lineHeight: 1.45 }}>{action.text}</p>
-                  <button
-                    type="button"
-                    className="btn-glass"
-                    style={{ marginTop: '8px', padding: '6px 10px', fontSize: '12px' }}
-                    onClick={() => setNotionModal({ open: true, taskName: action.notionTask })}
-                  >
-                    Add to Notion
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
+          ))}
+        </div>
+        <div style={{ marginTop: '10px', fontSize: '11px', color: 'var(--color-text-muted)' }}>
+          Every recommendation has thumbs up/down feedback. Downvotes require a reason so suggestion quality can improve over time.
         </div>
       </section>
 
-      <div className="glass-panel" style={{ padding: '10px', fontSize: '11px', color: 'var(--color-text-muted)' }}>
+      <div className="glass-panel" style={{ padding: '10px', fontSize: '11px', color: '#cbd5e1' }}>
         <p>Last loaded: {formatTimestamp(lastLoadedAt)}</p>
         <p style={{ marginTop: '4px' }}>
           Source rows used - Ads: {formatInt(snapshot.sourceRows.ads)}, HubSpot Contacts: {formatInt(snapshot.sourceRows.contacts)}, Interviews: {formatInt(snapshot.sourceRows.interviews)}, Attendance Sessions: {formatInt(snapshot.sourceRows.sessions)}, Donations: {formatInt(snapshot.sourceRows.donations)}, Todo Items: {formatInt(snapshot.sourceRows.todos)}
@@ -1385,3 +1628,4 @@ function DashboardOverview() {
 }
 
 export default DashboardOverview;
+

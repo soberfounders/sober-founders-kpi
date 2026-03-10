@@ -3,11 +3,30 @@ import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 
-const KPICard = ({ title, value, subvalue, trend, trendValue, color, chartData, invertColor }) => {
+const KPICard = ({
+  title,
+  value,
+  subvalue,
+  trend,
+  trendValue,
+  color,
+  chartData,
+  invertColor,
+  previousValue,
+  previousLabel = 'Previous',
+  previousTone = 'neutral',
+  showChart = true,
+}) => {
   const isUp = trend === 'up';
   const isDown = trend === 'down';
   const better = invertColor ? isDown : isUp;
   const worse = invertColor ? isUp : isDown;
+  const hasChart = Boolean(showChart && chartData);
+  const previousToneColor = previousTone === 'better'
+    ? '#16a34a'
+    : previousTone === 'worse'
+      ? '#dc2626'
+      : '#334155';
 
   return (
     <motion.div
@@ -22,16 +41,16 @@ const KPICard = ({ title, value, subvalue, trend, trendValue, color, chartData, 
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
-        height: '180px'
+        minHeight: hasChart ? '180px' : '160px'
       }}
     >
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <p style={{ fontSize: '14px', fontWeight: '500', color: 'var(--color-text-secondary)', marginBottom: '8px' }}>
+            <p style={{ fontSize: '14px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>
               {title}
             </p>
-            <h3 style={{ fontSize: '28px', color: 'var(--color-text-primary)' }}>{value}</h3>
+            <h3 style={{ fontSize: '31px', color: '#0f172a', fontWeight: 800 }}>{value}</h3>
           </div>
           {trend && (
             <div style={{
@@ -42,23 +61,28 @@ const KPICard = ({ title, value, subvalue, trend, trendValue, color, chartData, 
               borderRadius: '20px',
               fontSize: '12px',
               fontWeight: '600',
-              backgroundColor: better ? '#ecfdf5' : worse ? '#fef2f2' : '#f1f5f9',
-              color: better ? '#10b981' : worse ? '#ef4444' : '#64748b'
+                backgroundColor: better ? '#ecfdf5' : worse ? '#fef2f2' : '#f1f5f9',
+                color: better ? '#10b981' : worse ? '#ef4444' : '#64748b'
             }}>
               {isUp ? <TrendingUp size={14} /> : isDown ? <TrendingDown size={14} /> : <Minus size={14} />}
               {trendValue}
             </div>
           )}
         </div>
+        {previousValue && (
+          <p style={{ fontSize: '12px', color: previousToneColor, marginTop: '5px', fontWeight: 700 }}>
+            {previousLabel}: {previousValue}
+          </p>
+        )}
         {subvalue && (
-          <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
+          <p style={{ fontSize: '12px', color: '#475569', marginTop: '4px', lineHeight: 1.3 }}>
             {subvalue}
           </p>
         )}
       </div>
 
-      <div style={{ height: '50px', width: '100%', marginLeft: '-4px', marginRight: '-4px', marginBottom: '-24px' }}>
-        {chartData && (
+      <div style={{ height: hasChart ? '50px' : '0px', width: '100%', marginLeft: '-4px', marginRight: '-4px', marginBottom: hasChart ? '-24px' : '0px' }}>
+        {hasChart && (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData}>
               <defs>

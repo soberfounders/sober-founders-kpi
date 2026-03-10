@@ -35,18 +35,24 @@ test('dashboard overview KPI contract renders and remains stable', async ({ page
   await expect(page.getByText('Completed Items', { exact: true })).toBeVisible();
 
   await expect(page.getByText('AI Summary', { exact: true })).toBeVisible();
-  await expect(page.getByText('AI Can Execute (Top 3)', { exact: true })).toBeVisible();
-  await expect(page.getByText('Human Actions (Top 3)', { exact: true })).toBeVisible();
+  await expect(page.getByText('Must Do Today', { exact: true })).toBeVisible();
+  await expect(page.getByText('Leads (3 Suggestions)', { exact: true })).toBeVisible();
+  await expect(page.getByText('Attendance (3 Suggestions)', { exact: true })).toBeVisible();
+  await expect(page.getByText('Donations (3 Suggestions)', { exact: true })).toBeVisible();
+  await expect(page.getByText('Operations (3 Suggestions)', { exact: true })).toBeVisible();
 
   const rangeSelect = page.getByTestId('dashboard-time-range-select');
   await expect(rangeSelect).toBeVisible();
   await rangeSelect.selectOption('last_month');
   await expect(page.locator('main')).toContainText('Current period: Month of');
 
+  await expect(page.getByRole('button', { name: /Thumbs up/i }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /Thumbs down/i }).first()).toBeVisible();
+
   const addToNotionButton = page.getByRole('button', { name: 'Add to Notion' }).first();
   await expect(addToNotionButton).toBeVisible();
   await addToNotionButton.click();
-  const notionModal = page.getByText('Send to Notion', { exact: true });
+  const notionModal = page.getByRole('heading', { name: 'Send to Notion' });
   await expect(notionModal).toBeVisible();
   await page.keyboard.press('Escape');
 
