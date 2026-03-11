@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import {
   LEADS_ATTRIBUTION_HISTORY_DAYS,
@@ -931,6 +931,9 @@ export default function LeadsDashboard() {
   const [managerNotionModal, setManagerNotionModal] = useState({ open: false, taskName: '' });
   const [deferredInsightsReady, setDeferredInsightsReady] = useState(false);
   const [optionalEnrichmentStatus, setOptionalEnrichmentStatus] = useState('idle');
+  // Monotonically-incrementing counter used to cancel stale fire-and-forget enrichment
+  // invocations when fetchData is called again before the previous enrichment completes.
+  const enrichmentInvocationRef = useRef(0);
 
   // Legacy drilldown
   const [drilldownWindowKey, setDrilldownWindowKey] = useState('monthCurrent');
@@ -956,7 +959,7 @@ export default function LeadsDashboard() {
     return () => clearTimeout(timer);
   }, [loading, rawAds.length, rawHubspot.length, rawLuma.length, rawZoom.length]);
 
-  async function loadOptionalHubspotActivityEnrichment({ startKey, attributionStartKey }) {
+  async function loadOptionalHubspotActivityEnrichment({ startKey, attributionStartKey, myInvocation }) {
     setOptionalEnrichmentStatus('loading');
     const enrichmentErrors = [];
     let hubspotActivitiesData = [];
@@ -1014,6 +1017,9 @@ export default function LeadsDashboard() {
     } catch (optionalErr) {
       enrichmentErrors.push(`Optional HubSpot activity enrichment failed: ${optionalErr.message}`);
     }
+
+    // Discard results if a newer fetchData call has already superseded this invocation.
+    if (enrichmentInvocationRef.current !== myInvocation) return;
 
     setRawHubspotActivities(hubspotActivitiesData);
     setRawHubspotActivityAssociations(hubspotActivityAssociationsData);
@@ -1089,7 +1095,10 @@ export default function LeadsDashboard() {
     setLoadErrors(errors);
     setLoading(false);
     // Hydrate optional identity/enrichment datasets after KPIs paint.
-    void loadOptionalHubspotActivityEnrichment({ startKey, attributionStartKey });
+    // Increment the counter so any in-flight enrichment from a previous call discards its results.
+    enrichmentInvocationRef.current += 1;
+    const myInvocation = enrichmentInvocationRef.current;
+    void loadOptionalHubspotActivityEnrichment({ startKey, attributionStartKey, myInvocation });
   }
 
   useEffect(() => {

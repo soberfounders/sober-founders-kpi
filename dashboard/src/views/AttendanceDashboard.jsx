@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 /* Data source priority: HubSpot call/meeting activities + associations only. */
 import { supabase } from '../lib/supabaseClient';
 import {
@@ -1871,6 +1871,8 @@ const AttendanceDashboard = () => {
   const [hubspotContactAssocs, setHubspotContactAssocs] = useState([]);
   const [identityWarning, setIdentityWarning] = useState('');
   const [contactEnrichmentStatus, setContactEnrichmentStatus] = useState('idle');
+  // Guards against stale contact enrichment results when loadAll is re-triggered.
+  const contactEnrichmentInvocationRef = useRef(0);
   const [planState, setPlanState] = useState({});
   const [selectedSessionKey, setSelectedSessionKey] = useState('');
   const [selectedRepeaterName, setSelectedRepeaterName] = useState('');
@@ -2597,7 +2599,7 @@ const AttendanceDashboard = () => {
     });
   }
 
-  async function loadHubspotContactEnrichment({ identityStartIso, hsActivityRows, hsAssocRows }) {
+  async function loadHubspotContactEnrichment({ identityStartIso, hsActivityRows, hsAssocRows, myInvocation }) {
     setContactEnrichmentStatus('loading');
     const identityWarnings = [];
     const {
@@ -2676,6 +2678,9 @@ const AttendanceDashboard = () => {
         identityWarnings.push(`${stillMissingCount} HubSpot activity-linked contact(s) were not found in raw_hubspot_contacts cache; refresh contact sync to fill enrichment fields.`);
       }
     }
+
+    // Discard results if a newer loadAll call has already superseded this invocation.
+    if (contactEnrichmentInvocationRef.current !== myInvocation) return;
 
     setRawHubspotContacts(hubspotContactsData);
     const enrichmentFailed = identityWarnings.length > 0 && hubspotContactsData.length === 0;
@@ -2760,8 +2765,12 @@ const AttendanceDashboard = () => {
     setLoading(false);
 
     // Hydrate HubSpot contact enrichment in the background so attendance KPIs paint faster.
-    if (!hsActivitiesResult.error && !hsAssocsLoadError) {
-      void loadHubspotContactEnrichment({ identityStartIso, hsActivityRows, hsAssocRows });
+    // Only skip if activities themselves failed (contacts are independent of association load success).
+    // If hsAssocsLoadError is set, hsAssocRows will be [] and the backfill step is safely skipped.
+    contactEnrichmentInvocationRef.current += 1;
+    const myInvocation = contactEnrichmentInvocationRef.current;
+    if (!hsActivitiesResult.error) {
+      void loadHubspotContactEnrichment({ identityStartIso, hsActivityRows, hsAssocRows, myInvocation });
     } else {
       setContactEnrichmentStatus('error');
     }

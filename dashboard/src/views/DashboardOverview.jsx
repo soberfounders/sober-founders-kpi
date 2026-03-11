@@ -42,6 +42,9 @@ const RANGE_OPTIONS = [
 ];
 
 const FREE_GROUP_INTERVIEW_MEETING_NAME = 'Sober Founders Intro Meeting';
+// Legacy HubSpot records stored the booking URL rather than the meeting name as a title.
+// Keep the URL token as a fallback so older activities are not silently dropped.
+const FREE_GROUP_INTERVIEW_LEGACY_URL_TOKEN = 'meetings.hubspot.com/andrew-lassise/interview';
 const PHOENIX_INTERVIEW_MATCH_TOKENS = [
   'meetings.hubspot.com/andrew-lassise/phoenix-forum-interview',
   'meetings.hubspot.com/andrew-lassise/phoenix-forum-learn-more',
@@ -515,7 +518,9 @@ function normalizeHubspotContacts(rows = []) {
     .filter((row) => row.createdDateKey);
 }
 
-const matchesFreeGroupInterview = createMeetingNameMatcher(FREE_GROUP_INTERVIEW_MEETING_NAME);
+const _freeGroupNameMatcher = createMeetingNameMatcher(FREE_GROUP_INTERVIEW_MEETING_NAME);
+const _freeGroupUrlMatcher = createTokenMatcher([FREE_GROUP_INTERVIEW_LEGACY_URL_TOKEN]);
+const matchesFreeGroupInterview = (row) => _freeGroupNameMatcher(row) || _freeGroupUrlMatcher(row);
 const matchesPhoenixInterview = createTokenMatcher(PHOENIX_INTERVIEW_MATCH_TOKENS);
 
 function detectZoomDayType(row, dateKey) {
@@ -937,17 +942,16 @@ function buildCardModel({ metricKey, snapshot }) {
     format: definition.format,
     direction: definition.direction,
   });
-  // trend reflects the numeric direction the value moved (for the arrow icon).
-  // invertColor tells KPICard whether down is the good direction (cost metrics).
-  // These must be derived independently: tone already encodes direction semantics,
-  // but the arrow should show where the number actually went, not whether it was good.
-  const lastWeekDelta = lastWeekComparison.delta;
-  const trend = !Number.isFinite(Number(lastWeekDelta)) || lastWeekDelta === null
-    ? 'neutral'
-    : lastWeekDelta > 0 ? 'up' : lastWeekDelta < 0 ? 'down' : 'neutral';
-  const trendValue = Number.isFinite(Number(lastWeekComparison.pct))
-    ? toTrendValue(lastWeekComparison.pct)
-    : 'N/A';
+  // trend and trendValue are derived from the period-over-period comparison
+  // (current window vs prior window of the same length), NOT from lastWeekComparison.
+  // Using lastWeekComparison caused the arrow to always show neutral when the selected
+  // range is "week" — because current === last-week baseline in that case (same dates).
+  // The "vs Last Week" and "vs 4 Week Avg" rows remain in comparisonRows for display.
+  const periodPct = (rawDelta !== null && Number.isFinite(Number(previous)) && Number(previous) !== 0)
+    ? rawDelta / Number(previous)
+    : null;
+  const trend = rawDelta === null ? 'neutral' : rawDelta > 0 ? 'up' : rawDelta < 0 ? 'down' : 'neutral';
+  const trendValue = Number.isFinite(Number(periodPct)) ? toTrendValue(periodPct) : 'N/A';
 
   return {
     title: definition.title,

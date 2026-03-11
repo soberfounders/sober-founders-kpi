@@ -7,6 +7,7 @@ import {
   buildDirectionalComparison,
   countInterviewUniqueAttendees,
   createMeetingNameMatcher,
+  createTokenMatcher,
   formatCurrency,
   normalizeInterviewActivities,
 } from '../src/lib/dashboardKpiHelpers.js';
@@ -119,4 +120,119 @@ test('free group interviews dedupe attendees inferred from title when metadata n
   }, matcher);
 
   assert.equal(count, 2);
+});
+
+// ── Regression: dual matcher for free group interviews ──────────────────────
+
+test('legacy URL token still matches free group interview activities', () => {
+  // Simulates older HubSpot records where the booking URL was stored in metadata
+  // rather than "Sober Founders Intro Meeting" as the meeting title.
+  const rawActivities = [
+    {
+      hubspot_activity_id: 301,
+      hs_timestamp: '2026-03-03T18:00:00.000Z',
+      title: 'Call with Alice Smith',
+      metadata: {
+        meeting_name: 'meetings.hubspot.com/andrew-lassise/interview',
+        attendees: [{ name: 'Alice Smith' }],
+      },
+    },
+    {
+      hubspot_activity_id: 302,
+      hs_timestamp: '2026-03-04T18:00:00.000Z',
+      title: 'Call with Bob Jones',
+      body_preview: 'Scheduled via meetings.hubspot.com/andrew-lassise/interview',
+      metadata: { attendees: [{ name: 'Bob Jones' }] },
+    },
+    {
+      hubspot_activity_id: 303,
+      hs_timestamp: '2026-03-05T18:00:00.000Z',
+      title: 'Unrelated Call',
+      metadata: { attendees: [{ name: 'Charlie Brown' }] },
+    },
+  ];
+
+  const normalized = normalizeInterviewActivities(rawActivities);
+  const urlMatcher = createTokenMatcher(['meetings.hubspot.com/andrew-lassise/interview']);
+  const count = countInterviewUniqueAttendees(normalized, {
+    start: '2026-03-02',
+    end: '2026-03-08',
+  }, urlMatcher);
+
+  // Alice (from meeting_name) + Bob (from body_preview) should match; Charlie should not.
+  assert.equal(count, 2);
+});
+
+test('dual matcher catches both name-based and URL-based free group interviews', () => {
+  const rawActivities = [
+    {
+      hubspot_activity_id: 401,
+      hs_timestamp: '2026-03-03T18:00:00.000Z',
+      title: 'Sober Founders Intro Meeting',
+      metadata: { attendees: [{ name: 'New Format Person' }] },
+    },
+    {
+      hubspot_activity_id: 402,
+      hs_timestamp: '2026-03-04T18:00:00.000Z',
+      title: 'Legacy Interview Call',
+      metadata: {
+        meeting_name: 'meetings.hubspot.com/andrew-lassise/interview',
+        attendees: [{ name: 'Legacy Format Person' }],
+      },
+    },
+  ];
+
+  const normalized = normalizeInterviewActivities(rawActivities);
+  const nameMatcher = createMeetingNameMatcher('Sober Founders Intro Meeting');
+  const urlMatcher = createTokenMatcher(['meetings.hubspot.com/andrew-lassise/interview']);
+  const dualMatcher = (row) => nameMatcher(row) || urlMatcher(row);
+
+  const count = countInterviewUniqueAttendees(normalized, {
+    start: '2026-03-02',
+    end: '2026-03-08',
+  }, dualMatcher);
+
+  assert.equal(count, 2);
+});
+
+// ── buildDirectionalComparison edge cases ───────────────────────────────────
+
+test('buildDirectionalComparison returns better tone and null pct when baseline is zero and current is non-zero', () => {
+  const comparison = buildDirectionalComparison({
+    label: 'vs Last Week',
+    current: 5,
+    baseline: 0,
+    format: 'count',
+    direction: KPI_DIRECTION.HIGHER_IS_BETTER,
+  });
+
+  // delta = 5 > 0 so tone should be 'better', but pct must be null (div by zero)
+  assert.equal(comparison.tone, 'better');
+  assert.equal(comparison.pct, null);
+  // display should show the delta without a division-by-zero error
+  assert.ok(comparison.display.startsWith('+5'), `expected display to start with '+5', got: ${comparison.display}`);
+});
+
+test('buildDirectionalComparison returns neutral when both current and baseline are zero', () => {
+  const comparison = buildDirectionalComparison({
+    label: 'vs Last Week',
+    current: 0,
+    baseline: 0,
+    format: 'count',
+    direction: KPI_DIRECTION.HIGHER_IS_BETTER,
+  });
+
+  assert.equal(comparison.tone, 'neutral');
+  assert.equal(comparison.pct, 0);
+});
+
+// ── buildCompletedWeekWindows boundary ──────────────────────────────────────
+
+test('buildCompletedWeekWindows lastWeek never overlaps current week when today is Monday', () => {
+  // When today IS a Monday, last week should end on the previous Sunday.
+  const windows = buildCompletedWeekWindows('2026-03-09'); // Monday
+  assert.equal(windows.lastWeek.end, '2026-03-08');    // previous Sunday
+  assert.equal(windows.lastWeek.start, '2026-03-02');
+  // Verify lastWeek.end is strictly before current week start
+  assert.ok(windows.lastWeek.end < '2026-03-09');
 });
