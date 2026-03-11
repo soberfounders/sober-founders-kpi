@@ -2584,11 +2584,107 @@ const AttendanceDashboard = () => {
     }
   }
 
+  function appendIdentityWarnings(nextWarnings = []) {
+    const clean = (nextWarnings || []).map((w) => String(w || '').trim()).filter(Boolean);
+    if (clean.length === 0) return;
+    setIdentityWarning((prev) => {
+      const merged = Array.from(new Set([
+        ...String(prev || '').split('|').map((s) => s.trim()).filter(Boolean),
+        ...clean,
+      ]));
+      return merged.join(' | ');
+    });
+  }
+
+  async function loadHubspotContactEnrichment({ identityStartIso, hsActivityRows, hsAssocRows }) {
+    const identityWarnings = [];
+    const {
+      columns: contactSelectColumns,
+      schemaWarnings: contactSchemaWarnings = [],
+    } = await resolveAttendanceHubspotContactSelectColumns();
+    if (contactSchemaWarnings.length > 0) identityWarnings.push(...contactSchemaWarnings);
+    const contactSelectClause = contactSelectColumns.join(',');
+
+    const hubspotContactsResult = await selectAllRows((from, to) => (
+      supabase
+        .from('raw_hubspot_contacts')
+        .select(contactSelectClause)
+        .gte('createdate', identityStartIso)
+        .order('createdate', { ascending: false })
+        .range(from, to)
+    ), { pageSize: 1000, maxPages: 120 });
+
+    let hubspotContactsData = [];
+    if (hubspotContactsResult.error) {
+      identityWarnings.push(`HubSpot contacts cache unavailable: ${hubspotContactsResult.error.message || 'read failed'}`);
+    } else {
+      hubspotContactsData = hubspotContactsResult.data || [];
+    }
+
+    // Backfill any contact IDs referenced by loaded HubSpot call/meeting sessions but missing from the
+    // scoped contact query.
+    const sessionActivityIds = new Set(
+      (hsActivityRows || [])
+        .map((row) => String(row?.hubspot_activity_id || ''))
+        .filter(Boolean),
+    );
+    const neededContactIds = Array.from(new Set(
+      (hsAssocRows || [])
+        .filter((row) => sessionActivityIds.has(String(row?.hubspot_activity_id || '')))
+        .map((row) => Number(row?.hubspot_contact_id))
+        .filter((id) => Number.isFinite(id) && id > 0),
+    ));
+    const loadedContactIds = new Set(
+      hubspotContactsData
+        .map((row) => Number(row?.hubspot_contact_id))
+        .filter((id) => Number.isFinite(id) && id > 0),
+    );
+    const missingContactIds = neededContactIds.filter((id) => !loadedContactIds.has(id));
+
+    if (missingContactIds.length > 0) {
+      const backfillRows = [];
+      const backfillErrors = [];
+      for (const idChunk of chunkArray(missingContactIds, 200)) {
+        const backfillResult = await supabase
+          .from('raw_hubspot_contacts')
+          .select(contactSelectClause)
+          .in('hubspot_contact_id', idChunk);
+        if (backfillResult.error) {
+          backfillErrors.push(backfillResult.error.message || 'read failed');
+          continue;
+        }
+        backfillRows.push(...(backfillResult.data || []));
+      }
+
+      if (backfillRows.length > 0) {
+        hubspotContactsData = [...hubspotContactsData, ...backfillRows];
+      }
+
+      const finalContactIdSet = new Set(
+        hubspotContactsData
+          .map((row) => Number(row?.hubspot_contact_id))
+          .filter((id) => Number.isFinite(id) && id > 0),
+      );
+      const stillMissingCount = missingContactIds.filter((id) => !finalContactIdSet.has(id)).length;
+
+      if (backfillErrors.length > 0) {
+        identityWarnings.push(`HubSpot contacts enrichment backfill had ${backfillErrors.length} error(s); some revenue/sobriety fields may be missing.`);
+      }
+      if (stillMissingCount > 0) {
+        identityWarnings.push(`${stillMissingCount} HubSpot activity-linked contact(s) were not found in raw_hubspot_contacts cache; refresh contact sync to fill enrichment fields.`);
+      }
+    }
+
+    setRawHubspotContacts(hubspotContactsData);
+    appendIdentityWarnings(identityWarnings);
+  }
+
   async function loadAll() {
     setLoading(true);
     setError('');
     setAliasWarning('');
     setIdentityWarning('');
+    setRawHubspotContacts([]);
 
     const aliasResult = await loadAliasesForDashboard();
     if (aliasResult.warning) {
@@ -2600,35 +2696,15 @@ const AttendanceDashboard = () => {
     const identityStartIso = `${identityStartDate}T00:00:00.000Z`;
 
     // ── PRIMARY: HubSpot meeting activity groups (call-type, group sessions) ──
-    const {
-      columns: contactSelectColumns,
-      schemaWarnings: contactSchemaWarnings = [],
-    } = await resolveAttendanceHubspotContactSelectColumns();
-    if (contactSchemaWarnings.length > 0) identityWarnings.push(...contactSchemaWarnings);
-    const contactSelectClause = contactSelectColumns.join(',');
-
-    const [
-      hsActivitiesResult,
-      hubspotContactsResult,
-    ] = await Promise.all([
-      selectAllRows((from, to) => (
-        supabase
-          .from('raw_hubspot_meeting_activities')
-          .select('hubspot_activity_id,activity_type,hs_timestamp,created_at_hubspot,title,body_preview,metadata')
-          .in('activity_type', ['call', 'meeting'])
-          .or(`hs_timestamp.gte.${identityStartDate},created_at_hubspot.gte.${identityStartDate}`)
-          .order('hs_timestamp', { ascending: false })
-          .range(from, to)
-      ), { pageSize: 1000, maxPages: 120 }),
-      selectAllRows((from, to) => (
-        supabase
-          .from('raw_hubspot_contacts')
-          .select(contactSelectClause)
-          .gte('createdate', identityStartIso)
-          .order('createdate', { ascending: false })
-          .range(from, to)
-      ), { pageSize: 1000, maxPages: 120 }),
-    ]);
+    const hsActivitiesResult = await selectAllRows((from, to) => (
+      supabase
+        .from('raw_hubspot_meeting_activities')
+        .select('hubspot_activity_id,activity_type,hs_timestamp,created_at_hubspot,title,body_preview,metadata')
+        .in('activity_type', ['call', 'meeting'])
+        .or(`hs_timestamp.gte.${identityStartDate},created_at_hubspot.gte.${identityStartDate}`)
+        .order('hs_timestamp', { ascending: false })
+        .range(from, to)
+    ), { pageSize: 1000, maxPages: 120 });
 
     const hsActivityRows = hsActivitiesResult.data || [];
     if (hsActivitiesResult.error) {
@@ -2671,77 +2747,17 @@ const AttendanceDashboard = () => {
       setHubspotContactAssocs(hsAssocRows);
     }
 
-    let hubspotContactsData = [];
-    if (hubspotContactsResult.error) {
-      identityWarnings.push(`HubSpot contacts cache unavailable: ${hubspotContactsResult.error.message || 'read failed'}`);
-    } else {
-      hubspotContactsData = hubspotContactsResult.data || [];
-    }
-
-    // Backfill any contact IDs referenced by loaded HubSpot call/meeting sessions but missing from the
-    // scoped contact query.
-    if (!hsActivitiesResult.error && !hsAssocsLoadError) {
-      const sessionActivityIds = new Set(
-        hsActivityRows
-          .map((row) => String(row?.hubspot_activity_id || ''))
-          .filter(Boolean),
-      );
-      const neededContactIds = Array.from(new Set(
-        hsAssocRows
-          .filter((row) => sessionActivityIds.has(String(row?.hubspot_activity_id || '')))
-          .map((row) => Number(row?.hubspot_contact_id))
-          .filter((id) => Number.isFinite(id) && id > 0),
-      ));
-      const loadedContactIds = new Set(
-        hubspotContactsData
-          .map((row) => Number(row?.hubspot_contact_id))
-          .filter((id) => Number.isFinite(id) && id > 0),
-      );
-      const missingContactIds = neededContactIds.filter((id) => !loadedContactIds.has(id));
-
-      if (missingContactIds.length > 0) {
-        const backfillRows = [];
-        const backfillErrors = [];
-        for (const idChunk of chunkArray(missingContactIds, 200)) {
-          const backfillResult = await supabase
-            .from('raw_hubspot_contacts')
-            .select(contactSelectClause)
-            .in('hubspot_contact_id', idChunk);
-          if (backfillResult.error) {
-            backfillErrors.push(backfillResult.error.message || 'read failed');
-            continue;
-          }
-          backfillRows.push(...(backfillResult.data || []));
-        }
-
-        if (backfillRows.length > 0) {
-          hubspotContactsData = [...hubspotContactsData, ...backfillRows];
-        }
-
-        const finalContactIdSet = new Set(
-          hubspotContactsData
-            .map((row) => Number(row?.hubspot_contact_id))
-            .filter((id) => Number.isFinite(id) && id > 0),
-        );
-        const stillMissingCount = missingContactIds.filter((id) => !finalContactIdSet.has(id)).length;
-
-        if (backfillErrors.length > 0) {
-          identityWarnings.push(`HubSpot contacts enrichment backfill had ${backfillErrors.length} error(s); some revenue/sobriety fields may be missing.`);
-        }
-        if (stillMissingCount > 0) {
-          identityWarnings.push(`${stillMissingCount} HubSpot activity-linked contact(s) were not found in raw_hubspot_contacts cache; refresh contact sync to fill enrichment fields.`);
-        }
-      }
-    }
-
-    setRawHubspotContacts(hubspotContactsData);
-
     if (identityWarnings.length > 0) {
-      setIdentityWarning(identityWarnings.join(' | '));
+      appendIdentityWarnings(identityWarnings);
     }
 
     setAliases(aliasResult.aliases || []);
     setLoading(false);
+
+    // Hydrate HubSpot contact enrichment in the background so attendance KPIs paint faster.
+    if (!hsActivitiesResult.error && !hsAssocsLoadError) {
+      void loadHubspotContactEnrichment({ identityStartIso, hsActivityRows, hsAssocRows });
+    }
   }
 
   function handleShowUpBarClick(eventState) {

@@ -940,7 +940,10 @@ export default function LeadsDashboard() {
   const supabaseUrl = SUPABASE_URL;
   const supabaseKey = SUPABASE_ANON_KEY;
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (loading) {
@@ -950,6 +953,72 @@ export default function LeadsDashboard() {
     const timer = setTimeout(() => setDeferredInsightsReady(true), 0);
     return () => clearTimeout(timer);
   }, [loading, rawAds.length, rawHubspot.length, rawLuma.length, rawZoom.length]);
+
+  async function loadOptionalHubspotActivityEnrichment({ startKey, attributionStartKey }) {
+    const enrichmentErrors = [];
+    let hubspotActivitiesData = [];
+    let hubspotActivityAssociationsData = [];
+    let zoomHubspotMappingsData = [];
+
+    try {
+      const activitiesR = await supabase.from('raw_hubspot_meeting_activities')
+        .select('hubspot_activity_id,activity_type,hs_timestamp,created_at_hubspot,title,metadata')
+        .or(`hs_timestamp.gte.${attributionStartKey}T00:00:00.000Z,created_at_hubspot.gte.${attributionStartKey}T00:00:00.000Z`)
+        .order('hs_timestamp', { ascending: true });
+
+      if (activitiesR.error) {
+        enrichmentErrors.push(`HubSpot call/activity mapping tables not available yet: ${activitiesR.error.message}`);
+      } else {
+        hubspotActivitiesData = activitiesR.data || [];
+      }
+
+      const zoomMappingsR = await supabase.from('zoom_attendee_hubspot_mappings')
+        .select('session_date,meeting_id,zoom_session_key,zoom_attendee_canonical_name,hubspot_contact_id,hubspot_email,hubspot_activity_id,activity_type,mapping_source,mapping_confidence,mapping_reason,match_note')
+        .gte('session_date', startKey)
+        .order('session_date', { ascending: true });
+
+      if (zoomMappingsR.error) {
+        enrichmentErrors.push(`Zoom attendee HubSpot mapping table not available yet: ${zoomMappingsR.error.message}`);
+      } else {
+        zoomHubspotMappingsData = zoomMappingsR.data || [];
+      }
+
+      const activityIds = Array.from(new Set(
+        (hubspotActivitiesData || [])
+          .filter((row) => {
+            const activityType = String(row?.activity_type || '').toLowerCase();
+            return activityType === 'call' || activityType === 'meeting';
+          })
+          .map((row) => Number(row?.hubspot_activity_id))
+          .filter((id) => Number.isFinite(id)),
+      ));
+
+      if (activityIds.length > 0) {
+        const assocChunks = [];
+        for (const ids of Array.from({ length: Math.ceil(activityIds.length / 100) }, (_, i) => activityIds.slice(i * 100, (i + 1) * 100))) {
+          const assocR = await supabase.from('hubspot_activity_contact_associations')
+            .select('hubspot_activity_id,activity_type,hubspot_contact_id,contact_email,contact_firstname,contact_lastname,association_type')
+            .in('hubspot_activity_id', ids);
+          if (assocR.error) {
+            enrichmentErrors.push(`HubSpot activity associations unavailable: ${assocR.error.message}`);
+            assocChunks.length = 0;
+            break;
+          }
+          assocChunks.push(...(assocR.data || []));
+        }
+        hubspotActivityAssociationsData = assocChunks;
+      }
+    } catch (optionalErr) {
+      enrichmentErrors.push(`Optional HubSpot activity enrichment failed: ${optionalErr.message}`);
+    }
+
+    setRawHubspotActivities(hubspotActivitiesData);
+    setRawHubspotActivityAssociations(hubspotActivityAssociationsData);
+    setRawZoomHubspotMappings(zoomHubspotMappingsData);
+    if (enrichmentErrors.length > 0) {
+      setLoadErrors((prev) => Array.from(new Set([...(prev || []), ...enrichmentErrors])));
+    }
+  }
 
   async function fetchData() {
     setLoading(true);
@@ -987,72 +1056,14 @@ export default function LeadsDashboard() {
     }
     if (aliasR.error) errors.push(`Alias data unavailable: ${aliasR.error.message}`);
 
-    // Optional additive tables for HubSpot Call coverage / attendee identity reconciliation.
-    // These are safe to skip if the migration has not been applied yet.
-    let hubspotActivitiesData = [];
-    let hubspotActivityAssociationsData = [];
-    let zoomHubspotMappingsData = [];
-
-    try {
-      const activitiesR = await supabase.from('raw_hubspot_meeting_activities')
-        .select('hubspot_activity_id,activity_type,hs_timestamp,created_at_hubspot,title,metadata')
-        .or(`hs_timestamp.gte.${attributionStartKey}T00:00:00.000Z,created_at_hubspot.gte.${attributionStartKey}T00:00:00.000Z`)
-        .order('hs_timestamp', { ascending: true });
-
-      if (activitiesR.error) {
-        errors.push(`HubSpot call/activity mapping tables not available yet: ${activitiesR.error.message}`);
-      } else {
-        hubspotActivitiesData = activitiesR.data || [];
-      }
-
-      const zoomMappingsR = await supabase.from('zoom_attendee_hubspot_mappings')
-        .select('session_date,meeting_id,zoom_session_key,zoom_attendee_canonical_name,hubspot_contact_id,hubspot_email,hubspot_activity_id,activity_type,mapping_source,mapping_confidence,mapping_reason,match_note')
-        .gte('session_date', startKey)
-        .order('session_date', { ascending: true });
-
-      if (zoomMappingsR.error) {
-        errors.push(`Zoom attendee HubSpot mapping table not available yet: ${zoomMappingsR.error.message}`);
-      } else {
-        zoomHubspotMappingsData = zoomMappingsR.data || [];
-      }
-
-      const activityIds = Array.from(new Set(
-        (hubspotActivitiesData || [])
-          .filter((row) => {
-            const activityType = String(row?.activity_type || '').toLowerCase();
-            return activityType === 'call' || activityType === 'meeting';
-          })
-          .map((row) => Number(row?.hubspot_activity_id))
-          .filter((id) => Number.isFinite(id))
-      ));
-
-      if (activityIds.length > 0) {
-        const assocChunks = [];
-        for (const ids of Array.from({ length: Math.ceil(activityIds.length / 100) }, (_, i) => activityIds.slice(i * 100, (i + 1) * 100))) {
-          const assocR = await supabase.from('hubspot_activity_contact_associations')
-            .select('hubspot_activity_id,activity_type,hubspot_contact_id,contact_email,contact_firstname,contact_lastname,association_type')
-            .in('hubspot_activity_id', ids);
-          if (assocR.error) {
-            errors.push(`HubSpot activity associations unavailable: ${assocR.error.message}`);
-            assocChunks.length = 0;
-            break;
-          }
-          assocChunks.push(...(assocR.data || []));
-        }
-        hubspotActivityAssociationsData = assocChunks;
-      }
-    } catch (optionalErr) {
-      errors.push(`Optional HubSpot activity enrichment failed: ${optionalErr.message}`);
-    }
-
     setRawAds(adsR.data || []);
     setRawZoom(zoomR.data || []);
     setRawLuma(lumaR.data || []);
     setRawHubspot(hubspotR.data || []);
     setAliases(aliasR.data || []);
-    setRawHubspotActivities(hubspotActivitiesData);
-    setRawHubspotActivityAssociations(hubspotActivityAssociationsData);
-    setRawZoomHubspotMappings(zoomHubspotMappingsData);
+    setRawHubspotActivities([]);
+    setRawHubspotActivityAssociations([]);
+    setRawZoomHubspotMappings([]);
 
     // Legacy analytics for charts
     const nextAnalytics = buildLeadAnalytics({
@@ -1068,6 +1079,8 @@ export default function LeadsDashboard() {
 
     setLoadErrors(errors);
     setLoading(false);
+    // Hydrate optional identity/enrichment datasets after KPIs paint.
+    void loadOptionalHubspotActivityEnrichment({ startKey, attributionStartKey });
   }
 
   useEffect(() => {
