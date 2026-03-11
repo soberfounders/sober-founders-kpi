@@ -45,12 +45,12 @@ export function dateInRange(dateKey, startKey, endKey) {
 }
 
 export function formatInt(value) {
-  if (!Number.isFinite(Number(value))) return '0';
+  if (!Number.isFinite(Number(value))) return 'N/A';
   return Math.round(Number(value)).toLocaleString();
 }
 
 export function formatDecimal(value, digits = 2) {
-  if (!Number.isFinite(Number(value))) return '0.00';
+  if (!Number.isFinite(Number(value))) return 'N/A';
   return Number(value).toFixed(digits);
 }
 
