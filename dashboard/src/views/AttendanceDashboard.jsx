@@ -1850,6 +1850,9 @@ function buildAttendanceHubspotResolver({ rawHubspot = [] }) {
 
 const cardStyle = {
   backgroundColor: 'white',
+  // Explicit dark text ensures readability on white cards even in the app's
+  // dark glassmorphism theme, where the body's CSS default is near-white text.
+  color: '#0f172a',
   border: '1px solid var(--color-border)',
   borderRadius: '16px',
   padding: '20px',
@@ -2948,7 +2951,7 @@ const AttendanceDashboard = () => {
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-        <p style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>Loading attendance analytics...</p>
+        <p style={{ color: '#64748b', fontWeight: 600 }}>Loading attendance analytics...</p>
       </div>
     );
   }
@@ -3300,43 +3303,43 @@ const AttendanceDashboard = () => {
       {/* KPI Stats — Separated by Day */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
         <div style={cardStyle}>
-          <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Unique Tue</p>
+          <p style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>Unique Tue</p>
           <p style={{ fontSize: '28px', fontWeight: 700, marginTop: '8px', color: '#0ea5e9' }}>{analytics.stats.uniqueTue}</p>
-          <p style={{ marginTop: '10px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
+          <p style={{ marginTop: '10px', color: '#64748b', fontSize: '13px' }}>
             Tactic Tuesday
           </p>
         </div>
         <div style={cardStyle}>
-          <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Unique Thu</p>
+          <p style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>Unique Thu</p>
           <p style={{ fontSize: '28px', fontWeight: 700, marginTop: '8px', color: '#6366f1' }}>{analytics.stats.uniqueThu}</p>
-          <p style={{ marginTop: '10px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
+          <p style={{ marginTop: '10px', color: '#64748b', fontSize: '13px' }}>
             SF Mastermind
           </p>
         </div>
         <div style={cardStyle}>
-          <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Repeat Rate Tue</p>
+          <p style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>Repeat Rate Tue</p>
           <p style={{ fontSize: '28px', fontWeight: 700, marginTop: '8px', color: '#0ea5e9' }}>
             {formatPct(analytics.stats.repeatRateTue)}
           </p>
-          <p style={{ marginTop: '10px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
+          <p style={{ marginTop: '10px', color: '#64748b', fontSize: '13px' }}>
             Tue Retention
           </p>
         </div>
         <div style={cardStyle}>
-          <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Repeat Rate Thu</p>
+          <p style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>Repeat Rate Thu</p>
           <p style={{ fontSize: '28px', fontWeight: 700, marginTop: '8px', color: '#6366f1' }}>
             {formatPct(analytics.stats.repeatRateThu)}
           </p>
-          <p style={{ marginTop: '10px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
+          <p style={{ marginTop: '10px', color: '#64748b', fontSize: '13px' }}>
             Thu Retention
           </p>
         </div>
         <div style={cardStyle}>
-          <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Sessions</p>
+          <p style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>Sessions</p>
           <p style={{ fontSize: '28px', fontWeight: 700, marginTop: '8px', color: '#0f766e' }}>
             {analytics.stats.sessions}
           </p>
-          <p style={{ marginTop: '10px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
+          <p style={{ marginTop: '10px', color: '#64748b', fontSize: '13px' }}>
             Total analyzed
           </p>
         </div>
@@ -3390,7 +3393,7 @@ const AttendanceDashboard = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <div>
             <h3 style={{ fontSize: '18px' }}>Show-Up Drilldown</h3>
-            <p style={{ marginTop: '4px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
+            <p style={{ marginTop: '4px', color: '#64748b', fontSize: '13px' }}>
               Click any Tuesday/Thursday bar to inspect attendees, visit counts including that meeting, and possible duplicates.
             </p>
           </div>
@@ -3408,7 +3411,7 @@ const AttendanceDashboard = () => {
         )}
 
         {!selectedSessionDetail && (
-          <p style={{ marginTop: '12px', color: 'var(--color-text-secondary)' }}>
+          <p style={{ marginTop: '12px', color: '#64748b' }}>
             No session selected yet. Click a bar in Tuesday or Thursday show-ups.
           </p>
         )}
@@ -3763,10 +3766,10 @@ const AttendanceDashboard = () => {
                   </span>
                 </div>
                 <span style={{ fontSize: '13px', color: '#0f766e', fontWeight: 700 }}>{p.visits} total</span>
-                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>{formatPct(p.recentShowRate)}</span>
+                <span style={{ fontSize: '12px', color: '#64748b' }}>{formatPct(p.recentShowRate)}</span>
               </div>
             ))}
-            {analytics.topRepeaters.length === 0 && <p style={{ color: 'var(--color-text-secondary)' }}>No attendee rows yet.</p>}
+            {analytics.topRepeaters.length === 0 && <p style={{ color: '#64748b' }}>No attendee rows yet.</p>}
           </div>
 
           {selectedRepeaterDetail && (
@@ -3982,7 +3985,7 @@ const AttendanceDashboard = () => {
               );
             })}
             {atRiskOutreachRows.length === 0 && (
-              <span style={{ color: 'var(--color-text-secondary)', fontSize: '14px' }}>
+              <span style={{ color: '#64748b', fontSize: '14px' }}>
                 No at-risk attendees detected by the current outreach rules.
               </span>
             )}
@@ -4290,11 +4293,11 @@ const AttendanceDashboard = () => {
                         >
                           <div>
                             <p style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{item.title}</p>
-                            <p style={{ marginTop: '4px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>{item.detail}</p>
+                            <p style={{ marginTop: '4px', color: '#64748b', fontSize: '13px' }}>{item.detail}</p>
 
                             {isHumanGroup && (
                               <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
-                                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
                                   <input
                                     type="checkbox"
                                     checked={addToDoChecked}

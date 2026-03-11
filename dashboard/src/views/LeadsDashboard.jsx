@@ -5531,7 +5531,7 @@ export default function LeadsDashboard() {
 
           {/* ── ZOOM SOURCE ATTRIBUTION (TUESDAY + THURSDAY) ── */}
           <div style={card}>
-            <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Zoom Source Attribution (Free Meetings)</h3>
+            <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Zoom Source Attribution (Free Meeting Leads)</h3>
             <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b' }}>
               Uses Zoom attendee names (Tuesday + Thursday) matched to HubSpot via canonicalized names and aliases, so Tuesday attendees are included even without Lu.ma.
               Costs use Group 1 Free Meta spend in the selected date range. Repeat counts use loaded Zoom history ({zoomSourceModule.loadedHistoryDays} days). Good members = 3+ Zoom attendances and revenue ≥ $250k.

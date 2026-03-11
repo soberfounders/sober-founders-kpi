@@ -45,6 +45,9 @@ const FREE_GROUP_INTERVIEW_MEETING_NAME = 'Sober Founders Intro Meeting';
 // Legacy HubSpot records stored the booking URL rather than the meeting name as a title.
 // Keep the URL token as a fallback so older activities are not silently dropped.
 const FREE_GROUP_INTERVIEW_LEGACY_URL_TOKEN = 'meetings.hubspot.com/andrew-lassise/interview';
+// Phoenix Forum meetings are identified by name fragment first (newer HubSpot records store
+// the meeting name), with URL token fallback for older records (same pattern as free group).
+const PHOENIX_FORUM_MEETING_NAME_FRAGMENT = 'Phoenix Forum';
 const PHOENIX_INTERVIEW_MATCH_TOKENS = [
   'meetings.hubspot.com/andrew-lassise/phoenix-forum-interview',
   'meetings.hubspot.com/andrew-lassise/phoenix-forum-learn-more',
@@ -93,7 +96,7 @@ const KPI_CARD_DEFINITIONS = {
     key: 'freeMeetings',
     section: 'free',
     metric: 'meetings',
-    title: 'Free Meetings',
+    title: 'Free Meeting Leads',
     format: 'count',
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'ads',
@@ -218,7 +221,7 @@ const KPI_CARD_DEFINITIONS = {
     format: 'count',
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'interviews',
-    note: null,
+    note: 'Phoenix Forum Interview, Learn More, and Good Fit meetings',
     color: '#0ea5e9',
   },
   attendanceNetNewTue: {
@@ -521,7 +524,10 @@ function normalizeHubspotContacts(rows = []) {
 const _freeGroupNameMatcher = createMeetingNameMatcher(FREE_GROUP_INTERVIEW_MEETING_NAME);
 const _freeGroupUrlMatcher = createTokenMatcher([FREE_GROUP_INTERVIEW_LEGACY_URL_TOKEN]);
 const matchesFreeGroupInterview = (row) => _freeGroupNameMatcher(row) || _freeGroupUrlMatcher(row);
-const matchesPhoenixInterview = createTokenMatcher(PHOENIX_INTERVIEW_MATCH_TOKENS);
+// Phoenix: name-based match is primary (newer records); URL tokens are fallback for older records.
+const _phoenixNameMatcher = createMeetingNameMatcher(PHOENIX_FORUM_MEETING_NAME_FRAGMENT);
+const _phoenixUrlMatcher = createTokenMatcher(PHOENIX_INTERVIEW_MATCH_TOKENS);
+const matchesPhoenixInterview = (row) => _phoenixNameMatcher(row) || _phoenixUrlMatcher(row);
 
 function detectZoomDayType(row, dateKey) {
   const groupName = normalizeText(row?.metadata?.group_name);
@@ -578,6 +584,67 @@ function normalizeZoomSessions(rows = []) {
     return a.dateKey.localeCompare(b.dateKey);
   });
   return sessions;
+}
+
+// Positive title signals that identify Tue/Thu GROUP sessions (not 1-on-1 interviews).
+// Mirrors the detection logic in AttendanceDashboard.inferGroupTypeFromTitle so both
+// modules use the same HubSpot data source for attendance counting.
+const GROUP_ATTENDANCE_TITLE_SIGNALS = [
+  'tactic tuesday',         // Tuesday group call
+  'big book',               // Thursday "Entrepreneur's Big Book" session
+  'all are welcome',        // Thursday session variant
+  'mastermind',             // Thursday SF Mastermind (not containing 'intro')
+];
+
+function normalizeHubspotAttendanceSessions(interviewRows = []) {
+  // Derives Tue/Thu attendance sessions from already-normalized activity rows.
+  // Only rows carrying a positive group-session title signal are included, so
+  // 1-on-1 interviews (Free Group, Phoenix Forum) are excluded automatically.
+  // Produces sessions in the format buildAttendanceSnapshots expects.
+  const sessionsByKey = new Map();
+
+  interviewRows.forEach((row) => {
+    const dateKey = row.dateKey;
+    if (!dateKey) return;
+
+    // Require at least one positive group-session signal in the full text blob.
+    const isGroupSession = GROUP_ATTENDANCE_TITLE_SIGNALS.some(
+      (signal) => row.textBlob.includes(signal) && !(signal === 'mastermind' && row.textBlob.includes('intro')),
+    );
+    if (!isGroupSession) return;
+
+    const date = toUtcDate(dateKey);
+    const weekday = date.getUTCDay(); // 2 = Tuesday, 4 = Thursday
+    const dayType = weekday === 2 ? 'Tuesday' : weekday === 4 ? 'Thursday' : null;
+    if (!dayType) return;
+
+    const sessionKey = `${dayType}|${dateKey}`;
+    if (!sessionsByKey.has(sessionKey)) {
+      sessionsByKey.set(sessionKey, {
+        dateKey,
+        dayType,
+        attendees: new Set(),
+        startTs: Date.parse(`${dateKey}T00:00:00.000Z`),
+      });
+    }
+
+    const session = sessionsByKey.get(sessionKey);
+    if (row.attendeeKeys.length > 0) {
+      row.attendeeKeys.forEach((k) => session.attendees.add(k));
+    } else {
+      // No resolvable attendees — count the activity itself so the session isn't empty.
+      session.attendees.add(`activity:${row.activityId}`);
+    }
+  });
+
+  return Array.from(sessionsByKey.values())
+    .map((s) => ({
+      dateKey: s.dateKey,
+      dayType: s.dayType,
+      attendees: Array.from(s.attendees),
+      startTs: s.startTs,
+    }))
+    .sort((a, b) => a.startTs - b.startTs);
 }
 
 function normalizeDonationRows(rows = []) {
@@ -838,11 +905,14 @@ function buildWeeklyComparisons(normalizedData, todayKey) {
 }
 
 function computeKpiSnapshot(rawData, windows, todayKey) {
+  // Normalize interview activities once; reuse for both interview counting and
+  // attendance session derivation so the same HubSpot data source backs both KPIs.
+  const interviewRows = normalizeInterviewActivities(rawData.activities || []);
   const normalizedData = {
     adsRows: normalizeAdsRows(rawData.adsRows || []),
     contacts: normalizeHubspotContacts(rawData.contacts || []),
-    interviewRows: normalizeInterviewActivities(rawData.activities || []),
-    zoomSessions: normalizeZoomSessions(rawData.zoomRows || []),
+    interviewRows,
+    zoomSessions: normalizeHubspotAttendanceSessions(interviewRows),
     donationRows: normalizeDonationRows(rawData.donationRows || []),
     todoRows: normalizeTodoRows(rawData.todoRows || []),
   };
@@ -1576,18 +1646,21 @@ function DashboardOverview() {
       )}
 
       <section className="glass-panel" style={{ padding: '14px' }}>
-        <h4 style={{ fontSize: '18px' }}>Section 1 - Free Group Funnel</h4>
+        <h4 style={{ fontSize: '18px' }}>Section 1 - Phoenix Forum Funnel</h4>
+        <p style={{ marginTop: '4px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+          Top priority — drive Phoenix leads, interviews, and paying members.
+        </p>
         <div style={{ ...cardGridStyle, marginTop: '12px' }}>
-          {freeCards.map((card) => (
+          {phoenixCards.map((card) => (
             <KPICard key={card.title} {...card} />
           ))}
         </div>
       </section>
 
       <section className="glass-panel" style={{ padding: '14px' }}>
-        <h4 style={{ fontSize: '18px' }}>Section 2 - Phoenix Forum Funnel</h4>
+        <h4 style={{ fontSize: '18px' }}>Section 2 - Free Group Funnel</h4>
         <div style={{ ...cardGridStyle, marginTop: '12px' }}>
-          {phoenixCards.map((card) => (
+          {freeCards.map((card) => (
             <KPICard key={card.title} {...card} />
           ))}
         </div>
