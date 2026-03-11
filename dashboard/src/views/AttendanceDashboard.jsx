@@ -1870,6 +1870,7 @@ const AttendanceDashboard = () => {
   const [hubspotActivities, setHubspotActivities] = useState([]);
   const [hubspotContactAssocs, setHubspotContactAssocs] = useState([]);
   const [identityWarning, setIdentityWarning] = useState('');
+  const [contactEnrichmentStatus, setContactEnrichmentStatus] = useState('idle');
   const [planState, setPlanState] = useState({});
   const [selectedSessionKey, setSelectedSessionKey] = useState('');
   const [selectedRepeaterName, setSelectedRepeaterName] = useState('');
@@ -2597,6 +2598,7 @@ const AttendanceDashboard = () => {
   }
 
   async function loadHubspotContactEnrichment({ identityStartIso, hsActivityRows, hsAssocRows }) {
+    setContactEnrichmentStatus('loading');
     const identityWarnings = [];
     const {
       columns: contactSelectColumns,
@@ -2676,6 +2678,8 @@ const AttendanceDashboard = () => {
     }
 
     setRawHubspotContacts(hubspotContactsData);
+    const enrichmentFailed = identityWarnings.length > 0 && hubspotContactsData.length === 0;
+    setContactEnrichmentStatus(enrichmentFailed ? 'error' : 'ready');
     appendIdentityWarnings(identityWarnings);
   }
 
@@ -2684,6 +2688,7 @@ const AttendanceDashboard = () => {
     setError('');
     setAliasWarning('');
     setIdentityWarning('');
+    setContactEnrichmentStatus('idle');
     setRawHubspotContacts([]);
 
     const aliasResult = await loadAliasesForDashboard();
@@ -2757,6 +2762,8 @@ const AttendanceDashboard = () => {
     // Hydrate HubSpot contact enrichment in the background so attendance KPIs paint faster.
     if (!hsActivitiesResult.error && !hsAssocsLoadError) {
       void loadHubspotContactEnrichment({ identityStartIso, hsActivityRows, hsAssocRows });
+    } else {
+      setContactEnrichmentStatus('error');
     }
   }
 
@@ -3075,6 +3082,15 @@ const AttendanceDashboard = () => {
         <div style={{ ...cardStyle, borderLeft: '4px solid #f59e0b', backgroundColor: '#fffbeb' }}>
           <p style={{ color: '#92400e', fontWeight: 700 }}>Alias Warning</p>
           <p style={{ marginTop: '6px', color: '#92400e' }}>{aliasWarning}</p>
+        </div>
+      )}
+
+      {contactEnrichmentStatus === 'loading' && (
+        <div style={{ ...cardStyle, borderLeft: '4px solid #2563eb', backgroundColor: '#eff6ff' }}>
+          <p style={{ color: '#1d4ed8', fontWeight: 700 }}>Loading Contact Enrichment</p>
+          <p style={{ marginTop: '6px', color: '#1e40af' }}>
+            Core attendance KPIs are loaded. HubSpot contact details (email/revenue/sobriety enrichment) are still hydrating.
+          </p>
         </div>
       )}
 

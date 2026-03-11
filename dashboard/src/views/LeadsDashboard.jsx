@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import {
   LEADS_ATTRIBUTION_HISTORY_DAYS,
@@ -28,10 +28,7 @@ import DrillDownModal from '../components/DrillDownModal';
 import SendToNotionModal from '../components/SendToNotionModal';
 import AIAnalysisCard from '../components/AIAnalysisCard';
 import KPICard from '../components/KPICard';
-import CohortUnitEconomicsPreviewPanel from '../components/CohortUnitEconomicsPreviewPanel';
 import LeadsConfidenceActionPanel from '../components/LeadsConfidenceActionPanel';
-import LeadsManagerInsightsPanel from '../components/LeadsManagerInsightsPanel';
-import LeadsExperimentAnalyzerPanel from '../components/LeadsExperimentAnalyzerPanel';
 import LeadsParityGuardPanel from '../components/LeadsParityGuardPanel';
 import LeadsQualificationParityPanel from '../components/LeadsQualificationParityPanel';
 import {
@@ -43,6 +40,10 @@ const LOOKBACK_DAYS = LEADS_LOOKBACK_DAYS;
 const ATTRIBUTION_HISTORY_DAYS = LEADS_ATTRIBUTION_HISTORY_DAYS;
 const MIN_GROUP_ATTENDEES = 3;
 const EXPECTED_ZERO_GROUP_SESSION_KEYS = new Set(['2025-12-25|Thursday']);
+
+const CohortUnitEconomicsPreviewPanel = lazy(() => import('../components/CohortUnitEconomicsPreviewPanel'));
+const LeadsManagerInsightsPanel = lazy(() => import('../components/LeadsManagerInsightsPanel'));
+const LeadsExperimentAnalyzerPanel = lazy(() => import('../components/LeadsExperimentAnalyzerPanel'));
 
 
 const LEADS_HUBSPOT_CONTACT_REQUIRED_COLUMNS = [
@@ -929,6 +930,7 @@ export default function LeadsDashboard() {
   const [modal, setModal] = useState(null); // { title, columns, rows }
   const [managerNotionModal, setManagerNotionModal] = useState({ open: false, taskName: '' });
   const [deferredInsightsReady, setDeferredInsightsReady] = useState(false);
+  const [optionalEnrichmentStatus, setOptionalEnrichmentStatus] = useState('idle');
 
   // Legacy drilldown
   const [drilldownWindowKey, setDrilldownWindowKey] = useState('monthCurrent');
@@ -955,6 +957,7 @@ export default function LeadsDashboard() {
   }, [loading, rawAds.length, rawHubspot.length, rawLuma.length, rawZoom.length]);
 
   async function loadOptionalHubspotActivityEnrichment({ startKey, attributionStartKey }) {
+    setOptionalEnrichmentStatus('loading');
     const enrichmentErrors = [];
     let hubspotActivitiesData = [];
     let hubspotActivityAssociationsData = [];
@@ -1015,6 +1018,11 @@ export default function LeadsDashboard() {
     setRawHubspotActivities(hubspotActivitiesData);
     setRawHubspotActivityAssociations(hubspotActivityAssociationsData);
     setRawZoomHubspotMappings(zoomHubspotMappingsData);
+    const enrichmentFailed = enrichmentErrors.length > 0
+      && hubspotActivitiesData.length === 0
+      && hubspotActivityAssociationsData.length === 0
+      && zoomHubspotMappingsData.length === 0;
+    setOptionalEnrichmentStatus(enrichmentFailed ? 'error' : 'ready');
     if (enrichmentErrors.length > 0) {
       setLoadErrors((prev) => Array.from(new Set([...(prev || []), ...enrichmentErrors])));
     }
@@ -1023,6 +1031,7 @@ export default function LeadsDashboard() {
   async function fetchData() {
     setLoading(true);
     setLoadErrors([]);
+    setOptionalEnrichmentStatus('idle');
     const startDate = new Date();
     startDate.setUTCDate(startDate.getUTCDate() - LOOKBACK_DAYS);
     const startKey = startDate.toISOString().slice(0, 10);
@@ -4140,6 +4149,14 @@ export default function LeadsDashboard() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Errors */}
+      {(optionalEnrichmentStatus === 'loading') && (
+        <div style={{ ...card, borderLeft: '4px solid #2563eb', backgroundColor: '#eff6ff' }}>
+          <p style={{ margin: 0, fontWeight: 700, color: '#1d4ed8' }}>Loading Additional Lead Enrichment</p>
+          <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#1e40af' }}>
+            Core KPIs are already loaded. Deep attendee-to-HubSpot mapping details are hydrating in the background.
+          </p>
+        </div>
+      )}
       {loadErrors.length > 0 && (
         <div style={{ ...card, borderLeft: '4px solid #f59e0b', backgroundColor: '#fffbeb' }}>
           <p style={{ margin: 0, fontWeight: 700, color: '#92400e' }}>Data Quality Notes</p>
@@ -4254,15 +4271,19 @@ export default function LeadsDashboard() {
       </div>
 
       <LeadsConfidenceActionPanel data={leadsConfidenceActionData} isLoading={loading} />
-      <LeadsManagerInsightsPanel
-        data={leadsManagerInsightsData}
-        isLoading={loading || !deferredInsightsReady}
-        onSendToNotion={(taskName) => setManagerNotionModal({ open: true, taskName: String(taskName || '').trim() })}
-      />
-      <LeadsExperimentAnalyzerPanel
-        data={leadsExperimentAnalyzerData}
-        isLoading={loading || !deferredInsightsReady}
-      />
+      <Suspense fallback={<div style={{ ...card, color: '#64748b' }}>Loading manager insights...</div>}>
+        <LeadsManagerInsightsPanel
+          data={leadsManagerInsightsData}
+          isLoading={loading || !deferredInsightsReady}
+          onSendToNotion={(taskName) => setManagerNotionModal({ open: true, taskName: String(taskName || '').trim() })}
+        />
+      </Suspense>
+      <Suspense fallback={<div style={{ ...card, color: '#64748b' }}>Loading experiment analyzer...</div>}>
+        <LeadsExperimentAnalyzerPanel
+          data={leadsExperimentAnalyzerData}
+          isLoading={loading || !deferredInsightsReady}
+        />
+      </Suspense>
       <SendToNotionModal
         isOpen={managerNotionModal.open}
         onClose={() => setManagerNotionModal({ open: false, taskName: '' })}
@@ -4611,7 +4632,9 @@ export default function LeadsDashboard() {
         </div>
       </div>
 
-      <CohortUnitEconomicsPreviewPanel supabaseUrl={supabaseUrl} supabaseKey={supabaseKey} placement="top" />
+      <Suspense fallback={<div style={{ ...card, color: '#64748b' }}>Loading cohort unit economics...</div>}>
+        <CohortUnitEconomicsPreviewPanel supabaseUrl={supabaseUrl} supabaseKey={supabaseKey} placement="top" />
+      </Suspense>
 
       <details
         style={{ ...card, padding: '16px' }}
