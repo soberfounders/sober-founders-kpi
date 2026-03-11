@@ -937,11 +937,14 @@ function buildCardModel({ metricKey, snapshot }) {
     format: definition.format,
     direction: definition.direction,
   });
-  const trend = lastWeekComparison.tone === 'better'
-    ? 'up'
-    : lastWeekComparison.tone === 'worse'
-      ? 'down'
-      : 'neutral';
+  // trend reflects the numeric direction the value moved (for the arrow icon).
+  // invertColor tells KPICard whether down is the good direction (cost metrics).
+  // These must be derived independently: tone already encodes direction semantics,
+  // but the arrow should show where the number actually went, not whether it was good.
+  const lastWeekDelta = lastWeekComparison.delta;
+  const trend = !Number.isFinite(Number(lastWeekDelta)) || lastWeekDelta === null
+    ? 'neutral'
+    : lastWeekDelta > 0 ? 'up' : lastWeekDelta < 0 ? 'down' : 'neutral';
   const trendValue = Number.isFinite(Number(lastWeekComparison.pct))
     ? toTrendValue(lastWeekComparison.pct)
     : 'N/A';
@@ -955,7 +958,7 @@ function buildCardModel({ metricKey, snapshot }) {
     previousTone,
     trend,
     trendValue,
-    invertColor: false,
+    invertColor: definition.direction === KPI_DIRECTION.LOWER_IS_BETTER,
     color: definition.color,
     comparisonRows: [lastWeekComparison, fourWeekAverageComparison],
     showChart: false,
