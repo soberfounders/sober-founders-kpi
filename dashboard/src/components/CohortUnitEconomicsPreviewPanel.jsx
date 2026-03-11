@@ -1,5 +1,5 @@
-import React, { useMemo, useRef, useState } from 'react';
-import preview from '../data/metaCohortUnitEconPreview.json';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import previewLite from '../data/metaCohortUnitEconPreviewLite.json';
 import META_AD_TRAINING_INSTRUCTION_PACK from '../data/metaAdTrainingInstructionPack';
 import SendToNotionModal from './SendToNotionModal';
 
@@ -530,6 +530,7 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
   const [showMetaAdTrainingPack, setShowMetaAdTrainingPack] = useState(false);
   const [notionModal, setNotionModal] = useState({ open: false, taskName: '' });
   const drilldownRef = useRef(null);
+  const fullPreviewPromiseRef = useRef(null);
   const [viewMode, setViewMode] = useState('glance');
   const [sectionOpen, setSectionOpen] = useState({
     signoff: true,
@@ -538,10 +539,60 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
     qa: false,
     metrics: false,
   });
-  const data = preview ?? EMPTY_OBJECT;
+  const [fullData, setFullData] = useState(null);
+  const [fullDataStatus, setFullDataStatus] = useState('idle');
+  const [fullDataError, setFullDataError] = useState(null);
+  const data = fullData ?? previewLite ?? EMPTY_OBJECT;
   const hasMetrics = Array.isArray(data?.metrics) && data.metrics.length > 0;
   const isPrimary = placement === 'top';
   const isGlanceMode = isPrimary && viewMode === 'glance';
+
+  const ensureFullPreviewLoaded = useCallback(async () => {
+    if (fullData) return fullData;
+    if (fullPreviewPromiseRef.current) return fullPreviewPromiseRef.current;
+    setFullDataStatus('loading');
+    setFullDataError(null);
+    fullPreviewPromiseRef.current = import('../data/metaCohortUnitEconPreview.json')
+      .then((mod) => {
+        const payload = mod?.default ?? mod ?? EMPTY_OBJECT;
+        setFullData(payload);
+        setFullDataStatus('loaded');
+        return payload;
+      })
+      .catch((err) => {
+        setFullDataStatus('error');
+        setFullDataError(err?.message || 'Unable to load full cohort preview data.');
+        return null;
+      })
+      .finally(() => {
+        fullPreviewPromiseRef.current = null;
+      });
+    return fullPreviewPromiseRef.current;
+  }, [fullData]);
+
+  useEffect(() => {
+    if (!isPrimary) {
+      void ensureFullPreviewLoaded();
+    }
+  }, [isPrimary, ensureFullPreviewLoaded]);
+
+  useEffect(() => {
+    if (viewMode === 'analyst') {
+      void ensureFullPreviewLoaded();
+    }
+  }, [viewMode, ensureFullPreviewLoaded]);
+
+  useEffect(() => {
+    if (activeDrilldownKey || activeCampaignKey || showAuditChecks) {
+      void ensureFullPreviewLoaded();
+    }
+  }, [activeDrilldownKey, activeCampaignKey, showAuditChecks, ensureFullPreviewLoaded]);
+
+  useEffect(() => {
+    if (sectionOpen.diagnostics || sectionOpen.outreach || sectionOpen.qa || sectionOpen.metrics) {
+      void ensureFullPreviewLoaded();
+    }
+  }, [sectionOpen.diagnostics, sectionOpen.outreach, sectionOpen.qa, sectionOpen.metrics, ensureFullPreviewLoaded]);
 
   const metrics = [...(hasMetrics ? data.metrics : EMPTY_ARRAY)].sort((a, b) => metricOrderKey(a.key) - metricOrderKey(b.key));
   const lagStats = data.lag_stats ?? EMPTY_OBJECT;
@@ -1023,6 +1074,7 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
 
   function openDrilldown(key) {
     if (!key) return;
+    void ensureFullPreviewLoaded();
     setActiveDrilldownKey(key);
     setTimeout(() => {
       try {
@@ -1274,6 +1326,12 @@ export default function CohortUnitEconomicsPreviewPanel({ supabaseUrl = '', supa
                 Analyst
               </button>
             </div>
+          )}
+          {isPrimary && fullDataStatus === 'loading' && (
+            <p style={{ margin: 0, fontSize: '10px', color: '#64748b' }}>Loading full drilldowns...</p>
+          )}
+          {isPrimary && fullDataStatus === 'error' && (
+            <p style={{ margin: 0, fontSize: '10px', color: '#b91c1c' }}>Full drilldowns unavailable: {fullDataError}</p>
           )}
           <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>Snapshot Generated</p>
           <p style={{ margin: '3px 0 0', fontSize: '12px', color: '#0f172a', fontWeight: 700 }}>{formatDateTime(data.generated_at)}</p>
