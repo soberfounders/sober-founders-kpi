@@ -7,8 +7,6 @@ import { supabase } from '../lib/supabaseClient';
 import { DASHBOARD_LOOKBACK_DAYS } from '../lib/env';
 import { evaluateLeadQualification, parseOfficialRevenue } from '../lib/leadsQualificationRules';
 import {
-  THURSDAY_MEETING_ID,
-  TUESDAY_MEETING_ID,
   buildDateRangeWindows,
 } from '../lib/leadsGroupAnalytics';
 import {
@@ -28,7 +26,6 @@ import {
   formatPercent,
   formatValueByType,
   normalizeInterviewActivities,
-  normalizePersonKey,
   normalizeText,
   toDateKey,
 } from '../lib/dashboardKpiHelpers';
@@ -528,63 +525,6 @@ const matchesFreeGroupInterview = (row) => _freeGroupNameMatcher(row) || _freeGr
 const _phoenixNameMatcher = createMeetingNameMatcher(PHOENIX_FORUM_MEETING_NAME_FRAGMENT);
 const _phoenixUrlMatcher = createTokenMatcher(PHOENIX_INTERVIEW_MATCH_TOKENS);
 const matchesPhoenixInterview = (row) => _phoenixNameMatcher(row) || _phoenixUrlMatcher(row);
-
-function detectZoomDayType(row, dateKey) {
-  const groupName = normalizeText(row?.metadata?.group_name);
-  if (groupName === 'tuesday') return 'Tuesday';
-  if (groupName === 'thursday') return 'Thursday';
-
-  const meetingId = String(row?.metadata?.meeting_id || row?.metadata?.zoom_meeting_id || '').trim();
-  if (meetingId === TUESDAY_MEETING_ID) return 'Tuesday';
-  if (meetingId === THURSDAY_MEETING_ID) return 'Thursday';
-
-  const date = toUtcDate(dateKey);
-  const weekday = date.getUTCDay();
-  if (weekday === 2) return 'Tuesday';
-  if (weekday === 4) return 'Thursday';
-  return null;
-}
-
-function normalizeZoomSessions(rows = []) {
-  const sessions = [];
-  rows.forEach((row) => {
-    const dateKey = toDateKey(row?.metadata?.start_time || row?.metric_date);
-    if (!dateKey) return;
-
-    const dayType = detectZoomDayType(row, dateKey);
-    if (!dayType) return;
-
-    const attendeesRaw = Array.isArray(row?.metadata?.attendees)
-      ? row.metadata.attendees
-      : Array.isArray(row?.metadata?.participant_names)
-        ? row.metadata.participant_names
-        : [];
-
-    const attendeeSet = new Set();
-    attendeesRaw.forEach((entry) => {
-      const source = typeof entry === 'string'
-        ? entry
-        : entry?.name || entry?.display_name || entry?.email || '';
-      const key = normalizePersonKey(source);
-      if (key) attendeeSet.add(key);
-    });
-
-    const startTsRaw = row?.metadata?.start_time || `${dateKey}T00:00:00.000Z`;
-    const startTs = Date.parse(startTsRaw);
-    sessions.push({
-      dateKey,
-      dayType,
-      attendees: Array.from(attendeeSet),
-      startTs: Number.isFinite(startTs) ? startTs : Date.parse(`${dateKey}T00:00:00.000Z`),
-    });
-  });
-
-  sessions.sort((a, b) => {
-    if (a.startTs !== b.startTs) return a.startTs - b.startTs;
-    return a.dateKey.localeCompare(b.dateKey);
-  });
-  return sessions;
-}
 
 // Positive title signals that identify Tue/Thu GROUP sessions (not 1-on-1 interviews).
 // Mirrors the detection logic in AttendanceDashboard.inferGroupTypeFromTitle so both
