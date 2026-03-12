@@ -157,6 +157,29 @@ async function resolveAttendanceHubspotContactSelectColumns() {
   let selectedColumns = [...requestedColumns];
   const attemptedMissingColumns = new Set();
 
+  // Probe once with wildcard so we can drop unavailable projection columns
+  // up front and avoid a long chain of 400 retries.
+  const schemaProbe = await supabase
+    .from('raw_hubspot_contacts')
+    .select('*')
+    .limit(1);
+  if (!schemaProbe.error && Array.isArray(schemaProbe.data) && schemaProbe.data.length > 0) {
+    const availableColumns = new Set(Object.keys(schemaProbe.data[0] || {}));
+    const missingColumns = selectedColumns.filter((columnName) => !availableColumns.has(columnName));
+    const resolvedColumns = selectedColumns.filter((columnName) => availableColumns.has(columnName));
+    if (resolvedColumns.length > 0) {
+      selectedColumns = resolvedColumns;
+    }
+    missingColumns.forEach((missingColumn) => {
+      attemptedMissingColumns.add(missingColumn);
+      if (!ATTENDANCE_HUBSPOT_CONTACT_SILENT_FALLBACK_COLUMNS.has(missingColumn)) {
+        schemaWarnings.push(
+          `Attendance HubSpot contacts query auto-recovered from missing optional column \`${missingColumn}\`.`,
+        );
+      }
+    });
+  }
+
   while (selectedColumns.length > 0) {
     const probe = await supabase
       .from('raw_hubspot_contacts')
@@ -2064,6 +2087,7 @@ const AttendanceDashboard = () => {
 
         return {
           name,
+          identityKey,
           displayName: hubspotIdentity?.hubspotName && hubspotIdentity.hubspotName !== 'Not Found' ? hubspotIdentity.hubspotName : name,
           isNew: !!identityKey && newIdentitySet.has(identityKey),
           groupVisitsIncludingThisSession: identityKey ? (groupVisitsByIdentity.get(identityKey) || 0) : 0,
@@ -2179,6 +2203,7 @@ const AttendanceDashboard = () => {
         const identityKey = entry?.identityKey || `name:${normalizeName(name)}`;
         return {
           name,
+          identityKey,
           isNew: selectedNewIdentitySet.has(identityKey),
         };
       })
@@ -3430,7 +3455,7 @@ const AttendanceDashboard = () => {
             {isMobile ? (
               <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {selectedSessionDetail.attendeeRows.map((row) => (
-                  <div key={row.name} style={{ border: '1px solid #e2e8f0', borderRadius: '12px', padding: '10px', backgroundColor: 'white' }}>
+                  <div key={row.identityKey || row.name} style={{ border: '1px solid #e2e8f0', borderRadius: '12px', padding: '10px', backgroundColor: 'white' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>{row.displayName || row.name}</span>
                       <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: '999px', fontSize: '10px', fontWeight: 700, backgroundColor: row.isNew ? '#dcfce7' : '#e2e8f0', color: row.isNew ? '#166534' : '#334155', textTransform: 'uppercase' }}>
@@ -3511,7 +3536,7 @@ const AttendanceDashboard = () => {
                   </thead>
                   <tbody>
                     {selectedSessionDetail.attendeeRows.map((row) => (
-                      <tr key={row.name} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <tr key={row.identityKey || row.name} style={{ borderBottom: '1px solid #f1f5f9' }}>
                         <td style={{ padding: '10px' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -3720,7 +3745,7 @@ const AttendanceDashboard = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto' }}>
             {analytics.topRepeaters.map((p) => (
               <div
-                key={p.name}
+                key={p.identityKey || p.name}
                 style={{
                   display: 'grid',
                   gridTemplateColumns: isMobile ? '1fr' : '1fr auto auto',
@@ -3833,7 +3858,7 @@ const AttendanceDashboard = () => {
                       <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: '180px', overflowY: 'auto' }}>
                         {selectedRepeaterDetail.otherAttendees.map((attendee) => (
                           <span
-                            key={`${selectedRepeaterDetail.selectedSession.sessionKey}-${attendee.name}`}
+                            key={`${selectedRepeaterDetail.selectedSession.sessionKey}-${attendee.identityKey || attendee.name}`}
                             style={{
                               display: 'inline-flex',
                               alignItems: 'center',
@@ -3893,7 +3918,7 @@ const AttendanceDashboard = () => {
               const groupWord = p.primaryGroup === 'Tuesday' ? 'Tuesday' : 'Thursday';
               return (
                 <div
-                  key={p.name}
+                  key={p.identityKey || p.name}
                   style={{
                     display: 'grid',
                     gridTemplateColumns: isMobile ? '1fr' : '1fr auto',
