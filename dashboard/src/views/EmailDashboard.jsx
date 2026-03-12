@@ -89,8 +89,7 @@ const EmailDashboard = () => {
           <tr style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: 'rgba(0,0,0,0.2)' }}>
             <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: 'var(--color-text-secondary)' }}>Send Date</th>
             <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '600', color: 'var(--color-text-secondary)' }}>Delivered</th>
-            <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '600', color: 'var(--color-dark-green)' }}>Human Open Rate (excl. Apple MPP)</th>
-            <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '600', color: 'var(--color-text-secondary)' }}>Raw Open Rate (incl. Apple MPP)</th>
+            <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '600', color: 'var(--color-dark-green)' }}>Open Rate</th>
             <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '600', color: 'var(--color-text-secondary)' }}>Click-Through Rate (CTR)</th>
             <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '600', color: 'var(--color-text-secondary)' }}>Click-to-Open Rate (CTOR)</th>
             <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '600', color: 'var(--color-text-secondary)' }}>Unsubscribe Rate</th>
@@ -110,11 +109,7 @@ const EmailDashboard = () => {
               <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--color-text-primary)' }}>{c.emails_delivered?.toLocaleString()}</td>
               <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '700', color: 'var(--color-dark-green)' }}>
                 {formatPercent(c.human_open_rate)}
-                <div style={{ fontSize: '10px', fontWeight: '400', color: 'var(--color-text-secondary)' }}>{(c.unique_opens - c.mpp_opens).toLocaleString()} human opens</div>
-              </td>
-              <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--color-text-secondary)' }}>
-                {formatPercent(c.raw_open_rate)}
-                <div style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>{c.unique_opens?.toLocaleString()} total opens</div>
+                <div style={{ fontSize: '10px', fontWeight: '400', color: 'var(--color-text-secondary)' }}>{(c.unique_opens - (c.mpp_opens || 0)).toLocaleString()} opens</div>
               </td>
               <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '600', color: 'var(--color-text-primary)' }}>
                 {formatPercent(c.ctr)}
@@ -203,7 +198,7 @@ const EmailDashboard = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <h1 style={{ fontSize: '24px', fontWeight: '800', color: 'var(--color-text-primary)', marginBottom: '4px' }}>Email Analytics</h1>
-          <p style={{ color: 'var(--color-text-secondary)' }}>Direct Mailchimp integration with MPP-adjusted human engagement tracking.</p>
+          <p style={{ color: 'var(--color-text-secondary)' }}>Direct Mailchimp integration. Open rate reflects unique human recipients only (Apple MPP bots excluded).</p>
         </div>
         <button
           onClick={() => fetchEmailData(true)}
@@ -342,8 +337,8 @@ const EmailDashboard = () => {
         gap: '24px'
       }}>
         <div>
-          <strong style={{ color: 'var(--color-text-primary)', display: 'block', marginBottom: '8px' }}>Open Rate (Human)</strong>
-          Excludes bot-triggered Apple MPP auto-opens. Calculated as (Unique Opens - Est. MPP) / Delivered. This is the primary accuracy metric.
+          <strong style={{ color: 'var(--color-text-primary)', display: 'block', marginBottom: '8px' }}>Open Rate</strong>
+          Unique human recipients who opened / Delivered. Apple MPP bot opens are excluded. Matches the "Opened — X recipients" figure shown in Mailchimp.
         </div>
         <div>
           <strong style={{ color: 'var(--color-text-primary)', display: 'block', marginBottom: '8px' }}>Click-Through Rate (CTR)</strong>
@@ -351,7 +346,7 @@ const EmailDashboard = () => {
         </div>
         <div>
           <strong style={{ color: 'var(--color-text-primary)', display: 'block', marginBottom: '8px' }}>Click-to-Open Rate (CTOR)</strong>
-          Unique Clicks / Unique Opens. Shows content quality for those who actually opened the email.
+          Unique Clicks / Human Opens. Shows content quality for those who actually opened the email.
         </div>
       </div>
     </div>
