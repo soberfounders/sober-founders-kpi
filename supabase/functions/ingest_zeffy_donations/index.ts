@@ -149,12 +149,15 @@ function mapPayloadToRow(payload: any) {
   const campaignName = compactWhitespace(firstPresent(payload, ["campaign_name", "campaign", "fund_name", "data.campaign_name"]));
   const formName = compactWhitespace(firstPresent(payload, ["form_name", "form", "donation_form_name", "data.form_name"]));
   const paymentMethod = compactWhitespace(firstPresent(payload, ["payment_method", "method", "card_brand", "data.payment_method"]));
-  // is_recurring / recurring / subscription are explicit boolean-style fields — trust parseBool directly.
-  // donation_type is a Zeffy text field (e.g. "One time", "Monthly", "Recurring commitment") —
-  // only treat it as recurring when it explicitly signals a subscription, not for one-time forms.
-  const explicitRecurring = firstPresent(payload, ["is_recurring", "recurring", "subscription"]);
+  // Zeffy uses a single form where the donor picks "Monthly" or "One time" per transaction.
+  // The per-transaction type lives in donation_type (e.g. "Monthly donation", "One time donation").
+  // We do NOT use the "recurring" field because Zeffy sets it at the supporter/form level,
+  // meaning it can be true even for a one-time payment from someone who has ever had a subscription.
+  // Only is_recurring (explicit boolean sent by Zapier) or a donation_type that contains "month"
+  // should mark a transaction as recurring.
+  const explicitRecurring = firstPresent(payload, ["is_recurring"]);
   const donationTypeRaw = String(firstPresent(payload, ["donation_type"]) || "").trim().toLowerCase();
-  const donationTypeIsRecurring = ["monthly", "recurring commitment", "subscription"].includes(donationTypeRaw);
+  const donationTypeIsRecurring = donationTypeRaw.includes("month");
   const isRecurring = explicitRecurring !== null ? parseBool(explicitRecurring) : donationTypeIsRecurring;
   const currency = compactWhitespace(firstPresent(payload, ["currency", "amount_currency"])) || "USD";
   const donorAddress = firstPresent(payload, ["address", "donor_address", "supporter.address", "customer.address"]) || {};
