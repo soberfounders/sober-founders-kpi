@@ -4037,6 +4037,13 @@ export default function LeadsDashboard() {
 
     if (typeof buildLeadsConfidenceSummary === 'function' && typeof buildLeadsActionQueue === 'function') {
       try {
+        const zoomCurrent = zoomSourceModule?.current;
+        const lumaDetailCount = unifiedCurrent?.stageRows?.lumaRowsDetailed?.length ?? 0;
+        const lumaUnmatchedCount = unifiedCurrent?.stageRows?.unmatchedLumaRows?.length ?? 0;
+        const lumaHubspotMatchRate = lumaDetailCount > 0
+          ? (lumaDetailCount - lumaUnmatchedCount) / lumaDetailCount
+          : null;
+
         const confidenceInput = {
           analytics,
           groupedData,
@@ -4044,6 +4051,14 @@ export default function LeadsDashboard() {
           unifiedPrevious,
           loadErrors,
           dateWindows,
+          // Flatten the specific values pickNumber() resolves at the top level
+          match_rate: zoomCurrent?.matchRate ?? null,
+          total_showup_rows: zoomCurrent?.totalShowUpRows ?? null,
+          unknown_or_other_good_members: zoomCurrent?.unknownOrOtherGoodMembers ?? null,
+          hubspot_call_coverage_rate: unifiedCurrent?.hubspotCallCoverage?.rate ?? null,
+          confidence_breakdown: unifiedCurrent?.matchConfidenceBreakdown ?? null,
+          luma_hubspot_match_rate: lumaHubspotMatchRate,
+          luma_zoom_match_rate: unifiedCurrent?.funnel?.lumaToZoomRate ?? null,
         };
         const summary = buildLeadsConfidenceSummary(confidenceInput);
         const queue = buildLeadsActionQueue({ confidence_summary: summary, ...confidenceInput });
