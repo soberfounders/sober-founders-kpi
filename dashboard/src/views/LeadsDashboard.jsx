@@ -900,6 +900,49 @@ const RANGE_OPTIONS = [
   { value: 'custom', label: 'Custom Range' },
 ];
 
+const CAMPAIGN_ACTIVITY_FILTER_OPTIONS = [
+  { value: 'all', label: 'All' },
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+];
+
+function rankTopCampaignRows(rows = [], limit = 5) {
+  return rows
+    .filter((row) => Number(row?.spend || 0) > 0)
+    .map((row) => {
+      const cpgl = Number(row?.cpgl);
+      const cpql = Number(row?.cpql);
+      const showUpRate = Number(row?.showUpRate);
+      const qualityScore = Number(row?.qualityScore);
+      const cpglScore = Number(row?.attributedGreatLeads || 0) > 0 && Number.isFinite(cpgl) && cpgl > 0 ? 1 / cpgl : 0;
+      const cpqlScore = Number(row?.attributedQualifiedLeads || 0) > 0 && Number.isFinite(cpql) && cpql > 0 ? 1 / cpql : 0;
+      const showupScore = Number.isFinite(showUpRate) ? showUpRate : 0;
+      const qualityNormalized = Number.isFinite(qualityScore) ? (qualityScore / 100) : 0;
+      return {
+        ...row,
+        rankingScore: cpglScore * 0.5 + cpqlScore * 0.2 + showupScore * 0.15 + qualityNormalized * 0.15,
+      };
+    })
+    .sort((a, b) => (b.rankingScore - a.rankingScore) || (b.attributedShowUps - a.attributedShowUps) || (b.spend - a.spend))
+    .slice(0, limit);
+}
+
+function rankBottomCampaignRows(rows = [], limit = 5) {
+  return rows
+    .filter((row) => Number(row?.spend || 0) > 0)
+    .map((row) => {
+      const cplPenalty = Number.isFinite(Number(row?.cpl)) ? Number(row.cpl) : 0;
+      const zeroGreatPenalty = Number(row?.attributedGreatLeads || 0) === 0 ? 1 : 0;
+      const zeroQualifiedPenalty = Number(row?.attributedQualifiedLeads || 0) === 0 ? 1 : 0;
+      return {
+        ...row,
+        wasteScore: Number(row?.spend || 0) * (1 + zeroGreatPenalty + zeroQualifiedPenalty) + cplPenalty * 5,
+      };
+    })
+    .sort((a, b) => (b.wasteScore - a.wasteScore) || (b.spend - a.spend))
+    .slice(0, limit);
+}
+
 function DateRangeFilter({ rangeType, setRangeType, customStart, setCustomStart, customEnd, setCustomEnd, windows }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
@@ -963,6 +1006,7 @@ export default function LeadsDashboard() {
   const [drilldownMetricKey, setDrilldownMetricKey] = useState('leads');
   const [legacyComparisonOpen, setLegacyComparisonOpen] = useState(false);
   const [factCheckDrilldownOpen, setFactCheckDrilldownOpen] = useState(false);
+  const [campaignActivityFilter, setCampaignActivityFilter] = useState('all');
 
   // Supabase connection info for AI panel
   const supabaseUrl = SUPABASE_URL;
@@ -3590,10 +3634,88 @@ export default function LeadsDashboard() {
   const activeDrilldownTable = activeDrilldownWindow?.tables?.[drilldownMetricKey] || null;
   const drilldownQuickMetrics = ['leads', 'registrations', 'showups', 'qualified', 'great', 'cpl', 'cpql', 'cost_per_showup', 'cost_per_registration'];
 
-  const topAttributionRows = useMemo(() => {
+  const adActivityByIdInCurrentWindow = useMemo(() => {
+    const startKey = dateWindows?.current?.start;
+    const endKey = dateWindows?.current?.end;
+    const activityByAdId = new Map();
+    if (!startKey || !endKey) return activityByAdId;
+
+    (rawAds || []).forEach((row) => {
+      const adId = String(row?.ad_id || '').trim();
+      if (!adId) return;
+      const dateKey = parseDateKeyLoose(row?.date_day);
+      if (!dateKey || dateKey < startKey || dateKey > endKey) return;
+      if (!activityByAdId.has(adId)) {
+        activityByAdId.set(adId, {
+          adId,
+          spend: 0,
+          leads: 0,
+          impressions: 0,
+          clicks: 0,
+          lastDateKey: dateKey,
+        });
+      }
+      const activity = activityByAdId.get(adId);
+      const spend = Number(row?.spend || 0);
+      const leads = Number(row?.leads || 0);
+      const impressions = Number(row?.impressions || 0);
+      const clicks = Number(row?.clicks || 0);
+      activity.spend += Number.isFinite(spend) ? spend : 0;
+      activity.leads += Number.isFinite(leads) ? leads : 0;
+      activity.impressions += Number.isFinite(impressions) ? impressions : 0;
+      activity.clicks += Number.isFinite(clicks) ? clicks : 0;
+      if (!activity.lastDateKey || dateKey > activity.lastDateKey) activity.lastDateKey = dateKey;
+    });
+
+    return activityByAdId;
+  }, [rawAds, dateWindows]);
+
+  const campaignAttributionRowsWithStatus = useMemo(() => {
     if (!legacyComparisonOpen || !analytics?.adAttributionRows) return [];
-    return [...analytics.adAttributionRows].sort((a, b) => (b.attributedShowUps - a.attributedShowUps) || (b.spend - a.spend)).slice(0, 15);
-  }, [legacyComparisonOpen, analytics]);
+    return (analytics.adAttributionRows || []).map((row) => {
+      const adId = String(row?.adId || '').trim();
+      const activity = adActivityByIdInCurrentWindow.get(adId) || null;
+      const isActive = !!activity
+        && (
+          Number(activity.spend || 0) > 0
+          || Number(activity.impressions || 0) > 0
+          || Number(activity.clicks || 0) > 0
+          || Number(activity.leads || 0) > 0
+        );
+      return {
+        ...row,
+        campaignActivityStatus: isActive ? 'active' : 'inactive',
+        campaignActivity: activity,
+      };
+    });
+  }, [legacyComparisonOpen, analytics, adActivityByIdInCurrentWindow]);
+
+  const campaignAttributionStatusCounts = useMemo(() => {
+    const counts = {
+      all: campaignAttributionRowsWithStatus.length,
+      active: 0,
+      inactive: 0,
+    };
+    campaignAttributionRowsWithStatus.forEach((row) => {
+      const status = row?.campaignActivityStatus === 'active' ? 'active' : 'inactive';
+      counts[status] += 1;
+    });
+    return counts;
+  }, [campaignAttributionRowsWithStatus]);
+
+  const filteredCampaignAttributionRows = useMemo(() => {
+    if (campaignActivityFilter === 'all') return campaignAttributionRowsWithStatus;
+    return campaignAttributionRowsWithStatus.filter((row) => row?.campaignActivityStatus === campaignActivityFilter);
+  }, [campaignAttributionRowsWithStatus, campaignActivityFilter]);
+
+  const topAttributionRows = useMemo(() => (
+    [...filteredCampaignAttributionRows]
+      .sort((a, b) => (b.attributedShowUps - a.attributedShowUps) || (b.spend - a.spend))
+      .slice(0, 15)
+  ), [filteredCampaignAttributionRows]);
+
+  const campaignTopAds = useMemo(() => rankTopCampaignRows(filteredCampaignAttributionRows, 5), [filteredCampaignAttributionRows]);
+  const campaignBottomAds = useMemo(() => rankBottomCampaignRows(filteredCampaignAttributionRows, 5), [filteredCampaignAttributionRows]);
 
   const liveFreshnessModule = useMemo(() => {
     const todayKeyUtc = new Date().toISOString().slice(0, 10);
@@ -5872,7 +5994,37 @@ export default function LeadsDashboard() {
 
               {/* Ad Attribution Table */}
               <div style={card}>
-                <h3 style={{ fontSize: '18px', marginBottom: '14px' }}>Ad Attribution Table</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                  <h3 style={{ fontSize: '18px', margin: 0 }}>Ad Attribution Table</h3>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {CAMPAIGN_ACTIVITY_FILTER_OPTIONS.map((option) => {
+                      const selected = campaignActivityFilter === option.value;
+                      const count = campaignAttributionStatusCounts?.[option.value] ?? 0;
+                      return (
+                        <button
+                          key={`campaign-filter-${option.value}`}
+                          type="button"
+                          onClick={() => setCampaignActivityFilter(option.value)}
+                          style={{
+                            border: selected ? '1px solid #0f766e' : '1px solid #cbd5e1',
+                            backgroundColor: selected ? '#ecfdf5' : '#fff',
+                            color: selected ? '#065f46' : '#334155',
+                            borderRadius: '999px',
+                            padding: '4px 10px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {option.label} ({fmt.int(count)})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <p style={{ margin: '0 0 10px', fontSize: '11px', color: '#64748b' }}>
+                  Campaign status is based on ad activity inside the current selected window ({dateWindows?.current?.start || 'N/A'} to {dateWindows?.current?.end || 'N/A'}).
+                </p>
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1200px' }}>
                     <thead>
@@ -5890,7 +6042,7 @@ export default function LeadsDashboard() {
                           ))}
                         </tr>
                       ))}
-                      {topAttributionRows.length === 0 && <tr><td colSpan={15} style={{ padding: '10px', color: '#64748b', fontSize: '12px' }}>No attribution data.</td></tr>}
+                      {topAttributionRows.length === 0 && <tr><td colSpan={15} style={{ padding: '10px', color: '#64748b', fontSize: '12px' }}>No attribution data for this campaign activity filter.</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -5901,27 +6053,27 @@ export default function LeadsDashboard() {
                 <div style={card}>
                   <h3 style={{ fontSize: '18px', marginBottom: '10px' }}>Top Performing Ads</h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {analytics.topAds.map((r) => (
+                    {campaignTopAds.map((r) => (
                       <div key={r.adId} style={{ ...subCard }}>
                         <p style={{ margin: 0, fontWeight: 700, fontSize: '13px' }}>{r.adName}</p>
                         <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#64748b' }}>{r.adsetName}</p>
                         <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#0f766e' }}>CPGL: {r.attributedGreatLeads > 0 ? fmt.currency(r.cpgl) : 'N/A'} | Show-Up: {fmt.pct(r.showUpRate)}</p>
                       </div>
                     ))}
-                    {!analytics.topAds.length && <p style={{ color: '#64748b', fontSize: '13px' }}>No top ads.</p>}
+                    {!campaignTopAds.length && <p style={{ color: '#64748b', fontSize: '13px' }}>No top ads for this filter.</p>}
                   </div>
                 </div>
                 <div style={card}>
                   <h3 style={{ fontSize: '18px', marginBottom: '10px' }}>Bottom Performing Ads</h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {analytics.bottomAds.map((r) => (
+                    {campaignBottomAds.map((r) => (
                       <div key={r.adId} style={{ backgroundColor: '#fff7ed', borderRadius: '10px', padding: '10px', border: '1px solid #fed7aa' }}>
                         <p style={{ margin: 0, fontWeight: 700, fontSize: '13px' }}>{r.adName}</p>
                         <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#9a3412' }}>{r.adsetName}</p>
                         <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#9a3412' }}>Spend: {fmt.currency(r.spend)} | CPL: {fmt.currency(r.cpl)}</p>
                       </div>
                     ))}
-                    {!analytics.bottomAds.length && <p style={{ color: '#64748b', fontSize: '13px' }}>No bottom ads.</p>}
+                    {!campaignBottomAds.length && <p style={{ color: '#64748b', fontSize: '13px' }}>No bottom ads for this filter.</p>}
                   </div>
                 </div>
               </div>
