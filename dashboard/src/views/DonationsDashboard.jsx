@@ -134,7 +134,7 @@ function DonationsDashboard() {
       const [txRes, supportersRes, healthRes] = await Promise.all([
         supabase
           .from('donation_transactions_unified')
-          .select('row_id,source_system,source_event_id,donor_name,donor_email,amount,currency,eligible_amount,payment_method,status,is_recurring,campaign_name,receipt_url,donor_city,donor_region,donor_country,source_file,donated_at,created_at,payload')
+          .select('row_id,source_system,source_event_id,donor_name,donor_first_name,donor_last_name,donor_company_name,donor_email,amount,currency,eligible_amount,payment_method,status,is_recurring,campaign_name,receipt_url,donor_city,donor_region,donor_country,source_file,donated_at,created_at,payload')
           .order('donated_at', { ascending: false })
           .limit(5000),
         supabase
@@ -632,7 +632,14 @@ function DonationsDashboard() {
             <div key={`${row.source_system}-${row.row_id || row.source_event_id}`} style={{ border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
                 <div>
-                  <p style={{ fontSize: '13px', fontWeight: 700 }}>{row.donor_name || 'Unknown donor'}</p>
+                  <p style={{ fontSize: '13px', fontWeight: 700 }}>
+                    {row.donor_name ||
+                      ([row.donor_first_name, row.donor_last_name].filter(Boolean).join(' ')) ||
+                      'Unknown donor'}
+                  </p>
+                  {!!row.donor_company_name && (
+                    <p style={{ marginTop: '1px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>{row.donor_company_name}</p>
+                  )}
                   <p style={{ marginTop: '2px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
                     {row.donor_email || 'No email'} | {formatDate(row.donated_at)}
                   </p>
