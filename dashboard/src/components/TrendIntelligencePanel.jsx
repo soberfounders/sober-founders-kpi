@@ -41,12 +41,12 @@ function HealthRing({ pct, size = 76 }) {
     const r = size / 2 - 9;
     const circ = 2 * Math.PI * r;
     const dash = pct == null ? 0 : circ * (pct / 100);
-    const color = pct == null ? '#cbd5e1' : pct >= 70 ? '#16a34a' : pct >= 40 ? '#d97706' : '#dc2626';
+    const color = pct == null ? 'var(--color-neutral)' : pct >= 70 ? 'var(--color-success)' : pct >= 40 ? 'var(--color-warning)' : 'var(--color-danger)';
     const label = pct == null ? 'N/A' : `${pct}%`;
 
     return (
         <svg width={size} height={size}>
-            <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#f1f5f9" strokeWidth={8} />
+            <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--color-border)" strokeWidth={8} />
             <circle
                 cx={size / 2} cy={size / 2} r={r}
                 fill="none" stroke={color} strokeWidth={8}
@@ -65,10 +65,10 @@ function HealthRing({ pct, size = 76 }) {
 /*  Goal status helpers                                                */
 /* ------------------------------------------------------------------ */
 const STATUS_STYLES = {
-    on_track: { bg: '#f0fdf4', border: '#bbf7d0', badge: '#16a34a', label: 'On Track', icon: '✅' },
-    near_goal: { bg: '#fffbeb', border: '#fde68a', badge: '#d97706', label: 'Near Goal', icon: '🟡' },
-    off_track: { bg: '#fef2f2', border: '#fecaca', badge: '#dc2626', label: 'Off Track', icon: '🔴' },
-    no_goal: { bg: '#f8fafc', border: '#e2e8f0', badge: '#94a3b8', label: 'No Goal', icon: '⚪' },
+    on_track: { bg: 'var(--color-success-bg)', border: 'rgba(22, 163, 74, 0.35)', badge: 'var(--color-success)', label: 'On Track', icon: 'OK' },
+    near_goal: { bg: 'var(--color-warning-bg)', border: 'rgba(245, 158, 11, 0.35)', badge: 'var(--color-warning)', label: 'Near Goal', icon: '~' },
+    off_track: { bg: 'var(--color-danger-bg)', border: 'rgba(220, 38, 38, 0.35)', badge: 'var(--color-danger)', label: 'Off Track', icon: '!' },
+    no_goal: { bg: 'var(--color-surface-elevated)', border: 'var(--color-border)', badge: 'var(--color-neutral)', label: 'No Goal', icon: '-' },
 };
 
 function fmtPct(v) {
@@ -169,11 +169,13 @@ export default function TrendIntelligencePanel() {
     /*  Render                                                           */
     /* ---------------------------------------------------------------- */
     const card = {
-        background: 'white',
+        background: 'var(--color-card)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
         border: '1px solid var(--color-border)',
         borderRadius: '14px',
         padding: '18px 20px',
-        boxShadow: '0 1px 3px rgb(0 0 0 / 0.06)',
+        boxShadow: 'var(--glass-shadow)',
     };
 
     if (loading) {
@@ -200,9 +202,9 @@ export default function TrendIntelligencePanel() {
                     </div>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         {[
-                            { label: 'On Track', count: onTrack.length, bg: '#f0fdf4', color: '#16a34a' },
-                            { label: 'Near Goal', count: nearGoal.length, bg: '#fffbeb', color: '#d97706' },
-                            { label: 'Off Track', count: offTrack.length, bg: '#fef2f2', color: '#dc2626' },
+                            { label: 'On Track', count: onTrack.length, bg: 'var(--color-success-bg)', color: 'var(--color-success)' },
+                            { label: 'Near Goal', count: nearGoal.length, bg: 'var(--color-warning-bg)', color: 'var(--color-warning)' },
+                            { label: 'Off Track', count: offTrack.length, bg: 'var(--color-danger-bg)', color: 'var(--color-danger)' },
                         ].map(s => (
                             <span key={s.label} style={{ fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 6, background: s.bg, color: s.color }}>
                                 {s.count} {s.label}
@@ -222,18 +224,18 @@ export default function TrendIntelligencePanel() {
                         </div>
                     ))}
                 </div>
-                <button onClick={load} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--color-border)', background: '#f8fafc', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--color-text-secondary)', flexShrink: 0 }}>
+                <button onClick={load} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-surface-elevated)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--color-text-secondary)', flexShrink: 0 }}>
                     <RefreshCw size={12} /> Refresh
                 </button>
             </div>
 
             {/* ── Anomalies ── */}
             {anomalies.length > 0 && (
-                <div style={{ ...card, borderLeft: '3px solid #7c3aed', background: '#faf5ff' }}>
+                <div style={{ ...card, borderLeft: '3px solid #7c3aed', background: 'rgba(124, 58, 237, 0.12)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
                         <span style={{ fontSize: 14 }}>🚨</span>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: '#6d28d9' }}>Statistical Anomalies</span>
-                        <span style={{ fontSize: 11, color: '#a78bfa', marginLeft: 4 }}>z-score ≥ 1.5σ from 8-week mean</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-primary)' }}>Statistical Anomalies</span>
+                        <span style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginLeft: 4 }}>z-score ≥ 1.5σ from 8-week mean</span>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {anomalies.map(r => {
@@ -241,7 +243,7 @@ export default function TrendIntelligencePanel() {
                             const isSpike = Number(r.z_score) > 0;
                             return (
                                 <div key={`${r.kpi_key}-${r.funnel_key}`}
-                                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 8, background: 'white', border: '1px solid #e9d5ff', gap: 12 }}>
+                                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 8, background: 'var(--color-surface-elevated)', border: '1px solid #e9d5ff', gap: 12 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
                                         {isSpike ? <TrendingUp size={14} color="#7c3aed" /> : <TrendingDown size={14} color="#dc2626" />}
                                         <div>
@@ -256,7 +258,7 @@ export default function TrendIntelligencePanel() {
                                         <div style={{ fontSize: 14, fontWeight: 700, color: isSpike ? '#7c3aed' : '#dc2626' }}>{fmtVal(r.value)}</div>
                                         <div style={{ fontSize: 10, color: 'var(--color-text-secondary)' }}>WoW: {fmtPct(r.wow_pct)}</div>
                                     </div>
-                                    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: isSpike ? '#ede9fe' : '#fee2e2', color: isSpike ? '#6d28d9' : '#b91c1c', whiteSpace: 'nowrap' }}>
+                                    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: isSpike ? 'rgba(124, 58, 237, 0.2)' : 'var(--color-danger-bg)', color: isSpike ? '#c4b5fd' : 'var(--color-danger)', whiteSpace: 'nowrap' }}>
                                         {isSpike ? '↑' : '↓'} {zAbs.toFixed(1)}σ {isSpike ? 'spike' : 'drop'}
                                     </span>
                                 </div>
@@ -268,11 +270,11 @@ export default function TrendIntelligencePanel() {
 
             {/* ── Consecutive Decliners ── */}
             {decliners.length > 0 && (
-                <div style={{ ...card, borderLeft: '3px solid #dc2626', background: '#fff8f8' }}>
+                <div style={{ ...card, borderLeft: '3px solid #dc2626', background: 'var(--color-danger-bg)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
                         <span style={{ fontSize: 14 }}>📉</span>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: '#b91c1c' }}>Consecutive Decline Warning</span>
-                        <span style={{ fontSize: 11, color: '#fca5a5', marginLeft: 4 }}>declining week-over-week</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-primary)' }}>Consecutive Decline Warning</span>
+                        <span style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginLeft: 4 }}>declining week-over-week</span>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {decliners.map(r => {
@@ -280,7 +282,7 @@ export default function TrendIntelligencePanel() {
                             const isCritical = wks >= 3;
                             return (
                                 <div key={`${r.kpi_key}-${r.funnel_key}`}
-                                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 8, background: 'white', border: `1px solid ${isCritical ? '#fca5a5' : '#fecaca'}`, gap: 12 }}>
+                                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 8, background: 'var(--color-surface-elevated)', border: `1px solid ${isCritical ? '#fca5a5' : '#fecaca'}`, gap: 12 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
                                         <TrendingDown size={14} color={isCritical ? '#991b1b' : '#dc2626'} />
                                         <div>
@@ -295,7 +297,7 @@ export default function TrendIntelligencePanel() {
                                         <div style={{ fontSize: 14, fontWeight: 700, color: '#dc2626' }}>{fmtVal(r.value)}</div>
                                         <div style={{ fontSize: 10, color: 'var(--color-text-secondary)' }}>WoW: {fmtPct(r.wow_pct)}</div>
                                     </div>
-                                    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: isCritical ? '#fee2e2' : '#fef2f2', color: isCritical ? '#991b1b' : '#b91c1c', whiteSpace: 'nowrap' }}>
+                                    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'var(--color-danger-bg)', color: 'var(--color-danger)', whiteSpace: 'nowrap' }}>
                                         {isCritical ? '🔴' : '🟠'} {wks}-week decline
                                     </span>
                                 </div>
@@ -307,11 +309,11 @@ export default function TrendIntelligencePanel() {
 
             {/* ── Off-track KPIs ── */}
             {offTrack.length > 0 && (
-                <div style={{ ...card, borderLeft: '3px solid #f59e0b', background: '#fffbef' }}>
+                <div style={{ ...card, borderLeft: '3px solid #f59e0b', background: 'var(--color-warning-bg)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-                        <Target size={14} color="#d97706" />
-                        <span style={{ fontSize: 13, fontWeight: 700, color: '#b45309' }}>Off-Track vs Goals</span>
-                        <span style={{ fontSize: 11, color: '#fbbf24', marginLeft: 4 }}>&gt;15% below target</span>
+                        <Target size={14} color="var(--color-warning)" />
+                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-primary)' }}>Off-Track vs Goals</span>
+                        <span style={{ fontSize: 11, color: 'var(--color-warning)', marginLeft: 4 }}>&gt;15% below target</span>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {offTrack.map(r => {
@@ -319,9 +321,9 @@ export default function TrendIntelligencePanel() {
                             const higher = r.higher_is_better !== false;
                             return (
                                 <div key={`${r.kpi_key}-${r.funnel_key}`}
-                                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 8, background: 'white', border: '1px solid #fde68a', gap: 12 }}>
+                                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 8, background: 'var(--color-surface-elevated)', border: '1px solid #fde68a', gap: 12 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
-                                        <AlertTriangle size={14} color="#d97706" />
+                                        <AlertTriangle size={14} color="var(--color-warning)" />
                                         <div>
                                             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-primary)' }}>{r.kpi_name}</div>
                                             <div style={{ fontSize: 10, color: 'var(--color-text-secondary)' }}>Funnel: {r.funnel_key}</div>
@@ -331,10 +333,10 @@ export default function TrendIntelligencePanel() {
                                         <Sparkline values={r.trailing_8w_values} color="#d97706" />
                                     )}
                                     <div style={{ textAlign: 'right', minWidth: 120, fontSize: 11, color: 'var(--color-text-secondary)' }}>
-                                        <div style={{ fontSize: 14, fontWeight: 700, color: '#b45309' }}>{fmtVal(r.value)}</div>
+                                        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)' }}>{fmtVal(r.value)}</div>
                                         <div>Goal: <strong>{fmtVal(r.goal_value)}</strong></div>
                                     </div>
-                                    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#fef3c7', color: '#b45309', whiteSpace: 'nowrap' }}>
+                                    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'rgba(245, 158, 11, 0.2)', color: 'var(--color-text-primary)', whiteSpace: 'nowrap' }}>
                                         {higher ? fmtPct(gap) : `+${Math.abs(gap).toFixed(1)}%`} vs goal
                                     </span>
                                 </div>
@@ -379,15 +381,15 @@ export default function TrendIntelligencePanel() {
                                         const isEditing = editingKey === key;
                                         const st = STATUS_STYLES[r.goal_status] || STATUS_STYLES.no_goal;
                                         return (
-                                            <tr key={key} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.15s' }}
-                                                onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                                            <tr key={key} style={{ borderBottom: '1px solid var(--color-border)', transition: 'background 0.15s' }}
+                                                onMouseEnter={e => e.currentTarget.style.background = 'var(--color-surface-elevated)'}
                                                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                             >
                                                 <td style={{ padding: '7px 10px', fontWeight: 600, color: 'var(--color-text-primary)', maxWidth: 200 }}>
                                                     <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.kpi_name}</div>
                                                 </td>
                                                 <td style={{ padding: '7px 10px', color: 'var(--color-text-secondary)' }}>
-                                                    <span style={{ fontSize: 10, background: '#f1f5f9', borderRadius: 4, padding: '2px 6px' }}>{r.funnel_key}</span>
+                                                    <span style={{ fontSize: 10, background: 'var(--color-surface-elevated)', borderRadius: 4, padding: '2px 6px' }}>{r.funnel_key}</span>
                                                 </td>
                                                 <td style={{ padding: '7px 10px', color: 'var(--color-text-secondary)', fontSize: 11 }}>
                                                     {r.higher_is_better !== false ? (
@@ -411,11 +413,11 @@ export default function TrendIntelligencePanel() {
                                                                 style={{ width: 70, padding: '3px 6px', fontSize: 12, border: '1px solid #6366f1', borderRadius: 4, outline: 'none' }}
                                                             />
                                                             <button onClick={() => saveGoal(r.kpi_key, r.funnel_key)} disabled={saving}
-                                                                style={{ background: '#6366f1', color: 'white', border: 'none', borderRadius: 4, padding: '3px 6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                                                                style={{ background: '#6366f1', color: 'var(--color-text-primary)', border: 'none', borderRadius: 4, padding: '3px 6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
                                                                 <Check size={11} />
                                                             </button>
                                                             <button onClick={cancelEdit}
-                                                                style={{ background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: 4, padding: '3px 6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                                                                style={{ background: 'var(--color-surface-elevated)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '3px 6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
                                                                 <X size={11} />
                                                             </button>
                                                         </div>

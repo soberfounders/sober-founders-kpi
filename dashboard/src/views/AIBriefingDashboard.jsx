@@ -38,12 +38,7 @@ function AIBriefingDashboard() {
     const [expandedHistory, setExpandedHistory] = useState(null);
     const [notionModal, setNotionModal] = useState({ open: false, taskName: '' });
 
-    useEffect(() => {
-        if (!hasSupabaseConfig) return;
-        loadHistory();
-    }, []);
-
-    const loadHistory = async () => {
+    const loadHistory = useCallback(async () => {
         if (!hasSupabaseConfig) return;
         const { data, error: err } = await supabase
             .from('ai_briefings')
@@ -51,7 +46,14 @@ function AIBriefingDashboard() {
             .order('created_at', { ascending: false })
             .limit(20);
         if (!err && data) setHistory(data);
-    };
+    }, []);
+
+    useEffect(() => {
+        if (!hasSupabaseConfig) return;
+        loadHistory();
+        const id = setInterval(loadHistory, 5 * 60 * 1000);
+        return () => clearInterval(id);
+    }, [loadHistory]);
 
     const runBriefing = useCallback(async (mode) => {
         if (!hasSupabaseConfig) {
@@ -75,7 +77,7 @@ function AIBriefingDashboard() {
             setLoading(false);
             setLoadingMode(null);
         }
-    }, []);
+    }, [loadHistory]);
 
     const viewHistorical = (briefing) => {
         setActiveBriefing({
@@ -286,7 +288,10 @@ function AIBriefingDashboard() {
             {/* ── Briefing History ── */}
             <div style={baseCardStyle}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                    <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--color-text-primary)' }}>Briefing History</h3>
+                    <div>
+                        <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--color-text-primary)' }}>Briefing History</h3>
+                        <p style={{ marginTop: '4px', fontSize: '11px', color: 'var(--color-text-secondary)' }}>Auto-generates every Monday at 7:00 AM EST.</p>
+                    </div>
                     <button onClick={loadHistory} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: '500', backgroundColor: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', cursor: 'pointer' }}>
                         <RefreshCw size={12} /> Refresh
                     </button>
@@ -295,7 +300,7 @@ function AIBriefingDashboard() {
                 {history.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--color-text-secondary)' }}>
                         <Bot size={32} style={{ opacity: 0.3, marginBottom: '12px' }} />
-                        <p style={{ fontSize: '13px' }}>No briefings yet. Run your first one above!</p>
+                        <p style={{ fontSize: '13px' }}>No briefings yet. Weekly strategy briefings auto-run Mondays at 7:00 AM EST.</p>
                     </div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
