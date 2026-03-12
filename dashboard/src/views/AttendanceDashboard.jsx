@@ -49,20 +49,7 @@ const EXPECTED_ZERO_GROUP_SESSION_KEYS = new Set(['Thursday|2025-12-25']);
 const SCHEDULE_GAP_AUDIT_LOOKBACK_WEEKS = 8;
 const GROUP_CALL_TIME_FALLBACK_TOLERANCE_MINUTES = 240;
 const GROUP_CALL_MIN_ATTENDEE_SIGNAL = 5;
-const EXPECTED_ZERO_WEEK_KEYS_BY_DAY = (() => {
-  const byDay = {
-    Tuesday: new Set(),
-    Thursday: new Set(),
-  };
-  EXPECTED_ZERO_GROUP_SESSION_KEYS.forEach((key) => {
-    const [type, dateLabel] = String(key || '').split('|');
-    if (!type || !dateLabel || !byDay[type]) return;
-    const d = safeDate(`${dateLabel}T00:00:00.000Z`);
-    const weekKey = d ? etWeekStartKey(d) : '';
-    if (weekKey) byDay[type].add(weekKey);
-  });
-  return byDay;
-})();
+let expectedZeroWeekKeysByDayCache = null;
 
 function normalizeName(name = '') {
   return name.toLowerCase().trim().replace(/\s+/g, ' ');
@@ -831,6 +818,23 @@ function etWeekStartKey(dateLike) {
   return mondayUtc.toISOString().slice(0, 10);
 }
 
+function getExpectedZeroWeekKeysByDay() {
+  if (expectedZeroWeekKeysByDayCache) return expectedZeroWeekKeysByDayCache;
+  const byDay = {
+    Tuesday: new Set(),
+    Thursday: new Set(),
+  };
+  EXPECTED_ZERO_GROUP_SESSION_KEYS.forEach((key) => {
+    const [type, dateLabel] = String(key || '').split('|');
+    if (!type || !dateLabel || !byDay[type]) return;
+    const d = safeDate(`${dateLabel}T00:00:00.000Z`);
+    const weekKey = d ? etWeekStartKey(d) : '';
+    if (weekKey) byDay[type].add(weekKey);
+  });
+  expectedZeroWeekKeysByDayCache = byDay;
+  return byDay;
+}
+
 function inferGroupTypeFromTitle(titleRaw = '', scheduledDayType = null) {
   const title = String(titleRaw || '').toLowerCase();
   const likelyOneToOne = (
@@ -916,7 +920,7 @@ function listMissingWeekKeys(
   }
 
   const existing = new Set(uniqueWeekKeys);
-  const knownExpectedZeroWeeks = EXPECTED_ZERO_WEEK_KEYS_BY_DAY[dayType] || new Set();
+  const knownExpectedZeroWeeks = getExpectedZeroWeekKeysByDay()[dayType] || new Set();
   return expectedWeeks
     .filter((key) => !existing.has(key) && !knownExpectedZeroWeeks.has(key))
     .sort();
