@@ -126,6 +126,8 @@ const ATTENDANCE_HUBSPOT_CONTACT_OPTIONAL_COLUMNS = [
 
 const ATTENDANCE_HUBSPOT_CONTACT_SILENT_FALLBACK_COLUMNS = new Set([
   // Legacy aliases absent in some environments.
+  'annual_revenue_in_usd_official',
+  'sobriety_date__official_',
   'annual_revenue',
   'sober_date',
   'clean_date',
