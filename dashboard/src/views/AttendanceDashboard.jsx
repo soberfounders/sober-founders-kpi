@@ -3427,29 +3427,49 @@ const AttendanceDashboard = () => {
       </div>
 
       {/* Show-Up Drilldown */}
-      <div style={{ ...cardStyle, borderLeft: '5px solid #0f766e' }}>
+      <div style={{ ...cardStyle, borderLeft: '5px solid var(--color-info)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <div>
             <h3 style={{ fontSize: '18px' }}>Show-Up Drilldown</h3>
-            <p style={{ marginTop: '4px', color: '#64748b', fontSize: '13px' }}>
+            <p style={{ marginTop: '4px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
               Click any Tuesday/Thursday bar to inspect attendees, visit counts including that meeting, and possible duplicates.
             </p>
           </div>
           {selectedSessionDetail && (
-            <div style={{ padding: '6px 10px', borderRadius: '999px', backgroundColor: '#ecfeff', color: '#0f766e', fontSize: '12px', fontWeight: 700 }}>
+            <div
+              style={{
+                padding: '6px 10px',
+                borderRadius: '999px',
+                backgroundColor: 'var(--color-info-bg)',
+                border: '1px solid var(--color-info)',
+                color: 'var(--color-info)',
+                fontSize: '12px',
+                fontWeight: 700,
+              }}
+            >
               {selectedSessionDetail.session.type} {selectedSessionDetail.session.dateFormatted}
             </div>
           )}
         </div>
 
         {detailMessage && (
-          <div style={{ marginTop: '10px', borderRadius: '10px', padding: '10px 12px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', color: '#1e3a8a', fontSize: '13px' }}>
+          <div
+            style={{
+              marginTop: '10px',
+              borderRadius: '10px',
+              padding: '10px 12px',
+              backgroundColor: 'var(--color-info-bg)',
+              border: '1px solid var(--color-info)',
+              color: 'var(--color-text-primary)',
+              fontSize: '13px',
+            }}
+          >
             {detailMessage}
           </div>
         )}
 
         {!selectedSessionDetail && (
-          <p style={{ marginTop: '12px', color: '#64748b' }}>
+          <p style={{ marginTop: '12px', color: 'var(--color-text-secondary)' }}>
             No session selected yet. Click a bar in Tuesday or Thursday show-ups.
           </p>
         )}
@@ -3457,23 +3477,33 @@ const AttendanceDashboard = () => {
         {selectedSessionDetail && (
           <>
             {!selectedSessionDetail.hasTargetDate && (
-              <div style={{ marginTop: '10px', borderRadius: '10px', padding: '10px 12px', backgroundColor: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', fontSize: '13px' }}>
+              <div
+                style={{
+                  marginTop: '10px',
+                  borderRadius: '10px',
+                  padding: '10px 12px',
+                  backgroundColor: 'var(--color-warning-bg)',
+                  border: '1px solid var(--color-warning)',
+                  color: 'var(--color-warning)',
+                  fontSize: '13px',
+                }}
+              >
                 Validation target is Thursday 02/19/2026. Click that bar when it appears to verify this workflow there first.
               </div>
             )}
 
             <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
-              <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 12px' }}>
-                <p style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>Total Show-Ups</p>
-                <p style={{ marginTop: '4px', fontSize: '22px', fontWeight: 700, color: '#0f172a' }}>{selectedSessionDetail.session.derivedCount}</p>
+              <div style={{ backgroundColor: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px 12px' }}>
+                <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Total Show-Ups</p>
+                <p style={{ marginTop: '4px', fontSize: '22px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{selectedSessionDetail.session.derivedCount}</p>
               </div>
-              <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '10px 12px' }}>
-                <p style={{ fontSize: '12px', color: '#166534', textTransform: 'uppercase' }}>Net New</p>
-                <p style={{ marginTop: '4px', fontSize: '22px', fontWeight: 700, color: '#166534' }}>{selectedSessionDetail.session.newCount}</p>
+              <div style={{ backgroundColor: 'var(--color-success-bg)', border: '1px solid var(--color-success)', borderRadius: '10px', padding: '10px 12px' }}>
+                <p style={{ fontSize: '12px', color: 'var(--color-success)', textTransform: 'uppercase' }}>Net New</p>
+                <p style={{ marginTop: '4px', fontSize: '22px', fontWeight: 700, color: 'var(--color-success)' }}>{selectedSessionDetail.session.newCount}</p>
               </div>
-              <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 12px' }}>
-                <p style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>Returning</p>
-                <p style={{ marginTop: '4px', fontSize: '22px', fontWeight: 700, color: '#334155' }}>{selectedSessionDetail.session.repeatCount}</p>
+              <div style={{ backgroundColor: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px 12px' }}>
+                <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Returning</p>
+                <p style={{ marginTop: '4px', fontSize: '22px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{selectedSessionDetail.session.repeatCount}</p>
               </div>
             </div>
 
@@ -3482,27 +3512,39 @@ const AttendanceDashboard = () => {
                 {selectedSessionDetail.attendeeRows.map((row) => (
                   <div key={row.identityKey || row.name} style={{ border: '1px solid var(--color-border)', borderRadius: '12px', padding: '10px', backgroundColor: 'var(--color-card)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>{row.displayName || row.name}</span>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: '999px', fontSize: '10px', fontWeight: 700, backgroundColor: row.isNew ? '#dcfce7' : '#e2e8f0', color: row.isNew ? '#166534' : '#334155', textTransform: 'uppercase' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--color-text-primary)', fontWeight: 700 }}>{row.displayName || row.name}</span>
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          padding: '2px 8px',
+                          borderRadius: '999px',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          backgroundColor: row.isNew ? 'var(--color-success-bg)' : 'var(--color-neutral-bg)',
+                          color: row.isNew ? 'var(--color-success)' : 'var(--color-neutral)',
+                          textTransform: 'uppercase',
+                        }}
+                      >
                         {row.isNew ? 'Net New' : 'Returning'}
                       </span>
                     </div>
 
                     <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
                       <div>
-                        <p style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase' }}>Revenue</p>
-                        <p style={{ fontSize: '12px', color: '#0f172a', fontWeight: 700 }}>{formatCurrencyMaybe(row.revenue)}</p>
+                        <p style={{ fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Revenue</p>
+                        <p style={{ fontSize: '12px', color: 'var(--color-text-primary)', fontWeight: 700 }}>{formatCurrencyMaybe(row.revenue)}</p>
                       </div>
                       <div>
-                        <p style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase' }}>Meeting Visits</p>
-                        <p style={{ fontSize: '12px', color: '#0f172a', fontWeight: 700 }}>{row.groupVisitsIncludingThisSession} (total {row.totalVisitsIncludingThisSession})</p>
+                        <p style={{ fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Meeting Visits</p>
+                        <p style={{ fontSize: '12px', color: 'var(--color-text-primary)', fontWeight: 700 }}>{row.groupVisitsIncludingThisSession} (total {row.totalVisitsIncludingThisSession})</p>
                       </div>
                       <div style={{ gridColumn: '1 / -1' }}>
-                        <p style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase' }}>HubSpot</p>
-                        <p style={{ fontSize: '12px', color: '#0f172a', fontWeight: 600 }}>{row.hubspotName || 'Not Found'}</p>
-                        <p style={{ fontSize: '11px', color: '#475569', marginTop: '2px' }}>{row.hubspotEmail || 'Not Found'}</p>
+                        <p style={{ fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>HubSpot</p>
+                        <p style={{ fontSize: '12px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{row.hubspotName || 'Not Found'}</p>
+                        <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>{row.hubspotEmail || 'Not Found'}</p>
                         {row.hubspotUrl ? (
-                          <a href={row.hubspotUrl} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 700, textDecoration: 'underline' }}>
+                          <a href={row.hubspotUrl} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: 'var(--color-info)', fontWeight: 700, textDecoration: 'underline' }}>
                             Open in HubSpot
                           </a>
                         ) : null}
@@ -3520,9 +3562,9 @@ const AttendanceDashboard = () => {
                               onClick={() => handleMergeAlias(action.source, action.target)}
                               disabled={!!mergingAliasKey}
                               style={{
-                                border: '1px solid #cbd5e1',
-                                backgroundColor: '#f8fafc',
-                                color: '#1e293b',
+                                border: '1px solid var(--color-border)',
+                                backgroundColor: 'var(--color-overlay-strong)',
+                                color: 'var(--color-text-primary)',
                                 borderRadius: '999px',
                                 fontSize: '10px',
                                 fontWeight: 700,
@@ -3540,32 +3582,38 @@ const AttendanceDashboard = () => {
                   </div>
                 ))}
                 {selectedSessionDetail.attendeeRows.length === 0 && (
-                  <div style={{ padding: '14px', textAlign: 'center', fontSize: '13px', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
+                  <div style={{ padding: '14px', textAlign: 'center', fontSize: '13px', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)', borderRadius: '10px', backgroundColor: 'var(--color-surface-elevated)' }}>
                     No attendees found for this session.
                   </div>
                 )}
               </div>
             ) : (
-              <div style={{ marginTop: '14px', border: '1px solid #e2e8f0', borderRadius: '12px', overflowX: 'auto' }}>
-                <table style={{ width: '100%', minWidth: '1320px', borderCollapse: 'collapse' }}>
+              <div style={{ marginTop: '14px', border: '1px solid var(--color-border)', borderRadius: '12px', overflowX: 'auto', backgroundColor: 'var(--color-surface-elevated)' }}>
+                <table style={{ width: '100%', minWidth: '1320px', borderCollapse: 'collapse', color: 'var(--color-text-primary)' }}>
                   <thead>
-                    <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                      <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Display Name</th>
-                      <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Revenue</th>
-                      <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Sobriety Date</th>
-                      <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Times Visited Meeting</th>
-                      <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Total Visits</th>
-                      <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>Email Address</th>
-                      <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>HubSpot Contact</th>
+                    <tr style={{ backgroundColor: 'var(--color-overlay-strong)', borderBottom: '1px solid var(--color-border)' }}>
+                      <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Display Name</th>
+                      <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Revenue</th>
+                      <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Sobriety Date</th>
+                      <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Times Visited Meeting</th>
+                      <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Total Visits</th>
+                      <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Email Address</th>
+                      <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>HubSpot Contact</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedSessionDetail.attendeeRows.map((row) => (
-                      <tr key={row.identityKey || row.name} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    {selectedSessionDetail.attendeeRows.map((row, rowIndex) => (
+                      <tr
+                        key={row.identityKey || row.name}
+                        style={{
+                          borderBottom: '1px solid var(--color-border)',
+                          backgroundColor: rowIndex % 2 === 0 ? 'var(--color-surface-elevated)' : 'var(--color-card)',
+                        }}
+                      >
                         <td style={{ padding: '10px' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                              <span style={{ fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>{row.displayName || row.name}</span>
+                              <span style={{ fontSize: '13px', color: 'var(--color-text-primary)', fontWeight: 700 }}>{row.displayName || row.name}</span>
                               <span
                                 style={{
                                   display: 'inline-flex',
@@ -3574,8 +3622,8 @@ const AttendanceDashboard = () => {
                                   borderRadius: '999px',
                                   fontSize: '10px',
                                   fontWeight: 700,
-                                  backgroundColor: row.isNew ? '#dcfce7' : '#e2e8f0',
-                                  color: row.isNew ? '#166534' : '#334155',
+                                  backgroundColor: row.isNew ? 'var(--color-success-bg)' : 'var(--color-neutral-bg)',
+                                  color: row.isNew ? 'var(--color-success)' : 'var(--color-neutral)',
                                   textTransform: 'uppercase',
                                 }}
                               >
@@ -3583,10 +3631,10 @@ const AttendanceDashboard = () => {
                               </span>
                             </div>
                             {normalizeName(row.displayName || '') !== normalizeName(row.name || '') && (
-                              <span style={{ fontSize: '11px', color: '#64748b' }}>Attendance row name: {row.name}</span>
+                              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Attendance row name: {row.name}</span>
                             )}
                             {!row.hubspotMatched && row.missingIdentityReason ? (
-                              <span style={{ fontSize: '10px', color: '#b45309' }}>{row.missingIdentityReason}</span>
+                              <span style={{ fontSize: '10px', color: 'var(--color-warning)' }}>{row.missingIdentityReason}</span>
                             ) : null}
                             {row.duplicateActions.length > 0 && (
                               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '2px' }}>
@@ -3599,9 +3647,9 @@ const AttendanceDashboard = () => {
                                       onClick={() => handleMergeAlias(action.source, action.target)}
                                       disabled={!!mergingAliasKey}
                                       style={{
-                                        border: '1px solid #cbd5e1',
-                                        backgroundColor: '#f8fafc',
-                                        color: '#1e293b',
+                                        border: '1px solid var(--color-border)',
+                                        backgroundColor: 'var(--color-overlay-strong)',
+                                        color: 'var(--color-text-primary)',
                                         borderRadius: '999px',
                                         fontSize: '10px',
                                         fontWeight: 700,
@@ -3618,30 +3666,30 @@ const AttendanceDashboard = () => {
                             )}
                           </div>
                         </td>
-                        <td style={{ padding: '10px', fontSize: '12px', textAlign: 'right', color: Number.isFinite(row.revenue) ? '#0f172a' : '#94a3b8', fontWeight: Number.isFinite(row.revenue) ? 700 : 500 }}>
+                        <td style={{ padding: '10px', fontSize: '12px', textAlign: 'right', color: Number.isFinite(row.revenue) ? 'var(--color-text-primary)' : 'var(--color-text-secondary)', fontWeight: Number.isFinite(row.revenue) ? 700 : 500 }}>
                           {formatCurrencyMaybe(row.revenue)}
                         </td>
                         <td style={{ padding: '10px' }}>
                           {row.sobrietyDate ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                              <span style={{ fontSize: '12px', color: '#0f172a', fontWeight: 600 }}>
+                              <span style={{ fontSize: '12px', color: 'var(--color-text-primary)', fontWeight: 600 }}>
                                 {formatDateMMDDYY(row.sobrietyDate)}{row.sobrietyDurationLabel ? ` (${row.sobrietyDurationLabel})` : ''}
                               </span>
                               {row.sobrietySoonLabel ? (
-                                <span style={{ fontSize: '10px', color: '#b45309', fontWeight: 700 }}>{row.sobrietySoonLabel}</span>
+                                <span style={{ fontSize: '10px', color: 'var(--color-warning)', fontWeight: 700 }}>{row.sobrietySoonLabel}</span>
                               ) : null}
                             </div>
                           ) : (
-                            <span style={{ fontSize: '12px', color: '#94a3b8' }}>Not Found</span>
+                            <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Not Found</span>
                           )}
                         </td>
-                        <td style={{ padding: '10px', fontSize: '13px', color: '#334155', textAlign: 'right', fontWeight: 700 }}>
+                        <td style={{ padding: '10px', fontSize: '13px', color: 'var(--color-text-primary)', textAlign: 'right', fontWeight: 700 }}>
                           {row.groupVisitsIncludingThisSession}
                         </td>
-                        <td style={{ padding: '10px', fontSize: '13px', color: '#334155', textAlign: 'right', fontWeight: 700 }}>
+                        <td style={{ padding: '10px', fontSize: '13px', color: 'var(--color-text-primary)', textAlign: 'right', fontWeight: 700 }}>
                           {row.totalVisitsIncludingThisSession}
                         </td>
-                        <td style={{ padding: '10px', fontSize: '12px', color: row.hubspotEmail !== 'Not Found' ? '#0f172a' : '#94a3b8' }}>
+                        <td style={{ padding: '10px', fontSize: '12px', color: row.hubspotEmail !== 'Not Found' ? 'var(--color-text-primary)' : 'var(--color-text-secondary)' }}>
                           {row.hubspotEmail || 'Not Found'}
                         </td>
                         <td style={{ padding: '10px' }}>
@@ -3655,34 +3703,34 @@ const AttendanceDashboard = () => {
                                 borderRadius: '999px',
                                 fontSize: '10px',
                                 fontWeight: 700,
-                                backgroundColor: row.hubspotMatched ? '#dcfce7' : '#fee2e2',
-                                color: row.hubspotMatched ? '#166534' : '#991b1b',
+                                backgroundColor: row.hubspotMatched ? 'var(--color-success-bg)' : 'var(--color-danger-bg)',
+                                color: row.hubspotMatched ? 'var(--color-success)' : 'var(--color-danger)',
                                 textTransform: 'uppercase',
                               }}
                             >
                               {row.hubspotMatched ? 'Matched' : 'Missing'}
                             </span>
-                            <span style={{ fontSize: '12px', color: '#334155', fontWeight: 600 }}>{row.hubspotName || 'Not Found'}</span>
+                            <span style={{ fontSize: '12px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{row.hubspotName || 'Not Found'}</span>
                             {row.hubspotUrl ? (
                               <a
                                 href={row.hubspotUrl}
                                 target="_blank"
                                 rel="noreferrer"
-                                style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 700, textDecoration: 'underline' }}
+                                style={{ fontSize: '11px', color: 'var(--color-info)', fontWeight: 700, textDecoration: 'underline' }}
                               >
                                 Open in HubSpot
                               </a>
                             ) : (
-                              <span style={{ fontSize: '11px', color: '#94a3b8' }}>No HubSpot link</span>
+                              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>No HubSpot link</span>
                             )}
                             {row.hubspotContactId ? (
-                              <span style={{ fontSize: '10px', color: '#64748b' }}>ID: {row.hubspotContactId}</span>
+                              <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>ID: {row.hubspotContactId}</span>
                             ) : null}
-                            <span style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase' }}>
+                            <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>
                               {row.identityMappingSource === 'hubspot_call_activity' ? 'HubSpot Session' : (row.identityMappingSource || 'none')}
                             </span>
                             {row.identityMappingSource !== 'hubspot_call_activity' && (
-                              <span style={{ fontSize: '10px', color: '#64748b' }}>
+                              <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>
                                 Confidence: {row.identityMappingConfidence || 'Low'}
                               </span>
                             )}
@@ -3692,7 +3740,7 @@ const AttendanceDashboard = () => {
                     ))}
                     {selectedSessionDetail.attendeeRows.length === 0 && (
                       <tr>
-                        <td colSpan={7} style={{ padding: '14px', textAlign: 'center', fontSize: '13px', color: '#64748b' }}>
+                        <td colSpan={7} style={{ padding: '14px', textAlign: 'center', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
                           No attendees found for this session.
                         </td>
                       </tr>
