@@ -72,7 +72,7 @@ const AIAnalysisCard = ({ analysis }) => {
         </p>
         <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '8px' }}>
           {funnelRows.map((row) => (
-            <div key={row.key} style={{ backgroundColor: 'white', border: '1px solid #bae6fd', borderRadius: '10px', padding: '8px' }}>
+            <div key={row.key} style={{ backgroundColor: 'var(--color-card)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '8px' }}>
               <p style={{ margin: 0, fontSize: '12px', color: '#155e75' }}>{row.label}</p>
               <p style={{ margin: '4px 0 0 0', fontWeight: 700, color: '#0f172a' }}>{Math.round(row.value).toLocaleString()}</p>
               <p style={{ margin: '4px 0 0 0', fontSize: '11px', color: '#164e63' }}>
@@ -89,7 +89,7 @@ const AIAnalysisCard = ({ analysis }) => {
         </p>
         <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {recommendations.map((rec, index) => (
-            <div key={`${rec.title}-${index}`} style={{ backgroundColor: 'white', border: '1px solid #bae6fd', borderRadius: '10px', padding: '10px' }}>
+            <div key={`${rec.title}-${index}`} style={{ backgroundColor: 'var(--color-card)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px' }}>
               <p style={{ margin: 0, fontWeight: 700, color: '#0f172a' }}>{index + 1}. {rec.title}</p>
               <p style={{ margin: '4px 0 0 0', color: '#334155', fontSize: '13px' }}>{rec.reason}</p>
               <p style={{ margin: '4px 0 0 0', color: '#0e7490', fontSize: '12px', fontWeight: 600 }}>{rec.impact}</p>

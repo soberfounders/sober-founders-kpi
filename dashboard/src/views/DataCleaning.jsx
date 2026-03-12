@@ -611,7 +611,7 @@ export default function DataCleaning() {
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '16px', alignItems: 'center' }}>
                     {/* Candidate A */}
-                    <div style={{ backgroundColor: 'white', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ backgroundColor: 'var(--color-card)', backdropFilter: 'blur(12px)', padding: '12px', borderRadius: '10px', border: '1px solid var(--color-border)' }}>
                       <p style={{ fontWeight: 700, fontSize: '15px' }}>{review.candidate_a_name}</p>
                       <p style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>Existing Identity</p>
                     </div>
@@ -619,7 +619,7 @@ export default function DataCleaning() {
                     <div style={{ fontSize: '24px', color: '#94a3b8' }}>↔</div>
 
                     {/* Candidate B */}
-                    <div style={{ backgroundColor: 'white', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ backgroundColor: 'var(--color-card)', backdropFilter: 'blur(12px)', padding: '12px', borderRadius: '10px', border: '1px solid var(--color-border)' }}>
                       <p style={{ fontWeight: 700, fontSize: '15px' }}>{review.candidate_b_name}</p>
                       <p style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>New Participant</p>
                     </div>
@@ -873,7 +873,7 @@ export default function DataCleaning() {
           <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
-                <tr style={{ borderBottom: '2px solid #e2e8f0', position: 'sticky', top: 0, backgroundColor: 'white' }}>
+                <tr style={{ borderBottom: '2px solid var(--color-border)', position: 'sticky', top: 0, backgroundColor: 'var(--color-card)' }}>
                   <th style={{ textAlign: 'left', padding: '8px 12px', color: '#64748b', fontWeight: 600 }}>Name</th>
                   <th style={{ textAlign: 'left', padding: '8px 12px', color: '#64748b', fontWeight: 600 }}>Aliases</th>
                   <th style={{ textAlign: 'center', padding: '8px 12px', color: '#64748b', fontWeight: 600 }}>Visits</th>

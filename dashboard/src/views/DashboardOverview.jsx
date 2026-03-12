@@ -300,8 +300,8 @@ const KPI_CARD_DEFINITIONS = {
   },
 };
 
-const FREE_CARD_KEYS = ['freeMeetings', 'freeQualified', 'freeCpql', 'freeGreat', 'freeCpgl', 'freeInterviews'];
-const PHOENIX_CARD_KEYS = ['phoenixLeads', 'phoenixQualified', 'phoenixGreat', 'phoenixCpql', 'phoenixCpgl', 'phoenixInterviews'];
+const FREE_CARD_KEYS = ['freeQualified', 'freeCpql', 'freeGreat', 'freeCpgl', 'freeInterviews'];
+const PHOENIX_CARD_KEYS = ['phoenixQualified', 'phoenixGreat', 'phoenixCpql', 'phoenixCpgl', 'phoenixInterviews'];
 const ATTENDANCE_CARD_KEYS = ['attendanceNetNewTue', 'attendanceAvgVisitsTue', 'attendanceNetNewThu', 'attendanceAvgVisitsThu'];
 const DONATION_CARD_KEYS = ['donationsCount', 'donationsAmount'];
 const OPERATIONS_CARD_KEYS = ['operationsCompletedItems'];
@@ -1674,23 +1674,23 @@ function DashboardOverview() {
           <Bot size={17} />
           <h4 style={{ fontSize: '18px' }}>AI Summary</h4>
         </div>
-        <ul style={{ marginTop: '10px', listStyle: 'disc', paddingLeft: '18px', color: '#dbeafe', lineHeight: 1.6 }}>
+        <ul style={{ marginTop: '10px', listStyle: 'disc', paddingLeft: '18px', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
           <li>{aiNarrative.healthLine}</li>
           <li>{aiNarrative.bottleneckLine}</li>
           <li>{aiNarrative.trendLine}</li>
         </ul>
 
         {mustDoToday && (
-          <div style={{ marginTop: '14px', backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid #f59e0b', borderRadius: '12px', padding: '12px' }}>
-            <p style={{ fontSize: '12px', fontWeight: 800, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          <div style={{ marginTop: '14px', backgroundColor: 'var(--color-warning-bg)', border: '1px solid var(--color-warning)', borderRadius: '12px', padding: '12px' }}>
+            <p style={{ fontSize: '12px', fontWeight: 800, color: 'var(--color-warning)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Must Do Today
             </p>
-            <p style={{ marginTop: '4px', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
+            <p style={{ marginTop: '4px', fontSize: '16px', fontWeight: 800, color: 'var(--color-text-primary)' }}>
               {mustDoToday.section}: {mustDoToday.title}
             </p>
-            <p style={{ marginTop: '6px', fontSize: '13px', color: '#334155' }}>{mustDoToday.description}</p>
+            <p style={{ marginTop: '6px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>{mustDoToday.description}</p>
             {mustDoToday.definitionOfDone && (
-              <p style={{ marginTop: '6px', fontSize: '12px', fontWeight: 700, color: '#166534' }}>
+              <p style={{ marginTop: '6px', fontSize: '12px', fontWeight: 700, color: 'var(--color-success)' }}>
                 Finished looks like: {mustDoToday.definitionOfDone}
               </p>
             )}
@@ -1719,11 +1719,11 @@ function DashboardOverview() {
                   const feedback = recommendationFeedback[recommendation.id] || {};
                   const isDown = feedback.vote === 'down';
                   return (
-                    <div key={recommendation.id} style={{ border: '1px solid rgba(148,163,184,0.35)', borderRadius: '8px', padding: '9px', backgroundColor: 'rgba(255,255,255,0.96)' }}>
-                      <p style={{ fontWeight: 700, fontSize: '13px', color: '#0f172a' }}>{recommendation.title}</p>
-                      <p style={{ marginTop: '4px', color: '#334155', fontSize: '12px', lineHeight: 1.45 }}>{recommendation.description}</p>
+                    <div key={recommendation.id} style={{ border: '1px solid var(--color-border)', borderRadius: '8px', padding: '9px', backgroundColor: 'var(--color-surface-elevated)' }}>
+                      <p style={{ fontWeight: 700, fontSize: '13px', color: 'var(--color-text-primary)' }}>{recommendation.title}</p>
+                      <p style={{ marginTop: '4px', color: 'var(--color-text-secondary)', fontSize: '12px', lineHeight: 1.45 }}>{recommendation.description}</p>
                       {recommendation.definitionOfDone && (
-                        <p style={{ marginTop: '4px', color: '#166534', fontSize: '11px', fontWeight: 700, lineHeight: 1.4 }}>
+                        <p style={{ marginTop: '4px', color: 'var(--color-success)', fontSize: '11px', fontWeight: 700, lineHeight: 1.4 }}>
                           Finished looks like: {recommendation.definitionOfDone}
                         </p>
                       )}
@@ -1743,7 +1743,7 @@ function DashboardOverview() {
                           className="btn-glass"
                           aria-label="Add to Notion"
                           title="Add to Notion"
-                          style={{ padding: '6px 10px', fontSize: '12px', color: '#0f172a', borderColor: '#94a3b8' }}
+                          style={{ padding: '6px 10px', fontSize: '12px', color: 'var(--color-text-primary)', borderColor: 'var(--color-border)' }}
                           onClick={() => setNotionModal({ open: true, taskName: recommendation.taskName })}
                         >
                           <span
@@ -1766,7 +1766,7 @@ function DashboardOverview() {
                             />
                             <span
                               style={{
-                                color: '#111827',
+                                color: 'var(--color-text-primary)',
                                 display: 'inline-block',
                                 fontSize: '16px',
                                 lineHeight: 1,
@@ -1785,9 +1785,9 @@ function DashboardOverview() {
                             padding: '6px 8px',
                             fontSize: '16px',
                             lineHeight: 1,
-                            color: '#166534',
-                            borderColor: feedback.vote === 'up' ? '#16a34a' : '#86efac',
-                            backgroundColor: feedback.vote === 'up' ? '#dcfce7' : '#f0fdf4',
+                            color: 'var(--color-success)',
+                            borderColor: feedback.vote === 'up' ? 'var(--color-success)' : 'rgba(22, 163, 74, 0.3)',
+                            backgroundColor: feedback.vote === 'up' ? 'var(--color-success-bg)' : 'transparent',
                           }}
                           onClick={() => setRecommendationVote(recommendation.id, 'up')}
                         >
@@ -1801,15 +1801,15 @@ function DashboardOverview() {
                             padding: '6px 8px',
                             fontSize: '16px',
                             lineHeight: 1,
-                            color: '#b91c1c',
-                            borderColor: feedback.vote === 'down' ? '#dc2626' : '#fca5a5',
-                            backgroundColor: feedback.vote === 'down' ? '#fee2e2' : '#fef2f2',
+                            color: 'var(--color-danger)',
+                            borderColor: feedback.vote === 'down' ? 'var(--color-danger)' : 'rgba(220, 38, 38, 0.3)',
+                            backgroundColor: feedback.vote === 'down' ? 'var(--color-danger-bg)' : 'transparent',
                           }}
                           onClick={() => setRecommendationVote(recommendation.id, 'down')}
                         >
                           👎
                         </button>
-                        <span style={{ fontSize: '11px', color: state.status === 'error' ? '#b91c1c' : '#334155' }}>
+                        <span style={{ fontSize: '11px', color: state.status === 'error' ? 'var(--color-danger)' : 'var(--color-text-muted)' }}>
                           {state.message || 'Ready'}
                         </span>
                       </div>
@@ -1823,23 +1823,23 @@ function DashboardOverview() {
                               width: '100%',
                               minHeight: '64px',
                               borderRadius: '8px',
-                              border: '1px solid #cbd5e1',
+                              border: '1px solid var(--color-border)',
                               padding: '8px',
                               fontSize: '12px',
-                              color: '#0f172a',
-                              backgroundColor: '#fff',
+                              color: 'var(--color-text-primary)',
+                              backgroundColor: 'rgba(10, 15, 24, 0.6)',
                             }}
                           />
                           <button
                             type="button"
                             className="btn-glass"
-                            style={{ marginTop: '6px', fontSize: '12px', padding: '6px 10px', color: '#0f172a', borderColor: '#94a3b8' }}
+                            style={{ marginTop: '6px', fontSize: '12px', padding: '6px 10px', color: 'var(--color-text-primary)', borderColor: 'var(--color-border)' }}
                             onClick={() => saveDownvoteReason(recommendation.id)}
                           >
                             Save Feedback
                           </button>
                           {feedback.reason && (
-                            <p style={{ marginTop: '6px', fontSize: '11px', color: '#334155' }}>
+                            <p style={{ marginTop: '6px', fontSize: '11px', color: 'var(--color-text-secondary)' }}>
                               Saved feedback: {feedback.reason}
                             </p>
                           )}

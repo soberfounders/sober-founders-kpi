@@ -206,8 +206,8 @@ const fmt = {
 };
 
 // ─── Shared styles ────────────────────────────────────────────────────────────
-const card = { backgroundColor: '#fff', border: '1px solid var(--color-border)', borderRadius: '16px', padding: '20px' };
-const subCard = { backgroundColor: '#f8fafc', borderRadius: '10px', padding: '12px' };
+const card = { backgroundColor: 'var(--color-card)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: '1px solid var(--color-border)', borderRadius: '16px', padding: '20px' };
+const subCard = { backgroundColor: 'var(--color-surface-elevated)', borderRadius: '10px', padding: '12px' };
 
 const HEAR_ABOUT_CATEGORIES = [
   { key: 'meta', label: 'Meta (Facebook/Instagram)', color: '#2563eb' },
@@ -494,7 +494,7 @@ function ChangeBadge({ changePct, invertColor }) {
   const up = changePct >= 0;
   const better = invertColor ? !up : up;
   return (
-    <span style={{ fontSize: '11px', fontWeight: 600, color: better ? '#16a34a' : '#dc2626', marginLeft: '4px' }}>
+    <span style={{ fontSize: '11px', fontWeight: 600, color: better ? 'var(--color-success)' : 'var(--color-danger)', marginLeft: '4px' }}>
       {up ? '↑' : '↓'} {Math.abs(changePct * 100).toFixed(1)}%
     </span>
   );
@@ -503,7 +503,7 @@ function ChangeBadge({ changePct, invertColor }) {
 // ─── Loading skeleton ─────────────────────────────────────────────────────────
 function Skeleton({ h = '20px', w = '100%', mb = '0' }) {
   return (
-    <div style={{ height: h, width: w, backgroundColor: '#e2e8f0', borderRadius: '6px', marginBottom: mb, animation: 'pulse 1.5s infinite' }} />
+    <div style={{ height: h, width: w, backgroundColor: 'rgba(100, 116, 139, 0.2)', borderRadius: '6px', marginBottom: mb, animation: 'pulse 1.5s infinite' }} />
   );
 }
 
@@ -531,8 +531,8 @@ function MetricCell({ label, value, changePct, onClick, invertColor, formatFn = 
       onMouseEnter={e => { if (onClick) e.currentTarget.style.boxShadow = '0 0 0 2px #0f766e'; }}
       onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; }}
     >
-      <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 500 }}>{label}</p>
-      <p style={{ margin: '4px 0 0', fontWeight: 700, fontSize: '14px', color: '#0f172a' }}>
+      <p style={{ margin: 0, fontSize: '11px', color: 'var(--color-text-muted)', fontWeight: 500 }}>{label}</p>
+      <p style={{ margin: '4px 0 0', fontWeight: 700, fontSize: '14px', color: 'var(--color-text-primary)' }}>
         {formatFn(value)}
         {changePct !== undefined && <ChangeBadge changePct={changePct} invertColor={invertColor} />}
       </p>
@@ -545,23 +545,23 @@ function ExecutiveKpiCard({ label, value, note, changePct, format = 'count', inv
   return (
     <div
       style={{
-        background: 'linear-gradient(180deg,#ffffff 0%,#f8fafc 100%)',
-        border: '1px solid #e2e8f0',
+        background: 'linear-gradient(180deg, rgba(30, 45, 75, 0.8) 0%, rgba(15, 23, 42, 0.8) 100%)',
+        border: '1px solid var(--color-border)',
         borderRadius: '16px',
         padding: '16px',
-        boxShadow: '0 8px 24px rgba(15,23,42,0.06)',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
       }}
     >
-      <p style={{ margin: 0, fontSize: '11px', letterSpacing: '0.06em', textTransform: 'uppercase', color: '#475569', fontWeight: 700 }}>
+      <p style={{ margin: 0, fontSize: '11px', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-text-muted)', fontWeight: 700 }}>
         {label}
       </p>
-      <p style={{ margin: '10px 0 0', fontSize: '30px', lineHeight: 1.1, color: '#0f172a', fontWeight: 800 }}>
+      <p style={{ margin: '10px 0 0', fontSize: '30px', lineHeight: 1.1, color: 'var(--color-text-primary)', fontWeight: 800 }}>
         {formatter(value)}
         {(changePct !== null && changePct !== undefined) && <ChangeBadge changePct={changePct} invertColor={invertColor} />}
       </p>
       <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
         <span style={{ width: '10px', height: '10px', borderRadius: '999px', backgroundColor: color }} />
-        <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>{note}</p>
+        <p style={{ margin: 0, fontSize: '12px', color: 'var(--color-text-muted)' }}>{note}</p>
       </div>
     </div>
   );
@@ -575,17 +575,17 @@ function ProgressGapBar({ label, current, target, format = 'count', color = '#0f
   const gap = safeTarget !== null ? Math.max(0, safeTarget - safeCurrent) : null;
 
   return (
-    <div style={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px' }}>
+    <div style={{ backgroundColor: 'var(--color-card)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '12px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
-        <p style={{ margin: 0, fontSize: '12px', color: '#334155', fontWeight: 700 }}>{label}</p>
-        <p style={{ margin: 0, fontSize: '12px', color: '#475569' }}>
+        <p style={{ margin: 0, fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>{label}</p>
+        <p style={{ margin: 0, fontSize: '12px', color: 'var(--color-text-muted)' }}>
           Current {formatter(safeCurrent)}{safeTarget !== null ? ` / Target ${formatter(safeTarget)}` : ''}
         </p>
       </div>
-      <div style={{ marginTop: '8px', height: '10px', borderRadius: '999px', backgroundColor: '#e2e8f0', overflow: 'hidden' }}>
+      <div style={{ marginTop: '8px', height: '10px', borderRadius: '999px', backgroundColor: 'rgba(100, 116, 139, 0.2)', overflow: 'hidden' }}>
         <div style={{ width: `${pct || 0}%`, height: '100%', backgroundColor: color }} />
       </div>
-      <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#64748b' }}>
+      <p style={{ margin: '6px 0 0', fontSize: '11px', color: 'var(--color-text-muted)' }}>
         {gap === null ? 'No prior efficiency baseline in comparison window.' : gap > 0 ? `Gap: ${formatter(gap)}` : 'On or above target.'}
       </p>
     </div>
@@ -622,7 +622,7 @@ function CategoryRow({ cat, total }) {
 function MismatchWarning({ cat }) {
   if (!cat?.mismatch || !cat?.unmatched?.length) return null;
   return (
-    <div style={{ marginTop: '10px', backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '10px' }}>
+    <div style={{ marginTop: '10px', backgroundColor: 'var(--color-warning-bg)', border: '1px solid var(--color-warning)', borderRadius: '10px', padding: '10px' }}>
       <p style={{ margin: 0, fontWeight: 700, fontSize: '12px', color: '#9a3412' }}>
         ⚠ Categorization mismatch: Meta shows {cat.total} leads, {cat.categorizedTotal} matched in HubSpot
       </p>
@@ -658,7 +658,7 @@ function GroupPanel({ label, snap, prevSnap, onOpenModal }) {
 
   return (
     <div style={{ ...subCard, marginBottom: '12px' }}>
-      <p style={{ margin: '0 0 10px', fontSize: '13px', fontWeight: 700, color: '#334155' }}>{label}</p>
+      <p style={{ margin: '0 0 10px', fontSize: '13px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{label}</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: '8px' }}>
         <MetricCell label="Ad Spend" value={snap.spend} changePct={costDiff('spend')} invertColor={true} formatFn={fmt.currency} />
         <MetricCell label="Impressions" value={snap.impressions} changePct={diff('impressions')} formatFn={fmt.int} />
@@ -767,7 +767,7 @@ function AIInsightsPanel({ supabaseUrl, supabaseKey, groupedData }) {
   }, [groupedData, supabaseUrl, supabaseKey]);
 
   const AIPanel = ({ title, data, color }) => (
-    <div style={{ flex: 1, minWidth: '220px', backgroundColor: '#f8fafc', borderRadius: '12px', padding: '14px', border: `2px solid ${color}22` }}>
+    <div style={{ flex: 1, minWidth: '220px', backgroundColor: 'var(--color-surface-elevated)', borderRadius: '12px', padding: '14px', border: `2px solid ${color}22` }}>
       <p style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</p>
       {data ? (
         <>
@@ -790,7 +790,7 @@ function AIInsightsPanel({ supabaseUrl, supabaseKey, groupedData }) {
     <div style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
         <div>
-          <h3 style={{ margin: 0, fontSize: '18px', color: '#0f172a' }}>🤖 AI Manager Insights</h3>
+          <h3 style={{ margin: 0, fontSize: '18px', color: 'var(--color-text-primary)' }}>🤖 AI Manager Insights</h3>
           <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748b' }}>On-demand leads analysis. OpenAI and Gemini run through the Supabase Edge Function using server-side secrets.</p>
           <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#92400e', fontWeight: 600 }}>Recommended future: automatic weekly analysis (saved history). For now, run on demand only.</p>
         </div>

@@ -81,7 +81,7 @@ const SendToNotionModal = ({ isOpen, onClose, defaultTaskName = '', onSuccess })
         display: 'block',
         fontSize: '12px',
         fontWeight: 700,
-        color: '#334155',
+        color: 'var(--color-text-secondary)',
         marginBottom: '6px',
     };
 
@@ -89,12 +89,12 @@ const SendToNotionModal = ({ isOpen, onClose, defaultTaskName = '', onSuccess })
         width: '100%',
         padding: '10px 12px',
         borderRadius: '10px',
-        border: '1px solid #e2e8f0',
+        border: '1px solid var(--color-border)',
         fontSize: '14px',
         outline: 'none',
         transition: 'border-color 0.2s',
-        backgroundColor: '#fff',
-        color: '#0f172a',
+        backgroundColor: 'var(--color-input-surface)',
+        color: 'var(--color-text-primary)',
         boxSizing: 'border-box',
     };
 
@@ -113,7 +113,7 @@ const SendToNotionModal = ({ isOpen, onClose, defaultTaskName = '', onSuccess })
                 left: 0,
                 right: 0,
                 bottom: 0,
-                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                backgroundColor: 'var(--color-overlay-strong)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -124,7 +124,10 @@ const SendToNotionModal = ({ isOpen, onClose, defaultTaskName = '', onSuccess })
             <div
                 onClick={(e) => e.stopPropagation()}
                 style={{
-                    backgroundColor: '#fff',
+                    backgroundColor: 'var(--color-card)',
+                    border: '1px solid var(--color-border)',
+                    backdropFilter: 'blur(12px)',
+                    WebkitBackdropFilter: 'blur(12px)',
                     borderRadius: '16px',
                     width: '100%',
                     maxWidth: '480px',
@@ -136,7 +139,7 @@ const SendToNotionModal = ({ isOpen, onClose, defaultTaskName = '', onSuccess })
                 {/* Header */}
                 <div style={{
                     padding: '20px 24px 16px',
-                    borderBottom: '1px solid #e2e8f0',
+                    borderBottom: '1px solid var(--color-border)',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
@@ -146,21 +149,21 @@ const SendToNotionModal = ({ isOpen, onClose, defaultTaskName = '', onSuccess })
                             width: '32px',
                             height: '32px',
                             borderRadius: '8px',
-                            backgroundColor: '#0f172a',
+                            backgroundColor: 'var(--color-surface-elevated)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            color: '#fff',
+                            color: 'var(--color-text-primary)',
                             fontSize: '16px',
                             fontWeight: 800,
                         }}>
                             N
                         </div>
                         <div>
-                            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>
+                            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
                                 Send to Notion
                             </h3>
-                            <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#64748b' }}>
+                            <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
                                 Create a task in your To-Do list
                             </p>
                         </div>
@@ -172,7 +175,7 @@ const SendToNotionModal = ({ isOpen, onClose, defaultTaskName = '', onSuccess })
                             border: 'none',
                             cursor: 'pointer',
                             padding: '4px',
-                            color: '#94a3b8',
+                            color: 'var(--color-text-secondary)',
                             borderRadius: '6px',
                             display: 'flex',
                             alignItems: 'center',
@@ -257,8 +260,8 @@ const SendToNotionModal = ({ isOpen, onClose, defaultTaskName = '', onSuccess })
                             padding: '12px',
                             borderRadius: '10px',
                             border: 'none',
-                            backgroundColor: done ? '#16a34a' : '#0f172a',
-                            color: '#fff',
+                            backgroundColor: done ? 'var(--color-success)' : 'var(--color-surface-elevated)',
+                            color: 'var(--color-text-primary)',
                             fontSize: '14px',
                             fontWeight: 700,
                             cursor: loading || done ? 'default' : 'pointer',

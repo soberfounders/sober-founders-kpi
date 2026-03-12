@@ -64,7 +64,9 @@ const AddToNotionButton = ({ taskTitle: propTitle, priority, onSuccess, variant 
                             style={{
                                 padding: '6px 12px',
                                 borderRadius: '8px',
-                                border: '1px solid #e2e8f0',
+                                border: '1px solid var(--color-border)',
+                                backgroundColor: 'var(--color-input-surface)',
+                                color: 'var(--color-text-primary)',
                                 fontSize: '13px',
                                 outline: 'none',
                                 minWidth: '200px',
@@ -76,7 +78,7 @@ const AddToNotionButton = ({ taskTitle: propTitle, priority, onSuccess, variant 
                             style={{
                                 display: 'flex', alignItems: 'center', gap: '4px',
                                 padding: '6px 14px', borderRadius: '8px',
-                                backgroundColor: '#1a5632', color: 'white',
+                                backgroundColor: 'var(--color-success)', color: 'var(--color-bg-base)',
                                 border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: '600',
                                 opacity: (loading || !inlineTitle.trim()) ? 0.6 : 1,
                             }}
@@ -88,8 +90,8 @@ const AddToNotionButton = ({ taskTitle: propTitle, priority, onSuccess, variant 
                             onClick={() => { setShowInput(false); setInlineTitle(''); }}
                             style={{
                                 padding: '6px 10px', borderRadius: '8px',
-                                backgroundColor: '#f1f5f9', color: '#64748b',
-                                border: 'none', cursor: 'pointer', fontSize: '12px',
+                                backgroundColor: 'var(--color-surface-elevated)', color: 'var(--color-text-secondary)',
+                                border: '1px solid var(--color-border)', cursor: 'pointer', fontSize: '12px',
                             }}
                         >
                             Cancel
@@ -101,8 +103,8 @@ const AddToNotionButton = ({ taskTitle: propTitle, priority, onSuccess, variant 
                         style={{
                             display: 'flex', alignItems: 'center', gap: '6px',
                             padding: '6px 14px', borderRadius: '8px',
-                            backgroundColor: '#f0fdf4', color: '#1a5632',
-                            border: '1px solid #86efac', cursor: 'pointer',
+                            backgroundColor: 'var(--color-success-bg)', color: 'var(--color-success)',
+                            border: '1px solid var(--color-success)', cursor: 'pointer',
                             fontSize: '13px', fontWeight: '600',
                             transition: 'all 0.2s',
                             ...customStyle,
@@ -126,9 +128,9 @@ const AddToNotionButton = ({ taskTitle: propTitle, priority, onSuccess, variant 
                 display: 'inline-flex', alignItems: 'center', gap: '6px',
                 padding: variant === 'icon' ? '4px 8px' : '6px 14px',
                 borderRadius: '8px',
-                backgroundColor: done ? '#dcfce7' : '#f0fdf4',
-                color: done ? '#16a34a' : '#1a5632',
-                border: `1px solid ${done ? '#86efac' : '#bbf7d0'}`,
+                backgroundColor: done ? 'var(--color-success-bg)' : 'var(--color-surface-elevated)',
+                color: done ? 'var(--color-success)' : 'var(--color-text-primary)',
+                border: `1px solid ${done ? 'var(--color-success)' : 'var(--color-border)'}`,
                 cursor: loading ? 'wait' : 'pointer',
                 fontSize: '13px', fontWeight: '600',
                 transition: 'all 0.2s',

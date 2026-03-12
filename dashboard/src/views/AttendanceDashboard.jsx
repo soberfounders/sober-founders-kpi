@@ -1872,10 +1872,10 @@ function buildAttendanceHubspotResolver({ rawHubspot = [] }) {
 }
 
 const cardStyle = {
-  backgroundColor: 'white',
-  // Explicit dark text ensures readability on white cards even in the app's
-  // dark glassmorphism theme, where the body's CSS default is near-white text.
-  color: '#0f172a',
+  backgroundColor: 'var(--color-card)',
+  backdropFilter: 'blur(12px)',
+  WebkitBackdropFilter: 'blur(12px)',
+  color: 'var(--color-text-primary)',
   border: '1px solid var(--color-border)',
   borderRadius: '16px',
   padding: '20px',
@@ -2995,7 +2995,7 @@ const AttendanceDashboard = () => {
     if (active && payload && payload.length) {
       const d = payload[0].payload;
       return (
-        <div style={{ backgroundColor: 'white', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
+        <div style={{ backgroundColor: 'var(--color-card)', backdropFilter: 'blur(12px)', padding: '12px', border: '1px solid var(--color-border)', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
           <p style={{ fontWeight: 700, marginBottom: '6px', color: '#0f172a' }}>{label}</p>
           <div style={{ display: 'flex', gap: '12px', fontSize: '13px' }}>
             <span style={{ color: '#22c55e', fontWeight: 600 }}>New: {d.newCount}</span>
@@ -3047,7 +3047,7 @@ const AttendanceDashboard = () => {
     if (!active || !payload || payload.length === 0) return null;
     const row = payload[0]?.payload || {};
     return (
-      <div style={{ backgroundColor: 'white', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
+      <div style={{ backgroundColor: 'var(--color-card)', backdropFilter: 'blur(12px)', padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
         <p style={{ fontWeight: 700, marginBottom: '6px' }}>{label}</p>
         <p style={{ fontSize: '13px', color: '#0f172a', margin: 0 }}>Avg Visits: <strong>{row.avgVisits ?? '-'}</strong></p>
         <p style={{ fontSize: '12px', color: '#475569', margin: '4px 0 0 0' }}>MoM: {formatChangePct(row.momChange)}</p>
@@ -3064,7 +3064,7 @@ const AttendanceDashboard = () => {
     const thu = row.thursdayHoverAvg ?? row.thursdayAvg ?? '-';
 
     return (
-      <div style={{ backgroundColor: 'white', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
+      <div style={{ backgroundColor: 'var(--color-card)', backdropFilter: 'blur(12px)', padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
         <p style={{ fontWeight: 700, marginBottom: '6px' }}>{fullDate}</p>
         <p style={{ fontSize: '13px', color: '#0ea5e9', margin: 0 }}>Tuesday Avg Visits: <strong>{tue}</strong></p>
         <p style={{ fontSize: '13px', color: '#6366f1', margin: '4px 0 0 0' }}>Thursday Avg Visits: <strong>{thu}</strong></p>
@@ -3307,11 +3307,11 @@ const AttendanceDashboard = () => {
                             gap: '4px',
                             padding: '4px 10px',
                             borderRadius: '999px',
-                            backgroundColor: 'white',
+                            backgroundColor: 'var(--color-surface-elevated)',
                             border: `1px solid ${isTuesday ? '#bbf7d0' : '#fdba74'}`,
                             fontSize: '12px',
                             fontWeight: 600,
-                            color: '#334155',
+                            color: 'var(--color-text-primary)',
                           }}
                         >
                           {name}
@@ -3467,7 +3467,7 @@ const AttendanceDashboard = () => {
             {isMobile ? (
               <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {selectedSessionDetail.attendeeRows.map((row) => (
-                  <div key={row.identityKey || row.name} style={{ border: '1px solid #e2e8f0', borderRadius: '12px', padding: '10px', backgroundColor: 'white' }}>
+                  <div key={row.identityKey || row.name} style={{ border: '1px solid var(--color-border)', borderRadius: '12px', padding: '10px', backgroundColor: 'var(--color-card)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>{row.displayName || row.name}</span>
                       <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: '999px', fontSize: '10px', fontWeight: 700, backgroundColor: row.isNew ? '#dcfce7' : '#e2e8f0', color: row.isNew ? '#166534' : '#334155', textTransform: 'uppercase' }}>
@@ -3858,7 +3858,7 @@ const AttendanceDashboard = () => {
                   })}
                 </div>
 
-                <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', backgroundColor: 'white' }}>
+                <div style={{ border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px', backgroundColor: 'var(--color-card)' }}>
                   {selectedRepeaterDetail.selectedSession && (
                     <>
                       <p style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
@@ -4195,7 +4195,7 @@ const AttendanceDashboard = () => {
         </p>
 
         <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.2fr 1fr', gap: '12px' }}>
-          <div style={{ border: '1px solid #e9d5ff', borderRadius: '12px', backgroundColor: 'white', padding: '12px' }}>
+          <div style={{ border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '12px', backgroundColor: 'var(--color-card)', padding: '12px' }}>
             <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', color: '#7c3aed' }}>Session Summary</p>
             <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {attendanceAiInsight.summaryBullets.map((bullet, idx) => (
@@ -4220,7 +4220,7 @@ const AttendanceDashboard = () => {
           </div>
         </div>
 
-        <div style={{ marginTop: '12px', border: '1px solid #ddd6fe', borderRadius: '12px', backgroundColor: 'white', padding: '12px' }}>
+        <div style={{ marginTop: '12px', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '12px', backgroundColor: 'var(--color-card)', padding: '12px' }}>
           <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', color: '#6d28d9' }}>Opportunities To Raise Repeat Attendance</p>
           <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {attendanceAiInsight.opportunities.map((item, idx) => (

@@ -261,9 +261,9 @@ function AIBriefingDashboard() {
                                             </div>
                                             <button
                                                 onClick={() => setNotionModal({ open: true, taskName: item.text })}
-                                                style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '600', backgroundColor: 'white', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)', cursor: 'pointer', transition: 'all 0.15s' }}
-                                                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#f1f5f9'; }}
-                                                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'white'; }}
+                                                style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '600', backgroundColor: 'var(--color-card)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)', cursor: 'pointer', transition: 'all 0.15s' }}
+                                                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-card-hover)'; }}
+                                                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-card)'; }}
                                             >
                                                 <Send size={12} /> Notion
                                             </button>
@@ -287,7 +287,7 @@ function AIBriefingDashboard() {
             <div style={baseCardStyle}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
                     <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--color-text-primary)' }}>Briefing History</h3>
-                    <button onClick={loadHistory} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: '500', backgroundColor: '#f1f5f9', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer' }}>
+                    <button onClick={loadHistory} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: '500', backgroundColor: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', cursor: 'pointer' }}>
                         <RefreshCw size={12} /> Refresh
                     </button>
                 </div>
@@ -305,9 +305,9 @@ function AIBriefingDashboard() {
                                 <div key={item.id}>
                                     <button
                                         onClick={() => { setExpandedHistory(isExpanded ? null : item.id); if (!isExpanded) viewHistorical(item); }}
-                                        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--color-border)', backgroundColor: isExpanded ? '#f8fafc' : 'white', cursor: 'pointer', transition: 'background-color 0.15s', textAlign: 'left' }}
-                                        onMouseEnter={(e) => { if (!isExpanded) e.currentTarget.style.backgroundColor = '#fafafa'; }}
-                                        onMouseLeave={(e) => { if (!isExpanded) e.currentTarget.style.backgroundColor = 'white'; }}
+                                        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--color-border)', backgroundColor: isExpanded ? 'var(--color-surface-elevated)' : 'var(--color-card)', cursor: 'pointer', transition: 'background-color 0.15s', textAlign: 'left' }}
+                                        onMouseEnter={(e) => { if (!isExpanded) e.currentTarget.style.backgroundColor = 'var(--color-card-hover)'; }}
+                                        onMouseLeave={(e) => { if (!isExpanded) e.currentTarget.style.backgroundColor = 'var(--color-card)'; }}
                                     >
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                             <span style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.3px', color: typeColor(item.briefing_type), backgroundColor: `${typeColor(item.briefing_type)}15`, padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
@@ -319,7 +319,7 @@ function AIBriefingDashboard() {
                                         </div>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                             {item.metadata?.snapshot_summary?.trend_health_pct != null && (
-                                                <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: 10, background: '#f0fdf4', color: '#16a34a', fontWeight: 600 }}>
+                                                <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: 10, background: 'var(--color-success-bg)', color: 'var(--color-success)', fontWeight: 600 }}>
                                                     {item.metadata.snapshot_summary.trend_health_pct}% health
                                                 </span>
                                             )}
@@ -345,7 +345,7 @@ function AIBriefingDashboard() {
             `}</style>
 
             {notionModal.open && (
-                <SendToNotionModal isOpen={notionModal.open} onClose={() => setNotionModal({ open: false, taskName: '' })} taskName={notionModal.taskName} />
+                <SendToNotionModal isOpen={notionModal.open} onClose={() => setNotionModal({ open: false, taskName: '' })} defaultTaskName={notionModal.taskName} />
             )}
         </div>
     );

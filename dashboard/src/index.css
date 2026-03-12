@@ -24,6 +24,21 @@
   --color-border-glow: rgba(3, 218, 198, 0.2);
   --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
   
+  /* Status / semantic colors (dark-bg safe) */
+  --color-success: #16a34a;
+  --color-success-bg: rgba(22, 163, 74, 0.15);
+  --color-danger: #dc2626;
+  --color-danger-bg: rgba(220, 38, 38, 0.15);
+  --color-warning: #f59e0b;
+  --color-warning-bg: rgba(245, 158, 11, 0.15);
+  --color-info: #3b82f6;
+  --color-info-bg: rgba(59, 130, 246, 0.15);
+  --color-surface-elevated: rgba(30, 45, 75, 0.6);
+  --color-neutral: #94a3b8;
+  --color-neutral-bg: rgba(148, 163, 184, 0.15);
+  --color-overlay-strong: rgba(10, 15, 24, 0.78);
+  --color-input-surface: rgba(10, 15, 24, 0.6);
+  
   /* Fonts */
   --font-main: 'Outfit', 'Inter', sans-serif;
   --font-logo: 'DM Serif Display', serif;

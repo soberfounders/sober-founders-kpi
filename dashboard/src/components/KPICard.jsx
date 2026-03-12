@@ -5,10 +5,11 @@ import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 
 // Single source of truth for better/worse/neutral semantic colors.
 // All three rendering blocks (trend badge, previousTone, comparisonRows) use these.
+// Backgrounds use translucent overlays compatible with the dark glassmorphism theme.
 const TONE = {
-  better: { text: '#16a34a', bg: '#ecfdf5' },
-  worse:  { text: '#dc2626', bg: '#fef2f2' },
-  neutral: { text: '#64748b', bg: '#f1f5f9' },
+  better: { text: 'var(--color-success)', bg: 'var(--color-success-bg)' },
+  worse:  { text: 'var(--color-danger)', bg: 'var(--color-danger-bg)' },
+  neutral: { text: 'var(--color-neutral)', bg: 'var(--color-neutral-bg)' },
 };
 
 const KPICard = ({
@@ -36,13 +37,11 @@ const KPICard = ({
 
   return (
     <motion.div
-      whileHover={{ y: -4, shadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)' }}
+      whileHover={{ y: -4, shadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3)' }}
       style={{
-        // Intentionally white: card text uses dark colors (#334155, #0f172a) that
-        // require a light background. KPICard is a light-surface component placed
-        // inside dark glass-panel sections to create a card-in-dark-panel effect.
-        // If you need a transparent/dark card, pass a wrapping container instead.
-        backgroundColor: 'white',
+        backgroundColor: 'var(--color-card)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
         borderRadius: '16px',
         padding: '24px',
         border: '1px solid var(--color-border)',
@@ -57,10 +56,10 @@ const KPICard = ({
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <p style={{ fontSize: '14px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>
+            <p style={{ fontSize: '14px', fontWeight: '700', color: 'var(--color-text-secondary)', marginBottom: '8px' }}>
               {title}
             </p>
-            <h3 style={{ fontSize: '31px', color: '#0f172a', fontWeight: 800 }}>{value}</h3>
+            <h3 style={{ fontSize: '31px', color: 'var(--color-text-primary)', fontWeight: 800 }}>{value}</h3>
           </div>
           {trend && (
             <div style={{
@@ -85,7 +84,7 @@ const KPICard = ({
           </p>
         )}
         {subvalue && (
-          <p style={{ fontSize: '12px', color: '#475569', marginTop: '4px', lineHeight: 1.3 }}>
+          <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '4px', lineHeight: 1.3 }}>
             {subvalue}
           </p>
         )}
@@ -95,7 +94,7 @@ const KPICard = ({
               const toneColor = (TONE[row?.tone] ?? TONE.neutral).text;
               return (
                 <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '11px', lineHeight: 1.3 }}>
-                  <span style={{ color: '#475569', fontWeight: 600 }}>{row.label}</span>
+                  <span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>{row.label}</span>
                   <span style={{ color: toneColor, fontWeight: 700 }}>{row.display}</span>
                 </div>
               );
