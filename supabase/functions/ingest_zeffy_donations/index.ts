@@ -149,7 +149,13 @@ function mapPayloadToRow(payload: any) {
   const campaignName = compactWhitespace(firstPresent(payload, ["campaign_name", "campaign", "fund_name", "data.campaign_name"]));
   const formName = compactWhitespace(firstPresent(payload, ["form_name", "form", "donation_form_name", "data.form_name"]));
   const paymentMethod = compactWhitespace(firstPresent(payload, ["payment_method", "method", "card_brand", "data.payment_method"]));
-  const isRecurring = parseBool(firstPresent(payload, ["is_recurring", "recurring", "subscription", "donation_type"]));
+  // is_recurring / recurring / subscription are explicit boolean-style fields — trust parseBool directly.
+  // donation_type is a Zeffy text field (e.g. "One time", "Monthly", "Recurring commitment") —
+  // only treat it as recurring when it explicitly signals a subscription, not for one-time forms.
+  const explicitRecurring = firstPresent(payload, ["is_recurring", "recurring", "subscription"]);
+  const donationTypeRaw = String(firstPresent(payload, ["donation_type"]) || "").trim().toLowerCase();
+  const donationTypeIsRecurring = ["monthly", "recurring commitment", "subscription"].includes(donationTypeRaw);
+  const isRecurring = explicitRecurring !== null ? parseBool(explicitRecurring) : donationTypeIsRecurring;
   const currency = compactWhitespace(firstPresent(payload, ["currency", "amount_currency"])) || "USD";
   const donorAddress = firstPresent(payload, ["address", "donor_address", "supporter.address", "customer.address"]) || {};
   const donorCity = compactWhitespace(firstPresent(payload, ["city", "supporter.city", "customer.city", "address.city"]));
