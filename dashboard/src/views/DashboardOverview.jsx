@@ -347,6 +347,27 @@ async function fetchHubspotContactsWithSchemaFallback(startKey) {
   const attemptedMissingColumns = new Set();
   let selectedColumns = [...HUBSPOT_CONTACT_SELECT_COLUMNS];
 
+  // Probe with wildcard once so missing legacy columns can be removed up front
+  // instead of triggering repeated 400 retries.
+  const schemaProbe = await supabase
+    .from('raw_hubspot_contacts')
+    .select('*')
+    .limit(1);
+  if (!schemaProbe.error && Array.isArray(schemaProbe.data) && schemaProbe.data.length > 0) {
+    const availableColumns = new Set(Object.keys(schemaProbe.data[0] || {}));
+    const missingColumns = selectedColumns.filter((columnName) => !availableColumns.has(columnName));
+    const resolvedColumns = selectedColumns.filter((columnName) => availableColumns.has(columnName));
+    if (resolvedColumns.length > 0) {
+      selectedColumns = resolvedColumns;
+    }
+    missingColumns.forEach((missingColumn) => {
+      attemptedMissingColumns.add(missingColumn);
+      if (!HUBSPOT_OPTIONAL_COLUMNS.has(missingColumn)) {
+        schemaWarnings.push(`HubSpot contacts query removed missing column \`${missingColumn}\` to continue loading.`);
+      }
+    });
+  }
+
   while (selectedColumns.length > 0) {
     const result = await supabase
       .from('raw_hubspot_contacts')
@@ -368,9 +389,21 @@ async function fetchHubspotContactsWithSchemaFallback(startKey) {
     }
   }
 
+  const wildcardResult = await supabase
+    .from('raw_hubspot_contacts')
+    .select('*')
+    .gte('createdate', `${startKey}T00:00:00.000Z`)
+    .order('createdate', { ascending: true });
+  if (!wildcardResult.error) {
+    schemaWarnings.push(
+      'HubSpot contacts query fell back to `select(*)` because preferred projection failed. Run schema alignment to restore lean projection safely.',
+    );
+    return { ...wildcardResult, schemaWarnings };
+  }
+
   return {
     data: [],
-    error: { message: 'HubSpot contacts query failed after removing all selectable columns.' },
+    error: { message: wildcardResult.error?.message || 'HubSpot contacts query failed after removing all selectable columns.' },
     schemaWarnings,
   };
 }

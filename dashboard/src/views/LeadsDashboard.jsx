@@ -118,6 +118,29 @@ async function fetchLeadsHubspotContactsWithSchemaFallback({ attributionStartKey
   const attemptedMissingColumns = new Set();
   let lastError = null;
 
+  // Probe once with wildcard so we can pre-trim unavailable columns and avoid
+  // repeated 400 retries on each missing legacy field.
+  const schemaProbe = await supabase
+    .from('raw_hubspot_contacts')
+    .select('*')
+    .limit(1);
+  if (!schemaProbe.error && Array.isArray(schemaProbe.data) && schemaProbe.data.length > 0) {
+    const availableColumns = new Set(Object.keys(schemaProbe.data[0] || {}));
+    const missingColumns = selectedColumns.filter((columnName) => !availableColumns.has(columnName));
+    const resolvedColumns = selectedColumns.filter((columnName) => availableColumns.has(columnName));
+    if (resolvedColumns.length > 0) {
+      selectedColumns = resolvedColumns;
+    }
+    missingColumns.forEach((missingColumn) => {
+      attemptedMissingColumns.add(missingColumn);
+      if (!LEADS_HUBSPOT_CONTACT_SILENT_FALLBACK_COLUMNS.has(missingColumn)) {
+        schemaWarnings.push(
+          `Leads HubSpot contacts query auto-recovered from missing optional column \`${missingColumn}\`.`,
+        );
+      }
+    });
+  }
+
   while (selectedColumns.length > 0) {
     const response = await supabase
       .from('raw_hubspot_contacts')
