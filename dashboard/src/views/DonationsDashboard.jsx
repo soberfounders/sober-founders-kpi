@@ -649,7 +649,9 @@ function DonationsDashboard() {
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <p style={{ fontWeight: 700 }}>{formatCurrency(row.amount)}</p>
-                  <p style={{ marginTop: '2px', fontSize: '11px', color: 'var(--color-text-secondary)' }}>Recurring: {row.is_recurring ? 'Yes' : 'No'}</p>
+                  {!!row.is_recurring && (
+                    <span style={{ display: 'inline-block', marginTop: '4px', padding: '2px 8px', borderRadius: '999px', fontSize: '11px', fontWeight: 600, background: 'rgba(3,218,198,0.15)', color: 'var(--color-dark-green)', border: '1px solid rgba(3,218,198,0.35)' }}>Recurring</span>
+                  )}
                 </div>
               </div>
             </div>
