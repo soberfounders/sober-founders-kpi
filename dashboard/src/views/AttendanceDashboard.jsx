@@ -896,6 +896,14 @@ function listMissingWeekKeys(sessions = [], dayType = 'Tuesday') {
   return missing;
 }
 
+function scheduledDateKeyFromWeekKey(weekKey, dayType = 'Tuesday') {
+  const weekStart = safeDate(`${weekKey}T00:00:00.000Z`);
+  if (!weekStart) return '';
+  const dayOffset = dayType === 'Thursday' ? 3 : 1;
+  const sessionDate = new Date(weekStart.getTime() + (dayOffset * 86400000));
+  return sessionDate.toISOString().slice(0, 10);
+}
+
 /** Export cleaned attendance data as CSV */
 function exportAttendanceCSV(sessions) {
   const rows = [['canonical_name', 'session_date', 'group', 'is_net_new']];
@@ -1972,15 +1980,18 @@ const AttendanceDashboard = () => {
     const thuMissing = analytics?.scheduleCoverage?.missingThursdayWeeks || [];
     if (!tueMissing.length && !thuMissing.length) return '';
 
-    const fmtExamples = (rows) => rows
+    const fmtExamples = (rows, dayType) => rows
       .slice(0, 3)
-      .map((weekKey) => formatDateMMDDYY(weekKey))
+      .map((weekKey) => {
+        const dateKey = scheduledDateKeyFromWeekKey(weekKey, dayType);
+        return formatDateMMDDYY(dateKey || weekKey);
+      })
       .join(', ');
     const tueText = tueMissing.length
-      ? `Tuesday missing weeks: ${tueMissing.length}${fmtExamples(tueMissing) ? ` (${fmtExamples(tueMissing)})` : ''}`
+      ? `Tuesday missing weeks: ${tueMissing.length}${fmtExamples(tueMissing, 'Tuesday') ? ` (meeting dates: ${fmtExamples(tueMissing, 'Tuesday')})` : ''}`
       : '';
     const thuText = thuMissing.length
-      ? `Thursday missing weeks: ${thuMissing.length}${fmtExamples(thuMissing) ? ` (${fmtExamples(thuMissing)})` : ''}`
+      ? `Thursday missing weeks: ${thuMissing.length}${fmtExamples(thuMissing, 'Thursday') ? ` (meeting dates: ${fmtExamples(thuMissing, 'Thursday')})` : ''}`
       : '';
     return [tueText, thuText].filter(Boolean).join(' | ');
   }, [analytics]);
