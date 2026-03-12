@@ -46,8 +46,23 @@ const GROUP_CALL_ET_MINUTES = {
 const GROUP_CALL_TIME_TOLERANCE_MINUTES = 120;
 const MIN_GROUP_ATTENDEES = 3;
 const EXPECTED_ZERO_GROUP_SESSION_KEYS = new Set(['Thursday|2025-12-25']);
+const SCHEDULE_GAP_AUDIT_LOOKBACK_WEEKS = 8;
 const GROUP_CALL_TIME_FALLBACK_TOLERANCE_MINUTES = 240;
 const GROUP_CALL_MIN_ATTENDEE_SIGNAL = 5;
+const EXPECTED_ZERO_WEEK_KEYS_BY_DAY = (() => {
+  const byDay = {
+    Tuesday: new Set(),
+    Thursday: new Set(),
+  };
+  EXPECTED_ZERO_GROUP_SESSION_KEYS.forEach((key) => {
+    const [type, dateLabel] = String(key || '').split('|');
+    if (!type || !dateLabel || !byDay[type]) return;
+    const d = safeDate(`${dateLabel}T00:00:00.000Z`);
+    const weekKey = d ? etWeekStartKey(d) : '';
+    if (weekKey) byDay[type].add(weekKey);
+  });
+  return byDay;
+})();
 
 function normalizeName(name = '') {
   return name.toLowerCase().trim().replace(/\s+/g, ' ');
@@ -877,7 +892,11 @@ function pickStrongerSessionCandidate(existing, candidate) {
   return existing;
 }
 
-function listMissingWeekKeys(sessions = [], dayType = 'Tuesday') {
+function listMissingWeekKeys(
+  sessions = [],
+  dayType = 'Tuesday',
+  { anchorWeekKey = '', lookbackWeeks = SCHEDULE_GAP_AUDIT_LOOKBACK_WEEKS } = {},
+) {
   const weekKeys = (sessions || [])
     .filter((s) => s?.type === dayType && s?.weekKey)
     .map((s) => s.weekKey)
@@ -885,17 +904,22 @@ function listMissingWeekKeys(sessions = [], dayType = 'Tuesday') {
   if (!weekKeys.length) return [];
 
   const uniqueWeekKeys = Array.from(new Set(weekKeys));
-  const first = safeDate(`${uniqueWeekKeys[0]}T00:00:00.000Z`);
-  const last = safeDate(`${uniqueWeekKeys[uniqueWeekKeys.length - 1]}T00:00:00.000Z`);
-  if (!first || !last) return [];
+  const firstTrackedWeekKey = uniqueWeekKeys[0];
+  const anchorKey = anchorWeekKey || uniqueWeekKeys[uniqueWeekKeys.length - 1];
+  const anchorDate = safeDate(`${anchorKey}T00:00:00.000Z`);
+  if (!anchorDate) return [];
+
+  const expectedWeeks = [];
+  for (let i = 0; i < lookbackWeeks; i += 1) {
+    const key = new Date(anchorDate.getTime() - (i * 7 * 86400000)).toISOString().slice(0, 10);
+    if (key >= firstTrackedWeekKey) expectedWeeks.push(key);
+  }
 
   const existing = new Set(uniqueWeekKeys);
-  const missing = [];
-  for (let cursor = new Date(first); cursor <= last; cursor = new Date(cursor.getTime() + (7 * 86400000))) {
-    const key = cursor.toISOString().slice(0, 10);
-    if (!existing.has(key)) missing.push(key);
-  }
-  return missing;
+  const knownExpectedZeroWeeks = EXPECTED_ZERO_WEEK_KEYS_BY_DAY[dayType] || new Set();
+  return expectedWeeks
+    .filter((key) => !existing.has(key) && !knownExpectedZeroWeeks.has(key))
+    .sort();
 }
 
 function scheduledDateKeyFromWeekKey(weekKey, dayType = 'Tuesday') {
@@ -1685,8 +1709,19 @@ function computeAnalytics(
     total: s.derivedCount,
     newNames: s.newNames
   }));
-  const missingTuesdayWeeks = listMissingWeekKeys(sessions, 'Tuesday');
-  const missingThursdayWeeks = listMissingWeekKeys(sessions, 'Thursday');
+  const allObservedWeekKeys = sessions
+    .map((s) => s?.weekKey || etWeekStartKey(s?.date || s?.dateLabel))
+    .filter(Boolean)
+    .sort();
+  const latestObservedWeekKey = allObservedWeekKeys.length
+    ? allObservedWeekKeys[allObservedWeekKeys.length - 1]
+    : '';
+  const missingTuesdayWeeks = listMissingWeekKeys(sessions, 'Tuesday', {
+    anchorWeekKey: latestObservedWeekKey,
+  });
+  const missingThursdayWeeks = listMissingWeekKeys(sessions, 'Thursday', {
+    anchorWeekKey: latestObservedWeekKey,
+  });
 
   // Welcome New: keep top-of-page focused to 2 Tuesday + 2 Thursday sessions.
   const welcomeNewSessionsTue = sessions
@@ -1757,6 +1792,8 @@ function computeAnalytics(
     welcomeNewSessionsThu,
     sessionsMissingMarkedAttendees,
     scheduleCoverage: {
+      lookbackWeeks: SCHEDULE_GAP_AUDIT_LOOKBACK_WEEKS,
+      anchorWeekKey: latestObservedWeekKey,
       missingTuesdayWeeks,
       missingThursdayWeeks,
     },
@@ -1980,6 +2017,7 @@ const AttendanceDashboard = () => {
   const scheduleCoverageWarning = useMemo(() => {
     const tueMissing = analytics?.scheduleCoverage?.missingTuesdayWeeks || [];
     const thuMissing = analytics?.scheduleCoverage?.missingThursdayWeeks || [];
+    const lookbackWeeks = Number(analytics?.scheduleCoverage?.lookbackWeeks || SCHEDULE_GAP_AUDIT_LOOKBACK_WEEKS);
     if (!tueMissing.length && !thuMissing.length) return '';
 
     const fmtExamples = (rows, dayType) => rows
@@ -1995,7 +2033,7 @@ const AttendanceDashboard = () => {
     const thuText = thuMissing.length
       ? `Thursday missing weeks: ${thuMissing.length}${fmtExamples(thuMissing, 'Thursday') ? ` (meeting dates: ${fmtExamples(thuMissing, 'Thursday')})` : ''}`
       : '';
-    return [tueText, thuText].filter(Boolean).join(' | ');
+    return `Recent ${lookbackWeeks}-week audit: ${[tueText, thuText].filter(Boolean).join(' | ')}`;
   }, [analytics]);
 
   useEffect(() => {
@@ -3427,7 +3465,14 @@ const AttendanceDashboard = () => {
       </div>
 
       {/* Show-Up Drilldown */}
-      <div style={{ ...cardStyle, borderLeft: '5px solid var(--color-info)' }}>
+      <div
+        style={{
+          ...cardStyle,
+          borderLeft: '5px solid var(--color-info)',
+          backgroundColor: 'var(--color-surface-contrast)',
+          color: 'var(--color-text-primary)',
+        }}
+      >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <div>
             <h3 style={{ fontSize: '18px' }}>Show-Up Drilldown</h3>
@@ -3493,7 +3538,7 @@ const AttendanceDashboard = () => {
             )}
 
             <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
-              <div style={{ backgroundColor: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px 12px' }}>
+              <div style={{ backgroundColor: 'var(--color-surface-contrast-alt)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px 12px' }}>
                 <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Total Show-Ups</p>
                 <p style={{ marginTop: '4px', fontSize: '22px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{selectedSessionDetail.session.derivedCount}</p>
               </div>
@@ -3501,7 +3546,7 @@ const AttendanceDashboard = () => {
                 <p style={{ fontSize: '12px', color: 'var(--color-success)', textTransform: 'uppercase' }}>Net New</p>
                 <p style={{ marginTop: '4px', fontSize: '22px', fontWeight: 700, color: 'var(--color-success)' }}>{selectedSessionDetail.session.newCount}</p>
               </div>
-              <div style={{ backgroundColor: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px 12px' }}>
+              <div style={{ backgroundColor: 'var(--color-surface-contrast-alt)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px 12px' }}>
                 <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Returning</p>
                 <p style={{ marginTop: '4px', fontSize: '22px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{selectedSessionDetail.session.repeatCount}</p>
               </div>
@@ -3510,7 +3555,7 @@ const AttendanceDashboard = () => {
             {isMobile ? (
               <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {selectedSessionDetail.attendeeRows.map((row) => (
-                  <div key={row.identityKey || row.name} style={{ border: '1px solid var(--color-border)', borderRadius: '12px', padding: '10px', backgroundColor: 'var(--color-card)' }}>
+                  <div key={row.identityKey || row.name} style={{ border: '1px solid var(--color-border)', borderRadius: '12px', padding: '10px', backgroundColor: 'var(--color-surface-contrast-alt)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '13px', color: 'var(--color-text-primary)', fontWeight: 700 }}>{row.displayName || row.name}</span>
                       <span
@@ -3563,7 +3608,7 @@ const AttendanceDashboard = () => {
                               disabled={!!mergingAliasKey}
                               style={{
                                 border: '1px solid var(--color-border)',
-                                backgroundColor: 'var(--color-overlay-strong)',
+                                backgroundColor: 'var(--color-surface-contrast)',
                                 color: 'var(--color-text-primary)',
                                 borderRadius: '999px',
                                 fontSize: '10px',
@@ -3582,16 +3627,16 @@ const AttendanceDashboard = () => {
                   </div>
                 ))}
                 {selectedSessionDetail.attendeeRows.length === 0 && (
-                  <div style={{ padding: '14px', textAlign: 'center', fontSize: '13px', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)', borderRadius: '10px', backgroundColor: 'var(--color-surface-elevated)' }}>
+                  <div style={{ padding: '14px', textAlign: 'center', fontSize: '13px', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)', borderRadius: '10px', backgroundColor: 'var(--color-surface-contrast-alt)' }}>
                     No attendees found for this session.
                   </div>
                 )}
               </div>
             ) : (
-              <div style={{ marginTop: '14px', border: '1px solid var(--color-border)', borderRadius: '12px', overflowX: 'auto', backgroundColor: 'var(--color-surface-elevated)' }}>
+              <div style={{ marginTop: '14px', border: '1px solid var(--color-border)', borderRadius: '12px', overflowX: 'auto', backgroundColor: 'var(--color-surface-contrast-alt)' }}>
                 <table style={{ width: '100%', minWidth: '1320px', borderCollapse: 'collapse', color: 'var(--color-text-primary)' }}>
                   <thead>
-                    <tr style={{ backgroundColor: 'var(--color-overlay-strong)', borderBottom: '1px solid var(--color-border)' }}>
+                    <tr style={{ backgroundColor: 'var(--color-surface-contrast-header)', borderBottom: '1px solid var(--color-border)' }}>
                       <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Display Name</th>
                       <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Revenue</th>
                       <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Sobriety Date</th>
@@ -3607,7 +3652,7 @@ const AttendanceDashboard = () => {
                         key={row.identityKey || row.name}
                         style={{
                           borderBottom: '1px solid var(--color-border)',
-                          backgroundColor: rowIndex % 2 === 0 ? 'var(--color-surface-elevated)' : 'var(--color-card)',
+                          backgroundColor: rowIndex % 2 === 0 ? 'var(--color-surface-contrast-alt)' : 'var(--color-surface-contrast)',
                         }}
                       >
                         <td style={{ padding: '10px' }}>
@@ -3648,7 +3693,7 @@ const AttendanceDashboard = () => {
                                       disabled={!!mergingAliasKey}
                                       style={{
                                         border: '1px solid var(--color-border)',
-                                        backgroundColor: 'var(--color-overlay-strong)',
+                                        backgroundColor: 'var(--color-surface-contrast-alt)',
                                         color: 'var(--color-text-primary)',
                                         borderRadius: '999px',
                                         fontSize: '10px',

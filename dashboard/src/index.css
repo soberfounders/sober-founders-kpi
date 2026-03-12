@@ -38,6 +38,9 @@
   --color-neutral-bg: rgba(148, 163, 184, 0.15);
   --color-overlay-strong: rgba(10, 15, 24, 0.78);
   --color-input-surface: rgba(10, 15, 24, 0.6);
+  --color-surface-contrast: rgba(8, 14, 26, 0.96);
+  --color-surface-contrast-alt: rgba(14, 24, 42, 0.96);
+  --color-surface-contrast-header: rgba(20, 34, 58, 0.96);
   
   /* Fonts */
   --font-main: 'Outfit', 'Inter', sans-serif;
