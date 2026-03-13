@@ -293,7 +293,7 @@ const EmailDashboard = () => {
             {renderTrendChart(data.tuesday, 'var(--color-dark-green)')}
           </div>
 
-          <h3 style={{ fontSize: '15px', fontWeight: '700', marginTop: '8px' }}>Last 8 Sends</h3>
+          <h3 style={{ fontSize: '15px', fontWeight: '700', marginTop: '8px' }}>Last 8 {data.tuesday[0]?.campaign_group || 'Tuesday'} Sends</h3>
           {renderMetricTable(data.tuesday)}
         </div>
 
@@ -320,7 +320,7 @@ const EmailDashboard = () => {
             {renderTrendChart(data.thursday, '#2563eb')}
           </div>
 
-          <h3 style={{ fontSize: '15px', fontWeight: '700', marginTop: '8px' }}>Last 8 Sends</h3>
+          <h3 style={{ fontSize: '15px', fontWeight: '700', marginTop: '8px' }}>Last 8 {data.thursday[0]?.campaign_group || 'Thursday'} Sends</h3>
           {renderMetricTable(data.thursday)}
         </div>
 
