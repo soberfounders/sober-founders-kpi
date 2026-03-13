@@ -1,6 +1,14 @@
 import { config as loadDotEnv } from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
+const configDir = path.dirname(fileURLToPath(import.meta.url));
+const packageEnvPath = path.resolve(configDir, "../../.env");
+
+// Always load the Slack bot package env first so root-level scripts do not
+// accidentally read unrelated repo .env values.
+loadDotEnv({ path: packageEnvPath });
 loadDotEnv();
 
 const toBoolean = (value: string | undefined, fallback: boolean) => {
@@ -38,6 +46,8 @@ const envSchema = z.object({
   CONFIRMATION_TTL_MINUTES: z.string().optional(),
   HIGH_IMPACT_EXECUTIVE_CHANNELS: z.string().optional(),
   SLACK_EXECUTIVE_CHANNELS: z.string().optional(),
+  FREE_CHAT_CHANNEL_IDS: z.string().optional(),
+  SLACK_FREE_CHAT_CHANNEL_IDS: z.string().optional(),
   DEFAULT_SUMMARY_CHANNEL: z.string().optional(),
 });
 
@@ -50,6 +60,7 @@ if (!parsed.success) {
 const data = parsed.data;
 
 const executiveChannelCsv = data.HIGH_IMPACT_EXECUTIVE_CHANNELS || data.SLACK_EXECUTIVE_CHANNELS || "";
+const freeChatChannelCsv = data.FREE_CHAT_CHANNEL_IDS || data.SLACK_FREE_CHAT_CHANNEL_IDS || "";
 
 export const env = {
   appEnv: data.APP_ENV,
@@ -70,6 +81,10 @@ export const env = {
   rateLimitMaxRequests: toInt(data.RATE_LIMIT_MAX_REQUESTS, 5, 1, 100),
   confirmationTtlMinutes: toInt(data.CONFIRMATION_TTL_MINUTES, 15, 1, 240),
   executiveChannels: executiveChannelCsv
+    .split(",")
+    .map((channel) => channel.trim())
+    .filter(Boolean),
+  freeChatChannelIds: freeChatChannelCsv
     .split(",")
     .map((channel) => channel.trim())
     .filter(Boolean),

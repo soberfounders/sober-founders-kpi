@@ -4,6 +4,7 @@ Production-ready Slack worker for Sober Founders KPI chat, summaries, follow-ups
 
 ## What This Service Does
 - Supports Slack App Home, DM, channel `@mentions`, and `/kpi` slash command.
+- Supports allowlisted channel free chat (plain messages without `@mention`).
 - Answers KPI questions using allowlisted tools only (no model SQL access).
 - Creates follow-ups/tasks and posts summaries with RBAC + confirmation gates.
 - Logs all action outcomes to audit storage.
@@ -91,6 +92,7 @@ Optional but recommended:
 - `SLACK_SIGNING_SECRET`
 - `MASTER_SYNC_EDGE_INVOKE_KEY`
 - `SLACK_EXECUTIVE_CHANNELS`
+- `FREE_CHAT_CHANNEL_IDS`
 - scheduler/rate-limit tuning vars
 
 ## Slack App Setup Checklist
@@ -122,6 +124,8 @@ Add bot events:
 - `app_home_opened`
 - `app_mention`
 - `message.im`
+- `message.channels` (for free-chat public channels)
+- `message.groups` (for free-chat private channels)
 
 ## Slash Command Registration
 Register one command:
@@ -142,7 +146,7 @@ Subcommands handled in parser:
 4. Start worker:
    - `npm run slack:dev`
 5. In Slack:
-   - DM bot, mention in a channel thread, or run `/kpi`.
+   - DM bot, mention in a channel thread, run `/kpi`, or type directly in an allowlisted free-chat channel.
 
 ## Railway Deployment
 1. Create Railway service with root directory `slack-bot/`.

@@ -4,6 +4,7 @@ import { logger } from "../observability/logger.js";
 import { registerBaseEventHandlers } from "./handlers/events.js";
 import { registerMentionHandler } from "./handlers/mentions.js";
 import { registerDmHandler } from "./handlers/dm.js";
+import { registerChannelFreeChatHandler } from "./handlers/channelFreeChat.js";
 import { registerHomeHandler } from "./handlers/home.js";
 import { registerInteractionHandlers } from "./handlers/interactions.js";
 import { registerKpiCommand } from "./commands/kpi.js";
@@ -29,6 +30,7 @@ export const createSlackApp = (): App => {
   registerHomeHandler(app);
   registerMentionHandler(app);
   registerDmHandler(app);
+  registerChannelFreeChatHandler(app);
   registerInteractionHandlers(app);
   registerKpiCommand(app);
 
