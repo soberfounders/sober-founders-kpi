@@ -2004,6 +2004,7 @@ const AttendanceDashboard = () => {
   const [aliasWarning, setAliasWarning] = useState('');
   const [aliases, setAliases] = useState([]);
   const [rawHubspotContacts, setRawHubspotContacts] = useState([]);
+  const [donationRows, setDonationRows] = useState([]);
   // Attendance source inputs: HubSpot activity rows + HubSpot contact associations.
   const [hubspotActivities, setHubspotActivities] = useState([]);
   const [hubspotContactAssocs, setHubspotContactAssocs] = useState([]);
@@ -2249,12 +2250,79 @@ const AttendanceDashboard = () => {
         || a.displayName.localeCompare(b.displayName)
       );
 
+    // ── Match donations to attendees within 24 hours of session start ──
+    const sessionStartMs = session.date?.getTime?.() || 0;
+    const DONATION_WINDOW_MS = 24 * 60 * 60 * 1000;
+    const windowDonations = (donationRows || []).filter((d) => {
+      const donatedMs = new Date(d.donated_at).getTime();
+      return donatedMs >= sessionStartMs && donatedMs < sessionStartMs + DONATION_WINDOW_MS;
+    });
+
+    // Build attendee email sets for matching (primary + hs_additional_emails)
+    const attendeeEmailIndex = new Map(); // email → row index
+    const attendeeNameIndex = new Map(); // normalized name → row index
+    attendeeRows.forEach((row, idx) => {
+      // Primary email
+      const primary = normalizeEmail(row.hubspotEmail);
+      if (primary && primary !== 'not found') attendeeEmailIndex.set(primary, idx);
+      // Additional emails from HubSpot contact
+      const contactId = Number(row.hubspotContactId);
+      if (Number.isFinite(contactId) && contactId > 0) {
+        const contact = hubspotContactMap.get(contactId);
+        const additional = String(contact?.hs_additional_emails || '');
+        if (additional) {
+          additional.split(';').forEach((e) => {
+            const norm = normalizeEmail(e);
+            if (norm) attendeeEmailIndex.set(norm, idx);
+          });
+        }
+      }
+      // Name index
+      const normName = normalizeName(row.displayName || row.name || '');
+      if (normName) attendeeNameIndex.set(normName, idx);
+    });
+
+    // Match each donation to an attendee
+    const donationsByAttendeeIdx = new Map(); // idx → [donation, ...]
+    const matchedDonations = [];
+    windowDonations.forEach((d) => {
+      const donorEmail = normalizeEmail(d.donor_email);
+      const donorName = normalizeName(d.donor_name || '');
+      let matchIdx = donorEmail ? attendeeEmailIndex.get(donorEmail) : undefined;
+      if (matchIdx === undefined && donorName) matchIdx = attendeeNameIndex.get(donorName);
+      if (matchIdx !== undefined) {
+        if (!donationsByAttendeeIdx.has(matchIdx)) donationsByAttendeeIdx.set(matchIdx, []);
+        donationsByAttendeeIdx.get(matchIdx).push(d);
+        matchedDonations.push(d);
+      }
+    });
+
+    // Annotate attendee rows with donation info
+    attendeeRows.forEach((row, idx) => {
+      const donations = donationsByAttendeeIdx.get(idx) || [];
+      row.sessionDonations = donations;
+      row.donated = donations.length > 0;
+      row.donatedRecurring = donations.some((d) => !!d.is_recurring);
+      row.donationAmount = donations.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+    });
+
+    // Session-level donation summary
+    const donationSummary = {
+      count: matchedDonations.length,
+      totalAmount: matchedDonations.reduce((sum, d) => sum + (Number(d.amount) || 0), 0),
+      oneTimeAmount: matchedDonations.filter((d) => !d.is_recurring).reduce((sum, d) => sum + (Number(d.amount) || 0), 0),
+      recurringAmount: matchedDonations.filter((d) => !!d.is_recurring).reduce((sum, d) => sum + (Number(d.amount) || 0), 0),
+      oneTimeCount: matchedDonations.filter((d) => !d.is_recurring).length,
+      recurringCount: matchedDonations.filter((d) => !!d.is_recurring).length,
+    };
+
     return {
       session,
       attendeeRows,
+      donationSummary,
       hasTargetDate: session.dateLabel === '2026-02-19',
     };
-  }, [analytics, selectedSessionKey, attendanceHubspotResolver, hubspotContactMap]);
+  }, [analytics, selectedSessionKey, attendanceHubspotResolver, hubspotContactMap, donationRows]);
 
   const selectedRepeaterDetail = useMemo(() => {
     if (!analytics?.sessions?.length || !selectedRepeaterName) return null;
@@ -2904,6 +2972,17 @@ const AttendanceDashboard = () => {
     if (identityWarnings.length > 0) {
       appendIdentityWarnings(identityWarnings);
     }
+
+    // ── Load Zeffy donation transactions for session-level donation matching ──
+    const donationsResult = await selectAllRows((from, to) => (
+      supabase
+        .from('donation_transactions_unified')
+        .select('donor_name,donor_email,amount,donated_at,is_recurring,status')
+        .gte('donated_at', identityStartIso)
+        .order('donated_at', { ascending: false })
+        .range(from, to)
+    ), { pageSize: 1000, maxPages: 20 });
+    setDonationRows(donationsResult.data || []);
 
     setAliases(aliasResult.aliases || []);
     setLoading(false);
@@ -3602,7 +3681,7 @@ const AttendanceDashboard = () => {
               </div>
             )}
 
-            <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
+            <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
               <div style={{ backgroundColor: 'var(--color-surface-contrast-alt)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px 12px' }}>
                 <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Total Show-Ups</p>
                 <p style={{ marginTop: '4px', fontSize: '22px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{selectedSessionDetail.session.derivedCount}</p>
@@ -3614,6 +3693,24 @@ const AttendanceDashboard = () => {
               <div style={{ backgroundColor: 'var(--color-surface-contrast-alt)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px 12px' }}>
                 <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Returning</p>
                 <p style={{ marginTop: '4px', fontSize: '22px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{selectedSessionDetail.session.repeatCount}</p>
+              </div>
+              <div style={{ backgroundColor: 'rgba(251, 191, 36, 0.08)', border: '1px solid rgba(251, 191, 36, 0.3)', borderRadius: '10px', padding: '10px 12px' }}>
+                <p style={{ fontSize: '12px', color: '#fbbf24', textTransform: 'uppercase' }}>Donations</p>
+                <p style={{ marginTop: '4px', fontSize: '22px', fontWeight: 700, color: '#fbbf24' }}>{selectedSessionDetail.donationSummary?.count || 0}</p>
+              </div>
+              <div style={{ backgroundColor: 'rgba(251, 191, 36, 0.08)', border: '1px solid rgba(251, 191, 36, 0.3)', borderRadius: '10px', padding: '10px 12px' }}>
+                <p style={{ fontSize: '12px', color: '#fbbf24', textTransform: 'uppercase' }}>Donation Amount</p>
+                <p style={{ marginTop: '4px', fontSize: '22px', fontWeight: 700, color: '#fbbf24' }}>${selectedSessionDetail.donationSummary?.totalAmount?.toLocaleString() || '0'}</p>
+                {(selectedSessionDetail.donationSummary?.totalAmount > 0) && (
+                  <div style={{ marginTop: '4px', display: 'flex', gap: '8px', fontSize: '11px' }}>
+                    {selectedSessionDetail.donationSummary.oneTimeAmount > 0 && (
+                      <span style={{ color: 'var(--color-text-secondary)' }}>One-Time: ${selectedSessionDetail.donationSummary.oneTimeAmount.toLocaleString()}</span>
+                    )}
+                    {selectedSessionDetail.donationSummary.recurringAmount > 0 && (
+                      <span style={{ color: 'var(--color-text-secondary)' }}>Monthly: ${selectedSessionDetail.donationSummary.recurringAmount.toLocaleString()}</span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -3638,6 +3735,23 @@ const AttendanceDashboard = () => {
                       >
                         {row.isNew ? 'Net New' : 'Returning'}
                       </span>
+                      {row.donated && (
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '2px 8px',
+                            borderRadius: '999px',
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            backgroundColor: 'rgba(251, 191, 36, 0.15)',
+                            color: '#fbbf24',
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          {row.donatedRecurring ? 'Donated Monthly' : 'Donated'}
+                        </span>
+                      )}
                     </div>
 
                     <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
@@ -3739,6 +3853,23 @@ const AttendanceDashboard = () => {
                               >
                                 {row.isNew ? 'Net New' : 'Returning'}
                               </span>
+                              {row.donated && (
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    padding: '2px 8px',
+                                    borderRadius: '999px',
+                                    fontSize: '10px',
+                                    fontWeight: 700,
+                                    backgroundColor: 'rgba(251, 191, 36, 0.15)',
+                                    color: '#fbbf24',
+                                    textTransform: 'uppercase',
+                                  }}
+                                >
+                                  {row.donatedRecurring ? 'Donated Monthly' : 'Donated'}
+                                </span>
+                              )}
                             </div>
                             {normalizeName(row.displayName || '') !== normalizeName(row.name || '') && (
                               <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Attendance row name: {row.name}</span>
