@@ -240,7 +240,7 @@ const KPI_CARD_DEFINITIONS = {
     format: 'decimal',
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'sessions',
-    note: 'Cumulative all-time Tuesday visits / unique Tuesday attendees',
+    note: 'Rolling 90-day Tuesday visits / unique Tuesday attendees',
     color: '#38bdf8',
   },
   attendanceNetNewThu: {
@@ -262,7 +262,7 @@ const KPI_CARD_DEFINITIONS = {
     format: 'decimal',
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'sessions',
-    note: 'Cumulative all-time Thursday visits / unique Thursday attendees',
+    note: 'Rolling 90-day Thursday visits / unique Thursday attendees',
     color: '#818cf8',
   },
   donationsCount: {
@@ -703,13 +703,7 @@ function aggregateCompletedItems(rows, window) {
 }
 
 function buildAttendanceSnapshots(sessions, currentWindow, previousWindow) {
-  // Cumulative counters across ALL sessions (matches AttendanceDashboard logic).
-  // Net-new is still scoped to a window, but avg visits is cumulative all-time
-  // (total visits / unique people) so it matches the Attendance page numbers.
-  const cumulative = {
-    Tuesday: { visits: 0, unique: new Set() },
-    Thursday: { visits: 0, unique: new Set() },
-  };
+  const ROLLING_WINDOW_DAYS = 90;
 
   const initWindowState = () => ({
     Tuesday: { netNew: 0 },
@@ -723,17 +717,34 @@ function buildAttendanceSnapshots(sessions, currentWindow, previousWindow) {
   // Track first-seen across all time for net-new detection
   const seen = { Tuesday: new Set(), Thursday: new Set() };
 
+  // Find latest session date to anchor the rolling window
+  let latestDateMs = 0;
+  sessions.forEach((session) => {
+    const ts = new Date(session.dateKey + 'T00:00:00Z').getTime();
+    if (ts > latestDateMs) latestDateMs = ts;
+  });
+  const cutoffMs = latestDateMs - ROLLING_WINDOW_DAYS * 86400000;
+
+  // Rolling 90-day window counters for avg visits
+  const rolling = {
+    Tuesday: { visits: 0, unique: new Set() },
+    Thursday: { visits: 0, unique: new Set() },
+  };
+
   sessions.forEach((session) => {
     const day = session.dayType;
-    if (!cumulative[day]) return;
+    if (!rolling[day]) return;
     const isCurrent = dateInRange(session.dateKey, currentWindow.start, currentWindow.end);
     const isPrevious = dateInRange(session.dateKey, previousWindow.start, previousWindow.end);
     const bucketKey = isCurrent ? 'current' : (isPrevious ? 'previous' : null);
+    const sessionMs = new Date(session.dateKey + 'T00:00:00Z').getTime();
 
     session.attendees.forEach((personKey) => {
-      // Always accumulate into cumulative totals
-      cumulative[day].visits += 1;
-      cumulative[day].unique.add(personKey);
+      // Rolling 90-day window for avg visits
+      if (sessionMs >= cutoffMs) {
+        rolling[day].visits += 1;
+        rolling[day].unique.add(personKey);
+      }
 
       const isNetNew = !seen[day].has(personKey);
       if (bucketKey && isNetNew) {
@@ -743,16 +754,15 @@ function buildAttendanceSnapshots(sessions, currentWindow, previousWindow) {
     });
   });
 
-  // Avg visits = cumulative all-time visits / cumulative unique people
-  // (mirrors AttendanceDashboard.computeAnalytics groupStats logic)
-  const cumulativeAvg = (day) =>
-    cumulative[day].unique.size > 0 ? cumulative[day].visits / cumulative[day].unique.size : 0;
+  // Avg visits = rolling 90-day visits / unique people in that window
+  const rollingAvg = (day) =>
+    rolling[day].unique.size > 0 ? rolling[day].visits / rolling[day].unique.size : 0;
 
   const toSnapshot = (bucket) => ({
     netNewTue: bucket.Tuesday.netNew,
-    avgVisitsTue: cumulativeAvg('Tuesday'),
+    avgVisitsTue: rollingAvg('Tuesday'),
     netNewThu: bucket.Thursday.netNew,
-    avgVisitsThu: cumulativeAvg('Thursday'),
+    avgVisitsThu: rollingAvg('Thursday'),
   });
 
   return {
@@ -1297,7 +1307,6 @@ function DashboardOverview() {
     adsRows: [],
     contacts: [],
     activities: [],
-    zoomRows: [],
     donationRows: [],
     todoRows: [],
   });
@@ -1328,7 +1337,6 @@ function DashboardOverview() {
       adsResponse,
       contactsResponse,
       activitiesResponse,
-      zoomResponse,
       donationsResponse,
       todosResponse,
     ] = await Promise.all([
@@ -1343,12 +1351,6 @@ function DashboardOverview() {
         .select('hubspot_activity_id,activity_type,hs_timestamp,created_at_hubspot,title,body_preview,metadata')
         .or(`hs_timestamp.gte.${startKey}T00:00:00.000Z,created_at_hubspot.gte.${startKey}T00:00:00.000Z`)
         .order('hs_timestamp', { ascending: true }),
-      supabase
-        .from('kpi_metrics')
-        .select('metric_date,metadata')
-        .eq('metric_name', 'Zoom Meeting Attendees')
-        .gte('metric_date', startKey)
-        .order('metric_date', { ascending: true }),
       supabase
         .from('donation_transactions_unified')
         .select('amount,status,donated_at')
@@ -1378,9 +1380,6 @@ function DashboardOverview() {
     if (activitiesResponse.error) {
       nextWarnings.push(`Interviews feed unavailable: ${activitiesResponse.error.message}`);
     }
-    if (zoomResponse.error) {
-      nextWarnings.push(`Attendance feed unavailable: ${zoomResponse.error.message}`);
-    }
     if (donationsResponse.error) {
       nextWarnings.push(`Donations feed unavailable: ${donationsResponse.error.message}`);
     }
@@ -1393,7 +1392,6 @@ function DashboardOverview() {
       adsRows: adsResponse.data || [],
       contacts: contactsResponse.data || [],
       activities: activitiesResponse.data || [],
-      zoomRows: zoomResponse.data || [],
       donationRows: donationsResponse.data || [],
       todoRows: todosResponse.data || [],
     });

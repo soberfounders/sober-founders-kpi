@@ -1112,30 +1112,37 @@ function buildMonthlyAverageSeries(sessions = [], groupType = 'Tuesday') {
     return { series: [], summary: null };
   }
 
+  const ROLLING_WINDOW_MS = 90 * 86400000;
   let sessionIdx = 0;
-  let cumulativeVisits = 0;
-  const cumulativePeople = new Set();
   const series = [];
 
   while (cursor.getTime() <= endMonth.getTime()) {
     while (sessionIdx < groupSessions.length && groupSessions[sessionIdx].date.getTime() < cursor.getTime()) {
-      const session = groupSessions[sessionIdx];
-      cumulativeVisits += Number(session.derivedCount || 0);
-      (session.attendees || []).forEach((name) => {
-        const key = normalizeName(name);
-        if (key) cumulativePeople.add(key);
-      });
       sessionIdx += 1;
     }
 
-    const uniqueCount = cumulativePeople.size;
-    const avgVisits = uniqueCount > 0 ? cumulativeVisits / uniqueCount : 0;
+    // Rolling 90-day window: only count sessions in [cursor - 90d, cursor)
+    const cutoffMs = cursor.getTime() - ROLLING_WINDOW_MS;
+    let windowVisits = 0;
+    const windowPeople = new Set();
+    for (let i = 0; i < sessionIdx; i++) {
+      if (groupSessions[i].date.getTime() >= cutoffMs) {
+        windowVisits += Number(groupSessions[i].derivedCount || 0);
+        (groupSessions[i].attendees || []).forEach((name) => {
+          const key = normalizeName(name);
+          if (key) windowPeople.add(key);
+        });
+      }
+    }
+
+    const uniqueCount = windowPeople.size;
+    const avgVisits = uniqueCount > 0 ? windowVisits / uniqueCount : 0;
 
     series.push({
       monthKey: monthKeyUTC(cursor),
       monthLabel: formatMonthLabelUTC(cursor),
       avgVisits: Number(avgVisits.toFixed(2)),
-      totalVisits: cumulativeVisits,
+      totalVisits: windowVisits,
       uniquePeople: uniqueCount,
       momChange: null,
       yoyChange: null,
@@ -1541,9 +1548,10 @@ function computeAnalytics(
   // 2. Identify New vs Repeat — SEPARATELY per day
   const seenTuesday = new Set();
   const seenThursday = new Set();
+  const ROLLING_WINDOW_MS = 90 * 86400000;
   const groupStats = {
-    Tuesday: { visits: 0, unique: new Set(), trend: [] },
-    Thursday: { visits: 0, unique: new Set(), trend: [] }
+    Tuesday: { sessionHistory: [], trend: [] },
+    Thursday: { sessionHistory: [], trend: [] }
   };
 
   sessions = sessions.map(session => {
@@ -1568,20 +1576,36 @@ function computeAnalytics(
     const newCount = newNames.length;
     const repeatCount = Math.max(Number(session.derivedCount || 0) - newCount, 0);
 
-    // Update Group Running Stats
+    // Update Group Running Stats (rolling 90-day window)
     const gs = groupStats[session.type];
     if (gs) {
-      gs.visits += session.derivedCount;
+      const attendeeKeys = [];
       attendeeEntries.forEach((attendee) => {
         const displayName = String(attendee?.name || '').trim();
         if (!displayName) return;
         const identityKey = attendee?.identityKey || buildAttendanceIdentityKey(displayName, attendee, aliasMap);
         if (!identityKey) return;
-        gs.unique.add(identityKey);
+        attendeeKeys.push(identityKey);
+      });
+      gs.sessionHistory.push({
+        dateMs: session.date.getTime(),
+        derivedCount: session.derivedCount,
+        attendeeKeys,
       });
 
-      const uniqueCount = gs.unique.size;
-      const avg = uniqueCount > 0 ? gs.visits / uniqueCount : 0;
+      // Compute rolling 90-day window average
+      const cutoffMs = session.date.getTime() - ROLLING_WINDOW_MS;
+      let windowVisits = 0;
+      const windowUnique = new Set();
+      for (const hist of gs.sessionHistory) {
+        if (hist.dateMs >= cutoffMs) {
+          windowVisits += hist.derivedCount;
+          hist.attendeeKeys.forEach((k) => windowUnique.add(k));
+        }
+      }
+
+      const uniqueCount = windowUnique.size;
+      const avg = uniqueCount > 0 ? windowVisits / uniqueCount : 0;
 
       gs.trend.push({
         date: session.dateFormatted,
@@ -3749,7 +3773,7 @@ const AttendanceDashboard = () => {
                             textTransform: 'uppercase',
                           }}
                         >
-                          {row.donatedRecurring ? 'Donated Monthly' : 'Donated'}
+                          {row.donatedRecurring ? `Donated Monthly $${row.donationAmount}` : `Donated $${row.donationAmount}`}
                         </span>
                       )}
                     </div>
@@ -3867,7 +3891,7 @@ const AttendanceDashboard = () => {
                                     textTransform: 'uppercase',
                                   }}
                                 >
-                                  {row.donatedRecurring ? 'Donated Monthly' : 'Donated'}
+                                  {row.donatedRecurring ? `Donated Monthly $${row.donationAmount}` : `Donated $${row.donationAmount}`}
                                 </span>
                               )}
                             </div>
@@ -3996,7 +4020,7 @@ const AttendanceDashboard = () => {
       <div style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
           <TrendingUp size={17} color="#2563eb" />
-          <h3 style={{ fontSize: '18px' }}>Average Visits per Person (Trend)</h3>
+          <h3 style={{ fontSize: '18px' }}>Avg Visits per Person – Rolling 90 Days</h3>
           <span style={{ fontSize: '12px', color: '#64748b', marginLeft: 'auto' }}>Unified timeline by actual meeting date</span>
         </div>
         <div style={{ height: '260px' }}>
@@ -4016,13 +4040,13 @@ const AttendanceDashboard = () => {
 
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
         <MonthlyAverageCard
-          title="Tuesday Monthly Avg Visits (MoM / YoY)"
+          title="Tuesday Avg Visits – Rolling 90d (MoM / YoY)"
           color="#0ea5e9"
           series={analytics.monthlyAvgTrendTue}
           summary={analytics.monthlyAvgSummaryTue}
         />
         <MonthlyAverageCard
-          title="Thursday Monthly Avg Visits (MoM / YoY)"
+          title="Thursday Avg Visits – Rolling 90d (MoM / YoY)"
           color="#6366f1"
           series={analytics.monthlyAvgTrendThu}
           summary={analytics.monthlyAvgSummaryThu}
