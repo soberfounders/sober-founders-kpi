@@ -22,6 +22,7 @@ import {
   BarChart,
   Bar,
   Legend,
+  ReferenceLine,
 } from 'recharts';
 import {
   Calendar,
@@ -3342,8 +3343,9 @@ const AttendanceDashboard = () => {
           <LineChart data={series || []}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis dataKey="monthLabel" tick={{ fill: '#64748b', fontSize: 10 }} />
-            <YAxis domain={[1, 'auto']} tick={{ fill: '#64748b', fontSize: 10 }} />
+            <YAxis domain={[0, 13]} tick={{ fill: '#64748b', fontSize: 10 }} />
             <Tooltip content={monthlyTrendTooltip} />
+            <ReferenceLine y={13} stroke="#94a3b8" strokeDasharray="6 3" label={{ value: 'Perfect (13)', position: 'right', fill: '#94a3b8', fontSize: 10 }} />
             <Line type="monotone" dataKey="avgVisits" name="Avg Visits / Person" stroke={color} strokeWidth={2} dot={false} />
           </LineChart>
         </ResponsiveContainer>
@@ -4040,6 +4042,10 @@ const AttendanceDashboard = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
           <TrendingUp size={17} color="#2563eb" />
           <h3 style={{ fontSize: '18px' }}>Avg Visits per Person – Rolling 90 Days</h3>
+          <span
+            title="Perfect score ≈ 13 (90 days / 7 = ~12.86 sessions). That means every person who attended at least once came to every single session in the window.&#10;&#10;~1–2 = most try once and leave&#10;~3–4 = decent mix of regulars + churn&#10;~6–7 = strong core, ~every other week&#10;~10+ = very sticky weekly regulars&#10;13 = perfection"
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '18px', height: '18px', borderRadius: '50%', backgroundColor: '#e2e8f0', color: '#475569', fontSize: '11px', fontWeight: 700, cursor: 'help', flexShrink: 0 }}
+          >?</span>
           <span style={{ fontSize: '12px', color: '#64748b', marginLeft: 'auto' }}>Unified timeline by actual meeting date</span>
         </div>
         <div style={{ height: '260px' }}>
@@ -4047,9 +4053,10 @@ const AttendanceDashboard = () => {
             <LineChart data={analytics.avgTimelineCombined}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="date" allowDuplicatedCategory={false} tick={{ fill: '#64748b', fontSize: 10 }} />
-              <YAxis domain={[1, 'auto']} tick={{ fill: '#64748b', fontSize: 10 }} />
+              <YAxis domain={[0, 13]} tick={{ fill: '#64748b', fontSize: 10 }} />
               <Tooltip content={avgTimelineTooltip} />
               <Legend />
+              <ReferenceLine y={13} stroke="#94a3b8" strokeDasharray="6 3" label={{ value: 'Perfect (13)', position: 'right', fill: '#94a3b8', fontSize: 10 }} />
               <Line type="monotone" connectNulls dataKey="tuesdayAvg" name="Tuesday Avg Visits" stroke="#0ea5e9" strokeWidth={2} dot={false} />
               <Line type="monotone" connectNulls dataKey="thursdayAvg" name="Thursday Avg Visits" stroke="#6366f1" strokeWidth={2} dot={false} />
             </LineChart>
