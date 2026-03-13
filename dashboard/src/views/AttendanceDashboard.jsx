@@ -2029,6 +2029,7 @@ const AttendanceDashboard = () => {
   const [aliases, setAliases] = useState([]);
   const [rawHubspotContacts, setRawHubspotContacts] = useState([]);
   const [donationRows, setDonationRows] = useState([]);
+  const [donationAttendeeOverrides, setDonationAttendeeOverrides] = useState([]);
   // Attendance source inputs: HubSpot activity rows + HubSpot contact associations.
   const [hubspotActivities, setHubspotActivities] = useState([]);
   const [hubspotContactAssocs, setHubspotContactAssocs] = useState([]);
@@ -2306,7 +2307,14 @@ const AttendanceDashboard = () => {
       if (normName) attendeeNameIndex.set(normName, idx);
     });
 
-    // Match each donation to an attendee
+    // Build override map: donor_email → normalized attendee name (for household/spousal donations)
+    const donorOverrideMap = new Map();
+    (donationAttendeeOverrides || []).forEach((o) => {
+      const email = normalizeEmail(o.donor_email);
+      if (email) donorOverrideMap.set(email, normalizeName(o.attendee_display_name || ''));
+    });
+
+    // Match each donation to an attendee (email → additional email → name → override)
     const donationsByAttendeeIdx = new Map(); // idx → [donation, ...]
     const matchedDonations = [];
     windowDonations.forEach((d) => {
@@ -2314,6 +2322,11 @@ const AttendanceDashboard = () => {
       const donorName = normalizeName(d.donor_name || '');
       let matchIdx = donorEmail ? attendeeEmailIndex.get(donorEmail) : undefined;
       if (matchIdx === undefined && donorName) matchIdx = attendeeNameIndex.get(donorName);
+      // Tier 3: manual override (household/spousal donations)
+      if (matchIdx === undefined && donorEmail) {
+        const overrideName = donorOverrideMap.get(donorEmail);
+        if (overrideName) matchIdx = attendeeNameIndex.get(overrideName);
+      }
       if (matchIdx !== undefined) {
         if (!donationsByAttendeeIdx.has(matchIdx)) donationsByAttendeeIdx.set(matchIdx, []);
         donationsByAttendeeIdx.get(matchIdx).push(d);
@@ -2346,7 +2359,7 @@ const AttendanceDashboard = () => {
       donationSummary,
       hasTargetDate: session.dateLabel === '2026-02-19',
     };
-  }, [analytics, selectedSessionKey, attendanceHubspotResolver, hubspotContactMap, donationRows]);
+  }, [analytics, selectedSessionKey, attendanceHubspotResolver, hubspotContactMap, donationRows, donationAttendeeOverrides]);
 
   const selectedRepeaterDetail = useMemo(() => {
     if (!analytics?.sessions?.length || !selectedRepeaterName) return null;
@@ -3007,6 +3020,12 @@ const AttendanceDashboard = () => {
         .range(from, to)
     ), { pageSize: 1000, maxPages: 20 });
     setDonationRows(donationsResult.data || []);
+
+    // Load manual donor→attendee overrides (household/spousal donations)
+    const overridesResult = await supabase
+      .from('donation_attendee_overrides')
+      .select('donor_email,attendee_display_name');
+    setDonationAttendeeOverrides(overridesResult.data || []);
 
     setAliases(aliasResult.aliases || []);
     setLoading(false);
