@@ -106,6 +106,7 @@ const ATTENDANCE_HUBSPOT_CONTACT_REQUIRED_COLUMNS = [
   'email',
   'hs_additional_emails',
   'merged_into_hubspot_contact_id',
+  'hs_merged_object_ids',
 ];
 
 const ATTENDANCE_HUBSPOT_CONTACT_OPTIONAL_COLUMNS = [
@@ -1244,16 +1245,30 @@ function computeAnalytics(
   // ── Build merged-contact redirect map so old (merged-away) contact IDs resolve
   //    to the surviving canonical contact, preventing duplicates from HubSpot merges. ──
   const mergedContactRedirect = new Map();
+  // Strategy 1: victim-side — merged_into_hubspot_contact_id points victim → survivor.
   hubspotContactMap.forEach((row, id) => {
     const mergedInto = Number(row?.merged_into_hubspot_contact_id);
     if (Number.isFinite(mergedInto) && mergedInto > 0 && mergedInto !== id) {
       mergedContactRedirect.set(id, mergedInto);
     }
   });
-  // Also scan raw contact rows that were NOT in the primary map (e.g. soft-deleted merged contacts
-  // that only appeared via backfill) — the map is keyed by hubspot_contact_id so merged-away rows
-  // whose ID differs from the survivor may still be present as separate entries.
-  // We walk up to one level of redirect chains (A→B→C becomes A→C, B→C).
+  // Strategy 2: survivor-side — hs_merged_object_ids on the survivor lists victim IDs.
+  // This covers the common case where the sync hasn't yet propagated
+  // merged_into_hubspot_contact_id onto the victim row.
+  hubspotContactMap.forEach((row, survivorId) => {
+    const raw = String(row?.hs_merged_object_ids || '');
+    if (!raw) return;
+    raw.split(';').forEach((tok) => {
+      const victimId = Number(tok.trim());
+      if (Number.isFinite(victimId) && victimId > 0 && victimId !== survivorId) {
+        // Only set if not already redirected (victim-side is more authoritative).
+        if (!mergedContactRedirect.has(victimId)) {
+          mergedContactRedirect.set(victimId, survivorId);
+        }
+      }
+    });
+  });
+  // Resolve redirect chains up to 5 levels deep (A→B→C becomes A→C).
   const resolveCanonicalContactId = (rawId) => {
     let id = rawId;
     for (let depth = 0; depth < 5; depth++) {
@@ -1293,6 +1308,7 @@ function computeAnalytics(
 
     // Build attendees from contact associations
     const seenIds = new Set();
+    const seenEmails = new Set();
     const matchedEntries = assocs
       .filter(a => {
         const rawContactId = Number(a.hubspot_contact_id);
@@ -1308,6 +1324,12 @@ function computeAnalytics(
         // Anti-Duplicate for matched contacts (using canonical post-merge ID)
         if (seenIds.has(contactId)) return false;
         seenIds.add(contactId);
+
+        // Safety-net: dedup by email even if contact IDs differ and merge data is
+        // missing — covers edge cases where the sync hasn't propagated merge markers yet.
+        const email = normalizeEmail(a.contact_email);
+        if (email && seenEmails.has(email)) return false;
+        if (email) seenEmails.add(email);
 
         // Stash the resolved canonical ID back onto the association object so downstream
         // mapping uses the surviving contact's enrichment data.
