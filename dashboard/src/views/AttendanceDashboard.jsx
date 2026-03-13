@@ -3050,18 +3050,18 @@ const AttendanceDashboard = () => {
     if (active && payload && payload.length) {
       const d = payload[0].payload;
       return (
-        <div style={{ backgroundColor: 'var(--color-card)', backdropFilter: 'blur(12px)', padding: '12px', border: '1px solid var(--color-border)', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
-          <p style={{ fontWeight: 700, marginBottom: '6px', color: '#0f172a' }}>{label}</p>
-          <div style={{ display: 'flex', gap: '12px', fontSize: '13px' }}>
-            <span style={{ color: '#22c55e', fontWeight: 600 }}>New: {d.newCount}</span>
-            <span style={{ color: '#64748b', fontWeight: 600 }}>Return: {d.repeatCount}</span>
-            <span style={{ color: '#0f172a', fontWeight: 700 }}>Total: {d.total}</span>
+        <div style={{ backgroundColor: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(16px)', padding: '14px 16px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', boxShadow: '0 8px 24px rgb(0 0 0 / 0.4)', minWidth: '180px' }}>
+          <p style={{ fontWeight: 700, marginBottom: '8px', color: '#f1f5f9', fontSize: '14px', letterSpacing: '0.01em' }}>{label}</p>
+          <div style={{ display: 'flex', gap: '14px', fontSize: '13px' }}>
+            <span style={{ color: '#4ade80', fontWeight: 600 }}>New: {d.newCount}</span>
+            <span style={{ color: '#a78bfa', fontWeight: 600 }}>Return: {d.repeatCount}</span>
+            <span style={{ color: '#ffffff', fontWeight: 700 }}>Total: {d.total}</span>
           </div>
           {d.newNames && d.newNames.length > 0 && (
-            <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #f1f5f9' }}>
-              <p style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>Welcome New:</p>
-              <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '12px', color: '#334155' }}>
-                {d.newNames.map(n => <li key={n}>{n}</li>)}
+            <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+              <p style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700, marginBottom: '6px', letterSpacing: '0.06em' }}>Welcome New:</p>
+              <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '12px', color: '#e2e8f0' }}>
+                {d.newNames.map(n => <li key={n} style={{ marginBottom: '2px' }}>{n}</li>)}
               </ul>
             </div>
           )}
@@ -3102,11 +3102,11 @@ const AttendanceDashboard = () => {
     if (!active || !payload || payload.length === 0) return null;
     const row = payload[0]?.payload || {};
     return (
-      <div style={{ backgroundColor: 'var(--color-card)', backdropFilter: 'blur(12px)', padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
-        <p style={{ fontWeight: 700, marginBottom: '6px' }}>{label}</p>
-        <p style={{ fontSize: '13px', color: '#0f172a', margin: 0 }}>Avg Visits: <strong>{row.avgVisits ?? '-'}</strong></p>
-        <p style={{ fontSize: '12px', color: '#475569', margin: '4px 0 0 0' }}>MoM: {formatChangePct(row.momChange)}</p>
-        <p style={{ fontSize: '12px', color: '#475569', margin: '2px 0 0 0' }}>YoY: {formatChangePct(row.yoyChange)}</p>
+      <div style={{ backgroundColor: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(16px)', padding: '12px 14px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', boxShadow: '0 8px 24px rgb(0 0 0 / 0.4)' }}>
+        <p style={{ fontWeight: 700, marginBottom: '6px', color: '#f1f5f9', fontSize: '14px' }}>{label}</p>
+        <p style={{ fontSize: '13px', color: '#e2e8f0', margin: 0 }}>Avg Visits: <strong style={{ color: '#ffffff' }}>{row.avgVisits ?? '-'}</strong></p>
+        <p style={{ fontSize: '12px', color: '#94a3b8', margin: '4px 0 0 0' }}>MoM: {formatChangePct(row.momChange)}</p>
+        <p style={{ fontSize: '12px', color: '#94a3b8', margin: '2px 0 0 0' }}>YoY: {formatChangePct(row.yoyChange)}</p>
       </div>
     );
   };
@@ -3119,10 +3119,10 @@ const AttendanceDashboard = () => {
     const thu = row.thursdayHoverAvg ?? row.thursdayAvg ?? '-';
 
     return (
-      <div style={{ backgroundColor: 'var(--color-card)', backdropFilter: 'blur(12px)', padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
-        <p style={{ fontWeight: 700, marginBottom: '6px' }}>{fullDate}</p>
-        <p style={{ fontSize: '13px', color: '#0ea5e9', margin: 0 }}>Tuesday Avg Visits: <strong>{tue}</strong></p>
-        <p style={{ fontSize: '13px', color: '#6366f1', margin: '4px 0 0 0' }}>Thursday Avg Visits: <strong>{thu}</strong></p>
+      <div style={{ backgroundColor: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(16px)', padding: '12px 14px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', boxShadow: '0 8px 24px rgb(0 0 0 / 0.4)' }}>
+        <p style={{ fontWeight: 700, marginBottom: '6px', color: '#f1f5f9', fontSize: '14px' }}>{fullDate}</p>
+        <p style={{ fontSize: '13px', color: '#38bdf8', margin: 0 }}>Tuesday Avg Visits: <strong style={{ color: '#7dd3fc' }}>{tue}</strong></p>
+        <p style={{ fontSize: '13px', color: '#a78bfa', margin: '4px 0 0 0' }}>Thursday Avg Visits: <strong style={{ color: '#c4b5fd' }}>{thu}</strong></p>
       </div>
     );
   };
