@@ -240,7 +240,7 @@ const KPI_CARD_DEFINITIONS = {
     format: 'decimal',
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'sessions',
-    note: 'Total Tuesday visits / unique Tuesday attendees',
+    note: 'Cumulative all-time Tuesday visits / unique Tuesday attendees',
     color: '#38bdf8',
   },
   attendanceNetNewThu: {
@@ -262,7 +262,7 @@ const KPI_CARD_DEFINITIONS = {
     format: 'decimal',
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'sessions',
-    note: 'Total Thursday visits / unique Thursday attendees',
+    note: 'Cumulative all-time Thursday visits / unique Thursday attendees',
     color: '#818cf8',
   },
   donationsCount: {
@@ -703,44 +703,56 @@ function aggregateCompletedItems(rows, window) {
 }
 
 function buildAttendanceSnapshots(sessions, currentWindow, previousWindow) {
-  const seen = {
-    Tuesday: new Set(),
-    Thursday: new Set(),
+  // Cumulative counters across ALL sessions (matches AttendanceDashboard logic).
+  // Net-new is still scoped to a window, but avg visits is cumulative all-time
+  // (total visits / unique people) so it matches the Attendance page numbers.
+  const cumulative = {
+    Tuesday: { visits: 0, unique: new Set() },
+    Thursday: { visits: 0, unique: new Set() },
   };
 
   const initWindowState = () => ({
-    Tuesday: { netNew: 0, visits: 0, unique: new Set() },
-    Thursday: { netNew: 0, visits: 0, unique: new Set() },
+    Tuesday: { netNew: 0 },
+    Thursday: { netNew: 0 },
   });
   const state = {
     current: initWindowState(),
     previous: initWindowState(),
   };
 
+  // Track first-seen across all time for net-new detection
+  const seen = { Tuesday: new Set(), Thursday: new Set() };
+
   sessions.forEach((session) => {
     const day = session.dayType;
+    if (!cumulative[day]) return;
     const isCurrent = dateInRange(session.dateKey, currentWindow.start, currentWindow.end);
     const isPrevious = dateInRange(session.dateKey, previousWindow.start, previousWindow.end);
     const bucketKey = isCurrent ? 'current' : (isPrevious ? 'previous' : null);
 
     session.attendees.forEach((personKey) => {
-      const daySeenSet = seen[day];
-      const isNetNew = !daySeenSet.has(personKey);
-      if (bucketKey) {
-        const bucket = state[bucketKey][day];
-        bucket.visits += 1;
-        bucket.unique.add(personKey);
-        if (isNetNew) bucket.netNew += 1;
+      // Always accumulate into cumulative totals
+      cumulative[day].visits += 1;
+      cumulative[day].unique.add(personKey);
+
+      const isNetNew = !seen[day].has(personKey);
+      if (bucketKey && isNetNew) {
+        state[bucketKey][day].netNew += 1;
       }
-      if (isNetNew) daySeenSet.add(personKey);
+      if (isNetNew) seen[day].add(personKey);
     });
   });
 
+  // Avg visits = cumulative all-time visits / cumulative unique people
+  // (mirrors AttendanceDashboard.computeAnalytics groupStats logic)
+  const cumulativeAvg = (day) =>
+    cumulative[day].unique.size > 0 ? cumulative[day].visits / cumulative[day].unique.size : 0;
+
   const toSnapshot = (bucket) => ({
     netNewTue: bucket.Tuesday.netNew,
-    avgVisitsTue: bucket.Tuesday.unique.size > 0 ? bucket.Tuesday.visits / bucket.Tuesday.unique.size : 0,
+    avgVisitsTue: cumulativeAvg('Tuesday'),
     netNewThu: bucket.Thursday.netNew,
-    avgVisitsThu: bucket.Thursday.unique.size > 0 ? bucket.Thursday.visits / bucket.Thursday.unique.size : 0,
+    avgVisitsThu: cumulativeAvg('Thursday'),
   });
 
   return {
