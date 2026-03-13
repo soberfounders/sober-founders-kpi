@@ -34,6 +34,16 @@ function confidenceFromSample(leadBase, minLeadsThreshold) {
   return 'LOW';
 }
 
+function formatLeadCount(value) {
+  const n = toNumberOrNull(value);
+  if (n === null) return 'N/A';
+  const hasFraction = Math.abs(n - Math.round(n)) >= 0.001;
+  return n.toLocaleString(undefined, {
+    minimumFractionDigits: hasFraction ? 1 : 0,
+    maximumFractionDigits: hasFraction ? 2 : 0,
+  });
+}
+
 function efficiencyBand(value, goodThreshold, poorThreshold) {
   const n = toNumberOrNull(value);
   if (n === null) return 'UNKNOWN';
@@ -74,6 +84,8 @@ function buildGroupRows(adRows, keyBuilder, minLeadsThreshold, rubric) {
     const cpgl = safeDivide(row.spend, row.great_leads);
     const qualifiedRate = safeDivide(row.qualified_leads, leadBase);
     const greatRate = safeDivide(row.great_leads, leadBase);
+    const displayQualifiedRate = safeDivide(row.qualified_leads, row.leads);
+    const displayGreatRate = safeDivide(row.great_leads, row.leads);
     return {
       ...row,
       lead_base: leadBase,
@@ -82,6 +94,8 @@ function buildGroupRows(adRows, keyBuilder, minLeadsThreshold, rubric) {
       cpgl,
       qualified_rate: qualifiedRate,
       great_rate: greatRate,
+      display_qualified_rate: displayQualifiedRate,
+      display_great_rate: displayGreatRate,
       sample_ok: leadBase >= minLeadsThreshold,
     };
   });
@@ -101,7 +115,7 @@ function buildGroupRows(adRows, keyBuilder, minLeadsThreshold, rubric) {
         ...row,
         confidence,
         decision: 'HOLD_LOW_SAMPLE',
-        decision_reason: `Only ${Math.round(row.lead_base)} leads in sample; hold until at least ${minLeadsThreshold}.`,
+        decision_reason: `Background model: raw leads ${formatLeadCount(row.leads)}, modeled lead-credit ${formatLeadCount(row.lead_base)}. Hold until at least ${minLeadsThreshold}.`,
         low_cpl_weak_quality_trap: false,
       };
     }
@@ -146,7 +160,7 @@ function buildGroupRows(adRows, keyBuilder, minLeadsThreshold, rubric) {
     }
 
     const reasonParts = [];
-    reasonParts.push(`Qualified ${(row.qualified_rate * 100).toFixed(1)}% (floor ${(rubric.quality.qualifiedKeepFloor * 100).toFixed(0)}%), Great ${(row.great_rate * 100).toFixed(1)}% (floor ${(rubric.quality.greatKeepFloor * 100).toFixed(0)}%).`);
+    reasonParts.push(`Background model: Qualified ${(row.qualified_rate * 100).toFixed(1)}% (floor ${(rubric.quality.qualifiedKeepFloor * 100).toFixed(0)}%), Great ${(row.great_rate * 100).toFixed(1)}% (floor ${(rubric.quality.greatKeepFloor * 100).toFixed(0)}%).`);
     reasonParts.push(`Efficiency bands: CPQL ${cpqlBand}${row.cpql !== null ? ` (${Math.round(row.cpql)})` : ''}, CPGL ${cpglBand}${row.cpgl !== null ? ` (${Math.round(row.cpgl)})` : ''}.`);
     if (relativeOutperforming) reasonParts.push('Relative comparison: outperforming peer median.');
     if (relativeUnderperforming) reasonParts.push('Relative comparison: below peer median.');

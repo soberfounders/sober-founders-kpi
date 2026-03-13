@@ -26,10 +26,14 @@ function fmtCurrency(value) {
   return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 }
 
-function fmtInt(value) {
+function fmtCount(value) {
   const n = toNumberOrNull(value);
   if (n === null) return 'N/A';
-  return Math.round(n).toLocaleString();
+  const hasFraction = Math.abs(n - Math.round(n)) >= 0.001;
+  return n.toLocaleString(undefined, {
+    minimumFractionDigits: hasFraction ? 1 : 0,
+    maximumFractionDigits: hasFraction ? 2 : 0,
+  });
 }
 
 function fmtPct(value, digits = 1) {
@@ -65,8 +69,8 @@ const TABLE_COLUMNS = [
   { key: 'cpl', label: 'CPL', sortable: true },
   { key: 'cpql', label: 'CPQL', sortable: true },
   { key: 'cpgl', label: 'CPGL', sortable: true },
-  { key: 'qualified_rate', label: 'Qualified Rate', sortable: true },
-  { key: 'great_rate', label: 'Great Rate', sortable: true },
+  { key: 'display_qualified_rate', label: 'Qualified Rate', sortable: true },
+  { key: 'display_great_rate', label: 'Great Rate', sortable: true },
 ];
 
 export default function LeadsExperimentAnalyzerPanel({ data, isLoading = false }) {
@@ -138,6 +142,9 @@ export default function LeadsExperimentAnalyzerPanel({ data, isLoading = false }
           <h3 style={{ margin: '6px 0 0', fontSize: '17px', color: '#0f172a' }}>Campaign and adset decision table</h3>
           <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#64748b' }}>
             Prioritizes quality outcomes (CPQL/CPGL and qualified/great rates) over low CPL alone.
+          </p>
+          <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#64748b' }}>
+            Displayed rates use raw Meta leads for fast scanning. Qualified/Great counts remain directional, and keep/kill decisions still use the attribution model in the background.
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -237,14 +244,14 @@ export default function LeadsExperimentAnalyzerPanel({ data, isLoading = false }
                     </div>
                   </td>
                   <td style={{ padding: '8px', textAlign: 'right', fontSize: '12px', color: '#334155' }}>{fmtCurrency(row.spend)}</td>
-                  <td style={{ padding: '8px', textAlign: 'right', fontSize: '12px', color: '#334155' }}>{fmtInt(row.lead_base)}</td>
-                  <td style={{ padding: '8px', textAlign: 'right', fontSize: '12px', color: '#334155' }}>{fmtInt(row.qualified_leads)}</td>
-                  <td style={{ padding: '8px', textAlign: 'right', fontSize: '12px', color: '#334155' }}>{fmtInt(row.great_leads)}</td>
+                  <td style={{ padding: '8px', textAlign: 'right', fontSize: '12px', color: '#334155' }}>{fmtCount(row.leads)}</td>
+                  <td style={{ padding: '8px', textAlign: 'right', fontSize: '12px', color: '#334155' }}>{fmtCount(row.qualified_leads)}</td>
+                  <td style={{ padding: '8px', textAlign: 'right', fontSize: '12px', color: '#334155' }}>{fmtCount(row.great_leads)}</td>
                   <td style={{ padding: '8px', textAlign: 'right', fontSize: '12px', color: '#334155' }}>{fmtCurrency(row.cpl)}</td>
                   <td style={{ padding: '8px', textAlign: 'right', fontSize: '12px', color: '#334155' }}>{fmtCurrency(row.cpql)}</td>
                   <td style={{ padding: '8px', textAlign: 'right', fontSize: '12px', color: '#334155' }}>{fmtCurrency(row.cpgl)}</td>
-                  <td style={{ padding: '8px', textAlign: 'right', fontSize: '12px', color: '#334155' }}>{fmtPct(row.qualified_rate)}</td>
-                  <td style={{ padding: '8px', textAlign: 'right', fontSize: '12px', color: '#334155' }}>{fmtPct(row.great_rate)}</td>
+                  <td style={{ padding: '8px', textAlign: 'right', fontSize: '12px', color: '#334155' }}>{fmtPct(row.display_qualified_rate)}</td>
+                  <td style={{ padding: '8px', textAlign: 'right', fontSize: '12px', color: '#334155' }}>{fmtPct(row.display_great_rate)}</td>
                 </tr>
               );
             })}
