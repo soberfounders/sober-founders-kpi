@@ -362,7 +362,7 @@ async function syncNotion(supabase: any) {
     // Support multiple common title property names (user's DB uses 'Task name')
     const title = props['Task name']?.title?.[0]?.plain_text || props.Name?.title?.[0]?.plain_text || props.Title?.title?.[0]?.plain_text || 'Untitled';
     const status = props.Status?.status?.name || props.Status?.select?.name || 'No Status';
-    const dueDate = props.Date?.date?.start || props['Due Date']?.date?.start || props['Due date']?.date?.start || null;
+    const dueDate = props.Deadline?.date?.start || props.Date?.date?.start || props['Due Date']?.date?.start || props['Due date']?.date?.start || null;
     const priority = props.Priority?.select?.name || props.Priority?.status?.name || null;
     const effortLevel = props['Effort level']?.select?.name || props['Effort Level']?.select?.name || null;
     const assignee = props.Person?.people?.[0]?.name || props.Assignee?.people?.[0]?.name || null;

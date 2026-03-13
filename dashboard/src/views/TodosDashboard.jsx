@@ -1,9 +1,10 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import AddToNotionButton from '../components/AddToNotionButton';
 import {
   CheckCircle2, Circle, Clock, AlertCircle, Plus, Loader2, ExternalLink,
-  RefreshCw, Filter, Sparkles, Bot, Users, Zap, Lightbulb, ChevronDown, ChevronUp
+  RefreshCw, Filter, Sparkles, Bot, Users, Zap, Lightbulb, ChevronDown, ChevronUp,
+  User
 } from 'lucide-react';
 
 /* ── Status helpers ── */
@@ -18,12 +19,24 @@ const STATUS_COLORS = {
 };
 const PRIORITY_COLORS = {
   'high': { bg: 'rgba(239, 68, 68, 0.15)', text: '#f87171', icon: '🔴' },
+  'high priority': { bg: 'rgba(239, 68, 68, 0.15)', text: '#f87171', icon: '🔴' },
   'medium': { bg: 'rgba(245, 158, 11, 0.15)', text: '#fbbf24', icon: '🟡' },
+  'medium priority': { bg: 'rgba(245, 158, 11, 0.15)', text: '#fbbf24', icon: '🟡' },
   'low': { bg: 'rgba(16, 185, 129, 0.15)', text: '#34d399', icon: '🟢' },
+  'low priority': { bg: 'rgba(16, 185, 129, 0.15)', text: '#34d399', icon: '🟢' },
 };
+
+const EFFORT_COLORS = {
+  'easy effort': { bg: 'rgba(16, 185, 129, 0.15)', text: '#34d399' },
+  'medium effort': { bg: 'rgba(245, 158, 11, 0.15)', text: '#fbbf24' },
+  'hard effort': { bg: 'rgba(239, 68, 68, 0.15)', text: '#f87171' },
+};
+
+const PERSON_OPTIONS = ['All', 'Andrew Lassise', 'Kandace'];
 
 const getStatusStyle = (status) => STATUS_COLORS[status?.toLowerCase()] || STATUS_COLORS['to do'];
 const getPriorityStyle = (priority) => PRIORITY_COLORS[priority?.toLowerCase()] || null;
+const getEffortStyle = (effort) => EFFORT_COLORS[effort?.toLowerCase()] || null;
 
 const getStatusIcon = (status) => {
   switch (status?.toLowerCase()) {
@@ -34,13 +47,88 @@ const getStatusIcon = (status) => {
   }
 };
 
+/* ── Status Dropdown Component ── */
+const StatusDropdown = ({ todo, onStatusChange }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    if (open) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  const statusStyle = getStatusStyle(todo.status);
+  const currentStatus = todo.status || 'No Status';
+
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
+      <span
+        onClick={() => setOpen(!open)}
+        style={{
+          padding: '4px 10px', borderRadius: '12px',
+          fontSize: '11px', fontWeight: '700', cursor: 'pointer',
+          backgroundColor: statusStyle.bg, color: statusStyle.text,
+          border: `1px solid ${statusStyle.border}`,
+          display: 'inline-flex', alignItems: 'center', gap: '4px',
+        }}
+      >
+        {currentStatus}
+        <ChevronDown size={10} />
+      </span>
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, marginTop: '4px',
+          zIndex: 50, minWidth: '160px',
+          background: 'var(--color-card, #1a1f2e)', backdropFilter: 'blur(16px)',
+          borderRadius: '10px', border: '1px solid var(--color-border)',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+          overflow: 'hidden',
+        }}>
+          {STATUS_ORDER.map((s) => {
+            const sStyle = getStatusStyle(s);
+            const isActive = s.toLowerCase() === currentStatus.toLowerCase();
+            return (
+              <div
+                key={s}
+                onClick={() => {
+                  setOpen(false);
+                  if (!isActive) onStatusChange(todo, s);
+                }}
+                style={{
+                  padding: '8px 14px', cursor: 'pointer',
+                  fontSize: '12px', fontWeight: '600',
+                  color: sStyle.text,
+                  backgroundColor: isActive ? 'rgba(255,255,255,0.08)' : 'transparent',
+                  transition: 'background-color 0.15s',
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.06)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = isActive ? 'rgba(255,255,255,0.08)' : 'transparent'}
+              >
+                {getStatusIcon(s)}
+                {s}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 /* ── AI Analysis engine (rule-based) ── */
 function analyzeTaskList(todos) {
   if (!todos || todos.length === 0) return null;
 
   const open = todos.filter(t => t.status?.toLowerCase() !== 'done' && t.status?.toLowerCase() !== 'completed');
   const overdue = open.filter(t => t.due_date && new Date(t.due_date) < new Date());
-  const highPriority = open.filter(t => t.priority?.toLowerCase() === 'high');
+  const highPriority = open.filter(t => {
+    const p = t.priority?.toLowerCase() || '';
+    return p === 'high' || p === 'high priority';
+  });
   const noDueDate = open.filter(t => !t.due_date);
 
   // AI Can Handle — simple, routine tasks
@@ -103,6 +191,10 @@ function analyzeTaskList(todos) {
   return { aiCanHandle, delegate, nextSteps, suggestions, stats: { total: todos.length, open: open.length, overdue: overdue.length, done: doneCount } };
 }
 
+/* Helper: extract assignee/person from metadata */
+const getAssignee = (todo) => todo.metadata?.assignee || null;
+const getEffortLevel = (todo) => todo.metadata?.effort_level || null;
+
 /* ── Main Component ── */
 const TodosDashboard = () => {
   const [todos, setTodos] = useState([]);
@@ -110,7 +202,8 @@ const TodosDashboard = () => {
   const [syncing, setSyncing] = useState(false);
   const [newTodo, setNewTodo] = useState('');
   const [isAdding, setIsAdding] = useState(false);
-  const [filter, setFilter] = useState('All');
+  const [filter, setFilter] = useState('Active');
+  const [personFilter, setPersonFilter] = useState('Andrew Lassise');
   const [editingId, setEditingId] = useState(null);
   const [editTitle, setEditTitle] = useState('');
   const [showAnalysis, setShowAnalysis] = useState(false);
@@ -149,26 +242,29 @@ const TodosDashboard = () => {
     }
   };
 
-  /* ── Update Status ── */
-  const handleUpdateStatus = async (todo) => {
-    const currentIdx = STATUS_ORDER.indexOf(todo.status) === -1 ? 0 : STATUS_ORDER.indexOf(todo.status);
-    const nextStatus = STATUS_ORDER[(currentIdx + 1) % STATUS_ORDER.length];
-
-    setTodos(prev => prev.map(t => t.id === todo.id ? { ...t, status: nextStatus } : t));
+  /* ── Update Status (now accepts explicit status value) ── */
+  const handleUpdateStatus = async (todo, newStatus) => {
+    const previousStatus = todo.status;
+    setTodos(prev => prev.map(t => t.id === todo.id ? { ...t, status: newStatus } : t));
 
     try {
       const { error } = await supabase.functions.invoke('master-sync', {
         body: {
           action: 'update_task',
           pageId: todo.notion_page_id,
-          properties: { 'Status': { status: { name: nextStatus } } }
+          properties: { 'Status': { status: { name: newStatus } } }
         }
       });
       if (error) throw error;
+
+      // Update local DB too
+      await supabase.from('notion_todos')
+        .update({ status: newStatus })
+        .eq('notion_page_id', todo.notion_page_id);
     } catch (err) {
       console.error('Update failed:', err);
       alert('Failed to update Notion: ' + err.message);
-      fetchTodos();
+      setTodos(prev => prev.map(t => t.id === todo.id ? { ...t, status: previousStatus } : t));
     }
   };
 
@@ -216,7 +312,8 @@ const TodosDashboard = () => {
           action: 'create_task',
           properties: {
             'Task name': { title: [{ text: { content: newTodo } }] },
-            Status: { status: { name: 'Not started' } }
+            Status: { status: { name: 'Not started' } },
+            ...(personFilter !== 'All' ? { '_person_name': personFilter } : {}),
           }
         }
       });
@@ -232,15 +329,37 @@ const TodosDashboard = () => {
   };
 
   /* ── Filter & Analyze ── */
-  const filteredTodos = filter === 'All' ? todos
-    : todos.filter(t => {
-      const s = t.status?.toLowerCase() || '';
-      if (filter === 'Not started') return !t.status || s === 'not started' || s === 'no status' || s === 'to do';
-      if (filter === 'In progress') return s === 'in progress';
-      if (filter === 'Waiting') return s === 'waiting on others';
-      if (filter === 'Done') return s === 'done' || s === 'completed';
-      return true;
-    });
+  const filteredTodos = useMemo(() => {
+    let result = todos;
+
+    // Person filter
+    if (personFilter !== 'All') {
+      result = result.filter(t => {
+        const assignee = getAssignee(t);
+        return assignee && assignee.toLowerCase() === personFilter.toLowerCase();
+      });
+    }
+
+    // Status filter
+    if (filter === 'Active') {
+      // Default: exclude Done/Completed
+      result = result.filter(t => {
+        const s = t.status?.toLowerCase() || '';
+        return s !== 'done' && s !== 'completed';
+      });
+    } else if (filter !== 'All') {
+      result = result.filter(t => {
+        const s = t.status?.toLowerCase() || '';
+        if (filter === 'Not started') return !t.status || s === 'not started' || s === 'no status' || s === 'to do';
+        if (filter === 'In progress') return s === 'in progress';
+        if (filter === 'Waiting') return s === 'waiting on others';
+        if (filter === 'Done') return s === 'done' || s === 'completed';
+        return true;
+      });
+    }
+
+    return result;
+  }, [todos, filter, personFilter]);
 
   const analysis = useMemo(() => analyzeTaskList(todos), [todos]);
 
@@ -455,31 +574,63 @@ const TodosDashboard = () => {
         </button>
       </form>
 
-      {/* ═══ Filter Tabs ═══ */}
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-        <Filter size={14} color="var(--color-text-secondary)" />
-        {['All', 'Not started', 'In progress', 'Waiting', 'Done'].map(f => {
-          const count = f === 'All' ? null :
-            f === 'Not started' ? todos.filter(t => { const s = t.status?.toLowerCase() || ''; return !t.status || s === 'not started' || s === 'no status' || s === 'to do'; }).length :
-              f === 'In progress' ? todos.filter(t => t.status?.toLowerCase() === 'in progress').length :
-                f === 'Waiting' ? todos.filter(t => t.status?.toLowerCase() === 'waiting on others').length :
-                  todos.filter(t => t.status?.toLowerCase() === 'done' || t.status?.toLowerCase() === 'completed').length;
-          return (
+      {/* ═══ Person Filter + Status Filter ═══ */}
+      <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+        {/* Person Filter */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <User size={14} color="var(--color-text-secondary)" />
+          {PERSON_OPTIONS.map(p => (
             <button
-              key={f}
-              onClick={() => setFilter(f)}
+              key={p}
+              onClick={() => setPersonFilter(p)}
               style={{
                 padding: '6px 16px', borderRadius: '20px',
-                backgroundColor: filter === f ? 'var(--color-dark-green)' : 'rgba(255,255,255,0.05)',
-                color: filter === f ? '#0a0f18' : 'var(--color-text-secondary)',
-                border: `1px solid ${filter === f ? 'var(--color-dark-green)' : 'var(--color-border)'}`,
+                backgroundColor: personFilter === p ? 'var(--color-dark-green)' : 'rgba(255,255,255,0.05)',
+                color: personFilter === p ? '#0a0f18' : 'var(--color-text-secondary)',
+                border: `1px solid ${personFilter === p ? 'var(--color-dark-green)' : 'var(--color-border)'}`,
                 cursor: 'pointer', fontSize: '13px', fontWeight: '600',
                 transition: 'all 0.2s',
               }}
             >
-              {f} {count !== null && `(${count})`}
-            </button>);
-        })}
+              {p}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--color-border)' }} />
+
+        {/* Status Filter */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <Filter size={14} color="var(--color-text-secondary)" />
+          {['Active', 'All', 'Not started', 'In progress', 'Waiting', 'Done'].map(f => {
+            // Count based on person-filtered todos
+            const personFiltered = personFilter === 'All' ? todos : todos.filter(t => {
+              const assignee = getAssignee(t);
+              return assignee && assignee.toLowerCase() === personFilter.toLowerCase();
+            });
+            const count = f === 'Active' ? personFiltered.filter(t => { const s = t.status?.toLowerCase() || ''; return s !== 'done' && s !== 'completed'; }).length :
+              f === 'All' ? null :
+                f === 'Not started' ? personFiltered.filter(t => { const s = t.status?.toLowerCase() || ''; return !t.status || s === 'not started' || s === 'no status' || s === 'to do'; }).length :
+                  f === 'In progress' ? personFiltered.filter(t => t.status?.toLowerCase() === 'in progress').length :
+                    f === 'Waiting' ? personFiltered.filter(t => t.status?.toLowerCase() === 'waiting on others').length :
+                      personFiltered.filter(t => t.status?.toLowerCase() === 'done' || t.status?.toLowerCase() === 'completed').length;
+            return (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                style={{
+                  padding: '6px 16px', borderRadius: '20px',
+                  backgroundColor: filter === f ? 'var(--color-dark-green)' : 'rgba(255,255,255,0.05)',
+                  color: filter === f ? '#0a0f18' : 'var(--color-text-secondary)',
+                  border: `1px solid ${filter === f ? 'var(--color-dark-green)' : 'var(--color-border)'}`,
+                  cursor: 'pointer', fontSize: '13px', fontWeight: '600',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {f} {count !== null && `(${count})`}
+              </button>);
+          })}
+        </div>
       </div>
 
       {/* ═══ Task List ═══ */}
@@ -488,29 +639,33 @@ const TodosDashboard = () => {
         <div style={{
           padding: '16px 24px', backgroundColor: 'rgba(0,0,0,0.2)',
           borderBottom: '1px solid var(--color-border)',
-          display: 'grid', gridTemplateColumns: '40px 1fr 100px 120px 120px 40px',
+          display: 'grid', gridTemplateColumns: '40px 1fr 110px 100px 130px 110px 100px 40px',
           fontWeight: '600', fontSize: '13px', color: 'var(--color-text-secondary)',
           textTransform: 'uppercase', letterSpacing: '0.05em',
         }}>
           <div></div>
           <div>Task Name</div>
           <div>Priority</div>
+          <div>Effort</div>
           <div>Status</div>
           <div>Due Date</div>
+          <div>Person</div>
           <div></div>
         </div>
 
         {/* Task Rows */}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {filteredTodos.map((todo) => {
-            const statusStyle = getStatusStyle(todo.status);
             const priorityStyle = getPriorityStyle(todo.priority);
+            const effortLevel = getEffortLevel(todo);
+            const effortStyle = getEffortStyle(effortLevel);
+            const assignee = getAssignee(todo);
             const isEditing = editingId === todo.id;
 
             return (
               <div key={todo.id} style={{
                 padding: '14px 24px', borderBottom: '1px solid var(--color-border)',
-                display: 'grid', gridTemplateColumns: '40px 1fr 100px 120px 120px 40px',
+                display: 'grid', gridTemplateColumns: '40px 1fr 110px 100px 130px 110px 100px 40px',
                 alignItems: 'center', fontSize: '14px',
                 transition: 'background-color 0.15s',
                 backgroundColor: todo.status?.toLowerCase() === 'done' ? 'rgba(0,0,0,0.1)' : 'transparent',
@@ -519,7 +674,7 @@ const TodosDashboard = () => {
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = todo.status?.toLowerCase() === 'done' ? 'rgba(0,0,0,0.1)' : 'transparent'}
               >
                 {/* Status Icon */}
-                <div onClick={() => handleUpdateStatus(todo)} style={{ cursor: 'pointer', display: 'flex' }} title="Toggle Status">
+                <div style={{ display: 'flex' }}>
                   {getStatusIcon(todo.status)}
                 </div>
 
@@ -573,20 +728,24 @@ const TodosDashboard = () => {
                   )}
                 </div>
 
-                {/* Status Badge */}
+                {/* Effort Level */}
                 <div>
-                  <span
-                    onClick={() => handleUpdateStatus(todo)}
-                    style={{
-                      padding: '4px 10px', borderRadius: '12px',
-                      fontSize: '11px', fontWeight: '700', cursor: 'pointer',
-                      backgroundColor: statusStyle.bg, color: statusStyle.text,
-                      border: `1px solid ${statusStyle.border}`,
-                    }}
-                    title="Click to cycle status"
-                  >
-                    {todo.status || 'No Status'}
-                  </span>
+                  {effortStyle ? (
+                    <span style={{
+                      padding: '3px 8px', borderRadius: '12px',
+                      fontSize: '10px', fontWeight: '700',
+                      backgroundColor: effortStyle.bg, color: effortStyle.text,
+                    }}>
+                      {effortLevel}
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>—</span>
+                  )}
+                </div>
+
+                {/* Status Badge (dropdown) */}
+                <div>
+                  <StatusDropdown todo={todo} onStatusChange={handleUpdateStatus} />
                 </div>
 
                 {/* Due Date */}
@@ -600,6 +759,11 @@ const TodosDashboard = () => {
                       {new Date(todo.due_date).toLocaleDateString()}
                     </span>
                   ) : '—'}
+                </div>
+
+                {/* Person */}
+                <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                  {assignee || '—'}
                 </div>
 
                 {/* External Link */}
@@ -619,9 +783,9 @@ const TodosDashboard = () => {
             <div style={{ padding: '64px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
               <AlertCircle size={40} style={{ marginBottom: '16px', opacity: 0.3, margin: '0 auto' }} />
               <p style={{ fontSize: '16px', fontWeight: '500', marginTop: '16px' }}>
-                {filter === 'All' ? 'Your Notion To-Do list is empty!' : `No "${filter}" tasks found.`}
+                {filter === 'All' && personFilter === 'All' ? 'Your Notion To-Do list is empty!' : `No tasks found for current filters.`}
               </p>
-              {filter === 'All' && (
+              {filter === 'All' && personFilter === 'All' && (
                 <p style={{ marginTop: '4px' }}>Add a task above or click "Sync Now" to pull from Notion.</p>
               )}
             </div>
