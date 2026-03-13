@@ -105,6 +105,7 @@ const ATTENDANCE_HUBSPOT_CONTACT_REQUIRED_COLUMNS = [
   'lastname',
   'email',
   'hs_additional_emails',
+  'merged_into_hubspot_contact_id',
 ];
 
 const ATTENDANCE_HUBSPOT_CONTACT_OPTIONAL_COLUMNS = [
@@ -1240,6 +1241,29 @@ function computeAnalytics(
     };
   }
 
+  // ── Build merged-contact redirect map so old (merged-away) contact IDs resolve
+  //    to the surviving canonical contact, preventing duplicates from HubSpot merges. ──
+  const mergedContactRedirect = new Map();
+  hubspotContactMap.forEach((row, id) => {
+    const mergedInto = Number(row?.merged_into_hubspot_contact_id);
+    if (Number.isFinite(mergedInto) && mergedInto > 0 && mergedInto !== id) {
+      mergedContactRedirect.set(id, mergedInto);
+    }
+  });
+  // Also scan raw contact rows that were NOT in the primary map (e.g. soft-deleted merged contacts
+  // that only appeared via backfill) — the map is keyed by hubspot_contact_id so merged-away rows
+  // whose ID differs from the survivor may still be present as separate entries.
+  // We walk up to one level of redirect chains (A→B→C becomes A→C, B→C).
+  const resolveCanonicalContactId = (rawId) => {
+    let id = rawId;
+    for (let depth = 0; depth < 5; depth++) {
+      const next = mergedContactRedirect.get(id);
+      if (!next || next === id) break;
+      id = next;
+    }
+    return id;
+  };
+
   // ── 1. Build sessions from HubSpot call/meeting activities (authoritative source) ──
   const assocsByActivity = new Map();
   (hubspotContactAssocs || []).forEach(assoc => {
@@ -1271,22 +1295,28 @@ function computeAnalytics(
     const seenIds = new Set();
     const matchedEntries = assocs
       .filter(a => {
-        const contactId = Number(a.hubspot_contact_id);
+        const rawContactId = Number(a.hubspot_contact_id);
 
         // HubSpot-only attendance rule:
         // only keep attendees with an explicit HubSpot contact id from call associations.
-        if (!contactId) return false;
+        if (!rawContactId) return false;
 
-        // Anti-Duplicate for matched contacts
-        if (contactId) {
-          if (seenIds.has(contactId)) return false;
-          seenIds.add(contactId);
-        }
+        // Resolve merged contacts: if this contact was merged into another,
+        // use the surviving canonical ID for dedup so the same person isn't counted twice.
+        const contactId = resolveCanonicalContactId(rawContactId);
+
+        // Anti-Duplicate for matched contacts (using canonical post-merge ID)
+        if (seenIds.has(contactId)) return false;
+        seenIds.add(contactId);
+
+        // Stash the resolved canonical ID back onto the association object so downstream
+        // mapping uses the surviving contact's enrichment data.
+        a._resolvedContactId = contactId;
 
         return true;
       })
       .map(a => {
-        const contactId = Number(a.hubspot_contact_id);
+        const contactId = a._resolvedContactId || Number(a.hubspot_contact_id);
         const enriched = contactId ? (hubspotContactMap.get(contactId) || {}) : {};
         // Prefer the current HubSpot contact name so renames in HubSpot backfill
         // historical attendance rows in the dashboard (association snapshots can be stale/noisy).
@@ -1434,16 +1464,25 @@ function computeAnalytics(
       )
         ? String(rawObj.hubspotName).trim()
         : canonicalName;
-      const identityKey = buildAttendanceIdentityKey(preferredName, rawObj || {}, aliasMap);
+
+      // Resolve merged contact ID before building identity key so that
+      // merged-away contacts always map to the surviving canonical ID.
+      const rawContactId = Number(rawObj?.hubspotContactId);
+      const resolvedContactId = (Number.isFinite(rawContactId) && rawContactId > 0)
+        ? resolveCanonicalContactId(rawContactId)
+        : null;
+      const mergeResolved = resolvedContactId
+        ? { ...rawObj, hubspotContactId: resolvedContactId }
+        : rawObj;
+
+      const identityKey = buildAttendanceIdentityKey(preferredName, mergeResolved || {}, aliasMap);
       if (!identityKey) return;
 
       const normalized = {
-        ...rawObj,
+        ...mergeResolved,
         name: preferredName,
-        hubspotContactId: Number.isFinite(Number(rawObj?.hubspotContactId))
-          ? Number(rawObj.hubspotContactId)
-          : null,
-        hubspotMatched: !!rawObj?.hubspotMatched || Number.isFinite(Number(rawObj?.hubspotContactId)),
+        hubspotContactId: resolvedContactId || null,
+        hubspotMatched: !!rawObj?.hubspotMatched || Number.isFinite(resolvedContactId),
         identityKey,
       };
 
