@@ -31,9 +31,10 @@ import {
 } from '../lib/dashboardKpiHelpers';
 
 const RANGE_OPTIONS = [
-  { value: 'week', label: 'Week' },
+  { value: 'this_week', label: 'This Week' },
+  { value: 'week', label: 'Last Week' },
+  { value: 'last_30_days', label: 'Past 30 Days' },
   { value: 'last_month', label: 'Last Month' },
-  { value: 'last_30_days', label: 'Last 30 Days' },
   { value: 'last_90_days', label: 'Last 90 Days' },
   { value: 'custom', label: 'Custom Range' },
 ];
@@ -425,6 +426,9 @@ function buildMatchingWindow(startKey, endKey, currentLabel, previousLabelPrefix
 }
 
 function buildOverviewWindows(rangeType, customStart, customEnd, todayKey) {
+  if (rangeType === 'this_week') {
+    return buildDateRangeWindows('this_week', null, null, todayKey);
+  }
   if (rangeType === 'week') {
     return buildDateRangeWindows('last_week', null, null, todayKey);
   }
@@ -1431,9 +1435,10 @@ function DashboardOverview() {
       nextWarnings.push(`Operations feed unavailable: ${todosResponse.error.message}`);
     }
 
-    // Enrich activity rows with attendee data from associations table so
-    // collectAttendeeKeys can resolve real attendee identities (email/name)
-    // instead of falling back to a single activity-id placeholder.
+    // Fetch contact associations for attendance counting.
+    // Stored separately so normalizeHubspotAttendanceSessions can build
+    // one attendee key per contact (email preferred, name fallback) instead
+    // of going through collectAttendeeKeys which double-counts.
     const activityRows = activitiesResponse.data || [];
     const activityIds = activityRows
       .map((row) => Number(row?.hubspot_activity_id))
@@ -1441,7 +1446,6 @@ function DashboardOverview() {
 
     let assocRows = [];
     if (activityIds.length > 0) {
-      // Fetch associations in chunks of 200 IDs (Supabase .in() limit)
       for (let i = 0; i < activityIds.length; i += 200) {
         const chunk = activityIds.slice(i, i + 200);
         const assocResult = await supabase
@@ -1457,32 +1461,12 @@ function DashboardOverview() {
       }
     }
 
-    if (assocRows.length > 0) {
-      const assocByActivity = new Map();
-      assocRows.forEach((row) => {
-        const id = String(row.hubspot_activity_id);
-        if (!assocByActivity.has(id)) assocByActivity.set(id, []);
-        assocByActivity.get(id).push({
-          email: row.contact_email || '',
-          name: [row.contact_firstname, row.contact_lastname].filter(Boolean).join(' '),
-        });
-      });
-      activityRows.forEach((row) => {
-        const id = String(row.hubspot_activity_id);
-        const contacts = assocByActivity.get(id);
-        if (contacts && contacts.length > 0) {
-          const meta = row.metadata && typeof row.metadata === 'object' ? { ...row.metadata } : {};
-          meta.attendees = contacts;
-          row.metadata = meta;
-        }
-      });
-    }
-
     setWarnings(nextWarnings);
     setRawData({
       adsRows: adsResponse.data || [],
       contacts: contactsResponse.data || [],
       activities: activityRows,
+      associations: assocRows,
       donationRows: donationsResponse.data || [],
       todoRows: todosResponse.data || [],
     });
