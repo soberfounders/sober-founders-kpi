@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildZoomFreezePayload, shouldFreezeZoom } from "../_shared/zoom_freeze.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -124,6 +125,21 @@ function canonical(raw: string, aliases: Map<string, string>) {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
+    if (shouldFreezeZoom()) {
+      return new Response(JSON.stringify(buildZoomFreezePayload(
+        "Legacy Zoom-to-HubSpot reconciliation is frozen.",
+        {
+          mode: "frozen",
+          zoom_sessions_seen: 0,
+          sessions_with_hubspot_activity_match: 0,
+          attendee_mappings_proposed: 0,
+          sessions_written: 0,
+          attendee_mappings_written: 0,
+          history_preserved: true,
+        },
+      )), { headers: { ...corsHeaders, "content-type": "application/json" } });
+    }
+
     const SUPABASE_URL = mustGetEnv("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = mustGetEnv("SUPABASE_SERVICE_ROLE_KEY");
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);

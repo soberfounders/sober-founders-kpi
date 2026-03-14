@@ -23,7 +23,7 @@ test('leads qualification checks stay safe without parity enforcement', async ({
   await expect(page.getByRole('heading', { name: 'Leads Overview' })).toBeVisible({ timeout: 60000 });
 
   const missingEnv = page.getByText('Supabase Environment Variables Missing');
-  const confidencePanel = page.locator('section').filter({ hasText: 'Confidence and Action Queue' }).first();
+  const confidencePanel = page.locator('section').filter({ hasText: 'Data Integrity and Action Queue' }).first();
   const parityGuardPanel = page.locator('section').filter({ hasText: 'Parity Guard' }).first();
   await expect(confidencePanel.or(missingEnv).first()).toBeVisible({ timeout: 60000 });
   if ((await missingEnv.count()) > 0) {

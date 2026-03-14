@@ -105,9 +105,9 @@ export default function LeadsConfidenceActionPanel({ data, isLoading = false }) 
     return (
       <section style={cardStyle}>
         <p style={{ margin: 0, fontSize: '11px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
-          Confidence and Action Queue
+          Data Integrity and Action Queue
         </p>
-        <h3 style={{ margin: '6px 0 0', fontSize: '17px', color: '#0f172a' }}>Lead quality confidence panel</h3>
+        <h3 style={{ margin: '6px 0 0', fontSize: '17px', color: '#0f172a' }}>HubSpot parity and sync status</h3>
         <div style={{ marginTop: '12px', display: 'grid', gap: '8px' }}>
           {[0, 1, 2].map((idx) => (
             <div key={`lead-confidence-loading-${idx}`} style={{ height: '16px', backgroundColor: '#e2e8f0', borderRadius: '6px' }} />
@@ -126,22 +126,22 @@ export default function LeadsConfidenceActionPanel({ data, isLoading = false }) 
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div>
           <p style={{ margin: 0, fontSize: '11px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
-            Confidence and Action Queue
+            Data Integrity and Action Queue
           </p>
-          <h3 style={{ margin: '6px 0 0', fontSize: '17px', color: '#0f172a' }}>Lead quality confidence panel</h3>
+          <h3 style={{ margin: '6px 0 0', fontSize: '17px', color: '#0f172a' }}>HubSpot parity and sync status</h3>
           <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#64748b' }}>
-            Uses confidence payload from W1 when available and safely falls back when it is missing.
+            Uses HubSpot-truth blockers and action tasks when available. Attendance confidence scoring has been retired.
           </p>
         </div>
         <div style={{ ...listCardStyle, minWidth: '210px', backgroundColor: '#fff' }}>
           <p style={{ margin: 0, fontSize: '11px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
-            Confidence score
+            Integrity status
           </p>
           <p style={{ margin: '6px 0 0', fontSize: '24px', fontWeight: 800, color: '#0f172a' }}>
-            {Number.isFinite(normalized.score) ? `${Math.round(normalized.score * 100)}%` : 'N/A'}
+            {Number.isFinite(normalized.score) ? `${Math.round(normalized.score * 100)}%` : 'HubSpot Truth'}
           </p>
           <span style={{ display: 'inline-flex', marginTop: '6px', borderRadius: '999px', padding: '3px 8px', backgroundColor: tone.badgeBg, color: tone.badgeText, fontSize: '11px', fontWeight: 700 }}>
-            {normalized.level.toUpperCase()}
+            {normalized.level === 'unknown' ? 'MONITORING' : normalized.level.toUpperCase()}
           </span>
         </div>
       </div>
@@ -149,7 +149,7 @@ export default function LeadsConfidenceActionPanel({ data, isLoading = false }) 
       {isLowConfidence && (
         <div style={{ marginTop: '10px', border: `1px solid ${tone.warningBorder}`, backgroundColor: tone.warningBg, borderRadius: '10px', padding: '10px 12px' }}>
           <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: tone.warningText }}>
-            Low confidence warning: verify blockers and prioritize human review tasks before acting on this queue.
+            Data-quality warning: verify blockers and prioritize HubSpot backfill or sync fixes before acting on this queue.
           </p>
         </div>
       )}
@@ -157,7 +157,7 @@ export default function LeadsConfidenceActionPanel({ data, isLoading = false }) 
       {!hasData && (
         <div style={{ marginTop: '10px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', borderRadius: '10px', padding: '10px 12px' }}>
           <p style={{ margin: 0, fontSize: '12px', color: '#475569' }}>
-            No confidence queue payload is available yet. Showing placeholders until W1 data is present.
+            No action-queue payload is available yet. Attendance confidence scoring has been retired; rely on HubSpot parity and sync warnings.
           </p>
         </div>
       )}

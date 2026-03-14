@@ -1,6 +1,7 @@
 ﻿
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildZoomFreezePayload, shouldFreezeZoom } from "../_shared/zoom_freeze.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -338,6 +339,19 @@ serve(async (req) => {
   }
 
   try {
+    if (shouldFreezeZoom()) {
+      return new Response(
+        JSON.stringify(
+          buildZoomFreezePayload("Legacy Zoom attendance ingestion is frozen.", {
+            sessions_processed: 0,
+            rows_written: 0,
+            history_preserved: true,
+          }),
+        ),
+        { headers: { ...corsHeaders, "content-type": "application/json" } },
+      );
+    }
+
     const supabaseUrl = mustGetEnv("SUPABASE_URL");
     const serviceRoleKey = mustGetEnv("SUPABASE_SERVICE_ROLE_KEY");
     const accountId = mustGetEnv("ZOOM_ACCOUNT_ID");

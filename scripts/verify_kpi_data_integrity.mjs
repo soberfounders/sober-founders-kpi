@@ -32,6 +32,67 @@ const DEFAULT_HUBSPOT_PARITY_MIN_AGE_DAYS = 3;
 const DEFAULT_HUBSPOT_SYNC_LAG_GRACE_HOURS = 72;
 const DEFAULT_MAX_EXPLAINED_PARITY_MISMATCH_SHARE = 0.2;
 
+function parseDotEnvValue(raw = "") {
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) return "";
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"'))
+    || (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function readDotEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return {};
+  const text = fs.readFileSync(filePath, "utf8");
+  const rows = {};
+
+  text.split(/\r?\n/).forEach((line) => {
+    const trimmed = String(line || "").trim();
+    if (!trimmed || trimmed.startsWith("#")) return;
+    const normalized = trimmed.startsWith("export ") ? trimmed.slice(7) : trimmed;
+    const eqIndex = normalized.indexOf("=");
+    if (eqIndex <= 0) return;
+    const key = normalized.slice(0, eqIndex).trim();
+    if (!key) return;
+    rows[key] = parseDotEnvValue(normalized.slice(eqIndex + 1));
+  });
+
+  return rows;
+}
+
+function loadDotEnvCandidates() {
+  const cwd = process.cwd();
+  return {
+    ...readDotEnvFile(path.join(cwd, ".env")),
+    ...readDotEnvFile(path.join(cwd, ".env.local")),
+  };
+}
+
+const DOTENV_CANDIDATES = loadDotEnvCandidates();
+
+function looksLikePostgresUrl(value) {
+  return /^(postgres|postgresql):\/\//i.test(String(value || "").trim());
+}
+
+function envValue(name, fallback = "", options = {}) {
+  const preferDotenv = options?.preferDotenv === true;
+  const warnOnConflict = options?.warnOnConflict === true;
+  const processValue = String(process.env[name] || "").trim();
+  const dotenvValue = String(DOTENV_CANDIDATES[name] || "").trim();
+  if (preferDotenv && dotenvValue) {
+    if (warnOnConflict && processValue && processValue !== dotenvValue) {
+      console.warn(`[integrity] ${name} differs between process.env and .env; using .env for this local audit run.`);
+    }
+    return dotenvValue;
+  }
+  if (processValue) return processValue;
+  if (dotenvValue) return dotenvValue;
+  return fallback;
+}
+
 function parseArgs(argv = []) {
   const options = {
     windows: [...DEFAULT_WINDOWS],
@@ -80,16 +141,31 @@ function parseArgs(argv = []) {
 }
 
 function envNumber(name, fallback) {
-  const value = Number(process.env[name]);
+  const raw = envValue(name, null);
+  if (raw === null || raw === undefined) return fallback;
+  const trimmed = String(raw).trim();
+  if (!trimmed) return fallback;
+  const value = Number(trimmed);
   return Number.isFinite(value) ? value : fallback;
 }
 
 function mustGetDatabaseUrl() {
-  const value = (process.env.SUPABASE_DB_URL || process.env.DATABASE_URL || "").trim();
-  if (!value) {
-    throw new Error("Missing SUPABASE_DB_URL (or DATABASE_URL).");
+  const candidates = [
+    { source: "process.env.SUPABASE_DB_URL", value: process.env.SUPABASE_DB_URL },
+    { source: "process.env.DATABASE_URL", value: process.env.DATABASE_URL },
+    { source: ".env SUPABASE_DB_URL", value: DOTENV_CANDIDATES.SUPABASE_DB_URL },
+    { source: ".env DATABASE_URL", value: DOTENV_CANDIDATES.DATABASE_URL },
+  ];
+
+  const valid = candidates.find((candidate) => looksLikePostgresUrl(candidate.value));
+  if (valid) return String(valid.value).trim();
+
+  const present = candidates.find((candidate) => String(candidate.value || "").trim());
+  if (present) {
+    throw new Error(`Invalid database URL in ${present.source}. Expected postgres:// or postgresql://`);
   }
-  return value;
+
+  throw new Error("Missing SUPABASE_DB_URL (or DATABASE_URL).");
 }
 
 function quoteIdent(identifier) {
@@ -275,7 +351,10 @@ function markdownFromResult(result) {
 async function run() {
   const options = parseArgs(process.argv.slice(2));
   const dbUrl = mustGetDatabaseUrl();
-  const hubspotToken = (process.env.HUBSPOT_PRIVATE_APP_TOKEN || "").trim();
+  const hubspotToken = envValue("HUBSPOT_PRIVATE_APP_TOKEN", "", {
+    preferDotenv: true,
+    warnOnConflict: true,
+  });
   const referenceDate = new Date();
   const maxWindow = Math.max(...options.windows);
   const maxMissingRevenuePct = envNumber("INTEGRITY_MAX_MISSING_REVENUE_PCT", DEFAULT_MAX_MISSING_REVENUE_PCT);
@@ -459,11 +538,21 @@ async function run() {
       ) as exists
     `);
     if (syncViewExistsRes.rows?.[0]?.exists) {
+      const syncViewColumns = await listColumns(client, "vw_hubspot_sync_health_observability");
+      const staleRowsExpr = hasColumn(syncViewColumns, "is_stale")
+        ? "count(*) filter (where coalesce(is_stale, false))::bigint as stale_rows"
+        : "0::bigint as stale_rows";
+      const deadEventRowsExpr = hasColumn(syncViewColumns, "dead_events")
+        ? "count(*) filter (where coalesce(dead_events, 0) > 0)::bigint as dead_event_rows"
+        : "0::bigint as dead_event_rows";
+      const unhealthyRowsExpr = hasColumn(syncViewColumns, "latest_status")
+        ? "count(*) filter (where coalesce(latest_status, 'error') not in ('success', 'partial'))::bigint as unhealthy_rows"
+        : "0::bigint as unhealthy_rows";
       const syncHealthRes = await client.query(`
         select
-          count(*) filter (where coalesce(is_stale, false))::bigint as stale_rows,
-          count(*) filter (where coalesce(dead_events, 0) > 0)::bigint as dead_event_rows,
-          count(*) filter (where coalesce(latest_status, 'error') not in ('success', 'partial'))::bigint as unhealthy_rows
+          ${staleRowsExpr},
+          ${deadEventRowsExpr},
+          ${unhealthyRowsExpr}
         from public.vw_hubspot_sync_health_observability
       `);
       syncHealth = {

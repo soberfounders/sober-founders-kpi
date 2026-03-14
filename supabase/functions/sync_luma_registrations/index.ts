@@ -1,26 +1,33 @@
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+﻿import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getZoomFreezeConfig } from "../_shared/zoom_freeze.ts";
 
-const THURSDAY_ZOOM_MEETING_ID = "84242212480";
+const ET_TIMEZONE = "America/New_York";
+const THURSDAY_EXPECTED_ET_MINUTES = 11 * 60;
+const GROUP_CALL_TIME_TOLERANCE_MINUTES = 120;
+const THURSDAY_TITLE_HINTS = [
+  "mastermind",
+  "all are welcome",
+  "entrepreneur's big book",
+  "big book",
+];
 const CROSS_EMAIL_NAME_MATCH_MAX_HOURS = 720;
-const NON_PERSON_TOKENS = new Set([
-  "iphone",
-  "ipad",
-  "android",
-  "galaxy",
-  "phone",
-  "zoom",
-  "user",
-  "guest",
-  "host",
-  "cohost",
-  "admin",
-  "desktop",
-  "laptop",
-  "macbook",
-  "pc",
-  "meeting",
-]);
+const ET_WEEKDAY_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  timeZone: ET_TIMEZONE,
+  weekday: "short",
+});
+const ET_TIME_PARTS_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  timeZone: ET_TIMEZONE,
+  hour12: false,
+  hour: "2-digit",
+  minute: "2-digit",
+});
+const ET_DATE_FORMATTER = new Intl.DateTimeFormat("en-CA", {
+  timeZone: ET_TIMEZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -47,72 +54,55 @@ function addDays(dateKey: string, days: number) {
   return d.toISOString().slice(0, 10);
 }
 
+function toTimestampDate(value: unknown): Date | null {
+  if (!value) return null;
+  const parsed = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function dateKeyDiffDays(a: string | null | undefined, b: string | null | undefined): number | null {
+  if (!a || !b) return null;
+  const left = new Date(`${a}T00:00:00.000Z`);
+  const right = new Date(`${b}T00:00:00.000Z`);
+  if (Number.isNaN(left.getTime()) || Number.isNaN(right.getTime())) return null;
+  return Math.round(Math.abs(left.getTime() - right.getTime()) / (1000 * 60 * 60 * 24));
+}
+
 function normalizeName(value = "") {
   return value
     .toLowerCase()
-    .replace(/['’]s\s*(iphone|ipad|android|galaxy|phone|pc|macbook)$/gi, "")
+    .replace(/['â€™]s\s*(iphone|ipad|android|galaxy|phone|pc|macbook)$/gi, "")
     .replace(/\((iphone|ipad|android|galaxy|phone)\)$/gi, "")
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function tokenizeName(value = "") {
-  return normalizeName(value)
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .split(" ")
-    .map((x) => x.trim())
-    .filter(Boolean);
-}
-
-function toDisplayToken(token = "") {
-  if (!/[a-z]/.test(token)) return token.toUpperCase();
-  return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
-}
-
-function applyExplicitCanonicalRules(name = "") {
-  const trimmed = String(name || "").trim();
-  if (!trimmed) return "";
-  if (/^chris\s+lipper\b/i.test(trimmed)) return "Chris Lipper";
-  if (/^allen\s+g(?:\b|[^a-z0-9])/i.test(trimmed) || /^allen\s+godard\b/i.test(trimmed) || /^allen\s+goddard\b/i.test(trimmed)) {
-    return "Allen Goddard";
-  }
-  if (/^josh\s+cougler\b/i.test(trimmed)) return "Josh Cougler";
-  if (/^matt\s+s\b/i.test(trimmed)) return "Matt Shiebler";
-  return "";
-}
-
-function inferFirstLastCanonical(name = "") {
-  const tokens = tokenizeName(name);
-  if (tokens.length < 3) return "";
-  const first = tokens[0] || "";
-  const last = tokens[1] || "";
-  if (first.length < 2 || last.length < 2) return "";
-  if (!/[a-z]/.test(first) || !/[a-z]/.test(last)) return "";
-  if (NON_PERSON_TOKENS.has(first) || NON_PERSON_TOKENS.has(last)) return "";
-  return `${toDisplayToken(first)} ${toDisplayToken(last)}`;
-}
-
-function canonicalizeName(name = "") {
-  const explicit = applyExplicitCanonicalRules(name);
-  if (explicit) return explicit;
-  const inferred = inferFirstLastCanonical(name);
-  if (inferred) return inferred;
-  return String(name || "").trim();
-}
-
-function extractZoomMeetingId(urlValue: string | null | undefined) {
+function extractLegacyMeetingId(urlValue: string | null | undefined) {
   const value = String(urlValue || "");
   const match = value.match(/\/j\/(\d{8,14})/i);
   return match ? match[1] : "";
 }
 
 function isThursdayEvent(startAt: string | null | undefined) {
-  if (!startAt) return false;
-  const day = new Date(startAt).getUTCDay();
-  return day === 4;
+  const parsed = toTimestampDate(startAt);
+  if (!parsed) return false;
+  return ET_WEEKDAY_FORMATTER.format(parsed) === "Thu";
+}
+
+function etDateKey(value: unknown): string | null {
+  const parsed = toTimestampDate(value);
+  return parsed ? ET_DATE_FORMATTER.format(parsed) : null;
+}
+
+function etMinuteOfDay(value: unknown): number | null {
+  const parsed = toTimestampDate(value);
+  if (!parsed) return null;
+  const parts = ET_TIME_PARTS_FORMATTER.formatToParts(parsed);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value || NaN);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value || NaN);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  return (hour * 60) + minute;
 }
 
 function classifyHubspotTier(revenue: unknown): "standard" | "qualified" | "great" {
@@ -351,79 +341,145 @@ function matchHubspotContact(
   };
 }
 
-function buildZoomSessionIndex(zoomRows: any[]) {
-  const sessions = (zoomRows || [])
-    .map((row) => {
-      const dateKey = toDateKey(row?.metadata?.start_time || row?.metric_date);
-      const meetingId = String(row?.metadata?.meeting_id || "");
-      const groupName = String(row?.metadata?.group_name || "");
-      const dayType = meetingId === THURSDAY_ZOOM_MEETING_ID || groupName.toLowerCase() === "thursday"
-        ? "Thursday"
-        : "Other";
+function classifyHubspotThursdaySession(activity: any) {
+  const activityId = Number(activity?.hubspot_activity_id);
+  const activityType = String(activity?.activity_type || "").toLowerCase();
+  if (!Number.isFinite(activityId) || (activityType !== "call" && activityType !== "meeting")) return null;
 
-      const attendeesRaw = Array.isArray(row?.metadata?.attendees) ? row.metadata.attendees : [];
-      const attendees = attendeesRaw
-        .map((x: any) => String(x || "").trim())
-        .filter(Boolean);
+  const timestamp = toTimestampDate(activity?.hs_timestamp || activity?.created_at_hubspot || activity?.created_at);
+  if (!timestamp) return null;
 
-      const attendeeMap = new Map<string, string>();
-      attendees.forEach((name: string) => {
-        const canonicalName = canonicalizeName(name);
-        const key = normalizeName(canonicalName);
-        if (key && !attendeeMap.has(key)) attendeeMap.set(key, canonicalName);
-      });
+  const title = String(activity?.title || "").toLowerCase();
+  const dayShort = ET_WEEKDAY_FORMATTER.format(timestamp);
+  const minuteOfDay = etMinuteOfDay(timestamp);
+  const titleLooksThursday = THURSDAY_TITLE_HINTS.some((token) => title.includes(token)) && !title.includes("intro");
 
-      return { dateKey, dayType, attendeeMap };
-    })
-    .filter((row) => !!row.dateKey && row.dayType === "Thursday")
-    .sort((a, b) => String(a.dateKey).localeCompare(String(b.dateKey)));
-
-  const firstSeenByName = new Map<string, string>();
-  for (const session of sessions) {
-    for (const key of session.attendeeMap.keys()) {
-      if (!firstSeenByName.has(key)) {
-        firstSeenByName.set(key, String(session.dateKey));
-      }
+  if (!titleLooksThursday) {
+    if (dayShort !== "Thu") return null;
+    if (!Number.isFinite(minuteOfDay)) return null;
+    if (Math.abs(Number(minuteOfDay) - THURSDAY_EXPECTED_ET_MINUTES) > GROUP_CALL_TIME_TOLERANCE_MINUTES) {
+      return null;
     }
   }
 
-  return { sessions, firstSeenByName };
+  const dateKey = etDateKey(timestamp);
+  if (!dateKey) return null;
+
+  return {
+    activityId,
+    activityType,
+    dateKey,
+    title: String(activity?.title || ""),
+  };
 }
 
-function matchZoomThursday(
-  guestName: string,
-  eventDateKey: string,
-  zoomIndex: ReturnType<typeof buildZoomSessionIndex>,
-) {
-  const normalizedGuest = normalizeName(canonicalizeName(guestName));
-  if (!normalizedGuest) {
-    return { matched: false, matchedDate: null, matchedName: null, matchedNetNew: false };
+type ThursdayAttendanceSession = {
+  activityId: number;
+  activityType: string;
+  dateKey: string;
+  title: string;
+  contactIds: Set<number>;
+  emails: Set<string>;
+};
+
+function buildThursdayHubspotAttendanceIndex(activityRows: any[], associationRows: any[]) {
+  const assocByActivityKey = new Map<string, { contactIds: Set<number>; emails: Set<string> }>();
+
+  for (const row of associationRows || []) {
+    const activityId = Number(row?.hubspot_activity_id);
+    const activityType = String(row?.activity_type || "").toLowerCase();
+    if (!Number.isFinite(activityId) || (activityType !== "call" && activityType !== "meeting")) continue;
+
+    const key = `${activityType}:${activityId}`;
+    if (!assocByActivityKey.has(key)) {
+      assocByActivityKey.set(key, { contactIds: new Set<number>(), emails: new Set<string>() });
+    }
+    const bucket = assocByActivityKey.get(key)!;
+
+    const contactId = Number(row?.hubspot_contact_id);
+    if (Number.isFinite(contactId) && contactId > 0) bucket.contactIds.add(contactId);
+
+    const email = String(row?.contact_email || "").trim().toLowerCase();
+    if (email) bucket.emails.add(email);
   }
 
-  const candidates = zoomIndex.sessions.filter((session) => {
-    if (!session.dateKey) return false;
-    const diff = Math.abs(new Date(`${session.dateKey}T00:00:00.000Z`).getTime() - new Date(`${eventDateKey}T00:00:00.000Z`).getTime());
-    const diffDays = Math.round(diff / (1000 * 60 * 60 * 24));
-    return diffDays <= 1;
+  const sessions: ThursdayAttendanceSession[] = (activityRows || [])
+    .map((row) => {
+      const classified = classifyHubspotThursdaySession(row);
+      if (!classified) return null;
+      const key = `${classified.activityType}:${classified.activityId}`;
+      const assoc = assocByActivityKey.get(key);
+      if (!assoc) return null;
+      if (assoc.contactIds.size === 0 && assoc.emails.size === 0) return null;
+      return {
+        ...classified,
+        contactIds: assoc.contactIds,
+        emails: assoc.emails,
+      };
+    })
+    .filter((row): row is ThursdayAttendanceSession => !!row)
+    .sort((a, b) => String(a.dateKey).localeCompare(String(b.dateKey)));
+
+  const firstSeenByContactId = new Map<number, string>();
+  const firstSeenByEmail = new Map<string, string>();
+  for (const session of sessions) {
+    for (const contactId of session.contactIds) {
+      if (!firstSeenByContactId.has(contactId)) firstSeenByContactId.set(contactId, session.dateKey);
+    }
+    for (const email of session.emails) {
+      if (!firstSeenByEmail.has(email)) firstSeenByEmail.set(email, session.dateKey);
+    }
+  }
+
+  return { sessions, firstSeenByContactId, firstSeenByEmail };
+}
+
+function matchThursdayAttendance(
+  input: {
+    guestEmail: string;
+    eventDateKey: string;
+    hubspotContactId: number | null;
+    lumaMarkedAttended: boolean;
+  },
+  attendanceIndex: ReturnType<typeof buildThursdayHubspotAttendanceIndex>,
+) {
+  const email = String(input.guestEmail || "").trim().toLowerCase();
+  const contactId = Number(input.hubspotContactId);
+  const hasContactId = Number.isFinite(contactId) && contactId > 0;
+
+  const nearbySessions = attendanceIndex.sessions.filter((session) => {
+    const diffDays = dateKeyDiffDays(session.dateKey, input.eventDateKey);
+    return Number.isFinite(diffDays) && Number(diffDays) <= 1;
   });
 
-  for (const session of candidates) {
-    for (const [attendeeKey, attendeeName] of session.attendeeMap.entries()) {
-      const minLen = Math.min(attendeeKey.length, normalizedGuest.length);
-      if (minLen < 5) continue;
-
-      const isDirect = attendeeKey === normalizedGuest;
-      const isContains = attendeeKey.includes(normalizedGuest) || normalizedGuest.includes(attendeeKey);
-      if (!isDirect && !isContains) continue;
-
-      const firstSeenDate = zoomIndex.firstSeenByName.get(attendeeKey) || "";
+  for (const session of nearbySessions) {
+    if (hasContactId && session.contactIds.has(contactId)) {
+      const firstSeenDate = attendanceIndex.firstSeenByContactId.get(contactId);
       return {
         matched: true,
         matchedDate: session.dateKey,
-        matchedName: attendeeName,
+        matchedName: "HubSpot call association",
         matchedNetNew: !!firstSeenDate && firstSeenDate === session.dateKey,
       };
     }
+    if (email && session.emails.has(email)) {
+      const firstSeenDate = attendanceIndex.firstSeenByEmail.get(email);
+      return {
+        matched: true,
+        matchedDate: session.dateKey,
+        matchedName: "HubSpot call attendee email",
+        matchedNetNew: !!firstSeenDate && firstSeenDate === session.dateKey,
+      };
+    }
+  }
+
+  if (input.lumaMarkedAttended) {
+    return {
+      matched: true,
+      matchedDate: input.eventDateKey,
+      matchedName: "Lu.ma attended flag",
+      matchedNetNew: false,
+    };
   }
 
   return { matched: false, matchedDate: null, matchedName: null, matchedNetNew: false };
@@ -456,6 +512,7 @@ serve(async (req) => {
     const serviceRoleKey = mustGetEnv("SUPABASE_SERVICE_ROLE_KEY");
     const lumaApiKey = mustGetEnv("LUMA_API_KEY");
     const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const zoomFreeze = getZoomFreezeConfig();
 
     const url = new URL(req.url);
     const lookbackDays = Number(url.searchParams.get("lookback_days") || "120");
@@ -471,11 +528,7 @@ serve(async (req) => {
         const dateKey = toDateKey(event?.start_at);
         if (!dateKey) return false;
         if (dateKey < startKey || dateKey > endKey) return false;
-
-        const meetingId = extractZoomMeetingId(event?.zoom_meeting_url || event?.meeting_url);
-        const thursdayByDay = isThursdayEvent(event?.start_at);
-        const thursdayByMeeting = meetingId === THURSDAY_ZOOM_MEETING_ID;
-        return thursdayByDay || thursdayByMeeting;
+        return isThursdayEvent(event?.start_at);
       });
 
     const { data: hubspotRows, error: hubspotError } = await supabase
@@ -487,18 +540,68 @@ serve(async (req) => {
 
     if (hubspotError) throw new Error(`Failed loading HubSpot contacts: ${hubspotError.message}`);
 
-    const { data: zoomRows, error: zoomError } = await supabase
-      .from("kpi_metrics")
-      .select("metric_name,metric_date,metadata")
-      .eq("metric_name", "Zoom Meeting Attendees")
-      .gte("metric_date", addDays(startKey, -2))
-      .lte("metric_date", addDays(endKey, 2))
-      .order("metric_date", { ascending: true });
+    const { data: hubspotActivityRows, error: hubspotActivityError } = await supabase
+      .from("raw_hubspot_meeting_activities")
+      .select("hubspot_activity_id,activity_type,hs_timestamp,created_at_hubspot,title")
+      .gte("created_at_hubspot", `${addDays(startKey, -365)}T00:00:00.000Z`)
+      .lte("created_at_hubspot", `${addDays(endKey, 2)}T23:59:59.999Z`)
+      .order("created_at_hubspot", { ascending: true });
 
-    if (zoomError) throw new Error(`Failed loading Zoom attendees: ${zoomError.message}`);
+    if (hubspotActivityError) {
+      throw new Error(`Failed loading HubSpot meeting activities: ${hubspotActivityError.message}`);
+    }
+
+    const activityIds = Array.from(new Set((hubspotActivityRows || [])
+      .map((row: any) => Number(row?.hubspot_activity_id))
+      .filter((value) => Number.isFinite(value) && value > 0)));
+    const associationRows: any[] = [];
+    const assocChunkSize = 500;
+    for (let idx = 0; idx < activityIds.length; idx += assocChunkSize) {
+      const chunk = activityIds.slice(idx, idx + assocChunkSize);
+      const { data: assocChunkRows, error: assocError } = await supabase
+        .from("raw_hubspot_activity_contact_associations")
+        .select("hubspot_activity_id,activity_type,hubspot_contact_id,contact_email")
+        .in("hubspot_activity_id", chunk)
+        .in("activity_type", ["call", "meeting"]);
+      if (assocError) {
+        throw new Error(`Failed loading HubSpot activity associations: ${assocError.message}`);
+      }
+      associationRows.push(...(assocChunkRows || []));
+    }
+
+    const eventApiIds = Array.from(new Set(candidateEvents
+      .map((event) => String(event?.api_id || event?.id || ""))
+      .filter(Boolean)));
+    let existingRegistrations: any[] = [];
+    if (eventApiIds.length > 0) {
+      const { data: existingRows, error: existingError } = await supabase
+        .from("raw_luma_registrations")
+        .select("event_api_id,guest_api_id,event_date,matched_zoom,matched_zoom_date,matched_zoom_name,matched_zoom_net_new,matched_attendance,matched_attendance_date,matched_attendance_name,matched_attendance_net_new")
+        .in("event_api_id", eventApiIds);
+      if (existingError) {
+        throw new Error(`Failed loading existing Luma registrations: ${existingError.message}`);
+      }
+      existingRegistrations = existingRows || [];
+    }
+    const existingByKey = new Map(
+      existingRegistrations.map((row) => [
+        `${String(row?.event_api_id || "")}::${String(row?.guest_api_id || "")}`,
+        row,
+      ]),
+    );
 
     const hubspotIndex = buildHubspotIndexes(hubspotRows || []);
-    const zoomIndex = buildZoomSessionIndex(zoomRows || []);
+    const attendanceIndex = buildThursdayHubspotAttendanceIndex(hubspotActivityRows || [], associationRows);
+    const postFreezeEventsPresent = zoomFreeze.frozen && candidateEvents.some((event) => {
+      const dateKey = toDateKey(event?.start_at);
+      return !!dateKey && dateKey >= zoomFreeze.freezeDate;
+    });
+    const warnings: string[] = [];
+    if (postFreezeEventsPresent && attendanceIndex.sessions.length === 0) {
+      const warning = "No Thursday HubSpot call sessions were found in the selected freeze window. Verify HubSpot activity sync and attendee associations.";
+      console.warn(warning);
+      warnings.push(warning);
+    }
 
     const rows: any[] = [];
     let totalGuestsFetched = 0;
@@ -516,8 +619,8 @@ serve(async (req) => {
       const guests = await fetchLumaGuests(lumaApiKey, eventApiId);
       totalGuestsFetched += guests.length;
 
-      const zoomMeetingId = extractZoomMeetingId(event.zoom_meeting_url || event.meeting_url);
-      const thursdayFlag = isThursdayEvent(event.start_at) || zoomMeetingId === THURSDAY_ZOOM_MEETING_ID;
+      const legacyMeetingId = extractLegacyMeetingId(event.zoom_meeting_url || event.meeting_url);
+      const thursdayFlag = isThursdayEvent(event.start_at);
 
       for (const entry of guests) {
         const guest = entry?.guest || {};
@@ -546,7 +649,29 @@ serve(async (req) => {
         const hubspotTier = classifyHubspotTier(hubspotRevenue);
         const funnelKey = hubspotMatch ? classifyFunnelFromHubspot(hubspotMatch) : "free";
 
-        const zoomMatch = matchZoomThursday(guestName, eventDate, zoomIndex);
+        const matchedHubspotContactIdRaw = Number(hubspotMatch?.hubspot_contact_id);
+        const matchedHubspotContactId = Number.isFinite(matchedHubspotContactIdRaw) && matchedHubspotContactIdRaw > 0
+          ? matchedHubspotContactIdRaw
+          : null;
+        const existingMatch = existingByKey.get(`${eventApiId}::${guestApiId}`);
+        const shouldKeepLegacyMatch = !!existingMatch && eventDate < zoomFreeze.freezeDate;
+        const lumaMarkedAttended = !!toTimestamp(guest.joined_at || guest.checked_in_at || guest.attended_at);
+        const attendanceMatch = shouldKeepLegacyMatch
+          ? {
+            matched: !!(existingMatch?.matched_attendance ?? existingMatch?.matched_zoom),
+            matchedDate: existingMatch?.matched_attendance_date || existingMatch?.matched_zoom_date || null,
+            matchedName: existingMatch?.matched_attendance_name || existingMatch?.matched_zoom_name || null,
+            matchedNetNew: !!(existingMatch?.matched_attendance_net_new ?? existingMatch?.matched_zoom_net_new),
+          }
+          : matchThursdayAttendance(
+            {
+              guestEmail,
+              eventDateKey: eventDate,
+              hubspotContactId: matchedHubspotContactId,
+              lumaMarkedAttended,
+            },
+            attendanceIndex,
+          );
 
         rows.push({
           event_api_id: eventApiId,
@@ -555,7 +680,7 @@ serve(async (req) => {
           event_start_at: event.start_at || null,
           event_date: eventDate,
           event_timezone: String(event.timezone || "America/New_York"),
-          zoom_meeting_id: zoomMeetingId || null,
+          zoom_meeting_id: legacyMeetingId || null,
           is_thursday: thursdayFlag,
           guest_api_id: guestApiId,
           guest_name: guestName || null,
@@ -565,12 +690,16 @@ serve(async (req) => {
           approval_status: String(guest.approval_status || ""),
           custom_source: guest.custom_source || null,
           registration_answers: Array.isArray(guest.registration_answers) ? guest.registration_answers : [],
-          matched_zoom: zoomMatch.matched,
-          matched_zoom_date: zoomMatch.matchedDate,
-          matched_zoom_name: zoomMatch.matchedName,
-          matched_zoom_net_new: zoomMatch.matchedNetNew,
+          matched_attendance: attendanceMatch.matched,
+          matched_attendance_date: attendanceMatch.matchedDate,
+          matched_attendance_name: attendanceMatch.matchedName,
+          matched_attendance_net_new: attendanceMatch.matchedNetNew,
+          matched_zoom: attendanceMatch.matched,
+          matched_zoom_date: attendanceMatch.matchedDate,
+          matched_zoom_name: attendanceMatch.matchedName,
+          matched_zoom_net_new: attendanceMatch.matchedNetNew,
           matched_hubspot: !!hubspotMatch,
-          matched_hubspot_contact_id: hubspotMatch?.hubspot_contact_id ?? null,
+          matched_hubspot_contact_id: matchedHubspotContactId,
           matched_hubspot_name: hubspotMatch ? `${String(hubspotMatch.firstname || "").trim()} ${String(hubspotMatch.lastname || "").trim()}`.trim() : null,
           matched_hubspot_email: hubspotMatch?.email || null,
           matched_hubspot_revenue: hubspotRevenue,
@@ -589,6 +718,8 @@ serve(async (req) => {
 
     const upserted = await upsertRows(supabase, rows);
     const approvedRows = rows.filter((row) => String(row.approval_status).toLowerCase() === "approved");
+    const attendanceMatches = approvedRows.filter((row) => row.matched_attendance ?? row.matched_zoom).length;
+    const attendanceNetNewMatches = approvedRows.filter((row) => row.matched_attendance_net_new ?? row.matched_zoom_net_new).length;
 
     return new Response(
       JSON.stringify({
@@ -599,12 +730,15 @@ serve(async (req) => {
         rows_prepared: rows.length,
         rows_upserted: upserted,
         approved_registrations: approvedRows.length,
-        zoom_matches: approvedRows.filter((row) => row.matched_zoom).length,
-        zoom_net_new_matches: approvedRows.filter((row) => row.matched_zoom_net_new).length,
+        attendance_matches: attendanceMatches,
+        attendance_net_new_matches: attendanceNetNewMatches,
+        zoom_matches: attendanceMatches,
+        zoom_net_new_matches: attendanceNetNewMatches,
         hubspot_matches: approvedRows.filter((row) => row.matched_hubspot).length,
         hubspot_email_matches: hubspotEmailMatches,
         hubspot_name_matches_72h: hubspotNameMatches72h,
         hubspot_cross_email_matches: hubspotCrossEmailMatches,
+        warnings,
       }),
       { headers: { ...corsHeaders, "content-type": "application/json" } },
     );

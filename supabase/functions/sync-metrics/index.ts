@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { buildZoomFreezeWarning, getZoomFreezeConfig } from "../_shared/zoom_freeze.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,6 +14,7 @@ serve(async (req: Request) => {
   }
 
   try {
+    const zoomFreeze = getZoomFreezeConfig()
     const mustGetEnv = (name: string) => {
       const val = Deno.env.get(name);
       if (!val) throw new Error(`Missing environment variable: ${name}`);
@@ -48,7 +50,10 @@ serve(async (req: Request) => {
     const results = []
 
     for (const integration of integrations) {
-      const slug = integration.supported_integrations.slug
+      const supportedIntegration = Array.isArray(integration.supported_integrations)
+        ? integration.supported_integrations[0]
+        : integration.supported_integrations
+      const slug = supportedIntegration?.slug
       const credentials = integration.integration_credentials.reduce((acc: any, curr: any) => {
         acc[curr.credential_key] = curr.credential_value
         return acc
@@ -56,58 +61,28 @@ serve(async (req: Request) => {
 
       try {
         let metrics: any[] = []
+        const warnings: string[] = []
+
+        if (!slug) {
+          results.push({ slug: 'unknown', status: 'error', message: 'Missing supported integration slug' })
+          continue
+        }
 
         if (slug === 'notion') {
           metrics = await syncNotion(credentials, supabaseClient, integration)
         } else if (slug === 'mailchimp') {
           const mailchimpMetrics = await syncMailchimp(credentials)
           metrics = [...mailchimpMetrics]
-
-          // Zoom credentials from env (not yet migrated to user_integrations table)
-          const zoomCreds = {
-            account_id: Deno.env.get('ZOOM_ACCOUNT_ID'),
-            client_id: Deno.env.get('ZOOM_CLIENT_ID'),
-            client_secret: Deno.env.get('ZOOM_CLIENT_SECRET')
-          }
-
-          if (zoomCreds.account_id) {
-            const { data: aliases, error: aliasesError } = await supabaseClient.from('attendee_aliases').select('*');
-            if (aliasesError) {
-              console.warn('attendee_aliases unavailable; proceeding without aliases', aliasesError.message);
-            }
-
-            const zoomMetrics = await syncZoom(zoomCreds, metrics, aliases || []);
-            metrics = [...metrics, ...zoomMetrics];
-
-            // Correlate Mailchimp campaign openers with Zoom attendees for show-up rate
-            const campaigns = mailchimpMetrics.find(m => m.metric_name === 'Meeting Campaigns Data')?.metadata?.campaigns || [];
-            const meetings = zoomMetrics.filter(m => m.metric_name === 'Zoom Meeting Attendees');
-
-            for (const camp of campaigns) {
-              const match = meetings.find((m: any) => m.metadata.start_time.startsWith(camp.date));
-
-              if (match) {
-                const openers = camp.openers || [];
-                const attendees = match.metadata.attendees || [];
-                const shownUp = openers.filter((email: string) => attendees.includes(email));
-
-                metrics.push({
-                  metric_name: 'Weekly Show Up Rate',
-                  metric_value: openers.length > 0 ? (shownUp.length / openers.length) * 100 : 0,
-                  metadata: {
-                    date: camp.date,
-                    type: camp.type,
-                    openers_count: openers.length,
-                    attendees_count: attendees.length,
-                    show_up_count: shownUp.length
-                  }
-                });
-              }
-            }
-          }
+          const warning = buildZoomFreezeWarning('sync-metrics skipped legacy Zoom enrichment.', zoomFreeze.freezeDate)
+          console.warn(warning)
+          warnings.push(warning)
+        } else if (slug === 'zoom') {
+          const warning = buildZoomFreezeWarning('sync-metrics skipped deprecated Zoom integration.', zoomFreeze.freezeDate)
+          console.warn(warning)
+          warnings.push(warning)
         }
 
-        results.push({ slug, status: 'success', count: metrics.length })
+        results.push({ slug, status: 'success', count: metrics.length, warnings })
       } catch (err: any) {
         results.push({ slug, status: 'error', message: err.message })
       }

@@ -9,8 +9,6 @@ import {
 import { buildLeadAnalytics } from '../lib/leadAnalytics';
 import { buildGroupedLeadsSnapshot, buildDateRangeWindows, computeChangePct } from '../lib/leadsGroupAnalytics';
 import * as leadsGroupAnalyticsLib from '../lib/leadsGroupAnalytics';
-import { buildLeadsConfidenceSummary } from '../lib/leadsConfidenceModel';
-import { buildLeadsActionQueue } from '../lib/leadsActionQueue';
 import { buildLeadsManagerInsights } from '../lib/leadsManagerInsights';
 import { buildLeadsExperimentAnalyzer } from '../lib/leadsExperimentAnalyzer';
 import { buildAliasMap, resolveCanonicalAttendeeName } from '../lib/attendeeCanonicalization';
@@ -38,6 +36,7 @@ import {
 
 const LOOKBACK_DAYS = LEADS_LOOKBACK_DAYS;
 const ATTRIBUTION_HISTORY_DAYS = LEADS_ATTRIBUTION_HISTORY_DAYS;
+const HUBSPOT_ATTENDANCE_ONLY_WARNING = 'Attendance truth comes only from HubSpot Tuesday 12 PM ET and Thursday 11 AM ET calls. If counts look incomplete, backfill HubSpot and re-sync.';
 const MIN_GROUP_ATTENDEES = 3;
 const EXPECTED_ZERO_GROUP_SESSION_KEYS = new Set(['2025-12-25|Thursday']);
 
@@ -679,7 +678,7 @@ function GroupPanel({ label, snap, prevSnap, onOpenModal }) {
           onClick={() => onOpenModal('luma', snap, label)}
         />
         <MetricCell
-          label="Zoom Show-Ups"
+          label="Attendance Show-Ups"
           value={snap.zoomShowUps}
           changePct={diff('zoomShowUps')}
           formatFn={fmt.int}
@@ -1026,12 +1025,11 @@ export default function LeadsDashboard() {
     return () => clearTimeout(timer);
   }, [loading, rawAds.length, rawHubspot.length, rawLuma.length, rawZoom.length]);
 
-  async function loadOptionalHubspotActivityEnrichment({ startKey, attributionStartKey, myInvocation }) {
+  async function loadOptionalHubspotActivityEnrichment({ attributionStartKey, myInvocation }) {
     setOptionalEnrichmentStatus('loading');
     const enrichmentErrors = [];
     let hubspotActivitiesData = [];
     let hubspotActivityAssociationsData = [];
-    let zoomHubspotMappingsData = [];
 
     try {
       const activitiesR = await supabase.from('raw_hubspot_meeting_activities')
@@ -1043,17 +1041,6 @@ export default function LeadsDashboard() {
         enrichmentErrors.push(`HubSpot call/activity mapping tables not available yet: ${activitiesR.error.message}`);
       } else {
         hubspotActivitiesData = activitiesR.data || [];
-      }
-
-      const zoomMappingsR = await supabase.from('zoom_attendee_hubspot_mappings')
-        .select('session_date,meeting_id,zoom_session_key,zoom_attendee_canonical_name,hubspot_contact_id,hubspot_email,hubspot_activity_id,activity_type,mapping_source,mapping_confidence,mapping_reason,match_note')
-        .gte('session_date', startKey)
-        .order('session_date', { ascending: true });
-
-      if (zoomMappingsR.error) {
-        enrichmentErrors.push(`Zoom attendee HubSpot mapping table not available yet: ${zoomMappingsR.error.message}`);
-      } else {
-        zoomHubspotMappingsData = zoomMappingsR.data || [];
       }
 
       const activityIds = Array.from(new Set(
@@ -1090,11 +1077,10 @@ export default function LeadsDashboard() {
 
     setRawHubspotActivities(hubspotActivitiesData);
     setRawHubspotActivityAssociations(hubspotActivityAssociationsData);
-    setRawZoomHubspotMappings(zoomHubspotMappingsData);
+    setRawZoomHubspotMappings([]);
     const enrichmentFailed = enrichmentErrors.length > 0
       && hubspotActivitiesData.length === 0
-      && hubspotActivityAssociationsData.length === 0
-      && zoomHubspotMappingsData.length === 0;
+      && hubspotActivityAssociationsData.length === 0;
     setOptionalEnrichmentStatus(enrichmentFailed ? 'error' : 'ready');
     if (enrichmentErrors.length > 0) {
       setLoadErrors((prev) => Array.from(new Set([...(prev || []), ...enrichmentErrors])));
@@ -1111,26 +1097,21 @@ export default function LeadsDashboard() {
     const attributionStartDate = new Date();
     attributionStartDate.setUTCDate(attributionStartDate.getUTCDate() - ATTRIBUTION_HISTORY_DAYS);
     const attributionStartKey = attributionStartDate.toISOString().slice(0, 10);
-    const errors = [];
+    const errors = [HUBSPOT_ATTENDANCE_ONLY_WARNING];
 
-    const [adsR, zoomR, hubspotR, aliasR] = await Promise.all([
+    const [adsR, hubspotR, aliasR] = await Promise.all([
       supabase.from('raw_fb_ads_insights_daily')
         .select('date_day,ad_account_id,funnel_key,campaign_name,adset_name,ad_name,ad_id,spend,impressions,clicks,leads')
         .gte('date_day', startKey).order('date_day', { ascending: true }),
-      supabase.from('kpi_metrics')
-        .select('metric_name,metric_value,metric_date,metadata')
-        .eq('metric_name', 'Zoom Meeting Attendees')
-        .gte('metric_date', startKey).order('metric_date', { ascending: true }),
       fetchLeadsHubspotContactsWithSchemaFallback({ attributionStartKey }),
       supabase.from('attendee_aliases').select('original_name,target_name'),
     ]);
 
     const lumaR = await supabase.from('raw_luma_registrations')
-      .select('event_date,event_start_at,event_api_id,guest_api_id,guest_name,guest_email,registered_at,approval_status,is_thursday,matched_zoom,matched_zoom_net_new,matched_hubspot,matched_hubspot_tier,funnel_key,matched_hubspot_revenue,registration_answers,custom_source')
+      .select('event_date,event_start_at,event_api_id,guest_api_id,guest_name,guest_email,registered_at,approval_status,is_thursday,matched_attendance,matched_attendance_net_new,matched_zoom,matched_zoom_net_new,matched_hubspot,matched_hubspot_tier,funnel_key,matched_hubspot_revenue,registration_answers,custom_source')
       .gte('event_date', attributionStartKey).order('event_date', { ascending: true });
 
     if (adsR.error) errors.push(`Meta ads unavailable: ${adsR.error.message}`);
-    if (zoomR.error) errors.push(`Zoom data unavailable: ${zoomR.error.message}`);
     if (lumaR.error) errors.push(`Luma data unavailable: ${lumaR.error.message}`);
     if (hubspotR.error) errors.push(`HubSpot data unavailable: ${hubspotR.error.message}`);
     if (Array.isArray(hubspotR.schemaWarnings) && hubspotR.schemaWarnings.length > 0) {
@@ -1139,7 +1120,7 @@ export default function LeadsDashboard() {
     if (aliasR.error) errors.push(`Alias data unavailable: ${aliasR.error.message}`);
 
     setRawAds(adsR.data || []);
-    setRawZoom(zoomR.data || []);
+    setRawZoom([]);
     setRawLuma(lumaR.data || []);
     setRawHubspot(hubspotR.data || []);
     setAliases(aliasR.data || []);
@@ -1151,7 +1132,7 @@ export default function LeadsDashboard() {
     const nextAnalytics = buildLeadAnalytics({
       adsRows: adsR.data || [],
       hubspotRows: hubspotR.data || [],
-      zoomRows: zoomR.data || [],
+      zoomRows: [],
       lumaRows: lumaR.data || [],
       aliases: aliasR.data || [],
       lookbackDays: LOOKBACK_DAYS,
@@ -1165,7 +1146,7 @@ export default function LeadsDashboard() {
     // Increment the counter so any in-flight enrichment from a previous call discards its results.
     enrichmentInvocationRef.current += 1;
     const myInvocation = enrichmentInvocationRef.current;
-    void loadOptionalHubspotActivityEnrichment({ startKey, attributionStartKey, myInvocation });
+    void loadOptionalHubspotActivityEnrichment({ attributionStartKey, myInvocation });
   }
 
   useEffect(() => {
@@ -1175,7 +1156,7 @@ export default function LeadsDashboard() {
     const drilldownReadyAnalytics = buildLeadAnalytics({
       adsRows: rawAds,
       hubspotRows: rawHubspot,
-      zoomRows: rawZoom,
+      zoomRows: [],
       lumaRows: rawLuma,
       aliases,
       lookbackDays: LOOKBACK_DAYS,
@@ -1199,7 +1180,7 @@ export default function LeadsDashboard() {
   // Build grouped snapshot
   const groupedData = useMemo(() => {
     if (!rawAds.length && !rawHubspot.length) return null;
-    return buildGroupedLeadsSnapshot({ adsRows: rawAds, hubspotRows: rawHubspot, lumaRows: rawLuma, zoomRows: rawZoom, dateRange: dateWindows });
+    return buildGroupedLeadsSnapshot({ adsRows: rawAds, hubspotRows: rawHubspot, lumaRows: rawLuma, zoomRows: [], dateRange: dateWindows });
   }, [rawAds, rawHubspot, rawLuma, rawZoom, dateWindows]);
 
   const hearAboutModule = useMemo(() => {
@@ -1268,7 +1249,7 @@ export default function LeadsDashboard() {
       if (approval && approval !== 'approved') return;
       const isThursday = row?.is_thursday === undefined ? true : !!row.is_thursday;
       if (!isThursday) return;
-      if (!row?.matched_zoom) return;
+      if (!(row?.matched_attendance ?? row?.matched_zoom)) return;
       const email = normalizeEmail(row?.guest_email);
       if (!email) return;
       historyZoomCounts.set(email, (historyZoomCounts.get(email) || 0) + 1);
@@ -1904,7 +1885,7 @@ export default function LeadsDashboard() {
       const titleScore =
         (titleLc.includes('sober founders') ? 8 : 0) +
         (titleLc.includes('mastermind') ? 3 : 0) +
-        (titleLc.includes('zoom') ? 2 : 0);
+        0;
       const score = titleScore + (attendeeCount * 0.15) - (Number(et.minutesFromExpected) * 0.01);
       const key = `${et.etDateKey}|${et.dayType}`;
       if (!hubspotCallCandidatesByDateDay.has(key)) hubspotCallCandidatesByDateDay.set(key, []);
@@ -2098,20 +2079,13 @@ export default function LeadsDashboard() {
           const key = `${dateKey}|${dayType}`;
           const chosen = chosenHubspotCallSessionByDateDay.get(key);
           if (!chosen) {
-            const zoomAgg = zoomRowsByDateDay.get(key);
-            const zoomFallbackRowCount = zoomAgg?.rowCount || 0;
-            const zoomFallbackAttendeeCount = zoomAgg?.maxAttendees || 0;
-            const actionable = zoomFallbackRowCount > 0 || zoomFallbackAttendeeCount > 0;
             out.push({
               date: dateKey,
               dayType,
               expectedEtTime: dayType === 'Tuesday' ? '12:00 ET' : '11:00 ET',
               hubspotCallPresent: 'No',
-              zoomFallbackRowCount,
-              zoomFallbackAttendeeCount,
-              zoomFallbackMeetingIds: zoomAgg ? Array.from(zoomAgg.meetingIds || []).join(', ') : '',
-              missingCategory: actionable ? 'hubspot_call_missing_with_zoom' : 'likely_no_meeting',
-              actionRequired: actionable ? 'Yes' : 'No',
+              missingCategory: 'hubspot_call_missing',
+              actionRequired: 'Yes',
             });
           }
         }
@@ -2197,16 +2171,16 @@ export default function LeadsDashboard() {
           missingAttributionReason = 'HubSpot Call linked attendee/contact exists, but raw_hubspot_contacts is missing that contact row (HubSpot contacts backfill needed for attribution)';
         } else if (lumaEvidence) {
           if (String(lumaEvidence?.originalTrafficSource || '').trim().toUpperCase() !== 'NOT FOUND') {
-            missingAttributionReason = 'No HubSpot contact match by Zoom name; using Lu.ma-linked HubSpot source';
+            missingAttributionReason = 'No HubSpot contact match by attendee name; using Lu.ma-linked HubSpot source';
           } else if (String(lumaEvidence?.hearAboutCategory || '').trim() !== 'Unknown') {
-            missingAttributionReason = 'No HubSpot contact match by Zoom name; using Lu.ma self-reported source';
+            missingAttributionReason = 'No HubSpot contact match by attendee name; using Lu.ma self-reported source';
           } else {
-            missingAttributionReason = 'No HubSpot match by Zoom name; Lu.ma record exists but no usable attribution';
+            missingAttributionReason = 'No HubSpot match by attendee name; Lu.ma record exists but no usable attribution';
           }
         } else {
           missingAttributionReason = row?.sessionTruthSource === 'hubspot_call'
             ? 'HubSpot Call attendee row exists but no usable contact/source record found'
-            : 'No HubSpot match by normalized Zoom name; no Lu.ma evidence by name/email';
+            : 'No HubSpot match by normalized attendee name; no Lu.ma evidence by name/email';
         }
       } else if (hubspotOfflineLooksIntegration) {
         missingAttributionReason = 'HubSpot original source is OFFLINE (Lu.ma/Zap/CRM create path), acquisition source may require merge/duplicate resolution';
@@ -2243,7 +2217,7 @@ export default function LeadsDashboard() {
         manualHubspotContactId: null,
         manualHubspotUrl: '',
         hubspotContactId: Number.isFinite(directHubspotContactId) ? directHubspotContactId : (Number(contact?.hubspot_contact_id) || null),
-        attendanceTruthSource: row?.sessionTruthSource === 'hubspot_call' ? 'HubSpot Call' : 'Zoom KPI',
+        attendanceTruthSource: row?.sessionTruthSource === 'hubspot_call' ? 'HubSpot Call' : 'Legacy attendance fallback',
         hubspotCallActivityId: row?.hubspotActivityId || null,
         hubspotCallTitle: row?.hubspotCallTitle || 'Not Found',
         hubspotCallTimestampUtc: row?.hubspotCallTimestampUtc || 'Not Found',
@@ -2463,7 +2437,7 @@ export default function LeadsDashboard() {
           paidMetaShareOfMatchedTuesday: safeRatio(tuesdayPaidRows.length, tuesdayMatchedRows.length),
           unmatchedTuesdayRows: tuesdayRows.filter((r) => !r.matchedHubspot).length,
         },
-        attendanceTruthMode: useHubspotCallTruth ? 'HubSpot Calls (Tue/Thu scheduled) primary' : 'Zoom KPI fallback',
+        attendanceTruthMode: 'HubSpot Calls (Tue/Thu scheduled) only',
       };
     };
 
@@ -2505,7 +2479,7 @@ export default function LeadsDashboard() {
         hubspotCallTruthSessionCount: previousHubspotCallTruthSessionCount,
       } : null,
       loadedHistoryDays: LOOKBACK_DAYS,
-      attendanceTruthMode: useHubspotCallTruth ? 'HubSpot Calls (Tue/Thu scheduled) primary' : 'Zoom KPI fallback',
+      attendanceTruthMode: 'HubSpot Calls (Tue/Thu scheduled) only',
     };
   }, [rawZoom, rawHubspot, rawHubspotActivities, rawHubspotActivityAssociations, aliases, rawZoomHubspotMappings, dateWindows, groupedData]);
 
@@ -3173,7 +3147,7 @@ export default function LeadsDashboard() {
     const current = zoomSourceModule?.current;
     if (!current) {
       return {
-        headline: 'No Zoom source data available.',
+        headline: 'No HubSpot attendance source data available.',
         bullets: [],
         moves: [],
         warnings: [],
@@ -3189,7 +3163,7 @@ export default function LeadsDashboard() {
     const moves = [];
 
     if (current.totalShowUpRows > 0) {
-      bullets.push(`Paid Meta produced ${paid.showUpRows || 0} of ${current.totalShowUpRows} free Zoom show-up rows (${maybePct(paid.showUpShare)}).`);
+      bullets.push(`Paid Meta produced ${paid.showUpRows || 0} of ${current.totalShowUpRows} free attendance rows (${maybePct(paid.showUpShare)}).`);
     }
     if ((tuesday.totalTuesdayRows || 0) > 0) {
       bullets.push(`Tuesday assumption test: ${tuesday.paidMetaTuesdayRows || 0} of ${tuesday.totalTuesdayRows || 0} Tuesday show-up rows matched to Meta paid (${maybePct(tuesday.paidMetaShareOfTuesday)}).`);
@@ -3208,12 +3182,12 @@ export default function LeadsDashboard() {
       bullets.push('Meta good repeat members are currently too few to compute a stable cost per good repeat member in this date range.');
     }
     if (Number.isFinite(Number(lumaPaid.costPerShowUp))) {
-      bullets.push(`Lu.ma-only paid cost per show-up is ${maybeCurrency(lumaPaid.costPerShowUp)}; compare this with Zoom-wide paid cost per show-up (${maybeCurrency(paid.costPerShowUp)}) to see whether Tuesday changes the story.`);
+      bullets.push(`Lu.ma-only paid cost per show-up is ${maybeCurrency(lumaPaid.costPerShowUp)}; compare this with full attendance cost per show-up (${maybeCurrency(paid.costPerShowUp)}) to see whether Tuesday changes the story.`);
     }
 
     const matchRate = current.matchRate;
     if (!Number.isFinite(Number(matchRate)) || Number(matchRate) < 0.75) {
-      warnings.push(`Only ${maybePct(matchRate)} of Zoom show-up rows matched to HubSpot source data. Improve alias/name matching before making major budget decisions.`);
+      warnings.push(`Only ${maybePct(matchRate)} of attendance rows matched to HubSpot source data. Improve alias/name matching before making major budget decisions.`);
     }
     if ((tuesday.unmatchedTuesdayRows || 0) > 0) {
       warnings.push(`Tuesday has ${tuesday.unmatchedTuesdayRows} unmatched show-up rows, which can distort the Meta share assumption.`);
@@ -3252,7 +3226,7 @@ export default function LeadsDashboard() {
       const curPaidShowUps = paid.showUpRows || 0;
       const showUpChange = computeChangePct(curPaidShowUps, prevPaidShowUps).pct;
       if (showUpChange !== null && showUpChange !== undefined) {
-        bullets.push(`Paid Meta free Zoom show-up rows are ${showUpChange >= 0 ? 'up' : 'down'} ${Math.abs(showUpChange * 100).toFixed(1)}% vs previous comparison window.`);
+        bullets.push(`Paid Meta free attendance rows are ${showUpChange >= 0 ? 'up' : 'down'} ${Math.abs(showUpChange * 100).toFixed(1)}% vs previous comparison window.`);
       }
     }
 
@@ -3624,7 +3598,7 @@ export default function LeadsDashboard() {
       });
     }
     if (type === 'zoom') {
-      setModal({ title: `${groupLabel} — Zoom Show-Ups`, columns: ZOOM_COLS, rows: snap.zoomRows || [] });
+      setModal({ title: `${groupLabel} — Attendance Show-Ups`, columns: ZOOM_COLS, rows: snap.zoomRows || [] });
     }
   }, []);
 
@@ -3750,13 +3724,6 @@ export default function LeadsDashboard() {
         color: '#7c3aed',
         rowCount: (rawLuma || []).length,
         dateKey: latestDateKeyFromRows(rawLuma, (row) => row?.event_date || row?.event_start_at || row?.registered_at),
-      },
-      {
-        key: 'zoom',
-        label: 'Zoom KPI',
-        color: '#d97706',
-        rowCount: (rawZoom || []).length,
-        dateKey: latestDateKeyFromRows(rawZoom, (row) => row?.metadata?.start_time || row?.metric_date),
       },
     ].map((row) => {
       const staleDays = row.dateKey ? daysBetweenDateKeys(todayKeyUtc, row.dateKey) : null;
@@ -3887,7 +3854,7 @@ export default function LeadsDashboard() {
         card('metaLeads', 'Latest Week Meta Leads'),
         card('paidHubspotLeads', 'Latest Week Paid HubSpot Leads'),
         card('lumaRegistrations', 'Latest Week Lu.ma Registrations'),
-        card('zoomAttendees', 'Latest Week Zoom Attendees'),
+        card('zoomAttendees', 'Latest Week Attendance Attendees'),
         card('cpl', 'Latest Week Meta CPL', 'currency', true),
       ],
     };
@@ -3925,6 +3892,9 @@ export default function LeadsDashboard() {
   const currentMissingHubspotCallSessions = zoomSourceModule?.current?.missingHubspotCallSessions || [];
   const currentActionableMissingHubspotCallSessions = currentMissingHubspotCallSessions.filter((r) => String(r?.actionRequired || '') === 'Yes');
   const currentLikelyNoMeetingHubspotCallSessions = currentMissingHubspotCallSessions.filter((r) => String(r?.missingCategory || '') === 'likely_no_meeting');
+  const actionableMissingHubspotCallPreview = currentActionableMissingHubspotCallSessions
+    .slice(0, 5)
+    .map((row) => `${row?.date || 'Unknown Date'} ${row?.dayType || ''}`.trim());
   const unifiedCurrent = unifiedFunnelModule?.current || null;
   const unifiedPrevious = unifiedFunnelModule?.previous || null;
   const openUnifiedDrilldown = (title, columns, rows, options = {}) => {
@@ -4003,20 +3973,21 @@ export default function LeadsDashboard() {
         }
         return [];
       };
-
-      const scoreRaw = Number(
+      const rawScore = Number(
         source?.confidence_score
         ?? source?.confidenceScore
         ?? source?.score
-        ?? source?.confidence,
+        ?? source?.integrity_score
+        ?? source?.integrityScore
+        ?? 100,
       );
-      const confidenceScore = Number.isFinite(scoreRaw)
-        ? (scoreRaw > 1 ? scoreRaw / 100 : scoreRaw)
-        : null;
+      const normalizedScore = Number.isFinite(rawScore)
+        ? (rawScore > 1 ? rawScore / 100 : rawScore)
+        : 1;
 
       return {
-        confidence_score: confidenceScore,
-        confidence_level: String(source?.confidence_level ?? source?.confidenceLevel ?? '').trim(),
+        confidence_score: normalizedScore,
+        confidence_level: String(source?.integrity_level ?? source?.integrityLevel ?? source?.confidence_level ?? source?.confidenceLevel ?? '').trim(),
         blockers: pickFirstArray(source?.blockers, source?.top_blockers, source?.topBlockers),
         autonomous_tasks: pickFirstArray(source?.autonomous_tasks, source?.autonomousTasks, source?.autonomous_actions, source?.autonomousActions),
         human_tasks: pickFirstArray(source?.human_tasks, source?.humanTasks, source?.human_actions, source?.humanActions),
@@ -4035,46 +4006,28 @@ export default function LeadsDashboard() {
     const prebuiltPayload = objectCandidates.find((candidate) => candidate && typeof candidate === 'object' && !Array.isArray(candidate));
     if (prebuiltPayload) return normalizeQueuePayload(prebuiltPayload);
 
-    if (typeof buildLeadsConfidenceSummary === 'function' && typeof buildLeadsActionQueue === 'function') {
-      try {
-        const zoomCurrent = zoomSourceModule?.current;
-        const lumaDetailCount = unifiedCurrent?.stageRows?.lumaRowsDetailed?.length ?? 0;
-        const lumaUnmatchedCount = unifiedCurrent?.stageRows?.unmatchedLumaRows?.length ?? 0;
-        const lumaHubspotMatchRate = lumaDetailCount > 0
-          ? (lumaDetailCount - lumaUnmatchedCount) / lumaDetailCount
-          : null;
+    const blockers = Array.from(new Set([
+      ...loadErrors,
+      ...(currentActionableMissingHubspotCallSessions.length > 0
+        ? [`${currentActionableMissingHubspotCallSessions.length} expected Tuesday/Thursday HubSpot attendance call(s) are missing in the selected range.`]
+        : []),
+    ].filter(Boolean)));
+    const hasHubspotIntegrityIssue = currentActionableMissingHubspotCallSessions.length > 0
+      || loadErrors.some((message) => message !== HUBSPOT_ATTENDANCE_ONLY_WARNING);
+    const autonomousTasks = [
+      'Keep Tuesday 12 PM ET and Thursday 11 AM ET HubSpot attendance calls synced before reviewing attendance KPIs.',
+      'Treat missing attendance counts as a HubSpot data issue to backfill, not as a reason to use a legacy fallback.',
+    ];
+    const humanTasks = currentActionableMissingHubspotCallSessions.length > 0
+      ? ['Backfill missing HubSpot Tuesday/Thursday call records or contact associations, then re-sync attendance.']
+      : ['Verify HubSpot attendance sync freshness before acting on meeting attendance deltas.'];
 
-        const confidenceInput = {
-          analytics,
-          groupedData,
-          unifiedCurrent,
-          unifiedPrevious,
-          loadErrors,
-          dateWindows,
-          // Flatten the specific values pickNumber() resolves at the top level
-          match_rate: zoomCurrent?.matchRate ?? null,
-          total_showup_rows: zoomCurrent?.totalShowUpRows ?? null,
-          unknown_or_other_good_members: zoomCurrent?.unknownOrOtherGoodMembers ?? null,
-          hubspot_call_coverage_rate: unifiedCurrent?.hubspotCallCoverage?.rate ?? null,
-          confidence_breakdown: unifiedCurrent?.matchConfidenceBreakdown ?? null,
-          luma_hubspot_match_rate: lumaHubspotMatchRate,
-          luma_zoom_match_rate: unifiedCurrent?.funnel?.lumaToZoomRate ?? null,
-        };
-        const summary = buildLeadsConfidenceSummary(confidenceInput);
-        const queue = buildLeadsActionQueue({ confidence_summary: summary, ...confidenceInput });
-        const mergedPayload = {
-          ...(summary && typeof summary === 'object' && !Array.isArray(summary) ? summary : {}),
-          ...(queue && typeof queue === 'object' && !Array.isArray(queue) ? queue : {}),
-        };
-        if (Object.keys(mergedPayload).length > 0) {
-          return normalizeQueuePayload(mergedPayload);
-        }
-      } catch (confidenceErr) {
-        // Keep the page resilient when W1 helpers are unavailable or fail.
-      }
-    }
-
-    return null;
+    return normalizeQueuePayload({
+      integrity_level: hasHubspotIntegrityIssue ? 'low' : 'high',
+      blockers,
+      autonomous_tasks: autonomousTasks,
+      human_tasks: humanTasks,
+    });
   })();
   const leadsParityReport = useMemo(() => {
     const parityFnName = 'computeLeadsParityReport';
@@ -4318,6 +4271,25 @@ export default function LeadsDashboard() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Errors */}
+      {currentActionableMissingHubspotCallSessions.length > 0 && (
+        <div style={{ ...card, borderLeft: '4px solid #dc2626', backgroundColor: '#fef2f2' }}>
+          <p style={{ margin: 0, fontWeight: 800, color: '#991b1b' }}>Attendance Sync Warning</p>
+          <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#991b1b' }}>
+            {currentActionableMissingHubspotCallSessions.length} expected Tuesday/Thursday HubSpot call activity record(s) are missing in this date range.
+          </p>
+          <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#7f1d1d' }}>
+            Backfill the missing HubSpot activity and contact associations, then run sync again. Attendance should be treated as incomplete until this is resolved.
+          </p>
+          {actionableMissingHubspotCallPreview.length > 0 && (
+            <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#7f1d1d' }}>
+              Missing session dates: {actionableMissingHubspotCallPreview.join(', ')}
+              {currentActionableMissingHubspotCallSessions.length > actionableMissingHubspotCallPreview.length
+                ? ` (+${currentActionableMissingHubspotCallSessions.length - actionableMissingHubspotCallPreview.length} more)`
+                : ''}
+            </p>
+          )}
+        </div>
+      )}
       {(optionalEnrichmentStatus === 'loading') && (
         <div style={{ ...card, borderLeft: '4px solid #2563eb', backgroundColor: '#eff6ff' }}>
           <p style={{ margin: 0, fontWeight: 700, color: '#1d4ed8' }}>Loading Additional Lead Enrichment</p>
@@ -4344,7 +4316,7 @@ export default function LeadsDashboard() {
               Recent performance and priority actions
             </h2>
             <p style={{ margin: '10px 0 0', fontSize: '13px', color: '#475569', maxWidth: '820px', lineHeight: 1.55 }}>
-              Live view from Meta Ads, HubSpot, Lu.ma, and attendance sources already wired in this module. As-of date updates automatically from the latest loaded source row.
+              Live view from Meta Ads, HubSpot, and Lu.ma registration sources. Attendance truth comes from HubSpot Tuesday and Thursday calls, and any missing meeting data must be fixed in HubSpot before review.
             </p>
           </div>
           <div style={{ ...subCard, minWidth: '260px', border: '1px solid #cbd5e1', backgroundColor: '#fff' }}>
@@ -4789,7 +4761,7 @@ export default function LeadsDashboard() {
                     <Legend />
                     <Bar yAxisId="left" dataKey="metaLeads" name="Meta Leads" fill="#0f766e" radius={[4, 4, 0, 0]} />
                     <Bar yAxisId="left" dataKey="paidHubspotLeads" name="Paid HubSpot Leads" fill="#0284c7" radius={[4, 4, 0, 0]} />
-                    <Line yAxisId="left" type="monotone" dataKey="zoomAttendees" name="Zoom Attendees" stroke="#7c3aed" strokeWidth={2} dot={false} />
+                    <Line yAxisId="left" type="monotone" dataKey="zoomAttendees" name="Attendance Attendees" stroke="#7c3aed" strokeWidth={2} dot={false} />
                     <Line yAxisId="right" type="monotone" dataKey="cpl" name="Meta CPL" stroke="#dc2626" strokeWidth={2} dot={false} />
                   </ComposedChart>
                 </ResponsiveContainer>
@@ -4811,9 +4783,9 @@ export default function LeadsDashboard() {
       >
         <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <div>
-            <span style={{ fontWeight: 700, fontSize: '15px', color: '#0f172a' }}>Legacy Comparison (Mixed / Zoom-era analytics)</span>
+            <span style={{ fontWeight: 700, fontSize: '15px', color: '#0f172a' }}>Legacy Comparison (Deprecated pre-HubSpot attendance analytics)</span>
             <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748b' }}>
-              Kept temporarily for validation only. Do not use this section as the primary source of truth for show-ups or member economics.
+              Kept temporarily for migration review only. Do not use this section as the source of truth for attendance, show-ups, or member economics.
             </p>
           </div>
           <span style={{ padding: '4px 8px', borderRadius: '999px', backgroundColor: '#fef3c7', color: '#92400e', fontSize: '10px', fontWeight: 700 }}>
@@ -5218,10 +5190,10 @@ export default function LeadsDashboard() {
           )}
 
           <div style={card}>
-            <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Best Member Source Insights (Zoom-First)</h3>
+            <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Best Member Source Insights (HubSpot Attendance)</h3>
             <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b' }}>
-              Starts from actual Zoom attendance (Tuesday + Thursday), then matches to HubSpot to identify where the best members came from.
-              Good member = 3+ Zoom attendances and revenue ≥ $250k.
+              Starts from HubSpot attendance truth (Tuesday + Thursday), then matches to HubSpot to identify where the best members came from.
+              Good member = 3+ attendances and revenue at least $250k.
             </p>
 
             <div
@@ -5234,11 +5206,11 @@ export default function LeadsDashboard() {
             >
               <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Attendance Truth Source</p>
               <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#334155' }}>
-                {zoomSourceModule.attendanceTruthMode || 'HubSpot Calls (Tue/Thu scheduled) primary'}
+                {zoomSourceModule.attendanceTruthMode || 'HubSpot Calls (Tue/Thu scheduled) only'}
               </p>
               <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#475569' }}>
-                HubSpot Calls near Tuesday 12:00 ET and Thursday 11:00 ET are the source of truth for show-ups.
-                Zoom is fallback/audit only when a HubSpot Call is missing.
+                HubSpot Calls near Tuesday 12:00 ET and Thursday 11:00 ET are the source of truth for attendance show-ups.
+                Missing sessions should be backfilled in HubSpot and re-synced.
               </p>
               <p
                 style={{
@@ -5250,7 +5222,6 @@ export default function LeadsDashboard() {
               >
                 Missing expected HubSpot Calls in selected range (actionable): {fmt.int(currentActionableMissingHubspotCallSessions.length)}
                 {' '}| HubSpot Call sessions found (Tue/Thu scheduled): {fmt.int(zoomSourceModule.current?.hubspotCallTruthSessionCount || 0)}
-                {' '}| Likely no-meeting/holiday dates: {fmt.int(currentLikelyNoMeetingHubspotCallSessions.length)}
               </p>
             </div>
 
@@ -5309,7 +5280,7 @@ export default function LeadsDashboard() {
                 <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmtMaybePct(zoomSourceModule.current.tuesdayAssumptionTest.paidMetaShareOfMatchedTuesday)}</p>
               </div>
               <div style={{ ...subCard, borderLeft: '4px solid #0f766e' }}>
-                <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Zoom Attribution Match Rate</p>
+                <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Attendance Attribution Match Rate</p>
                 <p style={{ margin: '6px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmtMaybePct(zoomSourceModule.current.matchRate)}</p>
               </div>
               <div style={{ ...subCard, borderLeft: `4px solid ${currentActionableMissingHubspotCallSessions.length > 0 ? '#dc2626' : '#16a34a'}` }}>
@@ -5335,17 +5306,17 @@ export default function LeadsDashboard() {
                 Missing HubSpot Call Sessions (Tuesday/Thursday)
               </p>
               <p style={{ margin: '4px 0 8px', fontSize: '11px', color: '#64748b' }}>
-                Expected Tuesday 12:00 ET and Thursday 11:00 ET sessions with no matching HubSpot Call. Rows with no Zoom data are marked as likely no-meeting / holiday.
+                Expected Tuesday 12:00 ET and Thursday 11:00 ET sessions with no matching HubSpot Call.
               </p>
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '860px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '620px' }}>
                   <thead>
                     <tr style={{ backgroundColor: '#f8fafc' }}>
-                      {['Date', 'Day', 'Expected Time (ET)', 'HubSpot Call Present', 'Zoom Fallback Rows', 'Zoom Fallback Attendees', 'Zoom Meeting IDs (Audit)'].map((h) => (
+                      {['Date', 'Day', 'Expected Time (ET)', 'HubSpot Call Present'].map((h) => (
                         <th
                           key={h}
                           style={{
-                            textAlign: (h === 'Date' || h === 'Day' || h === 'Expected Time (ET)' || h === 'Zoom Meeting IDs (Audit)') ? 'left' : 'right',
+                            textAlign: (h === 'Date' || h === 'Day' || h === 'Expected Time (ET)') ? 'left' : 'right',
                             padding: '6px 8px',
                             borderBottom: '1px solid #e2e8f0',
                             fontSize: '11px',
@@ -5359,21 +5330,16 @@ export default function LeadsDashboard() {
                   </thead>
                   <tbody>
                     {currentMissingHubspotCallSessions.slice(0, 25).map((row) => (
-                      <tr key={`missing-hs-call-${row.date}-${row.dayType}`} style={{ backgroundColor: row.missingCategory === 'likely_no_meeting' ? '#f8fafc' : '#fff7ed' }}>
+                      <tr key={`missing-hs-call-${row.date}-${row.dayType}`} style={{ backgroundColor: '#fff7ed' }}>
                         <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#0f172a', fontWeight: 600 }}>{row.date}</td>
                         <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155' }}>{row.dayType}</td>
                         <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155' }}>{row.expectedEtTime}</td>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: row.missingCategory === 'likely_no_meeting' ? '#64748b' : '#991b1b', fontWeight: 700, textAlign: 'right' }}>
-                          {row.missingCategory === 'likely_no_meeting' ? 'No (Likely No Meeting)' : row.hubspotCallPresent}
-                        </td>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155', textAlign: 'right' }}>{fmt.int(row.zoomFallbackRowCount || 0)}</td>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#334155', textAlign: 'right' }}>{fmt.int(row.zoomFallbackAttendeeCount || 0)}</td>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#64748b' }}>{row.zoomFallbackMeetingIds || '—'}</td>
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', fontSize: '11px', color: '#991b1b', fontWeight: 700, textAlign: 'right' }}>{row.hubspotCallPresent}</td>
                       </tr>
                     ))}
                     {currentMissingHubspotCallSessions.length === 0 && (
                       <tr>
-                        <td colSpan={7} style={{ padding: '8px', fontSize: '11px', color: '#166534' }}>
+                        <td colSpan={4} style={{ padding: '8px', fontSize: '11px', color: '#166534' }}>
                           No missing Tuesday/Thursday HubSpot Call sessions in the selected range.
                         </td>
                       </tr>
@@ -5461,8 +5427,8 @@ export default function LeadsDashboard() {
             <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Group 1 — Free Leads</h3>
             <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b' }}>
               Meta campaigns where the campaign name does NOT contain "phoenix".
-              Tuesday: <a href="https://us02web.zoom.us/j/87199667045?pwd=CBcFMntO4jdoFDU08XrtfaHfBCAfbj.1" target="_blank" rel="noreferrer" style={{ color: '#0f766e' }}>87199667045</a> &nbsp;|&nbsp;
-              Thursday: <a href="https://us02web.zoom.us/j/84242212480?pwd=e8eQwD55guBhjGNwcfLRAix14AGjnF.1" target="_blank" rel="noreferrer" style={{ color: '#0f766e' }}>84242212480</a>
+              Tuesday attendance comes from the scheduled 12:00 PM ET HubSpot call.
+              Thursday attendance comes from the scheduled 11:00 AM ET HubSpot call.
             </p>
             <GroupPanel
               label="Free Tuesday"
@@ -5641,7 +5607,7 @@ export default function LeadsDashboard() {
                             { key: 'showedUp', label: 'Showed Up?' },
                             { key: 'repeatMember', label: 'Repeat Member?' },
                             { key: 'goodRepeatMember', label: 'Good Repeat Member?' },
-                            { key: '_historyShowUps', label: 'Matched Zooms (History)', type: 'number' },
+                            { key: '_historyShowUps', label: 'Matched Attendances (History)', type: 'number' },
                             { key: 'revenue', label: 'Revenue', type: 'currency' },
                             { key: 'sobrietyDate', label: 'Sobriety Date' },
                             { key: 'originalTrafficSource', label: 'Original Traffic Source' },
@@ -5691,10 +5657,10 @@ export default function LeadsDashboard() {
 
           {/* ── ZOOM SOURCE ATTRIBUTION (TUESDAY + THURSDAY) ── */}
           <div style={card}>
-            <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Zoom Source Attribution (Free Meeting Leads)</h3>
+            <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#0f172a' }}>Attendance Source Attribution (Free Meeting Leads)</h3>
             <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b' }}>
-              Uses Zoom attendee names (Tuesday + Thursday) matched to HubSpot via canonicalized names and aliases, so Tuesday attendees are included even without Lu.ma.
-              Costs use Group 1 Free Meta spend in the selected date range. Repeat counts use loaded Zoom history ({zoomSourceModule.loadedHistoryDays} days). Good members = 3+ Zoom attendances and revenue ≥ $250k.
+              Uses HubSpot Tuesday/Thursday attendance rows matched to HubSpot source data and Lu.ma evidence when needed.
+              Costs use Group 1 Free Meta spend in the selected date range. Repeat counts use loaded attendance history ({zoomSourceModule.loadedHistoryDays} days). Good members = 3+ attendances and revenue at least $250k.
             </p>
 
             <div style={{ ...subCard, border: '1px solid #dbeafe', backgroundColor: '#eff6ff', marginBottom: '12px' }}>
@@ -5709,7 +5675,7 @@ export default function LeadsDashboard() {
               )}
               {paidDecisionInsights.warnings.length > 0 && (
                 <div style={{ marginTop: '8px', padding: '8px', borderRadius: '8px', backgroundColor: '#fffbeb', border: '1px solid #fde68a' }}>
-                  <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#92400e' }}>Data / confidence warnings</p>
+                  <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#92400e' }}>Data / integrity warnings</p>
                   {paidDecisionInsights.warnings.map((line, idx) => (
                     <p key={`ai-w-${idx}`} style={{ margin: '4px 0 0', fontSize: '12px', color: '#92400e' }}>• {line}</p>
                   ))}
@@ -5728,7 +5694,7 @@ export default function LeadsDashboard() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: '10px' }}>
               {[
                 {
-                  label: 'Free Zoom Show-Up Rows',
+                  label: 'Free Attendance Rows',
                   value: fmt.int(zoomSourceModule.current.totalShowUpRows || 0),
                   changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.totalShowUpRows || 0, zoomSourceModule.previous.totalShowUpRows || 0).pct : null,
                 },
@@ -5738,7 +5704,7 @@ export default function LeadsDashboard() {
                   changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.matchRate || 0, zoomSourceModule.previous.matchRate || 0).pct : null,
                 },
                 {
-                  label: 'Paid Meta Zoom Show-Ups',
+                  label: 'Paid Meta Attendance Show-Ups',
                   value: fmt.int(zoomSourceModule.current.paidMeta.showUpRows || 0),
                   changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.paidMeta.showUpRows || 0, zoomSourceModule.previous.paidMeta.showUpRows || 0).pct : null,
                 },
@@ -5748,7 +5714,7 @@ export default function LeadsDashboard() {
                   changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.paidMeta.showUpShare || 0, zoomSourceModule.previous.paidMeta.showUpShare || 0).pct : null,
                 },
                 {
-                  label: 'Paid Meta Cost / Zoom Show-Up',
+                  label: 'Paid Meta Cost / Attendance Show-Up',
                   value: fmtMaybeCurrency(zoomSourceModule.current.paidMeta.costPerShowUp),
                   changePct: zoomSourceModule.previous ? computeChangePct(zoomSourceModule.current.paidMeta.costPerShowUp || 0, zoomSourceModule.previous.paidMeta.costPerShowUp || 0).pct : null,
                   invertColor: true,
@@ -5830,8 +5796,8 @@ export default function LeadsDashboard() {
                           const cols = [
                             { key: 'date', label: 'Date' },
                             { key: 'dayType', label: 'Day' },
-                            { key: 'attendeeName', label: 'Zoom Attendee (Canonical)' },
-                            { key: 'rawName', label: 'Zoom Attendee (Raw)' },
+                            { key: 'attendeeName', label: 'Attendance Attendee (Canonical)' },
+                            { key: 'rawName', label: 'Attendance Attendee (Raw)' },
                             { key: 'matchedHubspot', label: 'Matched HubSpot?' },
                             { key: 'matchType', label: 'Match Type' },
                             { key: 'matchLookupStrategy', label: 'Lookup Strategy' },
@@ -5855,11 +5821,11 @@ export default function LeadsDashboard() {
                             { key: 'netNewAttendee', label: 'Net New Attendee?' },
                             { key: 'repeatAttendee', label: 'Repeat Attendee?' },
                             { key: 'goodRepeatMember', label: 'Good Repeat Member?' },
-                            { key: 'totalZoomAttendances', label: 'Zoom Attendances (History)', type: 'number' },
+                            { key: 'totalZoomAttendances', label: 'Attendances (History)', type: 'number' },
                             { key: 'revenue', label: 'Revenue', type: 'currency' },
                           ];
                           setModal({
-                            title: `Free Zoom Show-Ups — ${row.bucket}`,
+                            title: `Free Attendance Show-Ups — ${row.bucket}`,
                             columns: cols,
                             rows: row.rows || [],
                             highlightKey: 'isMetaPaid',
@@ -5887,7 +5853,7 @@ export default function LeadsDashboard() {
                   })}
                   {zoomSourceModule.current.sourceRows.length === 0 && (
                     <tr>
-                      <td colSpan={13} style={{ padding: '12px', fontSize: '12px', color: '#64748b' }}>No Zoom attendees in the selected date range.</td>
+                      <td colSpan={13} style={{ padding: '12px', fontSize: '12px', color: '#64748b' }}>No HubSpot attendance rows in the selected date range.</td>
                     </tr>
                   )}
                 </tbody>
@@ -5930,7 +5896,7 @@ export default function LeadsDashboard() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '8px' }}>
                   {[
                     { key: 'registrations', label: 'Registrations', value: Math.round(analytics.thursdayLumaFunnel.registrations) },
-                    { key: 'luma_zoom_matches', label: 'Matched in Zoom', value: Math.round(analytics.thursdayLumaFunnel.zoomMatches) },
+                    { key: 'luma_zoom_matches', label: 'Matched in Attendance', value: Math.round(analytics.thursdayLumaFunnel.zoomMatches) },
                     { key: 'luma_zoom_net_new_matches', label: 'Matched Net New', value: Math.round(analytics.thursdayLumaFunnel.zoomNetNewMatches) },
                     { key: 'luma_hubspot_matches', label: 'Matched HubSpot', value: Math.round(analytics.thursdayLumaFunnel.hubspotMatches) },
                   ].map((item) => (

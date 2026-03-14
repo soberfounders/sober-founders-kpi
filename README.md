@@ -145,7 +145,7 @@ The Leads view now implements a full marketing funnel analysis with:
 - CPL / CPQL / CPGL / cost per show-up / cost per registration
 - Top and bottom ad efficiency ranking
 - Net new Tue/Thu show-up tracking
-- Thursday Lu.ma registration syncing with Zoom + HubSpot identity matching
+- Thursday Lu.ma registration syncing with HubSpot attendance + identity matching
 - AI recommendations prioritized by CPGL impact
 
 Reference: `docs/lead-intelligence-framework.md`
@@ -153,6 +153,8 @@ Reference: `docs/lead-intelligence-framework.md`
 - Quick-win autonomous workflow pilot: `docs/ai-manager-quick-win-pilot.md`
 - Leads autonomous manager execution plan: `docs/leads-autonomous-manager-plan.md`
 - Leads manager execution board (owners, tasks, success gates): `docs/leads-manager-execution-board.md`
+- Attendance HubSpot truth execution board: `docs/attendance-hubspot-truth-execution-board.md`
+- Attendance agent deployments: `.agent/tasks/attendance-data-integrity-deploy.md`, `.agent/tasks/attendance-data-cleanup-deploy.md`, `.agent/tasks/zoom-retirement-safety-deploy.md`
 - HubSpot sync verification SQL pack: `scripts/verify_hubspot_sync_health.sql`
 
 ## KPI Data Integrity Verification

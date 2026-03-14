@@ -427,8 +427,8 @@ function buildLumaRegistrations(lumaRows) {
       guestName: String(row?.guest_name || '').trim(),
       guestEmail: String(row?.guest_email || '').trim().toLowerCase(),
       funnel: funnelRaw === 'phoenix' ? 'phoenix' : 'free',
-      matchedZoom: !!row?.matched_zoom,
-      matchedZoomNetNew: !!row?.matched_zoom_net_new,
+      matchedZoom: !!(row?.matched_attendance ?? row?.matched_zoom),
+      matchedZoomNetNew: !!(row?.matched_attendance_net_new ?? row?.matched_zoom_net_new),
       matchedHubspot: !!row?.matched_hubspot,
       tier: tierRaw === 'great' ? 'great' : tierRaw === 'qualified' ? 'qualified' : 'standard',
     });
@@ -920,9 +920,9 @@ function buildRecommendations(monthCurrent, monthPrevious, topAds, bottomAds, fu
   const registrationToShowUpRate = monthCurrent.conversions.registrationToShowUp;
   if (monthCurrent.lumaRegistrations > 0 && registrationToShowUpRate < 0.45) {
     recommendations.push({
-      title: 'Improve Thursday Lu.ma registration follow-up to lift Zoom show-up matches',
-      reason: `Only ${round(registrationToShowUpRate * 100, 1)}% of Thursday Lu.ma registrations are matching net-new Zoom show-ups.`,
-      impact: `Expected impact: +${round((0.55 - registrationToShowUpRate) * monthCurrent.lumaRegistrations, 1)} net-new Thursday show-ups if match rate reaches 55%.`,
+      title: 'Improve Thursday Lu.ma follow-up to lift HubSpot attendance matches',
+      reason: `Only ${round(registrationToShowUpRate * 100, 1)}% of Thursday Lu.ma registrations are matching net-new HubSpot attendance records.`,
+      impact: `Expected impact: +${round((0.55 - registrationToShowUpRate) * monthCurrent.lumaRegistrations, 1)} net-new Thursday attendees if match rate reaches 55%.`,
     });
   }
 
@@ -971,7 +971,7 @@ function buildAlerts(monthCurrent, monthPrevious, weekCurrent, weekPrevious, dat
   }
 
   if (dataAvailability.hasDirectLumaData && dataAvailability.lumaRegistrationsCurrent > 0 && dataAvailability.lumaZoomMatchRate < 0.35) {
-    alerts.push(`Low Thursday Lu.ma -> Zoom net-new match rate (${round(dataAvailability.lumaZoomMatchRate * 100, 1)}%).`);
+    alerts.push(`Low Thursday Lu.ma -> HubSpot attendance net-new match rate (${round(dataAvailability.lumaZoomMatchRate * 100, 1)}%).`);
   }
 
   if (dataAvailability.hasDirectLumaData && dataAvailability.lumaRegistrationsCurrent > 0 && dataAvailability.lumaHubspotMatchRate < 0.7) {
@@ -1206,21 +1206,21 @@ function buildWindowDrilldown({
         { key: 'eventDate', label: 'Registration Date', type: 'text' },
         { key: 'guestName', label: 'Name', type: 'text' },
         { key: 'guestEmail', label: 'Email', type: 'text' },
-        { key: 'matchedZoom', label: 'Matched Zoom', type: 'text' },
-        { key: 'matchedZoomNetNew', label: 'Matched Net New', type: 'text' },
+        { key: 'matchedZoom', label: 'Matched Attendance', type: 'text' },
+        { key: 'matchedZoomNetNew', label: 'Matched Net New Attendance', type: 'text' },
       ],
       rows: lumaZoomMatchRows,
-      emptyMessage: 'No Lu.ma registrations matched to Zoom in this window.',
+      emptyMessage: 'No Lu.ma registrations matched to HubSpot attendance in this window.',
     },
     luma_zoom_net_new_matches: {
       columns: [
         { key: 'eventDate', label: 'Registration Date', type: 'text' },
         { key: 'guestName', label: 'Name', type: 'text' },
         { key: 'guestEmail', label: 'Email', type: 'text' },
-        { key: 'matchedZoomNetNew', label: 'Matched Net New', type: 'text' },
+        { key: 'matchedZoomNetNew', label: 'Matched Net New Attendance', type: 'text' },
       ],
       rows: lumaZoomNetNewMatchRows,
-      emptyMessage: 'No Lu.ma registrations matched to net-new Zoom show-ups in this window.',
+      emptyMessage: 'No Lu.ma registrations matched to net-new HubSpot attendance in this window.',
     },
     luma_hubspot_matches: {
       columns: [
@@ -1378,8 +1378,8 @@ export function buildLeadAnalytics({
     cpgl: 'CPGL',
     cost_per_showup: 'Cost Per Show-Up',
     cost_per_registration: 'Cost Per Registration',
-    luma_zoom_matches: 'Lu.ma Matched in Zoom',
-    luma_zoom_net_new_matches: 'Lu.ma Matched Net New',
+    luma_zoom_matches: 'Lu.ma Matched in Attendance',
+    luma_zoom_net_new_matches: 'Lu.ma Matched Net New Attendance',
     luma_hubspot_matches: 'Lu.ma Matched in HubSpot',
   };
   const dataAvailability = {

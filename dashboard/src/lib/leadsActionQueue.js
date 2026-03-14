@@ -32,16 +32,16 @@ function addTasksForBlocker(blockerCode, autonomous, human) {
   switch (blockerCode) {
     case 'low_match_rate':
       addTask(autonomous, {
-        task_id: 'run_identity_reconcile',
-        title: 'Run identity reconciliation for Zoom/Lu.ma to HubSpot',
-        rationale: 'Low match rate indicates the mapping layer needs a fresh reconcile pass.',
+        task_id: 'run_attendance_identity_reconcile',
+        title: 'Run HubSpot attendance identity reconcile',
+        rationale: 'Low match rate indicates attendance/source attribution needs a fresh reconcile pass.',
         priority: 95,
         suggested_sla_hours: 6,
         blocker_codes: [blockerCode],
       });
       addTask(human, {
         task_id: 'review_top_unmatched_rows',
-        title: 'Review top unmatched attendee/registration rows',
+        title: 'Review top unmatched attendance/registration rows',
         rationale: 'Resolve alias and naming edge-cases that automation cannot safely infer.',
         priority: 90,
         suggested_sla_hours: 24,
@@ -68,25 +68,6 @@ function addTasksForBlocker(blockerCode, autonomous, human) {
       });
       return;
 
-    case 'low_luma_zoom_match_rate':
-      addTask(autonomous, {
-        task_id: 'refresh_luma_registration_sync',
-        title: 'Refresh Lu.ma registration sync and net-new reconciliation',
-        rationale: 'Low Lu.ma -> Zoom net-new matches suggest stale registration reconciliation.',
-        priority: 82,
-        suggested_sla_hours: 12,
-        blocker_codes: [blockerCode],
-      });
-      addTask(human, {
-        task_id: 'audit_thursday_followup_sequence',
-        title: 'Audit Thursday reminder and follow-up flow',
-        rationale: 'Operational follow-up quality can drive registration -> show-up lift.',
-        priority: 70,
-        suggested_sla_hours: 72,
-        blocker_codes: [blockerCode],
-      });
-      return;
-
     case 'low_luma_hubspot_match_rate':
       addTask(autonomous, {
         task_id: 'reprocess_luma_hubspot_matching',
@@ -106,30 +87,11 @@ function addTasksForBlocker(blockerCode, autonomous, human) {
       });
       return;
 
-    case 'weak_mapping_quality':
-      addTask(autonomous, {
-        task_id: 'recompute_mapping_confidence_breakdown',
-        title: 'Recompute match confidence breakdown after reconciliation',
-        rationale: 'Fuzzy/unmatched dominance should be reduced before strategic decisions.',
-        priority: 88,
-        suggested_sla_hours: 12,
-        blocker_codes: [blockerCode],
-      });
-      addTask(human, {
-        task_id: 'resolve_alias_conflicts',
-        title: 'Resolve high-impact alias conflicts',
-        rationale: 'Alias conflicts are a common source of persistent fuzzy and unmatched rows.',
-        priority: 85,
-        suggested_sla_hours: 48,
-        blocker_codes: [blockerCode],
-      });
-      return;
-
     case 'high_unknown_source_share':
       addTask(autonomous, {
         task_id: 'rebuild_source_bucket_labels',
         title: 'Rebuild source bucket classification for unknown/other cohort',
-        rationale: 'Unknown/Other source inflation weakens attribution confidence.',
+        rationale: 'Unknown/Other source inflation weakens attribution integrity.',
         priority: 78,
         suggested_sla_hours: 24,
         blocker_codes: [blockerCode],
@@ -148,7 +110,7 @@ function addTasksForBlocker(blockerCode, autonomous, human) {
       addTask(autonomous, {
         task_id: 'trigger_full_sync_now',
         title: 'Trigger sync/reconcile pipeline now',
-        rationale: 'Stale data should be refreshed before reading confidence-sensitive KPIs.',
+        rationale: 'Stale data should be refreshed before reading attendance-sensitive KPIs.',
         priority: 96,
         suggested_sla_hours: 2,
         blocker_codes: [blockerCode],
@@ -221,10 +183,10 @@ export function buildLeadsActionQueue(input = {}) {
   blockers.forEach((blocker) => addTasksForBlocker(String(blocker?.code || ''), autonomous, human));
 
   if (blockers.length === 0) {
-    if (summary?.confidence_level === 'high') {
+    if (summary?.integrity_level === 'high' || summary?.confidence_level === 'high') {
       addTask(autonomous, {
-        task_id: 'daily_confidence_monitor',
-        title: 'Run daily confidence monitor snapshot',
+        task_id: 'daily_integrity_monitor',
+        title: 'Run daily attendance integrity monitor',
         rationale: 'No blockers detected; keep a lightweight automated watch on regressions.',
         priority: 40,
         suggested_sla_hours: 24,
@@ -232,16 +194,16 @@ export function buildLeadsActionQueue(input = {}) {
       });
     } else {
       addTask(autonomous, {
-        task_id: 'weekly_reconcile_guardrail',
-        title: 'Run weekly reconcile and confidence recalc',
-        rationale: 'Medium confidence without blockers still benefits from routine stabilization.',
+        task_id: 'weekly_integrity_guardrail',
+        title: 'Run weekly reconcile and integrity review',
+        rationale: 'Medium integrity without blockers still benefits from routine stabilization.',
         priority: 55,
         suggested_sla_hours: 24,
         blocker_codes: [],
       });
       addTask(human, {
         task_id: 'weekly_quality_review',
-        title: 'Review top attribution and match-confidence drifts',
+        title: 'Review top attribution and identity-match drifts',
         rationale: 'Human review catches narrative-level quality drift before it becomes a blocker.',
         priority: 50,
         suggested_sla_hours: 72,

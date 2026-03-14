@@ -88,7 +88,7 @@ async function run() {
   const luma = await restGet(
     supabaseUrl,
     supabaseKey,
-    'raw_luma_registrations?select=event_date,event_api_id,guest_email,matched_zoom,matched_hubspot&limit=1',
+    'raw_luma_registrations?select=event_date,event_api_id,guest_email,matched_attendance,matched_zoom,matched_hubspot&limit=1',
   );
   printStatus('Luma table: raw_luma_registrations', luma.ok, luma.ok ? 'available' : 'missing (HubSpot registration proxy in use)');
 }

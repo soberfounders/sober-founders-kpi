@@ -177,7 +177,7 @@ function classifyHubspotGroupSession(activity = {}) {
     return { group_type: "Tuesday", date_key: etDateKey(timestamp), is_near_scheduled: true };
   }
   if (
-    title.includes("mastermind on zoom")
+    (title.includes("mastermind") && !title.includes("intro"))
     || title.includes("all are welcome")
     || title.includes("entrepreneur's big book")
     || title.includes("big book")
