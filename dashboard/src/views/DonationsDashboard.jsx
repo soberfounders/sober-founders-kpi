@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Brain, Clock3, DollarSign, Repeat2, Sparkles, Users } from 'lucide-react';
+import { AlertTriangle, Brain, ChevronDown, ChevronUp, Clock3, DollarSign, Repeat2, Sparkles, Users } from 'lucide-react';
 import {
   CartesianGrid,
   Legend,
@@ -105,6 +105,22 @@ function monthLabelFromKey(key) {
 }
 
 
+/**
+ * Compute at-risk level for annual/one-time donors.
+ * Yellow: >= 11 months since last donation.
+ * Red: >= 12 months since last donation AND current month is December.
+ */
+function computeAtRiskLevel(lastGiftDate) {
+  if (!lastGiftDate) return 'red';
+  const now = new Date();
+  const monthsSince =
+    (now.getUTCFullYear() - lastGiftDate.getUTCFullYear()) * 12 +
+    (now.getUTCMonth() - lastGiftDate.getUTCMonth());
+  if (monthsSince >= 12 && now.getUTCMonth() === 11) return 'red';
+  if (monthsSince >= 11) return 'yellow';
+  return 'none';
+}
+
 function DonationsDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -115,6 +131,9 @@ function DonationsDashboard() {
   const [aiAnalysis, setAiAnalysis] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
+  const [rosterLimit, setRosterLimit] = useState(15);
+  const [sortField, setSortField] = useState('totalAmount');
+  const [sortDir, setSortDir] = useState('desc');
 
   useEffect(() => {
     let isMounted = true;
@@ -139,7 +158,7 @@ function DonationsDashboard() {
           .limit(5000),
         supabase
           .from('raw_zeffy_supporter_profiles')
-          .select('donor_email,donor_name,donor_company_name,commitment_amount,last_payment_at,manual_lists,donor_city,donor_region,donor_country')
+          .select('donor_email,donor_name,donor_company_name,last_payment_at,manual_lists,donor_city,donor_region,donor_country')
           .order('last_payment_at', { ascending: false })
           .limit(5000),
         supabase
@@ -263,7 +282,7 @@ function DonationsDashboard() {
     return out;
   }, [supporterProfiles]);
 
-  const topDonors = useMemo(() => {
+  const allDonors = useMemo(() => {
     const byDonor = new Map();
     const healthByEmail = new Map();
     (donorHealth || []).forEach(h => {
@@ -284,7 +303,7 @@ function DonationsDashboard() {
         donor_company_name: profile?.donor_company_name || '',
         donor_city: profile?.donor_city || '',
         donor_region: profile?.donor_region || '',
-        commitment_amount: safeNumber(profile?.commitment_amount),
+        monthlyDonation: safeNumber(hData?.current_recurring_amount),
         totalAmount: 0,
         gifts: 0,
         recurringGifts: 0,
@@ -296,17 +315,40 @@ function DonationsDashboard() {
       if (profile?.donor_company_name) existing.donor_company_name = profile.donor_company_name;
       if (profile?.donor_city) existing.donor_city = profile.donor_city;
       if (profile?.donor_region) existing.donor_region = profile.donor_region;
-      if (profile?.commitment_amount) existing.commitment_amount = safeNumber(profile.commitment_amount);
       existing.totalAmount += row.amount;
       existing.gifts += 1;
       if (row.is_recurring) existing.recurringGifts += 1;
       if (row.donatedAt > existing.lastGiftAt) existing.lastGiftAt = row.donatedAt;
       byDonor.set(key, existing);
     });
-    return Array.from(byDonor.values())
-      .sort((a, b) => b.totalAmount - a.totalAmount)
-      .slice(0, 15);
+
+    return Array.from(byDonor.values()).map((d) => ({
+      ...d,
+      atRiskLevel: d.health_status === 'active_recurring' || d.health_status === 'lapsed_recurring'
+        ? 'none'
+        : computeAtRiskLevel(d.lastGiftAt),
+    }));
   }, [transactions, supporterProfileByEmail, donorHealth]);
+
+  const displayedDonors = useMemo(() => {
+    const sorted = [...allDonors].sort((a, b) => {
+      let aVal, bVal;
+      switch (sortField) {
+        case 'donor_name': aVal = a.donor_name.toLowerCase(); bVal = b.donor_name.toLowerCase(); break;
+        case 'location': aVal = [a.donor_city, a.donor_region].filter(Boolean).join(', ').toLowerCase(); bVal = [b.donor_city, b.donor_region].filter(Boolean).join(', ').toLowerCase(); break;
+        case 'health_status': aVal = a.health_status; bVal = b.health_status; break;
+        case 'totalAmount': aVal = a.totalAmount; bVal = b.totalAmount; break;
+        case 'monthlyDonation': aVal = a.monthlyDonation; bVal = b.monthlyDonation; break;
+        case 'gifts': aVal = a.gifts; bVal = b.gifts; break;
+        case 'lastGiftAt': aVal = a.lastGiftAt ? a.lastGiftAt.getTime() : 0; bVal = b.lastGiftAt ? b.lastGiftAt.getTime() : 0; break;
+        default: aVal = a.totalAmount; bVal = b.totalAmount;
+      }
+      if (typeof aVal === 'string') return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+    });
+    if (rosterLimit === 'all') return sorted;
+    return sorted.slice(0, rosterLimit);
+  }, [allDonors, sortField, sortDir, rosterLimit]);
 
   const recentTransactions = useMemo(() => transactions.slice(0, 15), [transactions]);
 
@@ -352,7 +394,7 @@ function DonationsDashboard() {
         }}
       >
         <p style={{ fontSize: '12px', opacity: 0.9, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Donations KPI</p>
-        <h2 style={{ marginTop: '6px', fontSize: '28px' }}>Live donor performance</h2>
+        <h2 style={{ marginTop: '6px', fontSize: '28px' }}>Live Donor Performance</h2>
         <p style={{ marginTop: '8px', opacity: 0.95, maxWidth: '920px' }}>
           Backfilled Zeffy exports and live webhook donations are consolidated in Supabase for transaction trends, donor concentration, and recurring mix.
         </p>
@@ -391,7 +433,7 @@ function DonationsDashboard() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '16px' }}>
         <div style={baseCardStyle}>
-          <h3 style={{ fontSize: '18px', marginBottom: '6px' }}>12-month donation trend</h3>
+          <h3 style={{ fontSize: '18px', marginBottom: '6px' }}>12-Month Donation Trend</h3>
           <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '12px' }}>Total and recurring donation amount by month.</p>
           <div style={{ width: '100%', height: '320px' }}>
             <ResponsiveContainer>
@@ -539,35 +581,79 @@ function DonationsDashboard() {
       <div style={baseCardStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
           <div>
-            <h3 style={{ fontSize: '18px', marginBottom: '4px' }}>Donor roster</h3>
-            <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Top donors ranked by total donated — enriched with health status and commitment data ({summary.activeSupporters.toLocaleString()} supporter profiles loaded).</p>
+            <h3 style={{ fontSize: '18px', marginBottom: '4px' }}>Donor Roster</h3>
+            <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Top donors ranked by total donated — enriched with health status and monthly donation data ({summary.activeSupporters.toLocaleString()} supporter profiles loaded).</p>
+          </div>
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '12px' }}>
+            <span style={{ color: 'var(--color-text-secondary)' }}>Show:</span>
+            {[15, 50, 100, 'all'].map((opt) => (
+              <button
+                key={opt}
+                onClick={() => setRosterLimit(opt)}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--color-border)',
+                  background: rosterLimit === opt ? 'var(--color-dark-green)' : 'transparent',
+                  color: rosterLimit === opt ? 'white' : 'var(--color-text-secondary)',
+                  fontWeight: rosterLimit === opt ? 600 : 400,
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                }}
+              >
+                {opt === 'all' ? 'All' : opt}
+              </button>
+            ))}
           </div>
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                {['#', 'Donor', 'Location', 'Status', 'Total Donated', 'Commitment', 'Gifts', 'Last Gift'].map((h) => (
+                {[
+                  { label: '#', field: null, align: 'left' },
+                  { label: 'Donor', field: 'donor_name', align: 'left' },
+                  { label: 'Location', field: 'location', align: 'left' },
+                  { label: 'Status', field: 'health_status', align: 'left' },
+                  { label: 'Total Donated', field: 'totalAmount', align: 'right' },
+                  { label: 'Monthly Donation', field: 'monthlyDonation', align: 'right' },
+                  { label: 'Gifts', field: 'gifts', align: 'right' },
+                  { label: 'Last Gift', field: 'lastGiftAt', align: 'left' },
+                ].map((col) => (
                   <th
-                    key={h}
+                    key={col.label}
+                    onClick={col.field ? () => {
+                      if (sortField === col.field) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+                      else { setSortField(col.field); setSortDir('desc'); }
+                    } : undefined}
                     style={{
-                      textAlign: h === 'Total Donated' || h === 'Commitment' || h === 'Gifts' ? 'right' : 'left',
+                      textAlign: col.align,
                       fontSize: '11px',
-                      color: 'var(--color-text-secondary)',
+                      color: sortField === col.field ? 'var(--color-dark-green)' : 'var(--color-text-secondary)',
                       padding: '8px 10px',
                       borderBottom: '1px solid var(--color-border)',
                       whiteSpace: 'nowrap',
                       textTransform: 'uppercase',
                       letterSpacing: '0.04em',
+                      cursor: col.field ? 'pointer' : 'default',
+                      userSelect: 'none',
                     }}
                   >
-                    {h}
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                      {col.label}
+                      {col.field && sortField === col.field && (
+                        sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                      )}
+                    </span>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {topDonors.map((row, idx) => (
+              {displayedDonors.map((row, idx) => {
+                const atRiskBg = row.atRiskLevel === 'red' ? '#fee2e2' : row.atRiskLevel === 'yellow' ? '#fef3c7' : null;
+                const atRiskColor = row.atRiskLevel === 'red' ? '#b91c1c' : row.atRiskLevel === 'yellow' ? '#b45309' : null;
+                return (
                 <tr key={row.key} style={{ backgroundColor: idx % 2 === 0 ? 'rgba(255,255,255,0.01)' : 'rgba(0,0,0,0.12)' }}>
                   <td style={{ fontSize: '12px', padding: '10px', borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)', fontWeight: 600 }}>{idx + 1}</td>
                   <td style={{ fontSize: '12px', fontWeight: 700, padding: '10px', borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}>
@@ -581,7 +667,7 @@ function DonationsDashboard() {
                   <td style={{ fontSize: '11px', padding: '10px', borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
                     {row.donor_city || row.donor_region
                       ? [row.donor_city, row.donor_region].filter(Boolean).join(', ')
-                      : '—'}
+                      : '\u2014'}
                   </td>
                   <td style={{ fontSize: '12px', padding: '10px', borderBottom: '1px solid var(--color-border)' }}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
@@ -595,15 +681,30 @@ function DonationsDashboard() {
                           backgroundColor:
                             row.health_status === 'active_recurring' ? '#dcfce7' :
                               row.health_status === 'lapsed_recurring' ? '#fee2e2' :
-                                row.health_status === 'at_risk' ? '#fef3c7' : '#f1f5f9',
+                                '#f1f5f9',
                           color:
                             row.health_status === 'active_recurring' ? '#15803d' :
                               row.health_status === 'lapsed_recurring' ? '#b91c1c' :
-                                row.health_status === 'at_risk' ? '#b45309' : 'var(--color-text-secondary)',
+                                'var(--color-text-secondary)',
                         }}
                       >
                         {String(row.health_status).replaceAll('_', ' ')}
                       </span>
+                      {row.atRiskLevel !== 'none' && (
+                        <span
+                          style={{
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            textTransform: 'uppercase',
+                            backgroundColor: atRiskBg,
+                            color: atRiskColor,
+                          }}
+                        >
+                          AT RISK
+                        </span>
+                      )}
                       {row.is_upgrade_candidate && (
                         <span style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', backgroundColor: '#e0f2fe', color: '#0369a1' }}>
                           UPGRADE
@@ -612,20 +713,26 @@ function DonationsDashboard() {
                     </div>
                   </td>
                   <td style={{ fontSize: '12px', fontWeight: 700, textAlign: 'right', padding: '10px', borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}>{formatCurrency(row.totalAmount)}</td>
-                  <td style={{ fontSize: '12px', textAlign: 'right', padding: '10px', borderBottom: '1px solid var(--color-border)', color: row.commitment_amount > 0 ? 'var(--color-dark-green)' : 'var(--color-text-muted)' }}>
-                    {row.commitment_amount > 0 ? formatCurrency(row.commitment_amount) : '—'}
+                  <td style={{ fontSize: '12px', textAlign: 'right', padding: '10px', borderBottom: '1px solid var(--color-border)', color: row.monthlyDonation > 0 ? 'var(--color-dark-green)' : 'var(--color-text-muted)' }}>
+                    {row.monthlyDonation > 0 ? formatCurrency(row.monthlyDonation) : '\u2014'}
                   </td>
                   <td style={{ fontSize: '12px', textAlign: 'right', padding: '10px', borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}>{row.gifts}</td>
                   <td style={{ fontSize: '12px', padding: '10px', borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}>{formatDate(row.lastGiftAt)}</td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
+        {rosterLimit !== 'all' && allDonors.length > rosterLimit && (
+          <p style={{ marginTop: '8px', fontSize: '12px', color: 'var(--color-text-secondary)', textAlign: 'center' }}>
+            Showing {rosterLimit} of {allDonors.length} donors.
+          </p>
+        )}
       </div>
 
       <div style={baseCardStyle}>
-        <h3 style={{ fontSize: '18px', marginBottom: '6px' }}>Recent donations</h3>
+        <h3 style={{ fontSize: '18px', marginBottom: '6px' }}>Recent Donations</h3>
         <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '12px' }}>Most recent donation transactions loaded from Supabase.</p>
         <div style={{ display: 'grid', gap: '8px', maxHeight: '520px', overflowY: 'auto' }}>
           {recentTransactions.map((row) => (
