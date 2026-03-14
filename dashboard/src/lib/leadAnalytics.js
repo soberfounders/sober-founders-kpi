@@ -2,6 +2,7 @@
 
 import {
   isQualifiedLead,
+  isPhoenixQualifiedLead,
   leadQualityTierFromOfficialRevenue,
   parseOfficialRevenue,
   parseSobrietyDate,
@@ -370,6 +371,7 @@ function buildPaidLeads(hubspotRows, showupIndex) {
       const sobrietyDate = parseSobrietyDate(sobrietyRaw);
       const tier = leadTierFromRevenue(revenue);
       const isQualified = isQualifiedLead({ revenue, sobrietyDate });
+      const isPhoenixQualified = isPhoenixQualifiedLead({ revenue, sobrietyDate });
       const leadName = getLeadName(row);
       const showupMatch = matchLeadToShowup(leadName, createdDateKey, showupIndex);
 
@@ -392,6 +394,7 @@ function buildPaidLeads(hubspotRows, showupIndex) {
         revenue,
         sobrietyDate: sobrietyDate ? sobrietyDate.toISOString().slice(0, 10) : null,
         isQualified,
+        isPhoenixQualified,
       };
     })
     .filter(Boolean)
@@ -472,6 +475,7 @@ function aggregateAdsRows(adsRows) {
         attributedRegistrations: 0,
         attributedShowUps: 0,
         attributedQualifiedLeads: 0,
+        attributedPhoenixQualifiedLeads: 0,
         attributedGreatLeads: 0,
       });
     }
@@ -504,6 +508,7 @@ function buildLeadBuckets(paidLeads, lumaRegistrations = []) {
         leads: 0,
         registrations: 0,
         qualifiedLeads: 0,
+        phoenixQualifiedLeads: 0,
         greatLeads: 0,
         matchedShowUps: 0,
       });
@@ -513,6 +518,7 @@ function buildLeadBuckets(paidLeads, lumaRegistrations = []) {
         leads: 0,
         registrations: 0,
         qualifiedLeads: 0,
+        phoenixQualifiedLeads: 0,
         greatLeads: 0,
       });
     }
@@ -521,6 +527,7 @@ function buildLeadBuckets(paidLeads, lumaRegistrations = []) {
     bucket.leads += 1;
     if (lead.isRegistration) bucket.registrations += 1;
     if (lead.isQualified) bucket.qualifiedLeads += 1;
+    if (lead.isPhoenixQualified) bucket.phoenixQualifiedLeads += 1;
     if (lead.tier === 'great') bucket.greatLeads += 1;
     if (lead.matchedShowup) bucket.matchedShowUps += 1;
 
@@ -528,6 +535,7 @@ function buildLeadBuckets(paidLeads, lumaRegistrations = []) {
     dateRow.leads += 1;
     if (lead.isRegistration) dateRow.registrations += 1;
     if (lead.isQualified) dateRow.qualifiedLeads += 1;
+    if (lead.isPhoenixQualified) dateRow.phoenixQualifiedLeads += 1;
     if (lead.tier === 'great') dateRow.greatLeads += 1;
   });
 
@@ -618,6 +626,7 @@ function applyAttribution(adState, leadBuckets) {
       ad.attributedRegistrations += leadBucket.registrations * weight;
       ad.attributedShowUps += leadBucket.matchedShowUps * weight;
       ad.attributedQualifiedLeads += leadBucket.qualifiedLeads * weight;
+      ad.attributedPhoenixQualifiedLeads += leadBucket.phoenixQualifiedLeads * weight;
       ad.attributedGreatLeads += leadBucket.greatLeads * weight;
     });
 
@@ -678,6 +687,7 @@ function getSnapshot({ adsRows, paidLeads, zoomDaily, lumaRegistrations, hasDire
   const registrationShowUps = hasDirectLumaData ? lumaMatchedNetNewShowUps : showUps;
 
   const qualifiedLeads = leadsInRange.filter((row) => row.isQualified).length;
+  const phoenixQualifiedLeads = leadsInRange.filter((row) => row.isPhoenixQualified).length;
   const greatLeads = leadsInRange.filter((row) => row.tier === 'great').length;
   const standardLeads = Math.max(leads - qualifiedLeads, 0);
 
@@ -687,6 +697,7 @@ function getSnapshot({ adsRows, paidLeads, zoomDaily, lumaRegistrations, hasDire
   const costs = {
     cpl: safeDivide(spend, leads),
     cpql: safeDivide(spend, qualifiedLeads),
+    cpPhxQL: safeDivide(spend, phoenixQualifiedLeads),
     cpgl: safeDivide(spend, greatLeads),
     costPerShowUp: safeDivide(spend, showUps),
     costPerRegistration: safeDivide(spend, registrations),
@@ -714,6 +725,7 @@ function getSnapshot({ adsRows, paidLeads, zoomDaily, lumaRegistrations, hasDire
     tuesdayShowUps,
     thursdayShowUps,
     qualifiedLeads,
+    phoenixQualifiedLeads,
     greatLeads,
     standardLeads,
     lumaRegistrations: lumaRegistrationsCount,
@@ -754,7 +766,8 @@ function buildMetricSnapshotRows(monthCurrent, monthPrevious, weekCurrent, weekP
     row('Leads Captured', 'leads', monthCurrent.leads, monthPrevious.leads, weekCurrent.leads, weekPrevious.leads, 'count', 'higher'),
     row('Luma Registrations', 'registrations', monthCurrent.registrations, monthPrevious.registrations, weekCurrent.registrations, weekPrevious.registrations, 'count', 'higher'),
     row('Net New Show-Ups', 'showups', monthCurrent.showUps, monthPrevious.showUps, weekCurrent.showUps, weekPrevious.showUps, 'count', 'higher'),
-    row('Qualified Leads', 'qualified', monthCurrent.qualifiedLeads, monthPrevious.qualifiedLeads, weekCurrent.qualifiedLeads, weekPrevious.qualifiedLeads, 'count', 'higher'),
+    row('$250k Qualified Leads', 'qualified', monthCurrent.qualifiedLeads, monthPrevious.qualifiedLeads, weekCurrent.qualifiedLeads, weekPrevious.qualifiedLeads, 'count', 'higher'),
+    row('Phoenix Qualified Leads', 'phoenix_qualified', monthCurrent.phoenixQualifiedLeads, monthPrevious.phoenixQualifiedLeads, weekCurrent.phoenixQualifiedLeads, weekPrevious.phoenixQualifiedLeads, 'count', 'higher'),
     row('Great Leads', 'great', monthCurrent.greatLeads, monthPrevious.greatLeads, weekCurrent.greatLeads, weekPrevious.greatLeads, 'count', 'higher'),
     row('CPL', 'cpl', monthCurrent.costs.cpl, monthPrevious.costs.cpl, weekCurrent.costs.cpl, weekPrevious.costs.cpl, 'currency', 'lower'),
     row('CPQL', 'cpql', monthCurrent.costs.cpql, monthPrevious.costs.cpql, weekCurrent.costs.cpql, weekPrevious.costs.cpql, 'currency', 'lower'),
@@ -765,7 +778,7 @@ function buildMetricSnapshotRows(monthCurrent, monthPrevious, weekCurrent, weekP
     row('Click -> Lead', 'click_to_lead', monthCurrent.conversions.clickToLead, monthPrevious.conversions.clickToLead, weekCurrent.conversions.clickToLead, weekPrevious.conversions.clickToLead, 'percent', 'higher'),
     row('Lead -> Registration', 'lead_to_registration', monthCurrent.conversions.leadToRegistration, monthPrevious.conversions.leadToRegistration, weekCurrent.conversions.leadToRegistration, weekPrevious.conversions.leadToRegistration, 'percent', 'higher'),
     row('Registration -> Show-Up', 'registration_to_showup', monthCurrent.conversions.registrationToShowUp, monthPrevious.conversions.registrationToShowUp, weekCurrent.conversions.registrationToShowUp, weekPrevious.conversions.registrationToShowUp, 'percent', 'higher'),
-    row('Show-Up -> Qualified', 'showup_to_qualified', monthCurrent.conversions.showUpToQualified, monthPrevious.conversions.showUpToQualified, weekCurrent.conversions.showUpToQualified, weekPrevious.conversions.showUpToQualified, 'percent', 'higher'),
+    row('Show-Up -> $250k Qualified', 'showup_to_qualified', monthCurrent.conversions.showUpToQualified, monthPrevious.conversions.showUpToQualified, weekCurrent.conversions.showUpToQualified, weekPrevious.conversions.showUpToQualified, 'percent', 'higher'),
     row('Show-Up -> Great', 'showup_to_great', monthCurrent.conversions.showUpToGreat, monthPrevious.conversions.showUpToGreat, weekCurrent.conversions.showUpToGreat, weekPrevious.conversions.showUpToGreat, 'percent', 'higher'),
   ];
 }
@@ -776,7 +789,8 @@ function buildFunnelStages(snapshot) {
     { key: 'leads', label: 'Leads Captured', value: snapshot.leads },
     { key: 'registrations', label: 'Luma Registrations', value: snapshot.registrations },
     { key: 'showups', label: 'Net New Show-Ups', value: snapshot.showUps },
-    { key: 'qualified', label: 'Qualified Leads', value: snapshot.qualifiedLeads },
+    { key: 'qualified', label: '$250k Qualified Leads', value: snapshot.qualifiedLeads },
+    { key: 'phoenix_qualified', label: 'Phoenix Qualified Leads', value: snapshot.phoenixQualifiedLeads },
     { key: 'great', label: 'Great Leads', value: snapshot.greatLeads },
   ];
 
@@ -807,7 +821,7 @@ function buildTrendRows(primaryDate, adsRows, leadByDate, zoomDaily) {
 
   while (cursor <= primaryDate) {
     const ad = adsByDate.get(cursor) || { spend: 0, impressions: 0, clicks: 0, leads: 0 };
-    const lead = leadByDate.get(cursor) || { leads: 0, registrations: 0, qualifiedLeads: 0, greatLeads: 0 };
+    const lead = leadByDate.get(cursor) || { leads: 0, registrations: 0, qualifiedLeads: 0, phoenixQualifiedLeads: 0, greatLeads: 0 };
     const zoom = zoomByDate.get(cursor) || { tuesday: 0, thursday: 0, total: 0 };
 
     rows.push({
@@ -819,6 +833,7 @@ function buildTrendRows(primaryDate, adsRows, leadByDate, zoomDaily) {
       leads: lead.leads || ad.leads,
       registrations: lead.registrations,
       qualifiedLeads: lead.qualifiedLeads,
+      phoenixQualifiedLeads: lead.phoenixQualifiedLeads,
       greatLeads: lead.greatLeads,
       netNewTuesday: zoom.tuesday,
       netNewThursday: zoom.thursday,
@@ -993,18 +1008,25 @@ function buildLeadQualityBreakdown(snapshot) {
   const total = snapshot.leads;
   const standardPct = safeDivide(snapshot.standardLeads, total);
   const qualifiedPct = safeDivide(snapshot.qualifiedLeads, total);
+  const phoenixQualifiedPct = safeDivide(snapshot.phoenixQualifiedLeads, total);
   const greatPct = safeDivide(snapshot.greatLeads, total);
 
   return {
     standard: snapshot.standardLeads,
     qualified: snapshot.qualifiedLeads,
+    phoenixQualified: snapshot.phoenixQualifiedLeads,
     great: snapshot.greatLeads,
     standardPct,
     qualifiedPct,
+    phoenixQualifiedPct,
     greatPct,
     chartRows: [
-      { name: 'Non-Qualified', value: snapshot.standardLeads, pct: standardPct, color: '#94a3b8' },
-      { name: 'Qualified', value: snapshot.qualifiedLeads, pct: qualifiedPct, color: '#0ea5e9' },
+      { name: '$250k Non-Qualified', value: snapshot.standardLeads, pct: standardPct, color: '#94a3b8' },
+      { name: '$250k Qualified', value: snapshot.qualifiedLeads, pct: qualifiedPct, color: '#0ea5e9' },
+    ],
+    phoenixChartRows: [
+      { name: 'Phoenix Non-Qualified', value: Math.max(snapshot.leads - snapshot.phoenixQualifiedLeads, 0), pct: safeDivide(Math.max(snapshot.leads - snapshot.phoenixQualifiedLeads, 0), total), color: '#94a3b8' },
+      { name: 'Phoenix Qualified', value: snapshot.phoenixQualifiedLeads, pct: phoenixQualifiedPct, color: '#f59e0b' },
     ],
   };
 }
@@ -1044,6 +1066,7 @@ function buildWindowDrilldown({
     revenue: row.revenue,
     sobrietyDate: row.sobrietyDate || '',
     qualified: row.isQualified ? 'Yes' : 'No',
+    phoenixQualified: row.isPhoenixQualified ? 'Yes' : 'No',
     matchedShowup: row.matchedShowup ? 'Yes' : 'No',
     matchedShowupDate: row.matchedShowupDateKey || '',
     registrationProxy: row.isRegistration ? 'Yes' : 'No',
@@ -1054,6 +1077,7 @@ function buildWindowDrilldown({
 
   const standardLeadRows = leadRows.filter((row) => row.qualified !== 'Yes');
   const qualifiedLeadRows = leadRows.filter((row) => row.qualified === 'Yes');
+  const phoenixQualifiedLeadRows = leadRows.filter((row) => row.phoenixQualified === 'Yes');
   const greatLeadRows = leadRows.filter((row) => row.tier === 'great');
 
   const fallbackRegistrationRows = leadsInRange
@@ -1168,7 +1192,8 @@ function buildWindowDrilldown({
         { key: 'funnel', label: 'Funnel', type: 'text' },
         { key: 'revenue', label: 'Revenue', type: 'currency' },
         { key: 'sobrietyDate', label: 'Sobriety Date', type: 'text' },
-        { key: 'qualified', label: 'Qualified Rule', type: 'text' },
+        { key: 'qualified', label: '$250k Qualified', type: 'text' },
+        { key: 'phoenixQualified', label: 'Phoenix Qualified', type: 'text' },
         { key: 'campaign', label: 'Campaign', type: 'text' },
       ],
       rows: standardLeadRows,
@@ -1186,7 +1211,21 @@ function buildWindowDrilldown({
         { key: 'campaign', label: 'Campaign', type: 'text' },
       ],
       rows: qualifiedLeadRows,
-      emptyMessage: 'No qualified leads in this window.',
+      emptyMessage: 'No $250k qualified leads in this window.',
+    },
+    phoenix_qualified: {
+      columns: [
+        { key: 'leadDate', label: 'Lead Date', type: 'text' },
+        { key: 'leadName', label: 'Lead Name', type: 'text' },
+        { key: 'email', label: 'Email', type: 'text' },
+        { key: 'funnel', label: 'Funnel', type: 'text' },
+        { key: 'revenue', label: 'Revenue', type: 'currency' },
+        { key: 'sobrietyDate', label: 'Sobriety Date', type: 'text' },
+        { key: 'matchedShowup', label: 'Matched Show-Up', type: 'text' },
+        { key: 'campaign', label: 'Campaign', type: 'text' },
+      ],
+      rows: phoenixQualifiedLeadRows,
+      emptyMessage: 'No Phoenix qualified leads in this window.',
     },
     great: {
       columns: [
@@ -1371,7 +1410,8 @@ export function buildLeadAnalytics({
     registrations: 'Registrations',
     showups: 'Net New Show-Ups',
     standard: 'Non-Qualified Leads',
-    qualified: 'Qualified Leads',
+    qualified: '$250k Qualified Leads',
+    phoenix_qualified: 'Phoenix Qualified Leads',
     great: 'Great Leads',
     cpl: 'CPL',
     cpql: 'CPQL',

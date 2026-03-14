@@ -15,9 +15,16 @@ Revenue tiers are revenue-only labels (official annual revenue USD):
 - Bad: `< 100,000`
 - Unknown: missing, null, empty, or unparseable official revenue
 
-Qualification rule is independent of revenue-tier labels:
-- Qualified: official annual revenue `>= 250,000` **AND** sobriety date is at least 1 year old as of runtime "today".
-- Unqualified: any lead that does not meet the Qualified rule above.
+Qualification rules are independent of revenue-tier labels:
+
+### $250k Qualified / Unqualified
+- $250k Qualified: official annual revenue `>= 250,000` **AND** sobriety date is at least 1 year old as of runtime "today".
+- $250k Unqualified: any lead that does not meet the $250k Qualified rule above.
+
+### Phoenix Qualified / Unqualified
+- Phoenix Qualified: effective revenue (official first, fallback if missing) `>= 1,000,000` **AND** sobriety date is at least 1 year old as of runtime "today".
+- Phoenix Unqualified: any lead that does not meet the Phoenix Qualified rule above.
+- Note: Phoenix Qualified is a strict subset of $250k Qualified (every Phoenix Qualified lead is also $250k Qualified, but not vice versa).
 
 Notes:
 - Revenue must be parsed as a numeric USD value before classification.

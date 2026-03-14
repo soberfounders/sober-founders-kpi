@@ -9,6 +9,7 @@ const DEFAULT_PARITY_THRESHOLDS = Object.freeze({
 const DEFAULT_METRIC_KEYS = Object.freeze([
   'leads',
   'qualifiedLeads',
+  'phoenixQualifiedLeads',
   'greatLeads',
   'registrations',
   'showUps',

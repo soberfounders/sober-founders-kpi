@@ -51,7 +51,7 @@ test('leads qualification checks stay safe without parity enforcement', async ({
 
     const isUnavailable = (await parityPanel.getByText('Qualification rule values are not available yet.').count()) > 0;
     if (!isUnavailable) {
-      const qualified = await readMetricValue(parityPanel, 'Qualified');
+      const qualified = await readMetricValue(parityPanel, '$250k Qualified');
       const good = await readMetricValue(parityPanel, 'Good');
       const great = await readMetricValue(parityPanel, 'Great');
       const revenueEligible = await readMetricValue(parityPanel, 'Revenue Eligible');

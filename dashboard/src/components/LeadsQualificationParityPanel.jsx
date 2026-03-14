@@ -98,7 +98,7 @@ export default function LeadsQualificationParityPanel({ data, isLoading = false 
       {hasAnyValue && (
         <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: '8px' }}>
           <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px' }}>
-            <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>Qualified</p>
+            <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>$250k Qualified</p>
             <p style={{ margin: '4px 0 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{fmtInt(normalized.qualified_count)}</p>
           </div>
           <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px' }}>
@@ -122,7 +122,7 @@ export default function LeadsQualificationParityPanel({ data, isLoading = false 
             </p>
           </div>
           <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px' }}>
-            <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>Qualified - Eligible</p>
+            <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>$250k Qualified - Eligible</p>
             <p style={{ margin: '4px 0 0', fontSize: '16px', fontWeight: 800, color: hasAboveEligible ? '#9a3412' : '#166534' }}>
               {fmtInt(normalized.qualified_minus_revenue_eligible)}
             </p>

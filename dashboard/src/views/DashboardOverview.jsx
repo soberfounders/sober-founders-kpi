@@ -5,7 +5,7 @@ import SendToNotionModal from '../components/SendToNotionModal';
 import notionLogo from '../assets/notion-logo.png';
 import { supabase } from '../lib/supabaseClient';
 import { DASHBOARD_LOOKBACK_DAYS } from '../lib/env';
-import { evaluateLeadQualification, parseOfficialRevenue } from '../lib/leadsQualificationRules';
+import { evaluateLeadQualification, isPhoenixQualifiedLead, parseOfficialRevenue } from '../lib/leadsQualificationRules';
 import {
   buildDateRangeWindows,
 } from '../lib/leadsGroupAnalytics';
@@ -105,22 +105,33 @@ const KPI_CARD_DEFINITIONS = {
     key: 'freeQualified',
     section: 'free',
     metric: 'qualified',
-    title: 'New Qualified Leads',
+    title: 'New $250k Qualified Leads',
     format: 'count',
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'contacts',
     note: 'Revenue >= $250k and sobriety > 1 year',
     color: '#166534',
   },
+  freePhoenixQualified: {
+    key: 'freePhoenixQualified',
+    section: 'free',
+    metric: 'phoenixQualified',
+    title: 'New Phoenix Qualified Leads',
+    format: 'count',
+    direction: KPI_DIRECTION.HIGHER_IS_BETTER,
+    source: 'contacts',
+    note: 'Revenue >= $1M and sobriety > 1 year',
+    color: '#b45309',
+  },
   freeCpql: {
     key: 'freeCpql',
     section: 'free',
     metric: 'cpql',
-    title: 'Cost Per Qualified Lead (CPQL)',
+    title: 'Cost Per $250k Qualified Lead (CPQL)',
     format: 'currency',
     direction: KPI_DIRECTION.LOWER_IS_BETTER,
     source: ['ads', 'contacts'],
-    note: 'Free Group Ad Spend / New Qualified Leads',
+    note: 'Free Group Ad Spend / New $250k Qualified Leads',
     color: '#0369a1',
   },
   freeGreat: {
@@ -171,12 +182,23 @@ const KPI_CARD_DEFINITIONS = {
     key: 'phoenixQualified',
     section: 'phoenix',
     metric: 'qualified',
-    title: 'Phoenix Qualified Leads',
+    title: 'Phoenix $250k Qualified Leads',
     format: 'count',
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'contacts',
     note: 'Revenue >= $250k and sobriety > 1 year',
     color: '#166534',
+  },
+  phoenixPhoenixQualified: {
+    key: 'phoenixPhoenixQualified',
+    section: 'phoenix',
+    metric: 'phoenixQualified',
+    title: 'Phoenix Forum Phoenix Qualified',
+    format: 'count',
+    direction: KPI_DIRECTION.HIGHER_IS_BETTER,
+    source: 'contacts',
+    note: 'Revenue >= $1M and sobriety > 1 year',
+    color: '#b45309',
   },
   phoenixGreat: {
     key: 'phoenixGreat',
@@ -197,7 +219,7 @@ const KPI_CARD_DEFINITIONS = {
     format: 'currency',
     direction: KPI_DIRECTION.LOWER_IS_BETTER,
     source: ['ads', 'contacts'],
-    note: 'Phoenix Ad Spend / Phoenix Qualified Leads',
+    note: 'Phoenix Ad Spend / Phoenix $250k Qualified Leads',
     color: '#0369a1',
   },
   phoenixCpgl: {
@@ -301,8 +323,8 @@ const KPI_CARD_DEFINITIONS = {
   },
 };
 
-const FREE_CARD_KEYS = ['freeQualified', 'freeCpql', 'freeGreat', 'freeCpgl', 'freeInterviews'];
-const PHOENIX_CARD_KEYS = ['phoenixQualified', 'phoenixGreat', 'phoenixCpql', 'phoenixCpgl', 'phoenixInterviews'];
+const FREE_CARD_KEYS = ['freeQualified', 'freePhoenixQualified', 'freeCpql', 'freeGreat', 'freeCpgl', 'freeInterviews'];
+const PHOENIX_CARD_KEYS = ['phoenixQualified', 'phoenixPhoenixQualified', 'phoenixGreat', 'phoenixCpql', 'phoenixCpgl', 'phoenixInterviews'];
 const ATTENDANCE_CARD_KEYS = ['attendanceTotalTue', 'attendanceAvgVisitsTue', 'attendanceTotalThu', 'attendanceAvgVisitsThu'];
 const DONATION_CARD_KEYS = ['donationsCount', 'donationsAmount'];
 const OPERATIONS_CARD_KEYS = ['operationsCompletedItems'];
@@ -544,11 +566,13 @@ function normalizeHubspotContacts(rows = []) {
     .map((row) => {
       const createdDateKey = toDateKey(row?.createdate);
       const qualification = evaluateLeadQualification({ revenue: row, sobrietyDate: row });
+      const phoenixQual = isPhoenixQualifiedLead({ revenue: row, sobrietyDate: row });
       const revenue = parseOfficialRevenue(row);
       return {
         createdDateKey,
         funnel: classifyHubspotFunnel(row),
         qualified: qualification.qualified,
+        phoenixQualified: phoenixQual,
         great: Number.isFinite(Number(revenue)) && Number(revenue) >= 1_000_000,
       };
     })
@@ -709,9 +733,10 @@ function aggregateLeadContacts(rows, window, funnel) {
     if (!dateInRange(row.createdDateKey, window.start, window.end)) return acc;
     acc.total += 1;
     if (row.qualified) acc.qualified += 1;
+    if (row.phoenixQualified) acc.phoenixQualified += 1;
     if (row.great) acc.great += 1;
     return acc;
-  }, { total: 0, qualified: 0, great: 0 });
+  }, { total: 0, qualified: 0, phoenixQualified: 0, great: 0 });
 }
 
 function aggregateDonations(rows, window) {
@@ -829,6 +854,7 @@ function buildWindowMetrics(normalizedData, window) {
     free: {
       meetings: freeAds.leads,
       qualified: freeLeads.qualified,
+      phoenixQualified: freeLeads.phoenixQualified,
       great: freeLeads.great,
       cpql: safeDivide(freeAds.spend, freeLeads.qualified),
       cpgl: safeDivide(freeAds.spend, freeLeads.great),
@@ -838,6 +864,7 @@ function buildWindowMetrics(normalizedData, window) {
     phoenix: {
       leads: phoenixAds.leads,
       qualified: phoenixLeads.qualified,
+      phoenixQualified: phoenixLeads.phoenixQualified,
       great: phoenixLeads.great,
       cpql: safeDivide(phoenixAds.spend, phoenixLeads.qualified),
       cpgl: safeDivide(phoenixAds.spend, phoenixLeads.great),
@@ -854,12 +881,14 @@ function flattenMetricValues(metrics) {
   return {
     freeMeetings: metrics.free.meetings,
     freeQualified: metrics.free.qualified,
+    freePhoenixQualified: metrics.free.phoenixQualified,
     freeCpql: metrics.free.cpql,
     freeGreat: metrics.free.great,
     freeCpgl: metrics.free.cpgl,
     freeInterviews: metrics.free.interviews,
     phoenixLeads: metrics.phoenix.leads,
     phoenixQualified: metrics.phoenix.qualified,
+    phoenixPhoenixQualified: metrics.phoenix.phoenixQualified,
     phoenixGreat: metrics.phoenix.great,
     phoenixCpql: metrics.phoenix.cpql,
     phoenixCpgl: metrics.phoenix.cpgl,
@@ -1118,10 +1147,10 @@ function buildAiNarrative(snapshot) {
   );
 
   const bottlenecks = [
-    { key: 'free-qualified', label: 'Free funnel lead to qualified conversion', value: freeQualifiedRate },
-    { key: 'phoenix-qualified', label: 'Phoenix funnel lead to qualified conversion', value: phoenixQualifiedRate },
-    { key: 'free-interview', label: 'Free funnel qualified to interview conversion', value: freeInterviewRate },
-    { key: 'phoenix-interview', label: 'Phoenix funnel qualified to interview conversion', value: phoenixInterviewRate },
+    { key: 'free-qualified', label: 'Free funnel lead to $250k qualified conversion', value: freeQualifiedRate },
+    { key: 'phoenix-qualified', label: 'Phoenix funnel lead to $250k qualified conversion', value: phoenixQualifiedRate },
+    { key: 'free-interview', label: 'Free funnel $250k qualified to interview conversion', value: freeInterviewRate },
+    { key: 'phoenix-interview', label: 'Phoenix funnel $250k qualified to interview conversion', value: phoenixInterviewRate },
   ].filter((item) => Number.isFinite(Number(item.value)));
 
   const weakest = bottlenecks.length > 0
@@ -1130,7 +1159,7 @@ function buildAiNarrative(snapshot) {
 
   const trendRows = [
     {
-      label: 'Free qualified leads',
+      label: 'Free $250k qualified leads',
       delta: calculateDisplayChange(
         snapshot.free.current.qualified,
         snapshot.free.previous.qualified,
@@ -1138,7 +1167,7 @@ function buildAiNarrative(snapshot) {
       ),
     },
     {
-      label: 'Phoenix qualified leads',
+      label: 'Phoenix $250k qualified leads',
       delta: calculateDisplayChange(
         snapshot.phoenix.current.qualified,
         snapshot.phoenix.previous.qualified,
@@ -1165,7 +1194,7 @@ function buildAiNarrative(snapshot) {
   const improving = trendRows.filter((row) => row.delta !== null && row.delta > 0).map((row) => row.label);
   const deteriorating = trendRows.filter((row) => row.delta !== null && row.delta < 0).map((row) => row.label);
 
-  const healthLine = `Qualified lead volume is ${formatInt(snapshot.free.current.qualified + snapshot.phoenix.current.qualified)} with blended CPQL ${formatCurrency(blendedCPQL)} and donation volume ${formatCurrency(snapshot.donations.current.amount)}.`;
+  const healthLine = `$250k qualified lead volume is ${formatInt(snapshot.free.current.qualified + snapshot.phoenix.current.qualified)} with blended CPQL ${formatCurrency(blendedCPQL)} and donation volume ${formatCurrency(snapshot.donations.current.amount)}.`;
   const bottleneckLine = weakest
     ? `Primary funnel break is ${weakest.label} at ${formatPercent(weakest.value)}.`
     : 'No single bottleneck is reliable yet because one or more funnel stages have insufficient denominator data.';
@@ -1178,7 +1207,7 @@ function buildAiNarrative(snapshot) {
     healthLine,
     bottleneckLine,
     trendLine,
-    weakestLabel: weakest?.label || 'Qualified conversion',
+    weakestLabel: weakest?.label || '$250k Qualified conversion',
     blendedCPQL,
   };
 }
@@ -1197,8 +1226,8 @@ function buildSectionRecommendations(snapshot, windows, aiNarrative) {
       {
         id: 'leads-reallocate-budget',
         title: 'Reallocate budget to higher-quality campaigns',
-        description: `Qualified leads are ${formatInt(leadsQualifiedCurrent)} vs ${formatInt(leadsQualifiedPrevious)} in the prior period. Shift spend toward ad sets with higher qualified conversion and pause low-quality segments.`,
-        taskName: `Leads: reallocate spend based on qualified lead conversion (${windows.current.label})`,
+        description: `$250k qualified leads are ${formatInt(leadsQualifiedCurrent)} vs ${formatInt(leadsQualifiedPrevious)} in the prior period. Shift spend toward ad sets with higher qualified conversion and pause low-quality segments.`,
+        taskName: `Leads: reallocate spend based on $250k qualified lead conversion (${windows.current.label})`,
         priority: 'High Priority',
         definitionOfDone: 'Budget plan approved and at least two low-quality ad sets paused while top-quality sets receive additional spend.',
       },
@@ -1208,7 +1237,7 @@ function buildSectionRecommendations(snapshot, windows, aiNarrative) {
         description: `Current blended CPQL is ${formatCurrency(blendedCPQLCurrent)} (prior ${formatCurrency(blendedCPQLPrevious)}). Prioritize creative/audience combinations with lower CPQL and stable quality.`,
         taskName: `Leads: reduce blended CPQL from ${formatCurrency(blendedCPQLCurrent)}`,
         priority: 'High Priority',
-        definitionOfDone: 'At least one active campaign variant shows lower CPQL than current baseline while qualified lead count is not lower.',
+        definitionOfDone: 'At least one active campaign variant shows lower CPQL than current baseline while $250k qualified lead count is not lower.',
       },
       {
         id: 'leads-great-share',
@@ -1283,7 +1312,7 @@ function buildSectionRecommendations(snapshot, windows, aiNarrative) {
       {
         id: 'operations-prioritize',
         title: 'Re-prioritize to one owner per KPI blocker',
-        description: `Focus leadership execution on ${aiNarrative.weakestLabel} first, then sequence secondary work by impact on CPQL and qualified lead volume.`,
+        description: `Focus leadership execution on ${aiNarrative.weakestLabel} first, then sequence secondary work by impact on CPQL and $250k qualified lead volume.`,
         taskName: `Operations: assign owner + deadline for ${aiNarrative.weakestLabel}`,
         priority: 'Medium Priority',
         definitionOfDone: 'Each top KPI blocker has one owner, one due date, and one explicit next action.',
@@ -1291,7 +1320,7 @@ function buildSectionRecommendations(snapshot, windows, aiNarrative) {
       {
         id: 'operations-sla',
         title: 'Define KPI response SLAs',
-        description: 'Set explicit response SLAs when qualified leads, attendance, or donations fall below trend so action happens the same day.',
+        description: 'Set explicit response SLAs when $250k qualified leads, attendance, or donations fall below trend so action happens the same day.',
         taskName: 'Operations: define KPI response SLA playbook',
         priority: 'Medium Priority',
         definitionOfDone: 'SLA rules are documented and shared, with alert-to-owner routing tested end to end.',

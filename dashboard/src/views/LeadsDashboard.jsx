@@ -15,6 +15,7 @@ import { buildAliasMap, resolveCanonicalAttendeeName } from '../lib/attendeeCano
 import { applyZoomAttributionOverride, getZoomAttributionOverride } from '../lib/zoomAttributionOverrides';
 import {
   evaluateLeadQualification,
+  isPhoenixQualifiedLead,
   leadQualityTierFromOfficialRevenue,
   parseOfficialRevenue,
 } from '../lib/leadsQualificationRules';
@@ -324,6 +325,7 @@ function summarizeLeadQualificationAndQuality(leadRows) {
   let qualified = 0;
   let officialQualified = 0;
   let fallbackQualified = 0;
+  let phoenixQualified = 0;
 
   for (const row of rows) {
     const revenue = parseOfficialRevenue(row?.revenueOfficial ?? row?.revenue);
@@ -342,15 +344,27 @@ function summarizeLeadQualificationAndQuality(leadRows) {
       if (qualification.qualificationBasis === 'official') officialQualified += 1;
       if (qualification.qualificationBasis === 'fallback') fallbackQualified += 1;
     }
+    if (isPhoenixQualifiedLead({
+      revenue: {
+        annual_revenue_in_dollars__official_: row?.revenueOfficial,
+        annual_revenue_in_dollars: row?.revenue,
+      },
+      sobrietyDate: row?.sobrietyDate,
+    })) {
+      phoenixQualified += 1;
+    }
   }
 
   const total = rows.length;
   const nonQualified = Math.max(0, total - qualified);
+  const nonPhoenixQualified = Math.max(0, total - phoenixQualified);
   const fallbackSharePct = qualified > 0 ? fallbackQualified / qualified : null;
   return {
     total,
     qualified,
     nonQualified,
+    phoenixQualified,
+    nonPhoenixQualified,
     qualityCounts,
     qualificationBasis: {
       official_qualified_count: officialQualified,
@@ -593,7 +607,7 @@ function ProgressGapBar({ label, current, target, format = 'count', color = '#0f
 
 // ─── Category bar ─────────────────────────────────────────────────────────────
 const TIER_COLORS = { great: '#16a34a', qualified: '#2563eb', ok: '#b45309', bad: '#dc2626', unknown: '#94a3b8' };
-const TIER_LABELS = { great: 'Great >=$1M', qualified: 'Good $250k-$999,999', ok: 'OK $100k-$249k', bad: 'Bad <$100k', unknown: 'Unknown' };
+const TIER_LABELS = { great: 'Great >=$1M', qualified: '$250k Qualified $250k-$999,999', ok: 'OK $100k-$249k', bad: 'Bad <$100k', unknown: 'Unknown' };
 
 function CategoryRow({ cat, total }) {
   if (!cat) return null;
@@ -3492,9 +3506,9 @@ export default function LeadsDashboard() {
       { key: 'costPerGreatMemberPaidAcqInRange', label: 'Cost / Great Member (Acq In Range)', value: costMetrics.costPerGreatMemberPaidAcqInRange, previous: previousCostMetrics?.costPerGreatMemberPaidAcqInRange ?? null, format: 'currency', invertColor: true, note: 'Best current KPI' },
       { key: 'costPerGreatMemberPaidBlended', label: 'Cost / Great Member (Blended Active)', value: costMetrics.costPerGreatMemberPaidBlended, previous: previousCostMetrics?.costPerGreatMemberPaidBlended ?? null, format: 'currency', invertColor: true, note: 'Includes older cohorts active now' },
       { key: 'costPerBadLead', label: 'Cost / Bad Lead', value: costMetrics.costPerBadLead, previous: previousCostMetrics?.costPerBadLead ?? null, format: 'currency', invertColor: true, note: 'Lead tier < $100k' },
-      { key: 'costPerGoodLeadQualified', label: 'Cost / Good Lead ($250k-$999k)', value: costMetrics.costPerGoodLeadQualified, previous: previousCostMetrics?.costPerGoodLeadQualified ?? null, format: 'currency', invertColor: true, note: 'Qualified lead tier' },
+      { key: 'costPerGoodLeadQualified', label: 'Cost / $250k Qualified Lead ($250k-$999k)', value: costMetrics.costPerGoodLeadQualified, previous: previousCostMetrics?.costPerGoodLeadQualified ?? null, format: 'currency', invertColor: true, note: '$250k Qualified lead tier' },
       { key: 'costPerGreatLead1m', label: 'Cost / Great Lead ($1M+)', value: costMetrics.costPerGreatLead1m, previous: previousCostMetrics?.costPerGreatLead1m ?? null, format: 'currency', invertColor: true, note: 'Top lead tier' },
-      { key: 'costPerHighQualityLead250kPlus', label: 'Cost / High-Quality Lead ($250k+)', value: costMetrics.costPerHighQualityLead250kPlus, previous: previousCostMetrics?.costPerHighQualityLead250kPlus ?? null, format: 'currency', invertColor: true, note: 'Qualified + Great leads' },
+      { key: 'costPerHighQualityLead250kPlus', label: 'Cost / High-Quality Lead ($250k+)', value: costMetrics.costPerHighQualityLead250kPlus, previous: previousCostMetrics?.costPerHighQualityLead250kPlus ?? null, format: 'currency', invertColor: true, note: '$250k Qualified + Great leads' },
     ];
 
     const greatMembersBySource = currentGreatSourceRows.map((row) => ({
@@ -3606,7 +3620,7 @@ export default function LeadsDashboard() {
   const drilldownDataReady = !analytics?.drilldowns?.isDeferred;
   const activeDrilldownWindow = analytics?.drilldowns?.byWindow?.[drilldownWindowKey] || null;
   const activeDrilldownTable = activeDrilldownWindow?.tables?.[drilldownMetricKey] || null;
-  const drilldownQuickMetrics = ['leads', 'registrations', 'showups', 'qualified', 'great', 'cpl', 'cpql', 'cost_per_showup', 'cost_per_registration'];
+  const drilldownQuickMetrics = ['leads', 'registrations', 'showups', 'qualified', 'phoenix_qualified', 'great', 'cpl', 'cpql', 'cost_per_showup', 'cost_per_registration'];
 
   const adActivityByIdInCurrentWindow = useMemo(() => {
     const startKey = dateWindows?.current?.start;
@@ -4077,8 +4091,10 @@ export default function LeadsDashboard() {
   );
   const currentLeadsForQualification = currentFreeGroupHubspotLeads;
   const qualifiedLeadRate = currentLeadsForQualification > 0 ? (qualificationCurrent.qualified / currentLeadsForQualification) : null;
+  const phoenixQualifiedLeadRate = currentLeadsForQualification > 0 ? (qualificationCurrent.phoenixQualified / currentLeadsForQualification) : null;
   const estimatedCostPerLead = currentLeadsForQualification > 0 ? (overviewCurrentFreeSpend / currentLeadsForQualification) : null;
   const estimatedCostPerQualifiedLead = qualificationCurrent.qualified > 0 ? (overviewCurrentFreeSpend / qualificationCurrent.qualified) : null;
+  const estimatedCostPerPhoenixQualifiedLead = qualificationCurrent.phoenixQualified > 0 ? (overviewCurrentFreeSpend / qualificationCurrent.phoenixQualified) : null;
   const estimatedNonQualifiedSpend = Number.isFinite(estimatedCostPerLead)
     ? estimatedCostPerLead * qualificationCurrent.nonQualified
     : null;
@@ -4130,7 +4146,7 @@ export default function LeadsDashboard() {
     },
     {
       key: 'qualified_leads',
-      label: 'Free Group Qualified Leads',
+      label: 'Free Group $250k Qualified Leads',
       value: Number(qualificationCurrent?.qualified || 0),
       previous: dateWindows?.previous ? Number(qualificationPrevious?.qualified || 0) : null,
       format: 'count',
@@ -4139,12 +4155,30 @@ export default function LeadsDashboard() {
     },
     {
       key: 'non_qualified_leads',
-      label: 'Free Group Non-Qualified Leads',
+      label: 'Free Group $250k Non-Qualified Leads',
       value: Number(qualificationCurrent?.nonQualified || 0),
       previous: dateWindows?.previous ? Number(qualificationPrevious?.nonQualified || 0) : null,
       format: 'count',
-      note: 'Free Group leads not meeting qualified rule',
+      note: 'Free Group leads not meeting $250k qualified rule',
       color: '#64748b',
+    },
+    {
+      key: 'phoenix_qualified_leads',
+      label: 'Free Group Phoenix Qualified Leads',
+      value: Number(qualificationCurrent?.phoenixQualified || 0),
+      previous: dateWindows?.previous ? Number(qualificationPrevious?.phoenixQualified || 0) : null,
+      format: 'count',
+      note: 'Sobriety > 1 year and revenue >= $1M',
+      color: '#f59e0b',
+    },
+    {
+      key: 'phoenix_non_qualified_leads',
+      label: 'Free Group Phoenix Non-Qualified Leads',
+      value: Number(qualificationCurrent?.nonPhoenixQualified || 0),
+      previous: dateWindows?.previous ? Number(qualificationPrevious?.nonPhoenixQualified || 0) : null,
+      format: 'count',
+      note: 'Free Group leads not meeting Phoenix qualified rule (>$1M + sobriety)',
+      color: '#78716c',
     },
     {
       key: 'great_leads',
@@ -4164,8 +4198,12 @@ export default function LeadsDashboard() {
     { key: 'great', label: 'Great ($1M+)', value: Number(qualificationCurrent?.qualityCounts?.great || 0), color: '#16a34a' },
   ];
   const qualificationPieRows = [
-    { key: 'qualified', label: 'Qualified', value: Number(qualificationCurrent?.qualified || 0), color: '#2563eb' },
-    { key: 'nonQualified', label: 'Non-Qualified', value: Number(qualificationCurrent?.nonQualified || 0), color: '#94a3b8' },
+    { key: 'qualified', label: '$250k Qualified', value: Number(qualificationCurrent?.qualified || 0), color: '#2563eb' },
+    { key: 'nonQualified', label: '$250k Non-Qualified', value: Number(qualificationCurrent?.nonQualified || 0), color: '#94a3b8' },
+  ];
+  const phoenixQualificationPieRows = [
+    { key: 'phoenixQualified', label: 'Phoenix Qualified', value: Number(qualificationCurrent?.phoenixQualified || 0), color: '#f59e0b' },
+    { key: 'phoenixNonQualified', label: 'Phoenix Non-Qualified', value: Number(qualificationCurrent?.nonPhoenixQualified || 0), color: '#94a3b8' },
   ];
   const qualityMixTotal = qualityMixRows.reduce((sum, row) => sum + row.value, 0);
   const qualityUnknownCount = Number(qualificationCurrent?.qualityCounts?.unknown || 0);
@@ -4370,9 +4408,9 @@ export default function LeadsDashboard() {
             <p style={{ margin: 0, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 800, color: '#3730a3' }}>
               Unified KPI Snapshot
             </p>
-            <h3 style={{ margin: '6px 0 0', fontSize: '16px', color: '#0f172a' }}>Qualified basis, freshness, and source lineage</h3>
+            <h3 style={{ margin: '6px 0 0', fontSize: '16px', color: '#0f172a' }}>$250k / Phoenix Qualified basis, freshness, and source lineage</h3>
             <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#475569' }}>
-              Qualified = sobriety {'>'} 1 year and revenue {'>='} $250K (official first, fallback only if official is missing).
+              $250k Qualified = sobriety {'>'} 1 year and revenue {'>='} $250K. Phoenix Qualified = sobriety {'>'} 1 year and revenue {'>='} $1M.
             </p>
           </div>
           <div style={{ ...subCard, border: '1px solid #cbd5e1', minWidth: '220px', backgroundColor: '#ffffffb3' }}>
@@ -4387,11 +4425,13 @@ export default function LeadsDashboard() {
         </div>
         <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: '8px' }}>
           {[
-            { label: 'Qualified Count', value: fmt.int(leadsKpiSnapshot?.leads?.qualified_count || 0), color: '#1d4ed8' },
-            { label: 'Qualified %', value: fmtMaybePct(leadsKpiSnapshot?.leads?.qualified_pct), color: '#0f766e' },
-            { label: 'Official Qualified', value: fmt.int(leadsKpiSnapshot?.leads?.qualification_basis?.official_qualified_count || 0), color: '#3730a3' },
-            { label: 'Fallback Qualified', value: fmt.int(leadsKpiSnapshot?.leads?.qualification_basis?.fallback_qualified_count || 0), color: '#92400e' },
+            { label: '$250k Qualified Count', value: fmt.int(leadsKpiSnapshot?.leads?.qualified_count || 0), color: '#1d4ed8' },
+            { label: '$250k Qualified %', value: fmtMaybePct(leadsKpiSnapshot?.leads?.qualified_pct), color: '#0f766e' },
+            { label: 'Official $250k Qualified', value: fmt.int(leadsKpiSnapshot?.leads?.qualification_basis?.official_qualified_count || 0), color: '#3730a3' },
+            { label: 'Fallback $250k Qualified', value: fmt.int(leadsKpiSnapshot?.leads?.qualification_basis?.fallback_qualified_count || 0), color: '#92400e' },
             { label: 'Fallback Share', value: fmtMaybePct(leadsKpiSnapshot?.leads?.qualification_basis?.fallback_share_pct), color: '#b45309' },
+            { label: 'Phoenix Qualified Count', value: fmt.int(qualificationCurrent?.phoenixQualified || 0), color: '#f59e0b' },
+            { label: 'Phoenix Qualified %', value: phoenixQualifiedLeadRate !== null ? fmt.pct(phoenixQualifiedLeadRate) : 'N/A', color: '#92400e' },
           ].map((metric) => (
             <div key={`leads-snapshot-${metric.label}`} style={{ ...subCard, border: '1px solid #dbeafe', backgroundColor: '#fff' }}>
               <p style={{ margin: 0, fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>{metric.label}</p>
@@ -4508,14 +4548,14 @@ export default function LeadsDashboard() {
           <p style={{ margin: 0, fontSize: '11px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
             Qualification And Quality
           </p>
-          <h3 style={{ margin: '6px 0 0', fontSize: '17px', color: '#0f172a' }}>Free Group Qualified vs Non-Qualified and quality tiers</h3>
+          <h3 style={{ margin: '6px 0 0', fontSize: '17px', color: '#0f172a' }}>Free Group $250k Qualified, Phoenix Qualified, and quality tiers</h3>
           <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#64748b' }}>
-            Qualified = sobriety age {'>'} 1 year and revenue {'>='} $250K (official first, fallback only if official is missing). Good/Great tiers are revenue-only.
+            $250k Qualified = sobriety age {'>'} 1 year and revenue {'>='} $250K. Phoenix Qualified = sobriety age {'>'} 1 year and revenue {'>='} $1M. Good/Great tiers are revenue-only.
           </p>
           <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: '10px' }}>
             <div style={{ ...subCard, border: '1px solid #dbeafe', backgroundColor: '#f8fbff' }}>
               <p style={{ margin: 0, fontSize: '11px', color: '#1d4ed8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                Free Group Qualified vs Non-Qualified
+                Free Group $250k Qualified vs Non-Qualified
               </p>
               <div style={{ marginTop: '8px', height: '200px' }}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -4529,19 +4569,49 @@ export default function LeadsDashboard() {
               </div>
               <div style={{ display: 'grid', gap: '5px' }}>
                 <p style={{ margin: 0, fontSize: '12px', color: '#334155' }}>
-                  Free Group Qualified Leads: <strong>{fmt.int(qualificationCurrent.qualified)}</strong>
+                  $250k Qualified Leads: <strong>{fmt.int(qualificationCurrent.qualified)}</strong>
                 </p>
                 <p style={{ margin: 0, fontSize: '12px', color: '#334155' }}>
-                  Free Group Non-Qualified Leads: <strong>{fmt.int(qualificationCurrent.nonQualified)}</strong>
+                  $250k Non-Qualified Leads: <strong>{fmt.int(qualificationCurrent.nonQualified)}</strong>
                 </p>
                 <p style={{ margin: 0, fontSize: '12px', color: '#334155' }}>
-                  Qualified Rate: <strong>{qualifiedLeadRate !== null ? fmt.pct(qualifiedLeadRate) : 'N/A'}</strong>
+                  $250k Qualified Rate: <strong>{qualifiedLeadRate !== null ? fmt.pct(qualifiedLeadRate) : 'N/A'}</strong>
                 </p>
                 <p style={{ margin: 0, fontSize: '12px', color: '#334155' }}>
-                  Cost / Qualified Lead: <strong>{fmtMaybeCurrency(estimatedCostPerQualifiedLead)}</strong>
+                  Cost / $250k Qualified Lead: <strong>{fmtMaybeCurrency(estimatedCostPerQualifiedLead)}</strong>
                 </p>
                 <p style={{ margin: 0, fontSize: '12px', color: '#991b1b', fontWeight: 700 }}>
-                  Estimated Non-Qualified Spend: {fmtMaybeCurrency(estimatedNonQualifiedSpend)}
+                  Estimated $250k Non-Qualified Spend: {fmtMaybeCurrency(estimatedNonQualifiedSpend)}
+                </p>
+              </div>
+            </div>
+
+            <div style={{ ...subCard, border: '1px solid #fef3c7', backgroundColor: '#fffbeb' }}>
+              <p style={{ margin: 0, fontSize: '11px', color: '#92400e', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Free Group Phoenix Qualified vs Non-Qualified
+              </p>
+              <div style={{ marginTop: '8px', height: '200px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={phoenixQualificationPieRows.filter((row) => row.value > 0)} dataKey="value" nameKey="label" outerRadius={78}>
+                      {phoenixQualificationPieRows.filter((row) => row.value > 0).map((row) => <Cell key={`phoenix-qualification-${row.key}`} fill={row.color} />)}
+                    </Pie>
+                    <Tooltip formatter={(value) => fmt.int(value)} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div style={{ display: 'grid', gap: '5px' }}>
+                <p style={{ margin: 0, fontSize: '12px', color: '#334155' }}>
+                  Phoenix Qualified Leads: <strong>{fmt.int(qualificationCurrent.phoenixQualified)}</strong>
+                </p>
+                <p style={{ margin: 0, fontSize: '12px', color: '#334155' }}>
+                  Phoenix Non-Qualified Leads: <strong>{fmt.int(qualificationCurrent.nonPhoenixQualified)}</strong>
+                </p>
+                <p style={{ margin: 0, fontSize: '12px', color: '#334155' }}>
+                  Phoenix Qualified Rate: <strong>{phoenixQualifiedLeadRate !== null ? fmt.pct(phoenixQualifiedLeadRate) : 'N/A'}</strong>
+                </p>
+                <p style={{ margin: 0, fontSize: '12px', color: '#334155' }}>
+                  Cost / Phoenix Qualified Lead: <strong>{fmtMaybeCurrency(estimatedCostPerPhoenixQualifiedLead)}</strong>
                 </p>
               </div>
             </div>

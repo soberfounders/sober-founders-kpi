@@ -13,6 +13,7 @@
 
 import {
     isQualifiedLead,
+    isPhoenixQualifiedLead,
     leadQualityTierFromOfficialRevenue,
     parseOfficialRevenue,
 } from './leadsQualificationRules.js';
@@ -909,6 +910,7 @@ function buildLeadCategorization(adsMetrics, hubspotRows, funnelFilter) {
     const unmatchedLeads = [];
     const contacts = buildDedupedPaidHubspotContacts(hubspotRows, funnelFilter);
     let qualifiedCount = 0;
+    let phoenixQualifiedCount = 0;
     let goodCount = 0;
     let greatCount = 0;
 
@@ -926,6 +928,7 @@ function buildLeadCategorization(adsMetrics, hubspotRows, funnelFilter) {
 
         if (counts[tier] !== undefined) counts[tier]++;
         if (isQualifiedLead({ revenue, sobrietyDate: sobrietyRaw })) qualifiedCount += 1;
+        if (isPhoenixQualifiedLead({ revenue, sobrietyDate: sobrietyRaw })) phoenixQualifiedCount += 1;
         if (qualityTier === 'good') goodCount += 1;
         if (qualityTier === 'great') greatCount += 1;
     }
@@ -947,6 +950,7 @@ function buildLeadCategorization(adsMetrics, hubspotRows, funnelFilter) {
         total: metaTotal,
         categorizedTotal,
         qualified_count: qualifiedCount,
+        phoenix_qualified_count: phoenixQualifiedCount,
         good_count: goodCount,
         great_count: greatCount,
         revenue_eligible_count: goodCount + greatCount,

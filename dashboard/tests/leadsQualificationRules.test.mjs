@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluateLeadQualification } from '../src/lib/leadsQualificationRules.js';
+import { evaluateLeadQualification, isPhoenixQualifiedLead, evaluatePhoenixQualification } from '../src/lib/leadsQualificationRules.js';
 
 const REFERENCE_DATE = new Date('2026-03-09T00:00:00.000Z');
 
@@ -97,4 +97,83 @@ test('sobriety under 1 year blocks qualification even with high revenue', () => 
 
   assert.equal(result.qualified, false);
   assert.equal(result.sobrietyEligible, false);
+});
+
+// ─── Phoenix Qualification Tests ────────────────────────────────────────────
+
+test('phoenix qualified: revenue >= $1M with sobriety > 1 year qualifies', () => {
+  const result = evaluatePhoenixQualification({
+    revenue: {
+      annual_revenue_in_dollars__official_: 1_500_000,
+    },
+    sobrietyDate: '2024-01-01',
+    referenceDate: REFERENCE_DATE,
+  });
+
+  assert.equal(result.phoenixQualified, true);
+  assert.equal(result.revenueEligible, true);
+  assert.equal(result.sobrietyEligible, true);
+});
+
+test('phoenix qualified: revenue exactly $1M with sobriety > 1 year qualifies', () => {
+  const result = isPhoenixQualifiedLead({
+    revenue: {
+      annual_revenue_in_dollars__official_: 1_000_000,
+    },
+    sobrietyDate: '2024-01-01',
+    referenceDate: REFERENCE_DATE,
+  });
+
+  assert.equal(result, true);
+});
+
+test('phoenix qualified: revenue $999,999 does not qualify', () => {
+  const result = isPhoenixQualifiedLead({
+    revenue: {
+      annual_revenue_in_dollars__official_: 999_999,
+    },
+    sobrietyDate: '2024-01-01',
+    referenceDate: REFERENCE_DATE,
+  });
+
+  assert.equal(result, false);
+});
+
+test('phoenix qualified: revenue >= $1M but sobriety < 1 year does not qualify', () => {
+  const result = evaluatePhoenixQualification({
+    revenue: {
+      annual_revenue_in_dollars__official_: 2_000_000,
+    },
+    sobrietyDate: '2025-12-01',
+    referenceDate: REFERENCE_DATE,
+  });
+
+  assert.equal(result.phoenixQualified, false);
+  assert.equal(result.revenueEligible, true);
+  assert.equal(result.sobrietyEligible, false);
+});
+
+test('phoenix qualified: $250k revenue with sobriety > 1 year does NOT phoenix qualify (needs $1M)', () => {
+  const result = isPhoenixQualifiedLead({
+    revenue: {
+      annual_revenue_in_dollars__official_: 500_000,
+    },
+    sobrietyDate: '2024-01-01',
+    referenceDate: REFERENCE_DATE,
+  });
+
+  assert.equal(result, false);
+});
+
+test('phoenix qualified: uses fallback revenue when official is missing', () => {
+  const result = isPhoenixQualifiedLead({
+    revenue: {
+      annual_revenue_in_dollars__official_: null,
+      annual_revenue_in_dollars: 1_200_000,
+    },
+    sobrietyDate: '2024-01-01',
+    referenceDate: REFERENCE_DATE,
+  });
+
+  assert.equal(result, true);
 });

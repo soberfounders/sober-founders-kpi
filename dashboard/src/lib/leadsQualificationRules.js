@@ -19,6 +19,7 @@ const SOBRIETY_DATE_FIELDS = Object.freeze([
 
 const OFFICIAL_QUALIFIED_MIN_REVENUE = 250_000;
 const FALLBACK_QUALIFIED_MIN_REVENUE = OFFICIAL_QUALIFIED_MIN_REVENUE;
+const PHOENIX_QUALIFIED_MIN_REVENUE = 1_000_000;
 
 function toNumberOrNull(value) {
   if (value === null || value === undefined || value === '') return null;
@@ -205,6 +206,33 @@ export function leadQualityTierFromOfficialRevenue(revenue) {
   return 'bad';
 }
 
+export function isPhoenixQualifiedLead({
+  revenue,
+  sobrietyDate,
+  referenceDate = new Date(),
+}) {
+  return evaluatePhoenixQualification({ revenue, sobrietyDate, referenceDate }).phoenixQualified;
+}
+
+export function evaluatePhoenixQualification({
+  revenue,
+  sobrietyDate,
+  referenceDate = new Date(),
+}) {
+  const { effectiveRevenue } = extractRevenueSignals(revenue);
+  const sobrietyEligible = hasOneYearSobrietyByDate(sobrietyDate, referenceDate);
+  const revenueEligible = effectiveRevenue !== null && effectiveRevenue >= PHOENIX_QUALIFIED_MIN_REVENUE;
+  const phoenixQualified = sobrietyEligible && revenueEligible;
+
+  return {
+    phoenixQualified,
+    revenueEligible,
+    sobrietyEligible,
+    effectiveRevenue,
+    threshold: PHOENIX_QUALIFIED_MIN_REVENUE,
+  };
+}
+
 export function isQualifiedRevenueOnly(revenue) {
   const { officialRevenue, fallbackRevenue } = extractRevenueSignals(revenue);
   const hasOfficialRevenue = officialRevenue !== null;
@@ -218,4 +246,5 @@ export {
   NUMERIC_REVENUE_FALLBACK_FIELDS,
   OFFICIAL_QUALIFIED_MIN_REVENUE,
   FALLBACK_QUALIFIED_MIN_REVENUE,
+  PHOENIX_QUALIFIED_MIN_REVENUE,
 };
