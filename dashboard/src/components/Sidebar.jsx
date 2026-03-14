@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
@@ -16,25 +17,25 @@ import {
 import { motion } from 'framer-motion';
 
 const sidebarItems = [
-  { id: 'Dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { id: 'Attendance', icon: Calendar, label: 'Attendance' },
-  { id: 'Leads', icon: Users, label: 'Leads' },
-  { id: 'Email', icon: Mail, label: 'Email' },
-  { id: 'Online Discovery', icon: Globe, label: 'Online Discovery' },
-  { id: 'Donations', icon: Gift, label: 'Donations' },
-  { id: 'Marketing', icon: Megaphone, label: 'Marketing' },
-  { id: 'To-Do\'s', icon: CheckSquare, label: 'To-Do\'s' },
-  { id: 'AI Manager', icon: Bot, label: 'Board of Directors' },
+  { id: 'Dashboard',        icon: LayoutDashboard, label: 'Dashboard',         path: '/' },
+  { id: 'Attendance',       icon: Calendar,        label: 'Attendance',        path: '/attendance' },
+  { id: 'Leads',            icon: Users,           label: 'Leads',             path: '/leads' },
+  { id: 'Email',            icon: Mail,            label: 'Email',             path: '/email' },
+  { id: 'Online Discovery', icon: Globe,           label: 'Online Discovery',  path: '/online-discovery' },
+  { id: 'Donations',        icon: Gift,            label: 'Donations',         path: '/donations' },
+  { id: 'Marketing',        icon: Megaphone,       label: 'Marketing',         path: '/marketing' },
+  { id: "To-Do's",          icon: CheckSquare,     label: "To-Do's",           path: '/todos' },
+  { id: 'AI Manager',       icon: Bot,             label: 'Board of Directors', path: '/ai-manager' },
 ];
 
 const Sidebar = ({
   activeTab,
-  setActiveTab,
   isMobile = false,
   isOpen = true,
   isCollapsed = false,
   onToggleCollapse = () => { },
   onClose = () => { },
+  onNavigate = () => { },
 }) => {
   const showLabels = isMobile || !isCollapsed;
   const sidebarWidth = isMobile ? 280 : (isCollapsed ? 88 : 260);
@@ -59,11 +60,6 @@ const Sidebar = ({
       boxShadow: '0 20px 60px rgba(0, 0, 0, 0.7)',
       pointerEvents: isOpen ? 'auto' : 'none',
     } : {}),
-  };
-
-  const handleItemClick = (tabId) => {
-    setActiveTab(tabId);
-    if (isMobile) onClose();
   };
 
   return (
@@ -157,32 +153,37 @@ const Sidebar = ({
 
               return (
                 <li key={item.id} style={{ padding: '0 12px' }}>
-                  <motion.button
-                    whileHover={showLabels ? { x: 4 } : { scale: 1.03 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => handleItemClick(item.id)}
-                    style={{
-                      width: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: showLabels ? 'flex-start' : 'center',
-                      gap: showLabels ? '12px' : 0,
-                      padding: showLabels ? '12px 16px' : '12px',
-                      borderRadius: '10px',
-                      color: isActive ? '#0a0f18' : 'var(--color-text-secondary)',
-                      background: isActive
-                        ? 'linear-gradient(135deg, var(--color-dark-green) 0%, var(--color-light-green) 100%)'
-                        : 'transparent',
-                      boxShadow: isActive ? '0 4px 15px var(--color-brand-glow)' : 'none',
-                      fontSize: '14px',
-                      fontWeight: isActive ? '700' : '500',
-                      transition: 'all 0.2s',
-                      textAlign: 'left',
-                    }}
+                  <Link
+                    to={item.path}
+                    onClick={onNavigate}
+                    style={{ textDecoration: 'none' }}
                   >
-                    <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
-                    {showLabels && item.label}
-                  </motion.button>
+                    <motion.div
+                      whileHover={showLabels ? { x: 4 } : { scale: 1.03 }}
+                      whileTap={{ scale: 0.98 }}
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: showLabels ? 'flex-start' : 'center',
+                        gap: showLabels ? '12px' : 0,
+                        padding: showLabels ? '12px 16px' : '12px',
+                        borderRadius: '10px',
+                        color: isActive ? '#0a0f18' : 'var(--color-text-secondary)',
+                        background: isActive
+                          ? 'linear-gradient(135deg, var(--color-dark-green) 0%, var(--color-light-green) 100%)'
+                          : 'transparent',
+                        boxShadow: isActive ? '0 4px 15px var(--color-brand-glow)' : 'none',
+                        fontSize: '14px',
+                        fontWeight: isActive ? '700' : '500',
+                        transition: 'all 0.2s',
+                        textAlign: 'left',
+                      }}
+                    >
+                      <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+                      {showLabels && item.label}
+                    </motion.div>
+                  </Link>
                 </li>
               );
             })}

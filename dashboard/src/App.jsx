@@ -1,4 +1,5 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import DashboardOverview from './views/DashboardOverview';
@@ -13,6 +14,28 @@ const EmailMarketingDashboard = lazy(() => import('./views/EmailMarketingDashboa
 const WebsiteTrafficDashboard = lazy(() => import('./views/WebsiteTrafficDashboard'));
 const AIBriefingDashboard = lazy(() => import('./views/AIBriefingDashboard'));
 const DonationsDashboard = lazy(() => import('./views/DonationsDashboard'));
+
+/* ── route ↔ tab mapping ── */
+export const ROUTES = [
+  { path: '/',                 tabId: 'Dashboard',        label: 'Dashboard',         element: <DashboardOverview /> },
+  { path: '/attendance',       tabId: 'Attendance',       label: 'Attendance',         element: <AttendanceDashboard /> },
+  { path: '/leads',            tabId: 'Leads',            label: 'Leads',              element: <LeadsDashboard /> },
+  { path: '/email',            tabId: 'Email',            label: 'Email',              element: <EmailDashboard /> },
+  { path: '/online-discovery', tabId: 'Online Discovery', label: 'Online Discovery',   element: <WebsiteTrafficDashboard /> },
+  { path: '/donations',        tabId: 'Donations',        label: 'Donations',          element: <DonationsDashboard /> },
+  { path: '/marketing',        tabId: 'Marketing',        label: 'Marketing',          element: <EmailMarketingDashboard /> },
+  { path: '/todos',            tabId: "To-Do's",          label: "To-Do's",            element: <TodosDashboard /> },
+  { path: '/ai-manager',       tabId: 'AI Manager',       label: 'Board of Directors', element: <AIBriefingDashboard /> },
+  { path: '/data-integrity',   tabId: 'Data Integrity',   label: 'Data Integrity',     element: <DataCleaning /> },
+];
+
+const TAB_BY_PATH = Object.fromEntries(ROUTES.map((r) => [r.path, r.tabId]));
+
+const SUPABASE_REQUIRED_TABS = new Set([
+  'Dashboard', 'Attendance', 'Leads', 'Email', 'Online Discovery',
+  'Website Traffic', 'SEO', 'Donations', 'Marketing', "To-Do's",
+  'AI Manager', 'Data Integrity',
+]);
 
 function PlaceholderView({ tab }) {
   return (
@@ -50,27 +73,19 @@ function ModuleLoadingView() {
   );
 }
 
-function tabRequiresSupabase(activeTab) {
-  return [
-    'Dashboard',
-    'Attendance',
-    'Leads',
-    'Email',
-    'Online Discovery',
-    'Website Traffic',
-    'SEO',
-    'Donations',
-    'Marketing',
-    "To-Do's",
-    'AI Manager',
-    'Data Integrity',
-  ].includes(activeTab);
+function SupabaseGate({ tabId, children }) {
+  if (!hasSupabaseConfig && SUPABASE_REQUIRED_TABS.has(tabId)) {
+    return <SupabaseEnvRequiredView />;
+  }
+  return children;
 }
 
 const MOBILE_BREAKPOINT = 1024;
 
 function App() {
-  const [activeTab, setActiveTab] = useState('Dashboard');
+  const location = useLocation();
+  const activeTab = TAB_BY_PATH[location.pathname] || 'Dashboard';
+
   const [isMobile, setIsMobile] = useState(
     () => (typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false),
   );
@@ -112,11 +127,6 @@ function App() {
     };
   }, [isMobile, isMobileMenuOpen]);
 
-  const handleSetActiveTab = (tab) => {
-    setActiveTab(tab);
-    if (isMobile) setIsMobileMenuOpen(false);
-  };
-
   const handleMenuToggle = () => {
     if (isMobile) {
       setIsMobileMenuOpen((previous) => !previous);
@@ -125,64 +135,33 @@ function App() {
     setIsSidebarCollapsed((previous) => !previous);
   };
 
-  const renderView = () => {
-    if (!hasSupabaseConfig && tabRequiresSupabase(activeTab)) {
-      return <SupabaseEnvRequiredView />;
-    }
-
-    switch (activeTab) {
-      case 'Leads':
-        return <LeadsDashboard />;
-      case 'Email':
-        return <EmailDashboard />;
-      case 'Marketing':
-        return <EmailMarketingDashboard />;
-      case 'Online Discovery':
-        return <WebsiteTrafficDashboard />;
-      case 'Website Traffic':
-        return <WebsiteTrafficDashboard />;
-      case 'SEO':
-        return <WebsiteTrafficDashboard />;
-      case 'Donations':
-        return <DonationsDashboard />;
-      case "To-Do's":
-        return <TodosDashboard />;
-      case 'AI Manager':
-        return <AIBriefingDashboard />;
-      case 'Data Integrity':
-        return <DataCleaning />;
-      case 'Attendance':
-        return <AttendanceDashboard />;
-      case 'Sales':
-        return <PlaceholderView tab="Sales" />;
-      case 'Revenue':
-        return <PlaceholderView tab="Revenue" />;
-      case 'Operations':
-        return <PlaceholderView tab="Operations" />;
-      case 'Analysis':
-        return <PlaceholderView tab="Analysis" />;
-      default:
-        return <DashboardOverview />;
-    }
-  };
-
   return (
     <div className="app-container">
       <Sidebar
         activeTab={activeTab}
-        setActiveTab={handleSetActiveTab}
         isMobile={isMobile}
         isOpen={!isMobile || isMobileMenuOpen}
         isCollapsed={!isMobile && isSidebarCollapsed}
         onToggleCollapse={() => setIsSidebarCollapsed((previous) => !previous)}
         onClose={() => setIsMobileMenuOpen(false)}
+        onNavigate={() => { if (isMobile) setIsMobileMenuOpen(false); }}
       />
       <div className="main-content">
         <Header activeTab={activeTab} onMenuClick={handleMenuToggle} isMobile={isMobile} />
         <main style={{ flex: 1, minWidth: 0, padding: isMobile ? '12px' : '32px 40px', overflowY: 'auto' }}>
           <div className="page-transition-enter">
             <Suspense fallback={<ModuleLoadingView />}>
-              {renderView()}
+              <Routes>
+                {ROUTES.map((r) => (
+                  <Route
+                    key={r.path}
+                    path={r.path}
+                    element={<SupabaseGate tabId={r.tabId}>{r.element}</SupabaseGate>}
+                  />
+                ))}
+                {/* Catch-all: redirect unknown paths to dashboard */}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
             </Suspense>
           </div>
         </main>
