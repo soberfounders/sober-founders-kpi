@@ -1,7 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
-import { buildZoomFreezeWarning, getZoomFreezeConfig } from "../_shared/zoom_freeze.ts"
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -14,7 +12,6 @@ serve(async (req: Request) => {
   }
 
   try {
-    const zoomFreeze = getZoomFreezeConfig()
     const mustGetEnv = (name: string) => {
       const val = Deno.env.get(name);
       if (!val) throw new Error(`Missing environment variable: ${name}`);
@@ -73,13 +70,8 @@ serve(async (req: Request) => {
         } else if (slug === 'mailchimp') {
           const mailchimpMetrics = await syncMailchimp(credentials)
           metrics = [...mailchimpMetrics]
-          const warning = buildZoomFreezeWarning('sync-metrics skipped legacy Zoom enrichment.', zoomFreeze.freezeDate)
-          console.warn(warning)
-          warnings.push(warning)
         } else if (slug === 'zoom') {
-          const warning = buildZoomFreezeWarning('sync-metrics skipped deprecated Zoom integration.', zoomFreeze.freezeDate)
-          console.warn(warning)
-          warnings.push(warning)
+          // Zoom integration removed — skip silently
         }
 
         results.push({ slug, status: 'success', count: metrics.length, warnings })
@@ -217,15 +209,7 @@ async function syncMailchimp(credentials: any) {
     console.error('Error fetching Mailchimp campaigns:', err)
   }
 
-  // Store meeting campaigns in global scope or pass to Zoom sync (simplified for now by storing in metrics metadata)
-  // In a real scenario, we'd probably want to correlate this AFTER getting Zoom data.
-  // For this MVP, we'll try to find a matching Zoom meeting for these dates if Zoom creds are present.
-
   if (meetingCampaigns.length > 0) {
-    // We attach this data to a special metric to be picked up by the Zoom sync logic if needed,
-    // or we handle correlation in a separate step. For simplicity, let's just return what we have.
-    // The correlation ideally happens if we have both sets of data. 
-    // Let's add a "Correlation Ready" marker.
     metrics.push({
       metric_name: 'Meeting Campaigns Data',
       metric_value: meetingCampaigns.length,
@@ -236,165 +220,3 @@ async function syncMailchimp(credentials: any) {
   return metrics
 }
 
-async function syncZoom(credentials: any, meetingCampaigns: any[] = [], manualAliases: any[] = []) {
-  const { account_id, client_id, client_secret } = credentials;
-  if (!account_id || !client_id || !client_secret) return [];
-
-  const metrics = [];
-
-  // 1. Get Access Token
-  const tokenUrl = `https://zoom.us/oauth/token?grant_type=account_credentials&account_id=${account_id}`;
-  let accessToken = '';
-
-  try {
-    const tokenRes = await fetch(tokenUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${btoa(`${client_id}:${client_secret}`)}`
-      }
-    });
-    const tokenData = await tokenRes.json();
-    accessToken = tokenData.access_token;
-  } catch (err) {
-    console.error('Error getting Zoom token:', err);
-    return [];
-  }
-
-  if (!accessToken) return [];
-
-  // 2. Fetch Past Meeting Instances for Specific IDs
-  const targetMeetings = [
-    { id: '84242212480', label: 'Sober Founders Mastermind (Tuesday)' },
-    { id: '87199667045', label: 'Sober Founders Mastermind (Thursday)' }
-  ];
-
-  try {
-    for (const target of targetMeetings) {
-      const instancesRes = await fetch(`https://api.zoom.us/v2/past_meetings/${target.id}/instances`, {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-      });
-
-      if (instancesRes.status === 404) {
-        console.log(`Zoom Meeting ID ${target.id} not found or no past instances.`);
-        continue;
-      }
-
-      const instancesData = await instancesRes.json();
-      const meetings = instancesData.meetings || [];
-
-      // Filter for recent meetings (last 10 instances)
-      const recentMeetings = meetings.slice(0, 10);
-
-      for (const meeting of recentMeetings) {
-        // UUID needs to be double encoded if it contains / or +
-        let uuid = meeting.uuid;
-        if (uuid.includes('/') || uuid.includes('+')) {
-          uuid = encodeURIComponent(encodeURIComponent(uuid));
-        }
-
-        // Fetch Participants
-        const participantsRes = await fetch(`https://api.zoom.us/v2/report/meetings/${uuid}/participants?page_size=300`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` }
-        });
-        const participantsData = await participantsRes.json();
-
-        const allParticipants = participantsData.participants || [];
-
-        // Filter bots, apply aliases, and dedupe participants
-        let candidates: any[] = [];
-        const seenEmails = new Set();
-        const exclusionKeywords = ['note', 'notetaker', 'fireflies.ai', 'fathom', 'read.ai', 'otter.ai'];
-
-        // Prepare Aliases Map (normalized)
-        const aliasMap = new Map();
-        if (manualAliases && manualAliases.length > 0) {
-          manualAliases.forEach((a: any) => {
-            aliasMap.set(a.original_name.toLowerCase().trim(), a.target_name.trim());
-          });
-        }
-
-        for (const p of allParticipants) {
-          let name = (p.name || "").trim();
-          const email = (p.user_email || "").toLowerCase();
-          let lowerName = name.toLowerCase();
-
-          // APPLY ALIAS
-          if (aliasMap.has(lowerName)) {
-            name = aliasMap.get(lowerName);
-            lowerName = name.toLowerCase();
-          }
-
-          // Exclusion
-          if (exclusionKeywords.some(k => lowerName.includes(k))) continue;
-
-          // Basic Dedupe by Email if present
-          if (email && seenEmails.has(email)) continue;
-          if (email) seenEmails.add(email);
-
-          candidates.push({ name, email, lowerName });
-        }
-
-        // 2. Advanced Dedupe
-        // Score Quality: Has Email (2), Normal Name (1), Device Name (0)
-        candidates.forEach((p: any) => {
-          p.isDevice = /iphone|ipad|android|galaxy/i.test(p.lowerName);
-          p.score = (p.email ? 2 : 0) + (p.isDevice ? 0 : 1);
-          // Clean name for matching (remove "iPhone", etc)
-          p.cleanName = p.lowerName.replace(/['’]s\s*(iphone|ipad|android|galaxy)/i, '').trim();
-        });
-
-        // Sort: Score Desc, then Length Desc
-        candidates.sort((a: any, b: any) => {
-          if (b.score !== a.score) return b.score - a.score;
-          return b.name.length - a.name.length;
-        });
-
-        const uniqueAttendees: string[] = [];
-        const finalCandidates: any[] = [];
-
-        for (const p of candidates) {
-          // Check if this person is redundant
-          const isDuplicate = finalCandidates.some((existing: any) => {
-            // Case A: Exact Email Match (Handled by SeenEmails, but good safety)
-            if (p.email && existing.email === p.email) return true;
-
-            // Case B: Name Substring Match
-            // If "Emil Bakiyev" (Existing) contains "Emil" (p)
-            if (existing.lowerName.includes(p.lowerName)) return true;
-
-            // Case C: Device Match
-            // If p is "Lori's iPhone" (cleaned="lori"), and existing is "Lori Smith"
-            if (p.isDevice && existing.lowerName.includes(p.cleanName)) return true;
-
-            // Case D: Common First Name + Last Initial
-            // "Lori Smith" starts with "Lori" (if p was "Lori")
-            if (existing.lowerName.startsWith(p.lowerName)) return true;
-
-            return false;
-          });
-
-          if (!isDuplicate) {
-            finalCandidates.push(p);
-            uniqueAttendees.push(p.name);
-          }
-        }
-
-        metrics.push({
-          metric_name: 'Zoom Meeting Attendees',
-          metric_value: uniqueAttendees.length,
-          metadata: {
-            meeting_id: target.id,
-            meeting_topic: target.label,
-            start_time: meeting.start_time,
-            attendees: uniqueAttendees
-          }
-        });
-      }
-    }
-
-  } catch (err) {
-    console.error('Error fetching Zoom data:', err);
-  }
-
-  return metrics;
-}

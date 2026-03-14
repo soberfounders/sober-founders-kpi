@@ -1,7 +1,5 @@
 ﻿import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getZoomFreezeConfig } from "../_shared/zoom_freeze.ts";
-
 const ET_TIMEZONE = "America/New_York";
 const THURSDAY_EXPECTED_ET_MINUTES = 11 * 60;
 const GROUP_CALL_TIME_TOLERANCE_MINUTES = 120;
@@ -512,7 +510,6 @@ serve(async (req) => {
     const serviceRoleKey = mustGetEnv("SUPABASE_SERVICE_ROLE_KEY");
     const lumaApiKey = mustGetEnv("LUMA_API_KEY");
     const supabase = createClient(supabaseUrl, serviceRoleKey);
-    const zoomFreeze = getZoomFreezeConfig();
 
     const url = new URL(req.url);
     const lookbackDays = Number(url.searchParams.get("lookback_days") || "120");
@@ -569,39 +566,9 @@ serve(async (req) => {
       associationRows.push(...(assocChunkRows || []));
     }
 
-    const eventApiIds = Array.from(new Set(candidateEvents
-      .map((event) => String(event?.api_id || event?.id || ""))
-      .filter(Boolean)));
-    let existingRegistrations: any[] = [];
-    if (eventApiIds.length > 0) {
-      const { data: existingRows, error: existingError } = await supabase
-        .from("raw_luma_registrations")
-        .select("event_api_id,guest_api_id,event_date,matched_zoom,matched_zoom_date,matched_zoom_name,matched_zoom_net_new,matched_attendance,matched_attendance_date,matched_attendance_name,matched_attendance_net_new")
-        .in("event_api_id", eventApiIds);
-      if (existingError) {
-        throw new Error(`Failed loading existing Luma registrations: ${existingError.message}`);
-      }
-      existingRegistrations = existingRows || [];
-    }
-    const existingByKey = new Map(
-      existingRegistrations.map((row) => [
-        `${String(row?.event_api_id || "")}::${String(row?.guest_api_id || "")}`,
-        row,
-      ]),
-    );
-
     const hubspotIndex = buildHubspotIndexes(hubspotRows || []);
     const attendanceIndex = buildThursdayHubspotAttendanceIndex(hubspotActivityRows || [], associationRows);
-    const postFreezeEventsPresent = zoomFreeze.frozen && candidateEvents.some((event) => {
-      const dateKey = toDateKey(event?.start_at);
-      return !!dateKey && dateKey >= zoomFreeze.freezeDate;
-    });
     const warnings: string[] = [];
-    if (postFreezeEventsPresent && attendanceIndex.sessions.length === 0) {
-      const warning = "No Thursday HubSpot call sessions were found in the selected freeze window. Verify HubSpot activity sync and attendee associations.";
-      console.warn(warning);
-      warnings.push(warning);
-    }
 
     const rows: any[] = [];
     let totalGuestsFetched = 0;
@@ -653,25 +620,16 @@ serve(async (req) => {
         const matchedHubspotContactId = Number.isFinite(matchedHubspotContactIdRaw) && matchedHubspotContactIdRaw > 0
           ? matchedHubspotContactIdRaw
           : null;
-        const existingMatch = existingByKey.get(`${eventApiId}::${guestApiId}`);
-        const shouldKeepLegacyMatch = !!existingMatch && eventDate < zoomFreeze.freezeDate;
         const lumaMarkedAttended = !!toTimestamp(guest.joined_at || guest.checked_in_at || guest.attended_at);
-        const attendanceMatch = shouldKeepLegacyMatch
-          ? {
-            matched: !!(existingMatch?.matched_attendance ?? existingMatch?.matched_zoom),
-            matchedDate: existingMatch?.matched_attendance_date || existingMatch?.matched_zoom_date || null,
-            matchedName: existingMatch?.matched_attendance_name || existingMatch?.matched_zoom_name || null,
-            matchedNetNew: !!(existingMatch?.matched_attendance_net_new ?? existingMatch?.matched_zoom_net_new),
-          }
-          : matchThursdayAttendance(
-            {
-              guestEmail,
-              eventDateKey: eventDate,
-              hubspotContactId: matchedHubspotContactId,
-              lumaMarkedAttended,
-            },
-            attendanceIndex,
-          );
+        const attendanceMatch = matchThursdayAttendance(
+          {
+            guestEmail,
+            eventDateKey: eventDate,
+            hubspotContactId: matchedHubspotContactId,
+            lumaMarkedAttended,
+          },
+          attendanceIndex,
+        );
 
         rows.push({
           event_api_id: eventApiId,
