@@ -62,6 +62,9 @@ function buildGroupRows(adRows, keyBuilder, minLeadsThreshold, rubric) {
         key,
         campaign_name: String(row?.campaignName || 'Unknown Campaign'),
         adset_name: String(row?.adsetName || 'Unknown Ad Set'),
+        ad_name: String(row?.adName || 'Unknown Ad'),
+        ad_id: String(row?.adId || ''),
+        ad_ids: [],
         spend: 0,
         leads: 0,
         attributed_leads: 0,
@@ -70,6 +73,8 @@ function buildGroupRows(adRows, keyBuilder, minLeadsThreshold, rubric) {
       });
     }
     const target = grouped.get(key);
+    const adId = String(row?.adId || '').trim();
+    if (adId && !target.ad_ids.includes(adId)) target.ad_ids.push(adId);
     target.spend += Number(row?.spend || 0);
     target.leads += Number(row?.metaLeads || 0);
     target.attributed_leads += Number(row?.attributedLeads || 0);
@@ -315,6 +320,12 @@ export function buildLeadsExperimentAnalyzer({
     minLeadsThreshold,
     rubric,
   );
+  const adRows = buildGroupRows(
+    adAttributionRows,
+    (row) => `ad:${String(row?.adId || row?.adName || 'Unknown Ad')}`,
+    minLeadsThreshold,
+    rubric,
+  );
 
   const paidRecommendations = buildPaidRecommendations(campaignRows, adsetRows);
   const organicReferralInsights = buildOrganicReferralInsights(sourceRows);
@@ -326,6 +337,7 @@ export function buildLeadsExperimentAnalyzer({
     rubric_version: LEADS_EXPERIMENT_RUBRIC_VERSION,
     campaign_rows: campaignRows,
     adset_rows: adsetRows,
+    ad_rows: adRows,
     paid_recommendations: paidRecommendations,
     organic_referral_insights: organicReferralInsights,
   };

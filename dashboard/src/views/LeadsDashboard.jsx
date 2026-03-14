@@ -4458,6 +4458,7 @@ export default function LeadsDashboard() {
         <LeadsExperimentAnalyzerPanel
           data={leadsExperimentAnalyzerData}
           isLoading={loading || !deferredInsightsReady}
+          adActivityMap={adActivityByIdInCurrentWindow}
         />
       </Suspense>
       <SendToNotionModal

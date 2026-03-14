@@ -73,25 +73,78 @@ const TABLE_COLUMNS = [
   { key: 'display_great_rate', label: 'Great Rate', sortable: true },
 ];
 
-export default function LeadsExperimentAnalyzerPanel({ data, isLoading = false }) {
+const LEVEL_BUTTON_BASE = {
+  padding: '6px 10px',
+  borderRadius: '999px',
+  border: '1px solid #cbd5e1',
+  fontSize: '11px',
+  fontWeight: 700,
+  cursor: 'pointer',
+};
+
+function LevelButton({ label, active, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        ...LEVEL_BUTTON_BASE,
+        backgroundColor: active ? '#0f172a' : '#fff',
+        color: active ? '#fff' : '#334155',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+export default function LeadsExperimentAnalyzerPanel({ data, isLoading = false, adActivityMap }) {
   const [level, setLevel] = useState('adset');
   const [sortKey, setSortKey] = useState('cpql');
   const [sortDir, setSortDir] = useState('asc');
+  const [runningOnly, setRunningOnly] = useState(true);
 
   const rows = useMemo(() => {
-    const rawRows = level === 'campaign'
-      ? (Array.isArray(data?.campaign_rows) ? data.campaign_rows : [])
-      : (Array.isArray(data?.adset_rows) ? data.adset_rows : []);
+    let rawRows;
+    if (level === 'campaign') {
+      rawRows = Array.isArray(data?.campaign_rows) ? data.campaign_rows : [];
+    } else if (level === 'ad') {
+      rawRows = Array.isArray(data?.ad_rows) ? data.ad_rows : [];
+    } else {
+      rawRows = Array.isArray(data?.adset_rows) ? data.adset_rows : [];
+    }
 
-    const normalized = rawRows.map((row) => ({
-      ...row,
-      name: level === 'campaign'
-        ? String(row?.campaign_name || 'Unknown Campaign')
-        : `${String(row?.campaign_name || 'Unknown Campaign')} / ${String(row?.adset_name || 'Unknown Ad Set')}`,
-    }));
+    const normalized = rawRows.map((row) => {
+      let name;
+      if (level === 'campaign') {
+        name = String(row?.campaign_name || 'Unknown Campaign');
+      } else if (level === 'ad') {
+        name = `${String(row?.campaign_name || 'Unknown Campaign')} / ${String(row?.adset_name || 'Unknown Ad Set')} / ${String(row?.ad_name || 'Unknown Ad')}`;
+      } else {
+        name = `${String(row?.campaign_name || 'Unknown Campaign')} / ${String(row?.adset_name || 'Unknown Ad Set')}`;
+      }
+      return { ...row, name };
+    });
+
+    let filtered = normalized;
+    if (runningOnly && adActivityMap && adActivityMap.size > 0) {
+      const isAdActive = (adId) => {
+        const activity = adActivityMap.get(adId);
+        return !!activity && (
+          Number(activity.spend || 0) > 0
+          || Number(activity.impressions || 0) > 0
+          || Number(activity.clicks || 0) > 0
+          || Number(activity.leads || 0) > 0
+        );
+      };
+      filtered = normalized.filter((row) => {
+        const adIds = Array.isArray(row?.ad_ids) ? row.ad_ids : [];
+        if (adIds.length === 0) return true;
+        return adIds.some((id) => isAdActive(id));
+      });
+    }
 
     const direction = sortDir === 'asc' ? 1 : -1;
-    return normalized.sort((a, b) => {
+    return filtered.sort((a, b) => {
       const left = sortKey === 'name' ? String(a?.name || '') : a?.[sortKey];
       const right = sortKey === 'name' ? String(b?.name || '') : b?.[sortKey];
 
@@ -105,7 +158,7 @@ export default function LeadsExperimentAnalyzerPanel({ data, isLoading = false }
       if (rightNum === null) return -1 * direction;
       return (leftNum - rightNum) * direction;
     });
-  }, [data, level, sortKey, sortDir]);
+  }, [data, level, sortKey, sortDir, runningOnly, adActivityMap]);
 
   const onSort = (key) => {
     if (sortKey === key) {
@@ -122,7 +175,7 @@ export default function LeadsExperimentAnalyzerPanel({ data, isLoading = false }
         <p style={{ margin: 0, fontSize: '11px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
           Experiment Quality Analyzer
         </p>
-        <h3 style={{ margin: '6px 0 0', fontSize: '17px', color: '#0f172a' }}>Campaign and adset decision table</h3>
+        <h3 style={{ margin: '6px 0 0', fontSize: '17px', color: '#0f172a' }}>Campaign and Ad Set Decision Table</h3>
         <div style={{ marginTop: '12px', display: 'grid', gap: '8px' }}>
           {[0, 1, 2, 3].map((idx) => (
             <div key={`exp-loading-${idx}`} style={{ height: '16px', backgroundColor: '#e2e8f0', borderRadius: '6px' }} />
@@ -139,7 +192,7 @@ export default function LeadsExperimentAnalyzerPanel({ data, isLoading = false }
           <p style={{ margin: 0, fontSize: '11px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
             Experiment Quality Analyzer
           </p>
-          <h3 style={{ margin: '6px 0 0', fontSize: '17px', color: '#0f172a' }}>Campaign and adset decision table</h3>
+          <h3 style={{ margin: '6px 0 0', fontSize: '17px', color: '#0f172a' }}>Campaign and Ad Set Decision Table</h3>
           <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#64748b' }}>
             Prioritizes quality outcomes (CPQL/CPGL and qualified/great rates) over low CPL alone.
           </p>
@@ -147,37 +200,21 @@ export default function LeadsExperimentAnalyzerPanel({ data, isLoading = false }
             Displayed rates use raw Meta leads for fast scanning. Qualified/Great counts remain directional, and keep/kill decisions still use the attribution model in the background.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button
-            onClick={() => setLevel('adset')}
-            style={{
-              padding: '6px 10px',
-              borderRadius: '999px',
-              border: '1px solid #cbd5e1',
-              fontSize: '11px',
-              fontWeight: 700,
-              backgroundColor: level === 'adset' ? '#0f172a' : '#fff',
-              color: level === 'adset' ? '#fff' : '#334155',
-              cursor: 'pointer',
-            }}
-          >
-            Ad Set View
-          </button>
-          <button
-            onClick={() => setLevel('campaign')}
-            style={{
-              padding: '6px 10px',
-              borderRadius: '999px',
-              border: '1px solid #cbd5e1',
-              fontSize: '11px',
-              fontWeight: 700,
-              backgroundColor: level === 'campaign' ? '#0f172a' : '#fff',
-              color: level === 'campaign' ? '#fff' : '#334155',
-              cursor: 'pointer',
-            }}
-          >
-            Campaign View
-          </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <LevelButton label="Ad Set View" active={level === 'adset'} onClick={() => setLevel('adset')} />
+            <LevelButton label="Campaign View" active={level === 'campaign'} onClick={() => setLevel('campaign')} />
+            <LevelButton label="Ad View" active={level === 'ad'} onClick={() => setLevel('ad')} />
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#475569', cursor: 'pointer', userSelect: 'none' }}>
+            <input
+              type="checkbox"
+              checked={runningOnly}
+              onChange={(e) => setRunningOnly(e.target.checked)}
+              style={{ accentColor: '#0f172a' }}
+            />
+            Running Only
+          </label>
         </div>
       </div>
 
