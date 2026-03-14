@@ -52,6 +52,8 @@ const PHOENIX_INTERVIEW_MATCH_TOKENS = [
   'meetings.hubspot.com/andrew-lassise/phoenix-forum-good-fit',
 ];
 
+const ET_TIMEZONE = 'America/New_York';
+
 const DONATION_EXCLUDED_STATUSES = new Set(['refunded', 'refund', 'failed', 'void', 'voided', 'canceled', 'cancelled']);
 
 const HUBSPOT_CONTACT_SELECT_COLUMNS = [
@@ -619,6 +621,7 @@ function normalizeHubspotAttendanceSessions(activities = [], associations = []) 
   });
 
   const sessionsByKey = new Map();
+  const etWeekdayFmt = new Intl.DateTimeFormat('en-US', { timeZone: ET_TIMEZONE, weekday: 'short' });
 
   activities.forEach((row) => {
     const dateKey = toDateKey(row?.hs_timestamp || row?.created_at_hubspot);
@@ -638,8 +641,8 @@ function normalizeHubspotAttendanceSessions(activities = [], associations = []) 
     if (!isGroupSession) return;
 
     const date = toUtcDate(dateKey);
-    const weekday = date.getUTCDay(); // 2 = Tuesday, 4 = Thursday
-    const dayType = weekday === 2 ? 'Tuesday' : weekday === 4 ? 'Thursday' : null;
+    const etWeekday = etWeekdayFmt.format(date);
+    const dayType = etWeekday === 'Tue' ? 'Tuesday' : etWeekday === 'Thu' ? 'Thursday' : null;
     if (!dayType) return;
 
     // Get attendees from associations (not from collectAttendeeKeys)
