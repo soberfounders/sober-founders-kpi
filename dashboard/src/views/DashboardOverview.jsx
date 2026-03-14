@@ -202,17 +202,6 @@ const KPI_CARD_DEFINITIONS = {
     note: 'Revenue >= $1M and sobriety > 1 year',
     color: '#b45309',
   },
-  phoenixGreat: {
-    key: 'phoenixGreat',
-    section: 'phoenix',
-    metric: 'great',
-    title: 'Phoenix Great Leads',
-    format: 'count',
-    direction: KPI_DIRECTION.HIGHER_IS_BETTER,
-    source: 'contacts',
-    note: 'Revenue >= $1M',
-    color: '#4f46e5',
-  },
   phoenixCpql: {
     key: 'phoenixCpql',
     section: 'phoenix',
@@ -222,18 +211,7 @@ const KPI_CARD_DEFINITIONS = {
     direction: KPI_DIRECTION.LOWER_IS_BETTER,
     source: ['ads', 'contacts'],
     note: 'Phoenix Ad Spend / Phoenix $250k Qualified Leads',
-    color: '#0369a1',
-  },
-  phoenixCpgl: {
-    key: 'phoenixCpgl',
-    section: 'phoenix',
-    metric: 'cpgl',
-    title: 'Phoenix CPGL',
-    format: 'currency',
-    direction: KPI_DIRECTION.LOWER_IS_BETTER,
-    source: ['ads', 'contacts'],
-    note: 'Phoenix Ad Spend / Phoenix Great Leads',
-    color: '#7c3aed',
+    color: '#0369``a1',
   },
   phoenixInterviews: {
     key: 'phoenixInterviews',
@@ -326,7 +304,7 @@ const KPI_CARD_DEFINITIONS = {
 };
 
 const FREE_CARD_KEYS = ['freeQualified', 'freePhoenixQualified', 'freeCpql', 'freeGreat', 'freeCpgl', 'freeInterviews'];
-const PHOENIX_CARD_KEYS = ['phoenixQualified', 'phoenixPhoenixQualified', 'phoenixGreat', 'phoenixCpql', 'phoenixCpgl', 'phoenixInterviews'];
+const PHOENIX_CARD_KEYS = ['phoenixLeads', 'phoenixQualified', 'phoenixCpql', 'phoenixInterviews'];
 const ATTENDANCE_CARD_KEYS = ['attendanceTotalTue', 'attendanceAvgVisitsTue', 'attendanceTotalThu', 'attendanceAvgVisitsThu'];
 const DONATION_CARD_KEYS = ['donationsCount', 'donationsAmount'];
 const OPERATIONS_CARD_KEYS = ['operationsCompletedItems'];
@@ -938,9 +916,7 @@ function flattenMetricValues(metrics) {
     phoenixLeads: metrics.phoenix.leads,
     phoenixQualified: metrics.phoenix.qualified,
     phoenixPhoenixQualified: metrics.phoenix.phoenixQualified,
-    phoenixGreat: metrics.phoenix.great,
     phoenixCpql: metrics.phoenix.cpql,
-    phoenixCpgl: metrics.phoenix.cpgl,
     phoenixInterviews: metrics.phoenix.interviews,
     attendanceTotalTue: metrics.attendance.totalTue,
     attendanceNewTue: metrics.attendance.newTue,
@@ -1411,10 +1387,12 @@ function buildMustDoToday(snapshot, sectionRecommendations) {
     KPI_DIRECTION.HIGHER_IS_BETTER,
   );
 
+  // Leads gets a 1.5× boost on qualified-delta because lead generation has the
+  // highest revenue impact (drives Phoenix Forum attendance → donations).
   const sectionRiskRows = [
     {
       section: 'Leads',
-      score: Math.max(0, -(leadsQualifiedDelta ?? 0)) * 2 + Math.max(0, -(leadsCPQLDelta ?? 0)),
+      score: Math.max(0, -(leadsQualifiedDelta ?? 0)) * 1.5 + Math.max(0, -(leadsCPQLDelta ?? 0)),
     },
     {
       section: 'Attendance',

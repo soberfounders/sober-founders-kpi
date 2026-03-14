@@ -1009,17 +1009,11 @@ function buildLeadRows(hubspotInRange, lumaRows, funnelFilter) {
     return rows;
 }
 
-function buildSubRowSnapshot(label, adsRows, hubspotRows, lumaRows, zoomRows, startKey, endKey, funnelFilter, zoomDayType, adsAdsetIndex) {
+function buildSubRowSnapshot(label, adsRows, hubspotRows, lumaRows, startKey, endKey, funnelFilter, adsAdsetIndex) {
     const ads = sumAds(adsRows, startKey, endKey, funnelFilter);
     const lumaFiltered = buildLumaRows(lumaRows, startKey, endKey, hubspotRows, adsAdsetIndex)
         .filter((r) => funnelFilter === 'any' || r.funnel === funnelFilter);
     const lumaCount = lumaFiltered.length;
-
-    const zoomShowUpRowsRaw = buildZoomShowUpRows(zoomRows, startKey, endKey, zoomDayType);
-    const zoomShowUpRows = funnelFilter === 'any'
-        ? zoomShowUpRowsRaw
-        : filterZoomShowUpsByLumaMatches(zoomShowUpRowsRaw, lumaFiltered);
-    const zoomCount = zoomShowUpRows.length;
 
     // HubSpot contacts in date window
     const hubspotInRange = (hubspotRows || []).filter((row) => {
@@ -1033,7 +1027,6 @@ function buildSubRowSnapshot(label, adsRows, hubspotRows, lumaRows, zoomRows, st
 
     const cpl = safeDivide(ads.spend, ads.leads);
     const costPerRegistration = safeDivide(ads.spend, lumaCount);
-    const costPerShowUp = safeDivide(ads.spend, zoomCount);
 
     return {
         label,
@@ -1042,14 +1035,14 @@ function buildSubRowSnapshot(label, adsRows, hubspotRows, lumaRows, zoomRows, st
         clicks: ads.clicks,
         metaLeads: Math.round(ads.leads),
         lumaRegistrations: lumaCount,
-        zoomShowUps: zoomCount,
+        zoomShowUps: 0,
         cpl,
         costPerRegistration,
-        costPerShowUp,
+        costPerShowUp: null,
         categorization,
         leadRows,
         lumaRows: lumaFiltered,
-        zoomRows: zoomShowUpRows,
+        zoomRows: [],
     };
 }
 
@@ -1075,14 +1068,14 @@ function buildSubRowSnapshot(label, adsRows, hubspotRows, lumaRows, zoomRows, st
  *   generatedAt: string,
  * }}
  */
-export function buildGroupedLeadsSnapshot({ adsRows, hubspotRows, lumaRows, zoomRows, dateRange }) {
+export function buildGroupedLeadsSnapshot({ adsRows, hubspotRows, lumaRows, dateRange }) {
     const adsAdsetIndex = buildAdsAdsetIndex(adsRows);
 
     function buildPeriodSnapshot(start, end) {
-        const freeTuesday = buildSubRowSnapshot('Free Tuesday', adsRows, hubspotRows, lumaRows, zoomRows, start, end, 'free', 'tuesday', adsAdsetIndex);
-        const freeThursday = buildSubRowSnapshot('Free Thursday', adsRows, hubspotRows, lumaRows, zoomRows, start, end, 'free', 'thursday', adsAdsetIndex);
-        const freeCombined = buildSubRowSnapshot('Free Combined', adsRows, hubspotRows, lumaRows, zoomRows, start, end, 'free', null, adsAdsetIndex);
-        const phoenix = buildSubRowSnapshot('Phoenix Forum', adsRows, hubspotRows, lumaRows, zoomRows, start, end, 'phoenix', null, adsAdsetIndex);
+        const freeTuesday = buildSubRowSnapshot('Free Tuesday', adsRows, hubspotRows, lumaRows, start, end, 'free', adsAdsetIndex);
+        const freeThursday = buildSubRowSnapshot('Free Thursday', adsRows, hubspotRows, lumaRows, start, end, 'free', adsAdsetIndex);
+        const freeCombined = buildSubRowSnapshot('Free Combined', adsRows, hubspotRows, lumaRows, start, end, 'free', adsAdsetIndex);
+        const phoenix = buildSubRowSnapshot('Phoenix Forum', adsRows, hubspotRows, lumaRows, start, end, 'phoenix', adsAdsetIndex);
 
         return { free: { tuesday: freeTuesday, thursday: freeThursday, combined: freeCombined }, phoenix };
     }

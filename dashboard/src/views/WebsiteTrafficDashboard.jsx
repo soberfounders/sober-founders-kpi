@@ -22,6 +22,7 @@ import {
   Target,
   TrendingUp,
 } from 'lucide-react';
+import { formatInt } from '../lib/dashboardKpiHelpers';
 
 const GA_METRICS = [
   'GA Sessions',
@@ -72,10 +73,6 @@ const cardStyle = {
 function toNumber(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
-}
-
-function formatInt(value) {
-  return Math.round(toNumber(value)).toLocaleString();
 }
 
 function formatPct(value, digits = 1) {

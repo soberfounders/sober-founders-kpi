@@ -1146,7 +1146,6 @@ export default function LeadsDashboard() {
     const nextAnalytics = buildLeadAnalytics({
       adsRows: adsR.data || [],
       hubspotRows: hubspotR.data || [],
-      zoomRows: [],
       lumaRows: lumaR.data || [],
       aliases: aliasR.data || [],
       lookbackDays: LOOKBACK_DAYS,
@@ -1170,7 +1169,6 @@ export default function LeadsDashboard() {
     const drilldownReadyAnalytics = buildLeadAnalytics({
       adsRows: rawAds,
       hubspotRows: rawHubspot,
-      zoomRows: [],
       lumaRows: rawLuma,
       aliases,
       lookbackDays: LOOKBACK_DAYS,
@@ -1194,7 +1192,7 @@ export default function LeadsDashboard() {
   // Build grouped snapshot
   const groupedData = useMemo(() => {
     if (!rawAds.length && !rawHubspot.length) return null;
-    return buildGroupedLeadsSnapshot({ adsRows: rawAds, hubspotRows: rawHubspot, lumaRows: rawLuma, zoomRows: [], dateRange: dateWindows });
+    return buildGroupedLeadsSnapshot({ adsRows: rawAds, hubspotRows: rawHubspot, lumaRows: rawLuma, dateRange: dateWindows });
   }, [rawAds, rawHubspot, rawLuma, rawZoom, dateWindows]);
 
   const hearAboutModule = useMemo(() => {

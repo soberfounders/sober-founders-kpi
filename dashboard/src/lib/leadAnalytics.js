@@ -1,6 +1,4 @@
-﻿import { buildAliasMap, resolveCanonicalAttendeeName } from './attendeeCanonicalization';
-
-import {
+﻿import {
   isQualifiedLead,
   isPhoenixQualifiedLead,
   leadQualityTierFromOfficialRevenue,
@@ -8,12 +6,9 @@ import {
   parseSobrietyDate,
 } from './leadsQualificationRules';
 
-const TUESDAY_MEETING_ID = '87199667045';
-const THURSDAY_MEETING_ID = '84242212480';
 const LOOKBACK_DAYS_DEFAULT = 120;
 const MONTH_DAYS = 30;
 const WEEK_DAYS = 7;
-const LEAD_TO_SHOWUP_MATCH_WINDOW_DAYS = 30;
 
 function toNumber(value) {
   const parsed = Number(value);
@@ -191,142 +186,13 @@ function pickPrimaryDate(rows, fallbackKey) {
   return keys[keys.length - 1];
 }
 
-function buildZoomNetNew(zoomRows, aliasMap = new Map()) {
-  const sessions = (zoomRows || [])
-    .filter((row) => row?.metric_name === 'Zoom Meeting Attendees')
-    .map((row) => {
-      const dateKey = parseDateKey(row?.metadata?.start_time || row?.metric_date);
-      const dayType = dayTypeFromZoomMetric(row);
-      const rawAttendees = Array.isArray(row?.metadata?.attendees) ? row.metadata.attendees : [];
-
-      const dedupedMap = new Map();
-      rawAttendees.forEach((name) => {
-        const canonical = resolveCanonicalAttendeeName(name, aliasMap) || String(name || '').trim();
-        const normalized = normalizeName(canonical);
-        if (!normalized) return;
-        if (!dedupedMap.has(normalized)) dedupedMap.set(normalized, canonical);
-      });
-
-      return {
-        dateKey,
-        dayType,
-        attendees: Array.from(dedupedMap.values()),
-      };
-    })
-    .filter((row) => row.dateKey && (row.dayType === 'Tuesday' || row.dayType === 'Thursday'))
-    .sort((a, b) => a.dateKey.localeCompare(b.dateKey));
-
-  const seen = new Set();
-  const firstSeenByName = new Map();
-  const dailyMap = new Map();
-  const detailedSessions = [];
-
-  sessions.forEach((session) => {
-    const newNames = [];
-    const returningNames = [];
-
-    session.attendees.forEach((name) => {
-      const key = normalizeName(name);
-      if (!key) return;
-      if (seen.has(key)) {
-        returningNames.push(name);
-        return;
-      }
-      seen.add(key);
-      newNames.push(name);
-      firstSeenByName.set(key, {
-        name,
-        dateKey: session.dateKey,
-        dayType: session.dayType,
-      });
-    });
-
-    if (!dailyMap.has(session.dateKey)) {
-      dailyMap.set(session.dateKey, {
-        date: session.dateKey,
-        tuesday: 0,
-        thursday: 0,
-        total: 0,
-        tuesdaySessions: 0,
-        thursdaySessions: 0,
-      });
-    }
-
-    const row = dailyMap.get(session.dateKey);
-    if (session.dayType === 'Tuesday') {
-      row.tuesday += newNames.length;
-      row.tuesdaySessions += 1;
-    } else {
-      row.thursday += newNames.length;
-      row.thursdaySessions += 1;
-    }
-    row.total += newNames.length;
-
-    detailedSessions.push({
-      dateKey: session.dateKey,
-      dayType: session.dayType,
-      attendees: session.attendees,
-      newNames,
-      returningNames,
-      netNewCount: newNames.length,
-      totalCount: session.attendees.length,
-    });
-  });
-
-  const daily = Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date));
-  const totalTuesday = daily.reduce((acc, row) => acc + row.tuesday, 0);
-  const totalThursday = daily.reduce((acc, row) => acc + row.thursday, 0);
-
-  return {
-    daily,
-    sessions: detailedSessions,
-    firstSeenByName,
-    totalNetNew: totalTuesday + totalThursday,
-    totalTuesday,
-    totalThursday,
-    tuesdaySessions: daily.reduce((acc, row) => acc + row.tuesdaySessions, 0),
-    thursdaySessions: daily.reduce((acc, row) => acc + row.thursdaySessions, 0),
-  };
-}
-
-function buildShowupIndex(firstSeenByName) {
-  const byKey = new Map();
-  const entries = [];
-  firstSeenByName.forEach((value, key) => {
-    byKey.set(key, value);
-    entries.push({ ...value, key });
-  });
-  return { byKey, entries };
-}
-
 function daysDiff(startKey, endKey) {
   const start = toUtcDate(startKey).getTime();
   const end = toUtcDate(endKey).getTime();
   return Math.round((end - start) / (1000 * 60 * 60 * 24));
 }
 
-function matchLeadToShowup(leadName, createdDateKey, showupIndex) {
-  const key = normalizeName(leadName);
-  if (!key) return null;
-
-  const direct = showupIndex.byKey.get(key);
-  if (direct) {
-    const diff = daysDiff(createdDateKey, direct.dateKey);
-    if (diff >= 0 && diff <= LEAD_TO_SHOWUP_MATCH_WINDOW_DAYS) return direct;
-  }
-
-  for (const candidate of showupIndex.entries) {
-    const minLen = Math.min(candidate.key.length, key.length);
-    if (minLen < 8) continue;
-    if (!candidate.key.includes(key) && !key.includes(candidate.key)) continue;
-    const diff = daysDiff(createdDateKey, candidate.dateKey);
-    if (diff >= 0 && diff <= LEAD_TO_SHOWUP_MATCH_WINDOW_DAYS) return candidate;
-  }
-
-  return null;
-}
-
-function buildPaidLeads(hubspotRows, showupIndex) {
+function buildPaidLeads(hubspotRows) {
   const deduped = new Map();
   const keyByEmail = new Map();
   (hubspotRows || [])
@@ -373,7 +239,6 @@ function buildPaidLeads(hubspotRows, showupIndex) {
       const isQualified = isQualifiedLead({ revenue, sobrietyDate });
       const isPhoenixQualified = isPhoenixQualifiedLead({ revenue, sobrietyDate });
       const leadName = getLeadName(row);
-      const showupMatch = matchLeadToShowup(leadName, createdDateKey, showupIndex);
 
       return {
         createdDateKey,
@@ -381,8 +246,8 @@ function buildPaidLeads(hubspotRows, showupIndex) {
         funnel: classifyLeadFunnel(row),
         tier,
         isRegistration: isLumaRegistrationLead(row),
-        matchedShowup: !!showupMatch,
-        matchedShowupDateKey: showupMatch?.dateKey || null,
+        matchedShowup: false,
+        matchedShowupDateKey: null,
         leadName,
         email: normalizeEmail(row?.email),
         firstName: String(row?.firstname || '').trim(),
@@ -664,10 +529,9 @@ function summarizeAdRows(adTotals) {
   });
 }
 
-function getSnapshot({ adsRows, paidLeads, zoomDaily, lumaRegistrations, hasDirectLumaData }, startKey, endKey) {
+function getSnapshot({ adsRows, paidLeads, lumaRegistrations, hasDirectLumaData }, startKey, endKey) {
   const adsInRange = adsRows.filter((row) => dateInRange(row.dateKey, startKey, endKey));
   const leadsInRange = paidLeads.filter((row) => dateInRange(row.createdDateKey, startKey, endKey));
-  const showupsInRange = zoomDaily.filter((row) => dateInRange(row.date, startKey, endKey));
   const lumaInRange = (lumaRegistrations || []).filter((row) => dateInRange(row.dateKey, startKey, endKey));
 
   const spend = adsInRange.reduce((acc, row) => acc + row.spend, 0);
@@ -683,23 +547,18 @@ function getSnapshot({ adsRows, paidLeads, zoomDaily, lumaRegistrations, hasDire
   const lumaHubspotMatches = lumaInRange.filter((row) => row.matchedHubspot).length;
 
   const registrations = hasDirectLumaData ? lumaRegistrationsCount : fallbackRegistrations;
-  const showUps = showupsInRange.reduce((acc, row) => acc + row.total, 0);
-  const registrationShowUps = hasDirectLumaData ? lumaMatchedNetNewShowUps : showUps;
+  const registrationShowUps = hasDirectLumaData ? lumaMatchedNetNewShowUps : 0;
 
   const qualifiedLeads = leadsInRange.filter((row) => row.isQualified).length;
   const phoenixQualifiedLeads = leadsInRange.filter((row) => row.isPhoenixQualified).length;
   const greatLeads = leadsInRange.filter((row) => row.tier === 'great').length;
   const standardLeads = Math.max(leads - qualifiedLeads, 0);
 
-  const tuesdayShowUps = showupsInRange.reduce((acc, row) => acc + row.tuesday, 0);
-  const thursdayShowUps = showupsInRange.reduce((acc, row) => acc + row.thursday, 0);
-
   const costs = {
     cpl: safeDivide(spend, leads),
     cpql: safeDivide(spend, qualifiedLeads),
     cpPhxQL: safeDivide(spend, phoenixQualifiedLeads),
     cpgl: safeDivide(spend, greatLeads),
-    costPerShowUp: safeDivide(spend, showUps),
     costPerRegistration: safeDivide(spend, registrations),
   };
 
@@ -708,8 +567,6 @@ function getSnapshot({ adsRows, paidLeads, zoomDaily, lumaRegistrations, hasDire
     clickToLead: safeDivide(leads, clicks),
     leadToRegistration: safeDivide(registrations, leads),
     registrationToShowUp: safeDivide(registrationShowUps, registrations),
-    showUpToQualified: safeDivide(qualifiedLeads, showUps),
-    showUpToGreat: safeDivide(greatLeads, showUps),
   };
 
   return {
@@ -720,10 +577,10 @@ function getSnapshot({ adsRows, paidLeads, zoomDaily, lumaRegistrations, hasDire
     leads,
     metaLeads,
     registrations,
-    showUps,
+    showUps: 0,
     registrationShowUps,
-    tuesdayShowUps,
-    thursdayShowUps,
+    tuesdayShowUps: 0,
+    thursdayShowUps: 0,
     qualifiedLeads,
     phoenixQualifiedLeads,
     greatLeads,
@@ -801,7 +658,7 @@ function buildFunnelStages(snapshot) {
   }));
 }
 
-function buildTrendRows(primaryDate, adsRows, leadByDate, zoomDaily) {
+function buildTrendRows(primaryDate, adsRows, leadByDate) {
   const startDate = addDays(primaryDate, -59);
   const rows = [];
   let cursor = startDate;
@@ -818,12 +675,9 @@ function buildTrendRows(primaryDate, adsRows, leadByDate, zoomDaily) {
     aggregate.leads += row.leads;
   });
 
-  const zoomByDate = new Map((zoomDaily || []).map((row) => [row.date, row]));
-
   while (cursor <= primaryDate) {
     const ad = adsByDate.get(cursor) || { spend: 0, impressions: 0, clicks: 0, leads: 0 };
     const lead = leadByDate.get(cursor) || { leads: 0, registrations: 0, qualifiedLeads: 0, phoenixQualifiedLeads: 0, greatLeads: 0 };
-    const zoom = zoomByDate.get(cursor) || { tuesday: 0, thursday: 0, total: 0 };
 
     rows.push({
       date: cursor,
@@ -836,9 +690,9 @@ function buildTrendRows(primaryDate, adsRows, leadByDate, zoomDaily) {
       qualifiedLeads: lead.qualifiedLeads,
       phoenixQualifiedLeads: lead.phoenixQualifiedLeads,
       greatLeads: lead.greatLeads,
-      netNewTuesday: zoom.tuesday,
-      netNewThursday: zoom.thursday,
-      netNewTotal: zoom.total,
+      netNewTuesday: 0,
+      netNewThursday: 0,
+      netNewTotal: 0,
     });
 
     cursor = addDays(cursor, 1);
@@ -900,7 +754,7 @@ function buildHeadline(monthCurrent, monthPrevious, topAds, bottomAds) {
   return 'Lead quality and cost performance are stable. Focus now is to tighten attribution and improve registration-to-show-up conversion.';
 }
 
-function buildRecommendations(monthCurrent, monthPrevious, topAds, bottomAds, funnelStages, showupSummary) {
+function buildRecommendations(monthCurrent, monthPrevious, topAds, bottomAds, funnelStages) {
   const recommendations = [];
 
   if (bottomAds.length > 0 && topAds.length > 0) {
@@ -939,17 +793,6 @@ function buildRecommendations(monthCurrent, monthPrevious, topAds, bottomAds, fu
       title: 'Improve Thursday Lu.ma follow-up to lift HubSpot attendance matches',
       reason: `Only ${round(registrationToShowUpRate * 100, 1)}% of Thursday Lu.ma registrations are matching net-new HubSpot attendance records.`,
       impact: `Expected impact: +${round((0.55 - registrationToShowUpRate) * monthCurrent.lumaRegistrations, 1)} net-new Thursday attendees if match rate reaches 55%.`,
-    });
-  }
-
-  const tueAvg = safeDivide(showupSummary.totalTuesday, showupSummary.tuesdaySessions) ?? 0;
-  const thuAvg = safeDivide(showupSummary.totalThursday, showupSummary.thursdaySessions) ?? 0;
-  if (Math.abs(tueAvg - thuAvg) >= 1) {
-    const weakerDay = tueAvg < thuAvg ? 'Tuesday' : 'Thursday';
-    recommendations.push({
-      title: `Run a ${weakerDay}-specific follow-up sequence to raise show-up conversion`,
-      reason: `${weakerDay} is underperforming on net new attendance per session.`,
-      impact: `Expected impact: +${round(Math.abs(tueAvg - thuAvg), 1)} net-new show-ups per ${weakerDay} session if parity is reached.`,
     });
   }
 
@@ -1038,13 +881,11 @@ function buildWindowDrilldown({
   adsRows,
   paidLeads,
   lumaRegistrations,
-  zoomSessions,
   hasDirectLumaData,
 }) {
   const adsInRange = (adsRows || []).filter((row) => dateInRange(row.dateKey, startKey, endKey));
   const leadsInRange = (paidLeads || []).filter((row) => dateInRange(row.createdDateKey, startKey, endKey));
   const lumaInRange = (lumaRegistrations || []).filter((row) => dateInRange(row.dateKey, startKey, endKey));
-  const sessionsInRange = (zoomSessions || []).filter((row) => dateInRange(row.dateKey, startKey, endKey));
 
   const adRows = adsInRange.map((row) => ({
     date: row.dateKey,
@@ -1113,16 +954,6 @@ function buildWindowDrilldown({
   const lumaHubspotMatchRows = lumaRows.filter((row) => row.matchedHubspot === 'Yes');
 
   const showupRows = [];
-  sessionsInRange.forEach((session) => {
-    const names = Array.isArray(session?.newNames) ? session.newNames : [];
-    names.forEach((attendee) => {
-      showupRows.push({
-        sessionDate: session.dateKey,
-        dayType: session.dayType,
-        attendeeName: attendee,
-      });
-    });
-  });
 
   const adColumns = [
     { key: 'date', label: 'Date', type: 'text' },
@@ -1292,28 +1123,20 @@ function buildWindowDrilldown({
 export function buildLeadAnalytics({
   adsRows = [],
   hubspotRows = [],
-  zoomRows = [],
   lumaRows = [],
   aliases = [],
   lookbackDays = LOOKBACK_DAYS_DEFAULT,
   includeDrilldowns = true,
 }) {
   const todayKey = new Date().toISOString().slice(0, 10);
-  const primaryDate = pickPrimaryDate([...adsRows, ...hubspotRows, ...zoomRows], todayKey);
+  const primaryDate = pickPrimaryDate([...adsRows, ...hubspotRows], todayKey);
   const lookbackStart = addDays(primaryDate, -(lookbackDays - 1));
-  const aliasMap = buildAliasMap(aliases);
 
-  const zoomNetNew = buildZoomNetNew(zoomRows.filter((row) => {
-    const key = parseDateKey(row?.metadata?.start_time || row?.metric_date);
-    return dateInRange(key, lookbackStart, primaryDate);
-  }), aliasMap);
-  const showupIndex = buildShowupIndex(zoomNetNew.firstSeenByName);
   const paidLeads = buildPaidLeads(
     hubspotRows.filter((row) => {
       const key = parseDateKey(row?.createdate);
       return dateInRange(key, lookbackStart, primaryDate);
     }),
-    showupIndex,
   );
   const lumaRegistrations = buildLumaRegistrations(
     lumaRows.filter((row) => {
@@ -1353,31 +1176,16 @@ export function buildLeadAnalytics({
     end: primaryDate,
   };
 
-  const monthCurrent = getSnapshot(
-    { adsRows: adState.normalizedRows, paidLeads, zoomDaily: zoomNetNew.daily, lumaRegistrations, hasDirectLumaData },
-    monthCurrentRange.start,
-    monthCurrentRange.end,
-  );
-  const monthPrevious = getSnapshot(
-    { adsRows: adState.normalizedRows, paidLeads, zoomDaily: zoomNetNew.daily, lumaRegistrations, hasDirectLumaData },
-    monthPreviousRange.start,
-    monthPreviousRange.end,
-  );
-  const weekCurrent = getSnapshot(
-    { adsRows: adState.normalizedRows, paidLeads, zoomDaily: zoomNetNew.daily, lumaRegistrations, hasDirectLumaData },
-    weekCurrentRange.start,
-    weekCurrentRange.end,
-  );
-  const weekPrevious = getSnapshot(
-    { adsRows: adState.normalizedRows, paidLeads, zoomDaily: zoomNetNew.daily, lumaRegistrations, hasDirectLumaData },
-    weekPreviousRange.start,
-    weekPreviousRange.end,
-  );
+  const snapshotInput = { adsRows: adState.normalizedRows, paidLeads, lumaRegistrations, hasDirectLumaData };
+  const monthCurrent = getSnapshot(snapshotInput, monthCurrentRange.start, monthCurrentRange.end);
+  const monthPrevious = getSnapshot(snapshotInput, monthPreviousRange.start, monthPreviousRange.end);
+  const weekCurrent = getSnapshot(snapshotInput, weekCurrentRange.start, weekCurrentRange.end);
+  const weekPrevious = getSnapshot(snapshotInput, weekPreviousRange.start, weekPreviousRange.end);
 
   const metricSnapshotRows = buildMetricSnapshotRows(monthCurrent, monthPrevious, weekCurrent, weekPrevious);
   const funnelStages = buildFunnelStages(monthCurrent);
   const leadQualityBreakdown = buildLeadQualityBreakdown(monthCurrent);
-  const trendRows = buildTrendRows(primaryDate, adState.normalizedRows, leadBuckets.byDate, zoomNetNew.daily);
+  const trendRows = buildTrendRows(primaryDate, adState.normalizedRows, leadBuckets.byDate);
   const topAds = getTopAds(adAttributionRows);
   const bottomAds = getBottomAds(adAttributionRows);
 
@@ -1399,7 +1207,6 @@ export function buildLeadAnalytics({
         adsRows: adState.normalizedRows,
         paidLeads,
         lumaRegistrations,
-        zoomSessions: zoomNetNew.sessions || [],
         hasDirectLumaData,
       });
       return acc;
@@ -1444,7 +1251,6 @@ export function buildLeadAnalytics({
       topAds,
       bottomAds,
       funnelStages,
-      zoomNetNew,
     ),
     alerts: buildAlerts(monthCurrent, monthPrevious, weekCurrent, weekPrevious, dataAvailability),
   };
@@ -1470,19 +1276,18 @@ export function buildLeadAnalytics({
       { key: 'cpql', label: 'CPQL', value: monthCurrent.costs.cpql, previous: monthPrevious.costs.cpql },
       { key: 'cpphxql', label: 'CPPhxQL', value: monthCurrent.costs.cpPhxQL, previous: monthPrevious.costs.cpPhxQL },
       { key: 'cpgl', label: 'CPGL', value: monthCurrent.costs.cpgl, previous: monthPrevious.costs.cpgl },
-      { key: 'cost_per_showup', label: 'Cost Per Show-Up', value: monthCurrent.costs.costPerShowUp, previous: monthPrevious.costs.costPerShowUp },
       { key: 'cost_per_registration', label: 'Cost Per Registration', value: monthCurrent.costs.costPerRegistration, previous: monthPrevious.costs.costPerRegistration },
     ],
     funnelStages,
     leadQualityBreakdown,
     showUpTracker: {
       rows: trendRows,
-      totalTuesday: zoomNetNew.totalTuesday,
-      totalThursday: zoomNetNew.totalThursday,
-      tuesdaySessions: zoomNetNew.tuesdaySessions,
-      thursdaySessions: zoomNetNew.thursdaySessions,
-      averageTuesday: safeDivide(zoomNetNew.totalTuesday, zoomNetNew.tuesdaySessions),
-      averageThursday: safeDivide(zoomNetNew.totalThursday, zoomNetNew.thursdaySessions),
+      totalTuesday: 0,
+      totalThursday: 0,
+      tuesdaySessions: 0,
+      thursdaySessions: 0,
+      averageTuesday: 0,
+      averageThursday: 0,
     },
     thursdayLumaFunnel: {
       registrations: monthCurrent.lumaRegistrations,

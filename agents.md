@@ -305,7 +305,7 @@ Section 1 MUST render `phoenixCards`. Section 2 MUST render `freeCards`. Swappin
 
 Card key arrays:
 - `FREE_CARD_KEYS`: `freeMeetings`, `freeQualified`, `freeCpql`, `freeGreat`, `freeCpgl`, `freeInterviews`
-- `PHOENIX_CARD_KEYS`: `phoenixLeads`, `phoenixQualified`, `phoenixGreat`, `phoenixCpql`, `phoenixCpgl`, `phoenixInterviews`
+- `PHOENIX_CARD_KEYS`: `phoenixLeads`, `phoenixQualified`, `phoenixCpql`, `phoenixInterviews`
 
 Label: `"Free Meeting Leads"` (NOT `"Free Meetings"`) — internal key `freeMeetings` unchanged.
 

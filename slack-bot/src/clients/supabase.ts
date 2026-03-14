@@ -7,7 +7,10 @@ export const supabase = createClient(env.supabaseUrl, env.supabaseServiceRoleKey
 
 export const invokeMasterSync = async <T>(payload: Record<string, unknown>): Promise<T> => {
   const url = `${env.supabaseUrl}/functions/v1/master-sync`;
-  const bearer = env.masterSyncEdgeInvokeKey || env.supabaseAnonKey || env.supabaseServiceRoleKey;
+  const bearer = env.masterSyncEdgeInvokeKey || env.supabaseAnonKey;
+  if (!bearer) {
+    throw new Error("invokeMasterSync: MASTER_SYNC_EDGE_INVOKE_KEY or SUPABASE_ANON_KEY must be set — refusing to fall back to service_role key");
+  }
 
   const response = await fetch(url, {
     method: "POST",

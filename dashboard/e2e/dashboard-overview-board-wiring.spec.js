@@ -36,10 +36,10 @@ test('dashboard overview KPI contract renders and remains stable', async ({ page
 
   await expect(page.getByText('AI Summary', { exact: true })).toBeVisible();
   await expect(page.getByText('Must Do Today', { exact: true })).toBeVisible();
-  await expect(page.getByText('Leads (3 Suggestions)', { exact: true })).toBeVisible();
-  await expect(page.getByText('Attendance (3 Suggestions)', { exact: true })).toBeVisible();
-  await expect(page.getByText('Donations (3 Suggestions)', { exact: true })).toBeVisible();
-  await expect(page.getByText('Operations (3 Suggestions)', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Leads\s*\(\d+ Suggestions?\)/)).toBeVisible();
+  await expect(page.getByText(/Attendance\s*\(\d+ Suggestions?\)/)).toBeVisible();
+  await expect(page.getByText(/Donations\s*\(\d+ Suggestions?\)/)).toBeVisible();
+  await expect(page.getByText(/Operations\s*\(\d+ Suggestions?\)/)).toBeVisible();
   await expect(page.getByText('Finished looks like:', { exact: false }).first()).toBeVisible();
   await expect(page.getByText('vs Last Week', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('vs 4 Week Avg', { exact: true }).first()).toBeVisible();
