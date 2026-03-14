@@ -1147,7 +1147,6 @@ export default function LeadsDashboard() {
       adsRows: adsR.data || [],
       hubspotRows: hubspotR.data || [],
       lumaRows: lumaR.data || [],
-      aliases: aliasR.data || [],
       lookbackDays: LOOKBACK_DAYS,
       includeDrilldowns: false,
     });
@@ -1170,7 +1169,6 @@ export default function LeadsDashboard() {
       adsRows: rawAds,
       hubspotRows: rawHubspot,
       lumaRows: rawLuma,
-      aliases,
       lookbackDays: LOOKBACK_DAYS,
       includeDrilldowns: true,
     });
@@ -1193,7 +1191,7 @@ export default function LeadsDashboard() {
   const groupedData = useMemo(() => {
     if (!rawAds.length && !rawHubspot.length) return null;
     return buildGroupedLeadsSnapshot({ adsRows: rawAds, hubspotRows: rawHubspot, lumaRows: rawLuma, dateRange: dateWindows });
-  }, [rawAds, rawHubspot, rawLuma, rawZoom, dateWindows]);
+  }, [rawAds, rawHubspot, rawLuma, dateWindows]);
 
   const hearAboutModule = useMemo(() => {
     const currentRows = groupedData?.current?.free?.combined?.lumaRows || [];
@@ -1293,8 +1291,8 @@ export default function LeadsDashboard() {
       const email = normalizeEmail(row?.email);
       const historyShowUps = email ? (historyZoomCounts.get(email) || 0) : 0;
       const revenueForGood = parseOfficialRevenue(row?.revenueOfficial ?? row?.revenue);
-      const isRepeatMember = !!row?.matchedZoom && historyShowUps >= 2;
-      const isGoodRepeatMember = !!row?.matchedZoom && historyShowUps >= 3 && Number.isFinite(revenueForGood) && revenueForGood >= 250000;
+      const isRepeatMember = !!row?.matchedAttendance && historyShowUps >= 2;
+      const isGoodRepeatMember = !!row?.matchedAttendance && historyShowUps >= 3 && Number.isFinite(revenueForGood) && revenueForGood >= 250000;
       const sourceBucket = sourceBucketFromRow(row);
       return {
         ...row,
@@ -1309,7 +1307,7 @@ export default function LeadsDashboard() {
 
     const aggregate = (rows, spend) => {
       const byBucket = new Map();
-      const totalShowUps = rows.filter((r) => !!r?.matchedZoom).length;
+      const totalShowUps = rows.filter((r) => !!r?.matchedAttendance).length;
 
       rows.forEach((row) => {
         const bucket = row.sourceBucket || 'Unknown';
@@ -1328,14 +1326,14 @@ export default function LeadsDashboard() {
         const agg = byBucket.get(bucket);
         agg.registrations += 1;
         agg.rows.push(row);
-        if (row?.matchedZoom) agg.showUps += 1;
-        if (row?.matchedZoomNetNew) agg.netNewShowUps += 1;
-        if (row?._isRepeatMember && row?.matchedZoom) {
+        if (row?.matchedAttendance) agg.showUps += 1;
+        if (row?.matchedAttendanceNetNew) agg.netNewShowUps += 1;
+        if (row?._isRepeatMember && row?.matchedAttendance) {
           agg.repeatShowUpRows += 1;
           const email = normalizeEmail(row?.email);
           if (email) agg.repeatMembers.add(email);
         }
-        if (row?._isGoodRepeatMember && row?.matchedZoom) {
+        if (row?._isGoodRepeatMember && row?.matchedAttendance) {
           const email = normalizeEmail(row?.email);
           if (email) agg.goodRepeatMembers.add(email);
         }
@@ -1359,7 +1357,7 @@ export default function LeadsDashboard() {
           rows: agg.rows
             .slice()
             .sort((a, b) => {
-              if (!!a.matchedZoom !== !!b.matchedZoom) return a.matchedZoom ? -1 : 1;
+              if (!!a.matchedAttendance !== !!b.matchedAttendance) return a.matchedAttendance ? -1 : 1;
               if (a._isGoodRepeatMember !== b._isGoodRepeatMember) return a._isGoodRepeatMember ? -1 : 1;
               if (a._isRepeatMember !== b._isRepeatMember) return a._isRepeatMember ? -1 : 1;
               const aRev = Number(a.revenueOfficial ?? a.revenue);
@@ -1406,7 +1404,7 @@ export default function LeadsDashboard() {
         spend: Number(spend || 0),
         totalRegistrations: rows.length,
         totalShowUps,
-        totalNetNewShowUps: rows.filter((r) => !!r?.matchedZoomNetNew).length,
+        totalNetNewShowUps: rows.filter((r) => !!r?.matchedAttendanceNetNew).length,
         paid,
         nonPaid: {
           registrations: nonPaidRegs,
@@ -1795,7 +1793,7 @@ export default function LeadsDashboard() {
         if (row?.hearAboutCategory && row.hearAboutCategory !== 'Unknown') s += 2;
         if (row?.hearAboutSource === 'Luma Answer') s += 2;
         if (row?.adGroup && row.adGroup !== 'Not Found') s += 1;
-        const showed = row?.matchedZoom ? 1 : 0;
+        const showed = row?.matchedAttendance ? 1 : 0;
         return s * 10 + showed;
       };
       return score(candidate) > score(existing) ? candidate : existing;
@@ -3575,23 +3573,23 @@ export default function LeadsDashboard() {
 
     if (type === 'leads') {
       const sortedRows = [...(snap.leadRows || [])].sort((a, b) => {
-        if (a.matchedZoom === b.matchedZoom) return String(a.name || '').localeCompare(String(b.name || ''));
-        return a.matchedZoom ? -1 : 1;
+        if (a.matchedAttendance === b.matchedAttendance) return String(a.name || '').localeCompare(String(b.name || ''));
+        return a.matchedAttendance ? -1 : 1;
       });
       setModal({
         title: `${groupLabel} — Leads`,
         columns: PERSON_COLS,
         rows: sortedRows,
-        highlightKey: 'matchedZoom',
+        highlightKey: 'matchedAttendance',
       });
     }
     if (type === 'luma') {
       // Sort with Showed Up first, then high official-revenue no-shows for nurture follow-up.
       const sortedRows = [...(snap.lumaRows || [])].sort((a, b) => {
-        if (a.matchedZoom !== b.matchedZoom) return a.matchedZoom ? -1 : 1;
+        if (a.matchedAttendance !== b.matchedAttendance) return a.matchedAttendance ? -1 : 1;
 
         // For no-shows, sort by annual_revenue_in_dollars__official_ descending.
-        if (!a.matchedZoom && !b.matchedZoom) {
+        if (!a.matchedAttendance && !b.matchedAttendance) {
           const aOfficial = Number(a.revenueOfficial);
           const bOfficial = Number(b.revenueOfficial);
           const aHas = Number.isFinite(aOfficial);
@@ -3606,7 +3604,7 @@ export default function LeadsDashboard() {
         title: `${groupLabel} — Luma Registrations`,
         columns: LUMA_COLS,
         rows: sortedRows,
-        highlightKey: 'matchedZoom'
+        highlightKey: 'matchedAttendance'
       });
     }
     if (type === 'zoom') {
@@ -3763,7 +3761,7 @@ export default function LeadsDashboard() {
       staleSources: sourceRows.filter((row) => row.tone === 'stale'),
       watchSources: sourceRows.filter((row) => row.tone === 'watch'),
     };
-  }, [rawAds, rawHubspot, rawLuma, rawZoom]);
+  }, [rawAds, rawHubspot, rawLuma]);
 
   const recentMomentumModule = useMemo(() => {
     const currentWindow = dateWindows?.current || null;
@@ -3903,7 +3901,6 @@ export default function LeadsDashboard() {
   };
   const currentMissingHubspotCallSessions = zoomSourceModule?.current?.missingHubspotCallSessions || [];
   const currentActionableMissingHubspotCallSessions = currentMissingHubspotCallSessions.filter((r) => String(r?.actionRequired || '') === 'Yes');
-  const currentLikelyNoMeetingHubspotCallSessions = currentMissingHubspotCallSessions.filter((r) => String(r?.missingCategory || '') === 'likely_no_meeting');
   const actionableMissingHubspotCallPreview = currentActionableMissingHubspotCallSessions
     .slice(0, 5)
     .map((row) => `${row?.date || 'Unknown Date'} ${row?.dayType || ''}`.trim());
@@ -5691,7 +5688,7 @@ export default function LeadsDashboard() {
                             title: `Free Leads — ${row.bucket} Cohort`,
                             columns: sourceDrillCols,
                             rows: row.rows || [],
-                            highlightKey: 'matchedZoom',
+                            highlightKey: 'matchedAttendance',
                           });
                         }}
                         style={{ cursor: 'pointer', backgroundColor: isPaid ? '#fef2f2' : '#fff' }}

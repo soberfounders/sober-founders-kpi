@@ -101,7 +101,7 @@ const KPI_CARD_DEFINITIONS = {
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'ads',
     note: 'Meta free-group lead form submissions',
-    color: '#0f766e',
+    color: 'var(--color-kpi-teal)',
   },
   freeQualified: {
     key: 'freeQualified',
@@ -112,7 +112,7 @@ const KPI_CARD_DEFINITIONS = {
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'contacts',
     note: 'Revenue >= $250k and sobriety > 1 year',
-    color: '#166534',
+    color: 'var(--color-kpi-green-dark)',
   },
   freePhoenixQualified: {
     key: 'freePhoenixQualified',
@@ -123,7 +123,7 @@ const KPI_CARD_DEFINITIONS = {
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'contacts',
     note: 'Revenue >= $1M and sobriety > 1 year',
-    color: '#b45309',
+    color: 'var(--color-kpi-amber)',
   },
   freeCpql: {
     key: 'freeCpql',
@@ -134,7 +134,7 @@ const KPI_CARD_DEFINITIONS = {
     direction: KPI_DIRECTION.LOWER_IS_BETTER,
     source: ['ads', 'contacts'],
     note: 'Free Group Ad Spend / New $250k Qualified Leads',
-    color: '#0369a1',
+    color: 'var(--color-kpi-cyan)',
   },
   freeGreat: {
     key: 'freeGreat',
@@ -145,7 +145,7 @@ const KPI_CARD_DEFINITIONS = {
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'contacts',
     note: 'Revenue >= $1M',
-    color: '#4f46e5',
+    color: 'var(--color-kpi-indigo)',
   },
   freeCpgl: {
     key: 'freeCpgl',
@@ -156,7 +156,7 @@ const KPI_CARD_DEFINITIONS = {
     direction: KPI_DIRECTION.LOWER_IS_BETTER,
     source: ['ads', 'contacts'],
     note: 'Free Group Ad Spend / New Great Leads',
-    color: '#7c3aed',
+    color: 'var(--color-kpi-purple)',
   },
   freeInterviews: {
     key: 'freeInterviews',
@@ -167,7 +167,7 @@ const KPI_CARD_DEFINITIONS = {
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'interviews',
     note: null,
-    color: '#0ea5e9',
+    color: 'var(--color-kpi-sky)',
   },
   phoenixLeads: {
     key: 'phoenixLeads',
@@ -178,7 +178,7 @@ const KPI_CARD_DEFINITIONS = {
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'ads',
     note: 'Campaign name contains "Phoenix"',
-    color: '#0f766e',
+    color: 'var(--color-kpi-teal)',
   },
   phoenixQualified: {
     key: 'phoenixQualified',
@@ -189,7 +189,7 @@ const KPI_CARD_DEFINITIONS = {
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'contacts',
     note: 'Revenue >= $250k and sobriety > 1 year',
-    color: '#166534',
+    color: 'var(--color-kpi-green-dark)',
   },
   phoenixPhoenixQualified: {
     key: 'phoenixPhoenixQualified',
@@ -200,7 +200,7 @@ const KPI_CARD_DEFINITIONS = {
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'contacts',
     note: 'Revenue >= $1M and sobriety > 1 year',
-    color: '#b45309',
+    color: 'var(--color-kpi-amber)',
   },
   phoenixCpql: {
     key: 'phoenixCpql',
@@ -211,7 +211,7 @@ const KPI_CARD_DEFINITIONS = {
     direction: KPI_DIRECTION.LOWER_IS_BETTER,
     source: ['ads', 'contacts'],
     note: 'Phoenix Ad Spend / Phoenix $250k Qualified Leads',
-    color: '#0369``a1',
+    color: 'var(--color-kpi-cyan)',
   },
   phoenixInterviews: {
     key: 'phoenixInterviews',
@@ -222,7 +222,7 @@ const KPI_CARD_DEFINITIONS = {
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'interviews',
     note: 'Phoenix Forum Interview, Learn More, and Good Fit meetings',
-    color: '#0ea5e9',
+    color: 'var(--color-kpi-sky)',
   },
   attendanceTotalTue: {
     key: 'attendanceTotalTue',
@@ -233,7 +233,7 @@ const KPI_CARD_DEFINITIONS = {
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'sessions',
     note: 'Total Tuesday attendees in selected range',
-    color: '#0ea5e9',
+    color: 'var(--color-kpi-sky)',
   },
   attendanceAvgVisitsTue: {
     key: 'attendanceAvgVisitsTue',
@@ -244,7 +244,7 @@ const KPI_CARD_DEFINITIONS = {
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'sessions',
     note: 'Rolling 90-day Tuesday visits / unique Tuesday attendees',
-    color: '#38bdf8',
+    color: 'var(--color-kpi-sky-light)',
   },
   attendanceTotalThu: {
     key: 'attendanceTotalThu',
@@ -255,7 +255,7 @@ const KPI_CARD_DEFINITIONS = {
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'sessions',
     note: 'Total Thursday attendees in selected range',
-    color: '#6366f1',
+    color: 'var(--color-kpi-indigo-light)',
   },
   attendanceAvgVisitsThu: {
     key: 'attendanceAvgVisitsThu',
@@ -266,7 +266,7 @@ const KPI_CARD_DEFINITIONS = {
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'sessions',
     note: 'Rolling 90-day Thursday visits / unique Thursday attendees',
-    color: '#818cf8',
+    color: 'var(--color-kpi-indigo-lighter)',
   },
   donationsCount: {
     key: 'donationsCount',
@@ -277,7 +277,7 @@ const KPI_CARD_DEFINITIONS = {
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'donations',
     note: 'Count of donations in selected range',
-    color: '#16a34a',
+    color: 'var(--color-kpi-green)',
   },
   donationsAmount: {
     key: 'donationsAmount',
@@ -288,7 +288,7 @@ const KPI_CARD_DEFINITIONS = {
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'donations',
     note: 'Total donation amount in selected range',
-    color: '#15803d',
+    color: 'var(--color-kpi-green-med)',
   },
   operationsCompletedItems: {
     key: 'operationsCompletedItems',
@@ -299,7 +299,7 @@ const KPI_CARD_DEFINITIONS = {
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'todos',
     note: 'Notion status changed to Done in selected range',
-    color: '#f97316',
+    color: 'var(--color-kpi-orange)',
   },
 };
 
@@ -1562,12 +1562,28 @@ function DashboardOverview() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      const raw = window.localStorage.getItem('dashboard-kpi-recommendation-feedback-v1');
+      const STORAGE_KEY = 'dashboard-kpi-recommendation-feedback-v1';
+      const FEEDBACK_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+      const raw = window.localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') {
-        setRecommendationFeedback(parsed);
+      if (!parsed || typeof parsed !== 'object') return;
+      // Evict entries older than TTL
+      const now = Date.now();
+      const pruned = {};
+      let changed = false;
+      for (const [key, entry] of Object.entries(parsed)) {
+        const savedAt = entry?.savedAt ? new Date(entry.savedAt).getTime() : 0;
+        if (savedAt && (now - savedAt) > FEEDBACK_TTL_MS) {
+          changed = true;
+          continue;
+        }
+        pruned[key] = entry;
       }
+      if (changed) {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(pruned));
+      }
+      setRecommendationFeedback(pruned);
     } catch (_) {
       // Ignore malformed cached feedback.
     }
@@ -1686,7 +1702,7 @@ function DashboardOverview() {
   if (error && !lastLoadedAt) {
     return (
       <div className="glass-panel" style={{ padding: '20px', border: '1px solid rgba(248,113,113,0.5)' }}>
-        <p style={{ fontWeight: 700, color: '#fecaca' }}>Dashboard load failed</p>
+        <p style={{ fontWeight: 700, color: 'var(--color-kpi-error-text)' }}>Dashboard load failed</p>
         <p style={{ marginTop: '8px', color: 'var(--color-text-secondary)' }}>{error}</p>
         <button className="btn-glass" type="button" onClick={loadData} style={{ marginTop: '12px' }}>
           Retry
@@ -1764,7 +1780,7 @@ function DashboardOverview() {
       </div>
 
       {error && (
-        <div className="glass-panel" style={{ padding: '12px', border: '1px solid rgba(248,113,113,0.4)', color: '#fecaca' }}>
+        <div className="glass-panel" style={{ padding: '12px', border: '1px solid rgba(248,113,113,0.4)', color: 'var(--color-kpi-error-text)' }}>
           <p style={{ fontWeight: 700 }}>Partial load warning</p>
           <p style={{ marginTop: '4px', color: 'var(--color-text-secondary)' }}>{error}</p>
         </div>
@@ -1773,7 +1789,7 @@ function DashboardOverview() {
       {warnings.length > 0 && (
         <div className="glass-panel" style={{ padding: '12px', border: '1px solid rgba(245,158,11,0.35)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <AlertTriangle size={16} color="#fbbf24" />
+            <AlertTriangle size={16} color="var(--color-kpi-warning-icon)" />
             <p style={{ fontWeight: 700 }}>Data Quality Notes</p>
           </div>
           <ul style={{ marginTop: '8px', listStyle: 'disc', paddingLeft: '18px', color: 'var(--color-text-secondary)' }}>
@@ -2023,7 +2039,7 @@ function DashboardOverview() {
         </div>
       </section>
 
-      <div className="glass-panel" style={{ padding: '10px', fontSize: '11px', color: '#cbd5e1' }}>
+      <div className="glass-panel" style={{ padding: '10px', fontSize: '11px', color: 'var(--color-kpi-timestamp)' }}>
         <p>Last loaded: {formatTimestamp(lastLoadedAt)}</p>
         <p style={{ marginTop: '4px' }}>
           Source rows used - Ads: {formatInt(snapshot.sourceRows.ads)}, HubSpot Contacts: {formatInt(snapshot.sourceRows.contacts)}, Interviews: {formatInt(snapshot.sourceRows.interviews)}, Attendance Sessions: {formatInt(snapshot.sourceRows.sessions)}, Donations: {formatInt(snapshot.sourceRows.donations)}, Todo Items: {formatInt(snapshot.sourceRows.todos)}

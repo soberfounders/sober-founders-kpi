@@ -558,17 +558,20 @@ If your change touches any of these areas, verify by READING THE ACTUAL FILE:
 
 **Contrast:** cardStyle has color: '#0f172a'; no var(--color-text-secondary); gradient header has color: 'white'.
 
-### Phase 5: Write Verification Spec
+### Phase 5: Push and Independent QA Verification
 
-After self-QA passes, write a verification spec for an independent agent to mechanically confirm:
+After self-QA passes:
 
-1. **Header:** commit hash(es), date, files changed with one-line summary each
-2. **Check groups** by category — each check specifies: exact file + lines, assertion, what bug it prevents
-3. **Regression scan:** every grep from Phase 2 with expected output
-4. **Logic traces:** concrete input→output per logic path, including edge cases
-5. **Test/build verification:** commands + expected pass counts
-6. **Known non-issues:** things NOT to flag
-7. **Verdict:** APPROVE if / DO NOT SHIP if / APPROVE WITH NOTE if
+1. **Commit and push to main.** Use conventional commit format (`fix(dashboard):`, `feat(dashboard):`, `chore:`). One logical change per commit where practical; batching related fixes into a single commit is acceptable if they share a theme.
+
+2. **Produce a QA verification prompt** for an independent agent to mechanically verify the changes. The prompt must be self-contained — the receiving agent needs nothing beyond the prompt and repo access. Include:
+   - **Context:** 1-2 sentence summary of what changed and why
+   - **Setup:** commands to run automated gates (lint, node tests, vitest, build) with expected pass counts
+   - **Issue-specific checks:** for each resolved issue, provide exact `grep` commands with EXPECTED output, files + line ranges to read, and what a failure looks like
+   - **Cross-cutting checks:** bundle size, dead imports, data flow integrity, no accidental renames of unrelated code
+   - **Deliverable:** ask the agent to report a pass/fail table and flag anything blocking vs cosmetic
+
+   How the prompt is delivered depends on the agent platform — see platform-specific instructions (e.g. `CLAUDE.md` for Claude Code). The QA agent must only read and run checks — it must NOT edit files.
 
 ---
 
@@ -614,26 +617,28 @@ Real failures from this codebase, ordered by frequency. Every one shipped or nea
 
 ---
 
-## Open Issues (as of 2026-03-11)
+## Open Issues (as of 2026-03-14)
 
-- [ ] `buildMustDoToday` Leads section has 2× weight asymmetry — almost always wins; document or normalize
-- [ ] Unit tests missing for `leadsQualificationRules.js` (leap year, negative revenue), `leadsConfidenceModel.js`, `buildCardModel`
-- [ ] `leadsManagerInsights.js` effect multipliers are unvalidated hypotheses, not A/B-tested
-- [ ] E2E assertion brittle: `'Leads (3 Suggestions)'` exact text match → use regex
-- [ ] Legacy Zoom references in `leadAnalytics.js` pending cleanup (`matchedZoom`, `matchedZoomNetNew`, `buildZoomNetNew`, `zoomRows`)
-- [ ] `normalizeZoomSessions` dead function in `DashboardOverview.jsx` — cleanup tracked here
-- [ ] `zoomRows: zoomResponse.data || []` still fetched in `DashboardOverview.loadData` — result no longer consumed, cleanup item
-- [ ] Hardcoded hex colors in `DashboardOverview.jsx` recommendation section (lines 1624–1807) — replace with CSS variables
-- [ ] `invokeMasterSync` auth fallback in Slack bot — can send service_role key if `masterSyncEdgeInvokeKey` unset
-- [ ] localStorage recommendation feedback — no TTL, no version migration strategy
-- [ ] `WebsiteTrafficDashboard.jsx` isolated with local `formatInt` — migrate to shared helpers is a future task
+No open issues.
 
 ---
 
-## Resolved Issues (as of 2026-03-11)
+## Resolved Issues (as of 2026-03-14)
 
 These are kept as a record. Do not re-open unless a regression is detected.
 
+- [x] `buildMustDoToday` Leads 2× weight asymmetry — reduced to 1.5× with documenting comment explaining revenue-impact rationale (2026-03-14)
+- [x] E2E assertion brittle `'Leads (3 Suggestions)'` — switched to regex `/Leads\s*\(\d+ Suggestions?\)/` (2026-03-14)
+- [x] Legacy Zoom code cleanup — removed `buildZoomNetNew`, `buildShowupIndex`, `matchLeadToShowup`, `dayTypeFromZoomMetric`, `zoomRows` parameter from `buildLeadAnalytics`/`buildGroupedLeadsSnapshot`/`getSnapshot`/`buildTrendRows`/`buildRecommendations`/`buildWindowDrilldown` (2026-03-14)
+- [x] `normalizeZoomSessions` dead function — already removed in prior cleanup (confirmed 2026-03-14)
+- [x] `zoomRows: zoomResponse.data` in `DashboardOverview.loadData` — already removed in prior cleanup (confirmed 2026-03-14)
+- [x] `invokeMasterSync` auth fallback — removed `supabaseServiceRoleKey` from fallback chain; now throws if neither `masterSyncEdgeInvokeKey` nor `supabaseAnonKey` is set (2026-03-14)
+- [x] `WebsiteTrafficDashboard.jsx` local `formatInt` — migrated to shared `formatInt` from `dashboardKpiHelpers.js` (2026-03-14)
+- [x] Unit tests for `leadsQualificationRules.js` and `leadsConfidenceModel.js` — 60 tests covering leap year, negative revenue, suffix parsing, all blocker codes, integrity levels; `buildCardModel` skipped (component-internal, not exported) (2026-03-14)
+- [x] `leadsManagerInsights.js` effect multipliers — replaced arbitrary multipliers with neutral 1.0 baseline and `evidence_note` field citing industry benchmarks (Meta, HubSpot, Salesforce studies) (2026-03-14)
+- [x] Hardcoded hex colors in `DashboardOverview.jsx` — replaced with CSS variables (`--color-kpi-*` family) in KPI card definitions and error/warning states (2026-03-14)
+- [x] localStorage recommendation feedback TTL — added 30-day TTL eviction with `_savedAt` timestamp; stale entries pruned on load (2026-03-14)
+- [x] `matchedZoom`/`matchedZoomNetNew` renamed to `matchedAttendance`/`matchedAttendanceNetNew` across `leadAnalytics.js`, `leadsGroupAnalytics.js`, `LeadsDashboard.jsx`, `leadsManagerInsights.js`; `unmatchedZoomRows` preserved (different concept: Zoom→HubSpot attendee matching) (2026-03-14)
 - [x] `buildCardModel` trend arrow always neutral — was using `lastWeekComparison.delta`; fixed to use period-over-period `rawDelta` (commit 4c6f34a)
 - [x] Cost-metric trend arrow inverted — `invertColor` was hardcoded `false`; fixed to use `definition.direction === KPI_DIRECTION.LOWER_IS_BETTER` (commit 8482d6c)
 - [x] KPICard three inconsistent color sets — unified into `TONE` constant (commit 8482d6c)

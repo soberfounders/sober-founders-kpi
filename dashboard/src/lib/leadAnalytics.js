@@ -47,34 +47,6 @@ function dateInRange(dateKey, startKey, endKey) {
   return !!dateKey && dateKey >= startKey && dateKey <= endKey;
 }
 
-function normalizeName(value = '') {
-  return String(value)
-    .toLowerCase()
-    .replace(/['’]s\s*(iphone|ipad|android|galaxy|phone|pc|macbook)$/gi, '')
-    .replace(/\((iphone|ipad|android|galaxy|phone)\)$/gi, '')
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function dayTypeFromZoomMetric(row) {
-  const metadata = row?.metadata || {};
-  const group = String(metadata.group_name || '').toLowerCase();
-  if (group === 'tuesday' || group === 'thursday') {
-    return group[0].toUpperCase() + group.slice(1);
-  }
-
-  const meetingId = String(metadata.meeting_id || '');
-  if (meetingId === TUESDAY_MEETING_ID) return 'Tuesday';
-  if (meetingId === THURSDAY_MEETING_ID) return 'Thursday';
-
-  const dateKey = parseDateKey(metadata.start_time || row.metric_date);
-  if (!dateKey) return 'Other';
-  const day = toUtcDate(dateKey).getUTCDay();
-  if (day === 2) return 'Tuesday';
-  if (day === 4) return 'Thursday';
-  return 'Other';
-}
 
 function classifyAdFunnel(row) {
   const explicit = String(row?.funnel_key || '').toLowerCase();
@@ -186,12 +158,6 @@ function pickPrimaryDate(rows, fallbackKey) {
   return keys[keys.length - 1];
 }
 
-function daysDiff(startKey, endKey) {
-  const start = toUtcDate(startKey).getTime();
-  const end = toUtcDate(endKey).getTime();
-  return Math.round((end - start) / (1000 * 60 * 60 * 24));
-}
-
 function buildPaidLeads(hubspotRows) {
   const deduped = new Map();
   const keyByEmail = new Map();
@@ -295,8 +261,8 @@ function buildLumaRegistrations(lumaRows) {
       guestName: String(row?.guest_name || '').trim(),
       guestEmail: String(row?.guest_email || '').trim().toLowerCase(),
       funnel: funnelRaw === 'phoenix' ? 'phoenix' : 'free',
-      matchedZoom: !!(row?.matched_attendance ?? row?.matched_zoom),
-      matchedZoomNetNew: !!(row?.matched_attendance_net_new ?? row?.matched_zoom_net_new),
+      matchedAttendance: !!(row?.matched_attendance ?? row?.matched_zoom),
+      matchedAttendanceNetNew: !!(row?.matched_attendance_net_new ?? row?.matched_zoom_net_new),
       matchedHubspot: !!row?.matched_hubspot,
       tier: tierRaw === 'great' ? 'great' : tierRaw === 'qualified' ? 'qualified' : 'standard',
     });
@@ -425,11 +391,11 @@ function buildLeadBuckets(paidLeads, lumaRegistrations = []) {
 
       const bucket = byDateFunnelLuma.get(dateFunnelKey);
       bucket.registrations += 1;
-      if (reg.matchedZoomNetNew) bucket.matchedShowUps += 1;
+      if (reg.matchedAttendanceNetNew) bucket.matchedShowUps += 1;
 
       const day = byDateLuma.get(reg.dateKey);
       day.registrations += 1;
-      if (reg.matchedZoomNetNew) day.matchedShowUps += 1;
+      if (reg.matchedAttendanceNetNew) day.matchedShowUps += 1;
     });
 
     byDateFunnelLuma.forEach((luma, key) => {
@@ -542,8 +508,8 @@ function getSnapshot({ adsRows, paidLeads, lumaRegistrations, hasDirectLumaData 
   const leads = leadsInRange.length > 0 ? leadsInRange.length : metaLeads;
   const fallbackRegistrations = leadsInRange.filter((row) => row.isRegistration).length;
   const lumaRegistrationsCount = lumaInRange.length;
-  const lumaMatchedShowUps = lumaInRange.filter((row) => row.matchedZoom).length;
-  const lumaMatchedNetNewShowUps = lumaInRange.filter((row) => row.matchedZoomNetNew).length;
+  const lumaMatchedShowUps = lumaInRange.filter((row) => row.matchedAttendance).length;
+  const lumaMatchedNetNewShowUps = lumaInRange.filter((row) => row.matchedAttendanceNetNew).length;
   const lumaHubspotMatches = lumaInRange.filter((row) => row.matchedHubspot).length;
 
   const registrations = hasDirectLumaData ? lumaRegistrationsCount : fallbackRegistrations;
@@ -559,6 +525,7 @@ function getSnapshot({ adsRows, paidLeads, lumaRegistrations, hasDirectLumaData 
     cpql: safeDivide(spend, qualifiedLeads),
     cpPhxQL: safeDivide(spend, phoenixQualifiedLeads),
     cpgl: safeDivide(spend, greatLeads),
+    costPerShowUp: null,
     costPerRegistration: safeDivide(spend, registrations),
   };
 
@@ -567,6 +534,8 @@ function getSnapshot({ adsRows, paidLeads, lumaRegistrations, hasDirectLumaData 
     clickToLead: safeDivide(leads, clicks),
     leadToRegistration: safeDivide(registrations, leads),
     registrationToShowUp: safeDivide(registrationShowUps, registrations),
+    showUpToQualified: null,
+    showUpToGreat: null,
   };
 
   return {
@@ -930,8 +899,8 @@ function buildWindowDrilldown({
       guestEmail: row.email || '',
       funnel: row.funnel,
       hubspotTier: row.tier,
-      matchedZoom: row.matchedShowup ? 'Yes' : 'No',
-      matchedZoomNetNew: row.matchedShowup ? 'Yes' : 'No',
+      matchedAttendance: row.matchedShowup ? 'Yes' : 'No',
+      matchedAttendanceNetNew: row.matchedShowup ? 'Yes' : 'No',
       matchedHubspot: 'Yes',
       source: 'HubSpot Proxy',
     }));
@@ -942,15 +911,15 @@ function buildWindowDrilldown({
     guestEmail: row.guestEmail || '',
     funnel: row.funnel,
     hubspotTier: row.tier,
-    matchedZoom: row.matchedZoom ? 'Yes' : 'No',
-    matchedZoomNetNew: row.matchedZoomNetNew ? 'Yes' : 'No',
+    matchedAttendance: row.matchedAttendance ? 'Yes' : 'No',
+    matchedAttendanceNetNew: row.matchedAttendanceNetNew ? 'Yes' : 'No',
     matchedHubspot: row.matchedHubspot ? 'Yes' : 'No',
     source: 'Luma',
   }));
 
   const registrationRows = hasDirectLumaData ? lumaRows : fallbackRegistrationRows;
-  const lumaZoomMatchRows = lumaRows.filter((row) => row.matchedZoom === 'Yes');
-  const lumaZoomNetNewMatchRows = lumaRows.filter((row) => row.matchedZoomNetNew === 'Yes');
+  const lumaZoomMatchRows = lumaRows.filter((row) => row.matchedAttendance === 'Yes');
+  const lumaZoomNetNewMatchRows = lumaRows.filter((row) => row.matchedAttendanceNetNew === 'Yes');
   const lumaHubspotMatchRows = lumaRows.filter((row) => row.matchedHubspot === 'Yes');
 
   const showupRows = [];
@@ -997,8 +966,8 @@ function buildWindowDrilldown({
         { key: 'guestEmail', label: 'Email', type: 'text' },
         { key: 'funnel', label: 'Funnel', type: 'text' },
         { key: 'hubspotTier', label: 'HubSpot Tier', type: 'text' },
-        { key: 'matchedZoom', label: 'Matched Zoom', type: 'text' },
-        { key: 'matchedZoomNetNew', label: 'Matched Net New', type: 'text' },
+        { key: 'matchedAttendance', label: 'Matched Attendance', type: 'text' },
+        { key: 'matchedAttendanceNetNew', label: 'Matched Net New', type: 'text' },
         { key: 'matchedHubspot', label: 'Matched HubSpot', type: 'text' },
         { key: 'source', label: 'Source', type: 'text' },
       ],
@@ -1077,8 +1046,8 @@ function buildWindowDrilldown({
         { key: 'eventDate', label: 'Registration Date', type: 'text' },
         { key: 'guestName', label: 'Name', type: 'text' },
         { key: 'guestEmail', label: 'Email', type: 'text' },
-        { key: 'matchedZoom', label: 'Matched Attendance', type: 'text' },
-        { key: 'matchedZoomNetNew', label: 'Matched Net New Attendance', type: 'text' },
+        { key: 'matchedAttendance', label: 'Matched Attendance', type: 'text' },
+        { key: 'matchedAttendanceNetNew', label: 'Matched Net New Attendance', type: 'text' },
       ],
       rows: lumaZoomMatchRows,
       emptyMessage: 'No Lu.ma registrations matched to HubSpot attendance in this window.',
@@ -1088,7 +1057,7 @@ function buildWindowDrilldown({
         { key: 'eventDate', label: 'Registration Date', type: 'text' },
         { key: 'guestName', label: 'Name', type: 'text' },
         { key: 'guestEmail', label: 'Email', type: 'text' },
-        { key: 'matchedZoomNetNew', label: 'Matched Net New Attendance', type: 'text' },
+        { key: 'matchedAttendanceNetNew', label: 'Matched Net New Attendance', type: 'text' },
       ],
       rows: lumaZoomNetNewMatchRows,
       emptyMessage: 'No Lu.ma registrations matched to net-new HubSpot attendance in this window.',
@@ -1124,7 +1093,6 @@ export function buildLeadAnalytics({
   adsRows = [],
   hubspotRows = [],
   lumaRows = [],
-  aliases = [],
   lookbackDays = LOOKBACK_DAYS_DEFAULT,
   includeDrilldowns = true,
 }) {
@@ -1276,6 +1244,7 @@ export function buildLeadAnalytics({
       { key: 'cpql', label: 'CPQL', value: monthCurrent.costs.cpql, previous: monthPrevious.costs.cpql },
       { key: 'cpphxql', label: 'CPPhxQL', value: monthCurrent.costs.cpPhxQL, previous: monthPrevious.costs.cpPhxQL },
       { key: 'cpgl', label: 'CPGL', value: monthCurrent.costs.cpgl, previous: monthPrevious.costs.cpgl },
+      { key: 'cost_per_showup', label: 'Cost Per Show-Up', value: monthCurrent.costs.costPerShowUp, previous: monthPrevious.costs.costPerShowUp },
       { key: 'cost_per_registration', label: 'Cost Per Registration', value: monthCurrent.costs.costPerRegistration, previous: monthPrevious.costs.costPerRegistration },
     ],
     funnelStages,

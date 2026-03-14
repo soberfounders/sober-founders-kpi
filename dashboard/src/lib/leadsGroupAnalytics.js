@@ -18,8 +18,6 @@ import {
     parseOfficialRevenue,
 } from './leadsQualificationRules.js';
 
-export const TUESDAY_MEETING_ID = '87199667045';
-export const THURSDAY_MEETING_ID = '84242212480';
 
 // ---------------------------------------------------------------------------
 // Date helpers
@@ -433,69 +431,6 @@ function buildHubspotEmailIndex(hubspotRows) {
 // ---------------------------------------------------------------------------
 // Zoom show-up helpers
 // ---------------------------------------------------------------------------
-
-function getMeetingDayType(row) {
-    const meta = row?.metadata || {};
-    const meetingId = String(meta.meeting_id || '');
-    if (meetingId === TUESDAY_MEETING_ID) return 'tuesday';
-    if (meetingId === THURSDAY_MEETING_ID) return 'thursday';
-
-    // Fall back to day-of-week from start_time
-    const dateKey = parseDateKey(meta.start_time || row.metric_date);
-    if (!dateKey) return 'other';
-    const day = toUtcDate(dateKey).getUTCDay();
-    if (day === 2) return 'tuesday';
-    if (day === 4) return 'thursday';
-    return 'other';
-}
-
-function buildZoomShowUpRows(zoomRows, startKey, endKey, dayTypeFilter) {
-    /** Returns an array of { date, name, dayType } for attendees in range */
-    const rows = [];
-
-    for (const row of zoomRows || []) {
-        const dateKey = parseDateKey(row?.metadata?.start_time || row?.metric_date);
-        if (!dateKey || !dateInRange(dateKey, startKey, endKey)) continue;
-
-        const dayType = getMeetingDayType(row);
-        if (dayTypeFilter && dayType !== dayTypeFilter) continue;
-
-        const attendees = Array.isArray(row?.metadata?.attendees) ? row.metadata.attendees : [];
-        for (const name of attendees) {
-            const n = String(name || '').trim();
-            if (n) rows.push({ date: dateKey, name: n, dayType, email: '' });
-        }
-    }
-
-    return rows;
-}
-
-function normalizePersonNameKey(value) {
-    return String(value || '')
-        .toLowerCase()
-        .replace(/['’]s\s*(iphone|ipad|android|galaxy|phone|pc|macbook|desktop|laptop)$/gi, '')
-        .replace(/\((iphone|ipad|android|galaxy|phone)\)$/gi, '')
-        .replace(/[^a-z0-9\s]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-}
-
-function filterZoomShowUpsByLumaMatches(zoomRows, lumaRows) {
-    if (!Array.isArray(zoomRows) || zoomRows.length === 0) return [];
-    if (!Array.isArray(lumaRows) || lumaRows.length === 0) return [];
-
-    const matchedNames = new Set();
-    for (const row of lumaRows) {
-        if (!row?.matchedZoom) continue;
-        const key = normalizePersonNameKey(row?.name);
-        if (key) matchedNames.add(key);
-    }
-    if (matchedNames.size === 0) return [];
-
-    return zoomRows.filter((row) => matchedNames.has(normalizePersonNameKey(row?.name)));
-}
-
-// ---------------------------------------------------------------------------
 // Luma registration helpers
 // ---------------------------------------------------------------------------
 
@@ -801,8 +736,8 @@ function buildLumaRows(lumaRows, startKey, endKey, hubspotRows, adsAdsetIndex) {
             email: email || normalizeEmail(contact?.email) || 'Not Found',
             funnel: String(row?.funnel_key || '').toLowerCase() === 'phoenix' ? 'phoenix' : 'free',
             showedUp: (row?.matched_attendance ?? row?.matched_zoom) ? 'Yes' : 'No',
-            matchedZoom: !!(row?.matched_attendance ?? row?.matched_zoom),
-            matchedZoomNetNew: !!(row?.matched_attendance_net_new ?? row?.matched_zoom_net_new),
+            matchedAttendance: !!(row?.matched_attendance ?? row?.matched_zoom),
+            matchedAttendanceNetNew: !!(row?.matched_attendance_net_new ?? row?.matched_zoom_net_new),
             matchedHubspot: !!row?.matched_hubspot,
             hubspotTier: row?.matched_hubspot_tier || null,
             revenue: revenue ?? 'Not Found',
@@ -983,8 +918,8 @@ function buildLeadRows(hubspotInRange, lumaRows, funnelFilter) {
         const candidateDateScoreRaw = Number.parseInt(String(row?.date || '').replace(/-/g, ''), 10);
         const existingDateScore = Number.isFinite(existingDateScoreRaw) ? existingDateScoreRaw : 0;
         const candidateDateScore = Number.isFinite(candidateDateScoreRaw) ? candidateDateScoreRaw : 0;
-        const existingScore = Number(existing?.matchedZoom) * 1_000_000 + existingDateScore;
-        const candidateScore = Number(row?.matchedZoom) * 1_000_000 + candidateDateScore;
+        const existingScore = Number(existing?.matchedAttendance) * 1_000_000 + existingDateScore;
+        const candidateScore = Number(row?.matchedAttendance) * 1_000_000 + candidateDateScore;
         if (candidateScore > existingScore) lumaByEmail.set(email, row);
     }
 
@@ -999,8 +934,8 @@ function buildLeadRows(hubspotInRange, lumaRows, funnelFilter) {
         return {
             name: fullNameFromContact(contact) || matchedLuma?.name || 'Not Found',
             email: matchedLuma?.email || primaryEmail || extraEmails[0] || 'Not Found',
-            showedUp: matchedLuma?.matchedZoom ? 'Yes' : 'No',
-            matchedZoom: !!matchedLuma?.matchedZoom,
+            showedUp: matchedLuma?.matchedAttendance ? 'Yes' : 'No',
+            matchedAttendance: !!matchedLuma?.matchedAttendance,
             revenue: revenue ?? 'Not Found',
             sobrietyDate: sobrietyDate || 'Not Found',
         };

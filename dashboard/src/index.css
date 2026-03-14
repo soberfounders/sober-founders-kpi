@@ -35,6 +35,24 @@
   --color-info-bg: rgba(59, 130, 246, 0.15);
   --color-surface-elevated: rgba(30, 45, 75, 0.6);
   --color-neutral: #94a3b8;
+
+  /* KPI card accent colors */
+  --color-kpi-teal: #0f766e;
+  --color-kpi-green-dark: #166534;
+  --color-kpi-amber: #b45309;
+  --color-kpi-cyan: #0369a1;
+  --color-kpi-indigo: #4f46e5;
+  --color-kpi-purple: #7c3aed;
+  --color-kpi-sky: #0ea5e9;
+  --color-kpi-sky-light: #38bdf8;
+  --color-kpi-indigo-light: #6366f1;
+  --color-kpi-indigo-lighter: #818cf8;
+  --color-kpi-green: #16a34a;
+  --color-kpi-green-med: #15803d;
+  --color-kpi-orange: #f97316;
+  --color-kpi-error-text: #fecaca;
+  --color-kpi-warning-icon: #fbbf24;
+  --color-kpi-timestamp: #cbd5e1;
   --color-neutral-bg: rgba(148, 163, 184, 0.15);
   --color-overlay-strong: rgba(10, 15, 24, 0.78);
   --color-input-surface: rgba(10, 15, 24, 0.6);

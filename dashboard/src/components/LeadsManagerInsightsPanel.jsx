@@ -160,6 +160,11 @@ export default function LeadsManagerInsightsPanel({
                   <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#475569' }}>
                     {action.summary || 'Insufficient sample/data for action summary.'}
                   </p>
+                  {action.evidence_note && (
+                    <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#0369a1', fontStyle: 'italic' }}>
+                      {action.evidence_note}
+                    </p>
+                  )}
                   <div style={{ marginTop: '8px', display: 'grid', gap: '8px' }}>
                     {IMPACT_ROWS.map((entry) => {
                       const impactMetric = action?.projected_impact?.[entry.key];
