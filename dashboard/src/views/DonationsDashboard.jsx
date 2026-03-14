@@ -325,8 +325,13 @@ function DonationsDashboard() {
     return Array.from(byDonor.values()).map((d) => {
       const isRecurring = d.health_status === 'active_recurring' || d.health_status === 'lapsed_recurring';
       const atRiskLevel = isRecurring ? 'none' : computeAtRiskLevel(d.lastGiftAt);
-      // Override the DB's 90-day at_risk — use frontend 11/12-month logic instead
-      const displayStatus = d.health_status === 'at_risk' ? 'one_time' : d.health_status;
+      // Override DB statuses: at_risk uses frontend 11/12-month logic,
+      // one_time_recent only within last 7 days
+      const daysSinceLast = d.lastGiftAt ? (Date.now() - d.lastGiftAt.getTime()) / 86400000 : Infinity;
+      let displayStatus = d.health_status;
+      if (displayStatus === 'at_risk' || displayStatus === 'one_time_recent') {
+        displayStatus = daysSinceLast <= 7 ? 'one_time_recent' : 'one_time';
+      }
       return { ...d, atRiskLevel, health_status: displayStatus };
     });
   }, [transactions, supporterProfileByEmail, donorHealth]);
