@@ -575,19 +575,41 @@ const GROUP_ATTENDANCE_TITLE_SIGNALS = [
 
 const MIN_GROUP_ATTENDEES = 3; // Same threshold as AttendanceDashboard
 
-function normalizeHubspotAttendanceSessions(interviewRows = []) {
-  // Derives Tue/Thu attendance sessions from already-normalized activity rows.
-  // Only rows carrying a positive group-session title signal AND at least
-  // MIN_GROUP_ATTENDEES real attendees are included, matching AttendanceDashboard.
+function normalizeHubspotAttendanceSessions(activities = [], associations = []) {
+  // Builds Tue/Thu attendance sessions directly from raw HubSpot activities
+  // and their contact associations. Uses ONE key per contact (email preferred,
+  // name fallback) to match AttendanceDashboard's counting and avoid the
+  // double-counting that collectAttendeeKeys causes.
+
+  // Build a lookup: activityId → Set of unique attendee keys
+  const assocByActivity = new Map();
+  associations.forEach((row) => {
+    const id = String(row.hubspot_activity_id);
+    const email = (row.contact_email || '').trim().toLowerCase();
+    const name = [row.contact_firstname, row.contact_lastname].filter(Boolean).join(' ').trim().toLowerCase();
+    // One key per contact: prefer email, fall back to name
+    const key = email && email.includes('@') ? `email:${email}` : name ? `name:${name}` : null;
+    if (!key) return;
+    if (!assocByActivity.has(id)) assocByActivity.set(id, new Set());
+    assocByActivity.get(id).add(key);
+  });
+
   const sessionsByKey = new Map();
 
-  interviewRows.forEach((row) => {
-    const dateKey = row.dateKey;
+  activities.forEach((row) => {
+    const dateKey = toDateKey(row?.hs_timestamp || row?.created_at_hubspot);
     if (!dateKey) return;
 
-    // Require at least one positive group-session signal in the full text blob.
+    // Build text blob for title signal matching
+    const metadata = row?.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+    const textBlob = [
+      row?.title, row?.body_preview,
+      metadata.meeting_name, metadata.meetingName, metadata.subject, metadata.title,
+      JSON.stringify(metadata),
+    ].map((v) => String(v || '').toLowerCase()).join(' ');
+
     const isGroupSession = GROUP_ATTENDANCE_TITLE_SIGNALS.some(
-      (signal) => row.textBlob.includes(signal) && !(signal === 'mastermind' && row.textBlob.includes('intro')),
+      (signal) => textBlob.includes(signal) && !(signal === 'mastermind' && textBlob.includes('intro')),
     );
     if (!isGroupSession) return;
 
@@ -596,8 +618,10 @@ function normalizeHubspotAttendanceSessions(interviewRows = []) {
     const dayType = weekday === 2 ? 'Tuesday' : weekday === 4 ? 'Thursday' : null;
     if (!dayType) return;
 
-    // Only count rows with real attendee keys (skip activity-id placeholders)
-    if (row.attendeeKeys.length === 0) return;
+    // Get attendees from associations (not from collectAttendeeKeys)
+    const activityId = String(row.hubspot_activity_id);
+    const contactKeys = assocByActivity.get(activityId);
+    if (!contactKeys || contactKeys.size === 0) return;
 
     const sessionKey = `${dayType}|${dateKey}`;
     if (!sessionsByKey.has(sessionKey)) {
@@ -610,7 +634,7 @@ function normalizeHubspotAttendanceSessions(interviewRows = []) {
     }
 
     const session = sessionsByKey.get(sessionKey);
-    row.attendeeKeys.forEach((k) => session.attendees.add(k));
+    contactKeys.forEach((k) => session.attendees.add(k));
   });
 
   return Array.from(sessionsByKey.values())
@@ -926,14 +950,15 @@ function buildAttendanceTrend(sessions) {
 }
 
 function computeKpiSnapshot(rawData, windows, todayKey) {
-  // Normalize interview activities once; reuse for both interview counting and
-  // attendance session derivation so the same HubSpot data source backs both KPIs.
+  // Interview rows are still used for interview counting (Free Group, Phoenix).
+  // Attendance sessions are built separately from raw activities + associations
+  // to avoid collectAttendeeKeys double-counting (email + name = 2 keys per person).
   const interviewRows = normalizeInterviewActivities(rawData.activities || []);
   const normalizedData = {
     adsRows: normalizeAdsRows(rawData.adsRows || []),
     contacts: normalizeHubspotContacts(rawData.contacts || []),
     interviewRows,
-    zoomSessions: normalizeHubspotAttendanceSessions(interviewRows),
+    zoomSessions: normalizeHubspotAttendanceSessions(rawData.activities || [], rawData.associations || []),
     donationRows: normalizeDonationRows(rawData.donationRows || []),
     todoRows: normalizeTodoRows(rawData.todoRows || []),
   };
