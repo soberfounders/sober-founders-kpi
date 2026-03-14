@@ -28,7 +28,7 @@ Qualification rules are independent of revenue-tier labels:
 
 Notes:
 - Revenue must be parsed as a numeric USD value before classification.
-- "At least 1 year old" means `today - sobriety_date >= 365 days` (UTC day boundary).
+- "At least 1 year old" means strictly more than 1 calendar year: `sobriety_anniversary < today` (UTC day boundary). The exact anniversary day does NOT qualify.
 - Non-official revenue fields are not allowed for classification unless explicitly flagged (see allowed fields section).
 - Qualified/Unqualified may use both revenue + sobriety logic, while Bad/OK/Good/Great must stay revenue-only.
 

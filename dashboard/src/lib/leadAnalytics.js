@@ -771,6 +771,7 @@ function buildMetricSnapshotRows(monthCurrent, monthPrevious, weekCurrent, weekP
     row('Great Leads', 'great', monthCurrent.greatLeads, monthPrevious.greatLeads, weekCurrent.greatLeads, weekPrevious.greatLeads, 'count', 'higher'),
     row('CPL', 'cpl', monthCurrent.costs.cpl, monthPrevious.costs.cpl, weekCurrent.costs.cpl, weekPrevious.costs.cpl, 'currency', 'lower'),
     row('CPQL', 'cpql', monthCurrent.costs.cpql, monthPrevious.costs.cpql, weekCurrent.costs.cpql, weekPrevious.costs.cpql, 'currency', 'lower'),
+    row('CPPhxQL', 'cpphxql', monthCurrent.costs.cpPhxQL, monthPrevious.costs.cpPhxQL, weekCurrent.costs.cpPhxQL, weekPrevious.costs.cpPhxQL, 'currency', 'lower'),
     row('CPGL', 'cpgl', monthCurrent.costs.cpgl, monthPrevious.costs.cpgl, weekCurrent.costs.cpgl, weekPrevious.costs.cpgl, 'currency', 'lower'),
     row('Cost Per Show-Up', 'cost_per_showup', monthCurrent.costs.costPerShowUp, monthPrevious.costs.costPerShowUp, weekCurrent.costs.costPerShowUp, weekPrevious.costs.costPerShowUp, 'currency', 'lower'),
     row('Cost Per Registration', 'cost_per_registration', monthCurrent.costs.costPerRegistration, monthPrevious.costs.costPerRegistration, weekCurrent.costs.costPerRegistration, weekPrevious.costs.costPerRegistration, 'currency', 'lower'),
@@ -1276,6 +1277,7 @@ function buildWindowDrilldown({
 
   tables.cpl = tables.leads;
   tables.cpql = tables.qualified;
+  tables.cpphxql = tables.phoenix_qualified;
   tables.cpgl = tables.great;
   tables.cost_per_showup = tables.showups;
   tables.cost_per_registration = tables.registrations;
@@ -1415,6 +1417,7 @@ export function buildLeadAnalytics({
     great: 'Great Leads',
     cpl: 'CPL',
     cpql: 'CPQL',
+    cpphxql: 'CPPhxQL',
     cpgl: 'CPGL',
     cost_per_showup: 'Cost Per Show-Up',
     cost_per_registration: 'Cost Per Registration',
@@ -1465,6 +1468,7 @@ export function buildLeadAnalytics({
     costCards: [
       { key: 'cpl', label: 'CPL', value: monthCurrent.costs.cpl, previous: monthPrevious.costs.cpl },
       { key: 'cpql', label: 'CPQL', value: monthCurrent.costs.cpql, previous: monthPrevious.costs.cpql },
+      { key: 'cpphxql', label: 'CPPhxQL', value: monthCurrent.costs.cpPhxQL, previous: monthPrevious.costs.cpPhxQL },
       { key: 'cpgl', label: 'CPGL', value: monthCurrent.costs.cpgl, previous: monthPrevious.costs.cpgl },
       { key: 'cost_per_showup', label: 'Cost Per Show-Up', value: monthCurrent.costs.costPerShowUp, previous: monthPrevious.costs.costPerShowUp },
       { key: 'cost_per_registration', label: 'Cost Per Registration', value: monthCurrent.costs.costPerRegistration, previous: monthPrevious.costs.costPerRegistration },

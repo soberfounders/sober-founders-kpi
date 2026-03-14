@@ -607,7 +607,7 @@ function ProgressGapBar({ label, current, target, format = 'count', color = '#0f
 
 // ─── Category bar ─────────────────────────────────────────────────────────────
 const TIER_COLORS = { great: '#16a34a', qualified: '#2563eb', ok: '#b45309', bad: '#dc2626', unknown: '#94a3b8' };
-const TIER_LABELS = { great: 'Great >=$1M', qualified: '$250k Qualified $250k-$999,999', ok: 'OK $100k-$249k', bad: 'Bad <$100k', unknown: 'Unknown' };
+const TIER_LABELS = { great: 'Great >=$1M', qualified: '$250k Qualified ($250k-$999k)', ok: 'OK $100k-$249k', bad: 'Bad <$100k', unknown: 'Unknown' };
 
 function CategoryRow({ cat, total }) {
   if (!cat) return null;
@@ -6080,7 +6080,7 @@ export default function LeadsDashboard() {
                   <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1200px' }}>
                     <thead>
                       <tr style={{ backgroundColor: '#f8fafc' }}>
-                        {['Campaign', 'Ad Set', 'Ad', 'Spend', 'Meta Leads', 'Attr Leads', 'Attr Regs', 'Attr Show-Ups', 'Attr Qual', 'Attr Great', 'CPL', 'CPQL', 'CPGL', 'Show-Up Rate', 'Quality Score'].map((h) => (
+                        {['Campaign', 'Ad Set', 'Ad', 'Spend', 'Meta Leads', 'Attr Leads', 'Attr Regs', 'Attr Show-Ups', 'Attr Qual', 'Attr Phx Qual', 'Attr Great', 'CPL', 'CPQL', 'CPGL', 'Show-Up Rate', 'Quality Score'].map((h) => (
                           <th key={h} style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>{h}</th>
                         ))}
                       </tr>
@@ -6088,12 +6088,12 @@ export default function LeadsDashboard() {
                     <tbody>
                       {topAttributionRows.map((r) => (
                         <tr key={r.adId}>
-                          {[r.campaignName, r.adsetName, r.adName, fmt.currency(r.spend), fmt.int(r.metaLeads), r.attributedLeads.toFixed(2), r.attributedRegistrations.toFixed(2), r.attributedShowUps.toFixed(2), r.attributedQualifiedLeads.toFixed(2), r.attributedGreatLeads.toFixed(2), fmt.currency(r.cpl), r.attributedQualifiedLeads > 0 ? fmt.currency(r.cpql) : 'N/A', r.attributedGreatLeads > 0 ? fmt.currency(r.cpgl) : 'N/A', fmt.pct(r.showUpRate), r.qualityScore.toFixed(1)].map((v, i) => (
+                          {[r.campaignName, r.adsetName, r.adName, fmt.currency(r.spend), fmt.int(r.metaLeads), r.attributedLeads.toFixed(2), r.attributedRegistrations.toFixed(2), r.attributedShowUps.toFixed(2), r.attributedQualifiedLeads.toFixed(2), r.attributedPhoenixQualifiedLeads.toFixed(2), r.attributedGreatLeads.toFixed(2), fmt.currency(r.cpl), r.attributedQualifiedLeads > 0 ? fmt.currency(r.cpql) : 'N/A', r.attributedGreatLeads > 0 ? fmt.currency(r.cpgl) : 'N/A', fmt.pct(r.showUpRate), r.qualityScore.toFixed(1)].map((v, i) => (
                             <td key={i} style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#334155' }}>{v}</td>
                           ))}
                         </tr>
                       ))}
-                      {topAttributionRows.length === 0 && <tr><td colSpan={15} style={{ padding: '10px', color: '#64748b', fontSize: '12px' }}>No attribution data for this campaign activity filter.</td></tr>}
+                      {topAttributionRows.length === 0 && <tr><td colSpan={16} style={{ padding: '10px', color: '#64748b', fontSize: '12px' }}>No attribution data for this campaign activity filter.</td></tr>}
                     </tbody>
                   </table>
                 </div>
