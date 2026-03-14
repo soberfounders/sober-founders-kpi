@@ -15,7 +15,7 @@ const Header = ({ activeTab, onMenuClick, isMobile = false }) => {
     }
 
     const failures = Array.isArray(data?.results)
-      ? data.results.filter((row) => row?.status !== 'success')
+      ? data.results.filter((row) => row?.status !== 'success' && row?.status !== 'skipped')
       : [];
 
     if (failures.length > 0) {
@@ -26,7 +26,7 @@ const Header = ({ activeTab, onMenuClick, isMobile = false }) => {
           .join('\n'),
       );
     } else {
-      alert('Data refresh completed, including HubSpot call attendance sync, leads, Lu.ma, Meta, Google Analytics, and Search Console.');
+      alert('Data refresh completed: HubSpot contacts (revenue, sobriety date), calls/meetings, deals, Lu.ma, Meta ads, Google Analytics, and Search Console.');
     }
   };
 

@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildZoomFreezePayload, getZoomFreezeConfig } from "../_shared/zoom_freeze.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -205,11 +204,6 @@ serve(async (req: Request) => {
     if (hubspotFrom) hubspotSourceSyncBody.from = hubspotFrom;
     else hubspotSourceSyncBody.days = hubspotDays;
     if (hubspotTo) hubspotSourceSyncBody.to = hubspotTo;
-    const hubspotReconcileBody: Record<string, any> = { dry_run: false };
-    if (hubspotFrom) hubspotReconcileBody.from = hubspotFrom;
-    else hubspotReconcileBody.days = hubspotDays;
-    if (hubspotTo) hubspotReconcileBody.to = hubspotTo;
-    const zoomFreeze = getZoomFreezeConfig();
 
     console.log(`Starting Master Sync for week: ${weekStart}, force refresh: ${triggerRefresh}`);
 
@@ -258,17 +252,6 @@ serve(async (req: Request) => {
       runStep('search_console', 'sync_search_console', { method: 'POST' }),
     ];
 
-    if (zoomFreeze.frozen) {
-      results.push({
-        source: 'zoom_attendance_legacy',
-        function: 'sync_zoom_attendance',
-        status: 'skipped',
-        data: buildZoomFreezePayload('Master sync skipped legacy Zoom attendance ingestion.'),
-      });
-    } else {
-      stageOneSteps.push(runStep('zoom_attendance_legacy', 'sync_zoom_attendance', { method: 'POST' }));
-    }
-
     await Promise.all(stageOneSteps);
 
     // Stage 1b: ads sync with configurable backfill window.
@@ -282,26 +265,10 @@ serve(async (req: Request) => {
       });
     }
 
-    // Stage 2: jobs that benefit from the refreshed HubSpot/Zoom caches.
-    const stageTwoSteps = [
+    // Stage 2: jobs that benefit from the refreshed HubSpot caches.
+    await Promise.all([
       runStep('luma_registrations', 'sync_luma_registrations', { method: 'POST' }),
-    ];
-
-    if (zoomFreeze.frozen) {
-      results.push({
-        source: 'zoom_hubspot_reconcile',
-        function: 'reconcile_zoom_attendee_hubspot_mappings',
-        status: 'skipped',
-        data: buildZoomFreezePayload('Master sync skipped legacy Zoom-to-HubSpot reconciliation.'),
-      });
-    } else {
-      stageTwoSteps.push(runStep('zoom_hubspot_reconcile', 'reconcile_zoom_attendee_hubspot_mappings', {
-        method: 'POST',
-        body: hubspotReconcileBody,
-      }));
-    }
-
-    await Promise.all(stageTwoSteps);
+    ]);
 
     // Keep a local Notion sync fallback if generic sync path is unavailable/misconfigured.
     // This preserves the previous behavior of master-sync while the stack transitions.
