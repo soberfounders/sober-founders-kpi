@@ -717,13 +717,10 @@ function buildAttendanceSnapshots(sessions, currentWindow, previousWindow) {
   // Track first-seen across all time for net-new detection
   const seen = { Tuesday: new Set(), Thursday: new Set() };
 
-  // Find latest session date to anchor the rolling window
-  let latestDateMs = 0;
-  sessions.forEach((session) => {
-    const ts = new Date(session.dateKey + 'T00:00:00Z').getTime();
-    if (ts > latestDateMs) latestDateMs = ts;
-  });
-  const cutoffMs = latestDateMs - ROLLING_WINDOW_DAYS * 86400000;
+  // Anchor rolling 90-day window to end of currentWindow so each comparison
+  // period (last week, 4-week avg) gets its own correctly-scoped rolling avg.
+  const anchorMs = Date.parse(currentWindow.end + 'T00:00:00Z');
+  const cutoffMs = Number.isFinite(anchorMs) ? anchorMs - ROLLING_WINDOW_DAYS * 86400000 : 0;
 
   // Rolling 90-day window counters for avg visits
   const rolling = {
@@ -740,8 +737,8 @@ function buildAttendanceSnapshots(sessions, currentWindow, previousWindow) {
     const sessionMs = new Date(session.dateKey + 'T00:00:00Z').getTime();
 
     session.attendees.forEach((personKey) => {
-      // Rolling 90-day window for avg visits
-      if (sessionMs >= cutoffMs) {
+      // Rolling 90-day window for avg visits (sessions up to window end)
+      if (sessionMs >= cutoffMs && sessionMs <= anchorMs) {
         rolling[day].visits += 1;
         rolling[day].unique.add(personKey);
       }
@@ -1387,11 +1384,58 @@ function DashboardOverview() {
       nextWarnings.push(`Operations feed unavailable: ${todosResponse.error.message}`);
     }
 
+    // Enrich activity rows with attendee data from associations table so
+    // collectAttendeeKeys can resolve real attendee identities (email/name)
+    // instead of falling back to a single activity-id placeholder.
+    const activityRows = activitiesResponse.data || [];
+    const activityIds = activityRows
+      .map((row) => Number(row?.hubspot_activity_id))
+      .filter((id) => Number.isFinite(id));
+
+    let assocRows = [];
+    if (activityIds.length > 0) {
+      // Fetch associations in chunks of 200 IDs (Supabase .in() limit)
+      for (let i = 0; i < activityIds.length; i += 200) {
+        const chunk = activityIds.slice(i, i + 200);
+        const assocResult = await supabase
+          .from('hubspot_activity_contact_associations')
+          .select('hubspot_activity_id,contact_email,contact_firstname,contact_lastname')
+          .in('activity_type', ['call', 'meeting'])
+          .in('hubspot_activity_id', chunk);
+        if (assocResult.error) {
+          nextWarnings.push(`Attendance contacts unavailable: ${assocResult.error.message}`);
+          break;
+        }
+        assocRows.push(...(assocResult.data || []));
+      }
+    }
+
+    if (assocRows.length > 0) {
+      const assocByActivity = new Map();
+      assocRows.forEach((row) => {
+        const id = String(row.hubspot_activity_id);
+        if (!assocByActivity.has(id)) assocByActivity.set(id, []);
+        assocByActivity.get(id).push({
+          email: row.contact_email || '',
+          name: [row.contact_firstname, row.contact_lastname].filter(Boolean).join(' '),
+        });
+      });
+      activityRows.forEach((row) => {
+        const id = String(row.hubspot_activity_id);
+        const contacts = assocByActivity.get(id);
+        if (contacts && contacts.length > 0) {
+          const meta = row.metadata && typeof row.metadata === 'object' ? { ...row.metadata } : {};
+          meta.attendees = contacts;
+          row.metadata = meta;
+        }
+      });
+    }
+
     setWarnings(nextWarnings);
     setRawData({
       adsRows: adsResponse.data || [],
       contacts: contactsResponse.data || [],
-      activities: activitiesResponse.data || [],
+      activities: activityRows,
       donationRows: donationsResponse.data || [],
       todoRows: todosResponse.data || [],
     });
