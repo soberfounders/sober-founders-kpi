@@ -281,7 +281,9 @@ function collectAttendeeKeys(row) {
 export function normalizeInterviewActivities(rows = []) {
   return rows
     .map((row, index) => {
-      const dateKey = toDateKey(row?.hs_timestamp || row?.created_at_hubspot);
+      // Use booking date (created_at_hubspot) so interviews count in the week
+      // they were booked, not the week the meeting is scheduled to occur.
+      const dateKey = toDateKey(row?.created_at_hubspot || row?.hs_timestamp);
       if (!dateKey) return null;
 
       const activityId = Number.isFinite(Number(row?.hubspot_activity_id))

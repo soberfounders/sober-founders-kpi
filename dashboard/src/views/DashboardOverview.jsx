@@ -184,11 +184,11 @@ const KPI_CARD_DEFINITIONS = {
     key: 'phoenixQualified',
     section: 'phoenix',
     metric: 'qualified',
-    title: 'Phoenix $250k Qualified Leads',
+    title: 'Phoenix Qualified Leads',
     format: 'count',
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'contacts',
-    note: 'Revenue >= $250k and sobriety > 1 year',
+    note: 'Revenue >= $1M and sobriety > 1 year',
     color: 'var(--color-kpi-green-dark)',
   },
   phoenixPhoenixQualified: {
@@ -210,7 +210,7 @@ const KPI_CARD_DEFINITIONS = {
     format: 'currency',
     direction: KPI_DIRECTION.LOWER_IS_BETTER,
     source: ['ads', 'contacts'],
-    note: 'Phoenix Ad Spend / Phoenix $250k Qualified Leads',
+    note: 'Phoenix Ad Spend / Phoenix Qualified Leads',
     color: 'var(--color-kpi-cyan)',
   },
   phoenixInterviews: {
@@ -893,7 +893,7 @@ function buildWindowMetrics(normalizedData, window) {
       qualified: phoenixLeads.qualified,
       phoenixQualified: phoenixLeads.phoenixQualified,
       great: phoenixLeads.great,
-      cpql: safeDivide(phoenixAds.spend, phoenixLeads.qualified),
+      cpql: safeDivide(phoenixAds.spend, phoenixLeads.phoenixQualified),
       cpgl: safeDivide(phoenixAds.spend, phoenixLeads.great),
       interviews: phoenixInterviews,
       spend: phoenixAds.spend,
@@ -914,7 +914,7 @@ function flattenMetricValues(metrics) {
     freeCpgl: metrics.free.cpgl,
     freeInterviews: metrics.free.interviews,
     phoenixLeads: metrics.phoenix.leads,
-    phoenixQualified: metrics.phoenix.qualified,
+    phoenixQualified: metrics.phoenix.phoenixQualified,
     phoenixPhoenixQualified: metrics.phoenix.phoenixQualified,
     phoenixCpql: metrics.phoenix.cpql,
     phoenixInterviews: metrics.phoenix.interviews,
@@ -1163,19 +1163,19 @@ function buildCardModel({ metricKey, snapshot }) {
 
 function buildAiNarrative(snapshot) {
   const freeQualifiedRate = safeDivide(snapshot.free.current.qualified, snapshot.free.current.meetings);
-  const phoenixQualifiedRate = safeDivide(snapshot.phoenix.current.qualified, snapshot.phoenix.current.leads);
+  const phoenixQualifiedRate = safeDivide(snapshot.phoenix.current.phoenixQualified, snapshot.phoenix.current.leads);
   const freeInterviewRate = safeDivide(snapshot.free.current.interviews, snapshot.free.current.qualified);
-  const phoenixInterviewRate = safeDivide(snapshot.phoenix.current.interviews, snapshot.phoenix.current.qualified);
+  const phoenixInterviewRate = safeDivide(snapshot.phoenix.current.interviews, snapshot.phoenix.current.phoenixQualified);
   const blendedCPQL = safeDivide(
     snapshot.free.current.spend + snapshot.phoenix.current.spend,
-    snapshot.free.current.qualified + snapshot.phoenix.current.qualified,
+    snapshot.free.current.qualified + snapshot.phoenix.current.phoenixQualified,
   );
 
   const bottlenecks = [
     { key: 'free-qualified', label: 'Free funnel lead to $250k qualified conversion', value: freeQualifiedRate },
-    { key: 'phoenix-qualified', label: 'Phoenix funnel lead to $250k qualified conversion', value: phoenixQualifiedRate },
+    { key: 'phoenix-qualified', label: 'Phoenix funnel lead to Phoenix Qualified conversion', value: phoenixQualifiedRate },
     { key: 'free-interview', label: 'Free funnel $250k qualified to interview conversion', value: freeInterviewRate },
-    { key: 'phoenix-interview', label: 'Phoenix funnel $250k qualified to interview conversion', value: phoenixInterviewRate },
+    { key: 'phoenix-interview', label: 'Phoenix funnel Phoenix Qualified to interview conversion', value: phoenixInterviewRate },
   ].filter((item) => Number.isFinite(Number(item.value)));
 
   const weakest = bottlenecks.length > 0
@@ -1192,10 +1192,10 @@ function buildAiNarrative(snapshot) {
       ),
     },
     {
-      label: 'Phoenix $250k qualified leads',
+      label: 'Phoenix Qualified leads',
       delta: calculateDisplayChange(
-        snapshot.phoenix.current.qualified,
-        snapshot.phoenix.previous.qualified,
+        snapshot.phoenix.current.phoenixQualified,
+        snapshot.phoenix.previous.phoenixQualified,
         KPI_DIRECTION.HIGHER_IS_BETTER,
       ),
     },
@@ -1203,7 +1203,7 @@ function buildAiNarrative(snapshot) {
       label: 'CPQL efficiency',
       delta: calculateDisplayChange(blendedCPQL, safeDivide(
         snapshot.free.previous.spend + snapshot.phoenix.previous.spend,
-        snapshot.free.previous.qualified + snapshot.phoenix.previous.qualified,
+        snapshot.free.previous.qualified + snapshot.phoenix.previous.phoenixQualified,
       ), KPI_DIRECTION.LOWER_IS_BETTER),
     },
     {
@@ -1219,7 +1219,7 @@ function buildAiNarrative(snapshot) {
   const improving = trendRows.filter((row) => row.delta !== null && row.delta > 0).map((row) => row.label);
   const deteriorating = trendRows.filter((row) => row.delta !== null && row.delta < 0).map((row) => row.label);
 
-  const healthLine = `$250k qualified lead volume is ${formatInt(snapshot.free.current.qualified + snapshot.phoenix.current.qualified)} with blended CPQL ${formatCurrency(blendedCPQL)} and donation volume ${formatCurrency(snapshot.donations.current.amount)}.`;
+  const healthLine = `Qualified lead volume is ${formatInt(snapshot.free.current.qualified + snapshot.phoenix.current.phoenixQualified)} with blended CPQL ${formatCurrency(blendedCPQL)} and donation volume ${formatCurrency(snapshot.donations.current.amount)}.`;
   const bottleneckLine = weakest
     ? `Primary funnel break is ${weakest.label} at ${formatPercent(weakest.value)}.`
     : 'No single bottleneck is reliable yet because one or more funnel stages have insufficient denominator data.';
