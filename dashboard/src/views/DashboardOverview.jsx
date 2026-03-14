@@ -221,15 +221,15 @@ const KPI_CARD_DEFINITIONS = {
     note: 'Phoenix Forum Interview, Learn More, and Good Fit meetings',
     color: '#0ea5e9',
   },
-  attendanceNetNewTue: {
-    key: 'attendanceNetNewTue',
+  attendanceTotalTue: {
+    key: 'attendanceTotalTue',
     section: 'attendance',
-    metric: 'netNewTue',
-    title: 'Net New Attendees (Tuesday)',
+    metric: 'totalTue',
+    title: 'Total Attendance (Tuesday)',
     format: 'count',
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'sessions',
-    note: 'First-time Tuesday attendees in selected range',
+    note: 'Total Tuesday attendees in selected range',
     color: '#0ea5e9',
   },
   attendanceAvgVisitsTue: {
@@ -243,15 +243,15 @@ const KPI_CARD_DEFINITIONS = {
     note: 'Rolling 90-day Tuesday visits / unique Tuesday attendees',
     color: '#38bdf8',
   },
-  attendanceNetNewThu: {
-    key: 'attendanceNetNewThu',
+  attendanceTotalThu: {
+    key: 'attendanceTotalThu',
     section: 'attendance',
-    metric: 'netNewThu',
-    title: 'Net New Attendees (Thursday)',
+    metric: 'totalThu',
+    title: 'Total Attendance (Thursday)',
     format: 'count',
     direction: KPI_DIRECTION.HIGHER_IS_BETTER,
     source: 'sessions',
-    note: 'First-time Thursday attendees in selected range',
+    note: 'Total Thursday attendees in selected range',
     color: '#6366f1',
   },
   attendanceAvgVisitsThu: {
@@ -302,7 +302,7 @@ const KPI_CARD_DEFINITIONS = {
 
 const FREE_CARD_KEYS = ['freeQualified', 'freeCpql', 'freeGreat', 'freeCpgl', 'freeInterviews'];
 const PHOENIX_CARD_KEYS = ['phoenixQualified', 'phoenixGreat', 'phoenixCpql', 'phoenixCpgl', 'phoenixInterviews'];
-const ATTENDANCE_CARD_KEYS = ['attendanceNetNewTue', 'attendanceAvgVisitsTue', 'attendanceNetNewThu', 'attendanceAvgVisitsThu'];
+const ATTENDANCE_CARD_KEYS = ['attendanceTotalTue', 'attendanceAvgVisitsTue', 'attendanceTotalThu', 'attendanceAvgVisitsThu'];
 const DONATION_CARD_KEYS = ['donationsCount', 'donationsAmount'];
 const OPERATIONS_CARD_KEYS = ['operationsCompletedItems'];
 
@@ -569,11 +569,12 @@ const GROUP_ATTENDANCE_TITLE_SIGNALS = [
   'mastermind',             // Thursday SF Mastermind (not containing 'intro')
 ];
 
+const MIN_GROUP_ATTENDEES = 3; // Same threshold as AttendanceDashboard
+
 function normalizeHubspotAttendanceSessions(interviewRows = []) {
   // Derives Tue/Thu attendance sessions from already-normalized activity rows.
-  // Only rows carrying a positive group-session title signal are included, so
-  // 1-on-1 interviews (Free Group, Phoenix Forum) are excluded automatically.
-  // Produces sessions in the format buildAttendanceSnapshots expects.
+  // Only rows carrying a positive group-session title signal AND at least
+  // MIN_GROUP_ATTENDEES real attendees are included, matching AttendanceDashboard.
   const sessionsByKey = new Map();
 
   interviewRows.forEach((row) => {
@@ -591,6 +592,9 @@ function normalizeHubspotAttendanceSessions(interviewRows = []) {
     const dayType = weekday === 2 ? 'Tuesday' : weekday === 4 ? 'Thursday' : null;
     if (!dayType) return;
 
+    // Only count rows with real attendee keys (skip activity-id placeholders)
+    if (row.attendeeKeys.length === 0) return;
+
     const sessionKey = `${dayType}|${dateKey}`;
     if (!sessionsByKey.has(sessionKey)) {
       sessionsByKey.set(sessionKey, {
@@ -602,15 +606,11 @@ function normalizeHubspotAttendanceSessions(interviewRows = []) {
     }
 
     const session = sessionsByKey.get(sessionKey);
-    if (row.attendeeKeys.length > 0) {
-      row.attendeeKeys.forEach((k) => session.attendees.add(k));
-    } else {
-      // No resolvable attendees — count the activity itself so the session isn't empty.
-      session.attendees.add(`activity:${row.activityId}`);
-    }
+    row.attendeeKeys.forEach((k) => session.attendees.add(k));
   });
 
   return Array.from(sessionsByKey.values())
+    .filter((s) => s.attendees.size >= MIN_GROUP_ATTENDEES)
     .map((s) => ({
       dateKey: s.dateKey,
       dayType: s.dayType,
@@ -706,15 +706,15 @@ function buildAttendanceSnapshots(sessions, currentWindow, previousWindow) {
   const ROLLING_WINDOW_DAYS = 90;
 
   const initWindowState = () => ({
-    Tuesday: { netNew: 0 },
-    Thursday: { netNew: 0 },
+    Tuesday: { total: 0, newAttendees: 0, repeat: 0 },
+    Thursday: { total: 0, newAttendees: 0, repeat: 0 },
   });
   const state = {
     current: initWindowState(),
     previous: initWindowState(),
   };
 
-  // Track first-seen across all time for net-new detection
+  // Track first-seen across all time for new vs repeat detection
   const seen = { Tuesday: new Set(), Thursday: new Set() };
 
   // Anchor rolling 90-day window to end of currentWindow so each comparison
@@ -744,8 +744,13 @@ function buildAttendanceSnapshots(sessions, currentWindow, previousWindow) {
       }
 
       const isNetNew = !seen[day].has(personKey);
-      if (bucketKey && isNetNew) {
-        state[bucketKey][day].netNew += 1;
+      if (bucketKey) {
+        state[bucketKey][day].total += 1;
+        if (isNetNew) {
+          state[bucketKey][day].newAttendees += 1;
+        } else {
+          state[bucketKey][day].repeat += 1;
+        }
       }
       if (isNetNew) seen[day].add(personKey);
     });
@@ -756,9 +761,13 @@ function buildAttendanceSnapshots(sessions, currentWindow, previousWindow) {
     rolling[day].unique.size > 0 ? rolling[day].visits / rolling[day].unique.size : 0;
 
   const toSnapshot = (bucket) => ({
-    netNewTue: bucket.Tuesday.netNew,
+    totalTue: bucket.Tuesday.total,
+    newTue: bucket.Tuesday.newAttendees,
+    repeatTue: bucket.Tuesday.repeat,
     avgVisitsTue: rollingAvg('Tuesday'),
-    netNewThu: bucket.Thursday.netNew,
+    totalThu: bucket.Thursday.total,
+    newThu: bucket.Thursday.newAttendees,
+    repeatThu: bucket.Thursday.repeat,
     avgVisitsThu: rollingAvg('Thursday'),
   });
 
@@ -827,9 +836,13 @@ function flattenMetricValues(metrics) {
     phoenixCpql: metrics.phoenix.cpql,
     phoenixCpgl: metrics.phoenix.cpgl,
     phoenixInterviews: metrics.phoenix.interviews,
-    attendanceNetNewTue: metrics.attendance.netNewTue,
+    attendanceTotalTue: metrics.attendance.totalTue,
+    attendanceNewTue: metrics.attendance.newTue,
+    attendanceRepeatTue: metrics.attendance.repeatTue,
     attendanceAvgVisitsTue: metrics.attendance.avgVisitsTue,
-    attendanceNetNewThu: metrics.attendance.netNewThu,
+    attendanceTotalThu: metrics.attendance.totalThu,
+    attendanceNewThu: metrics.attendance.newThu,
+    attendanceRepeatThu: metrics.attendance.repeatThu,
     attendanceAvgVisitsThu: metrics.attendance.avgVisitsThu,
     donationsCount: metrics.donations.count,
     donationsAmount: metrics.donations.amount,
@@ -896,6 +909,18 @@ function buildWeeklyComparisons(normalizedData, todayKey) {
   };
 }
 
+function buildAttendanceTrend(sessions) {
+  // Build sparkline-ready data: one point per session, grouped by dayType
+  const tue = [];
+  const thu = [];
+  sessions.forEach((s) => {
+    const point = { date: s.dateKey, value: s.attendees.length };
+    if (s.dayType === 'Tuesday') tue.push(point);
+    else if (s.dayType === 'Thursday') thu.push(point);
+  });
+  return { tue, thu };
+}
+
 function computeKpiSnapshot(rawData, windows, todayKey) {
   // Normalize interview activities once; reuse for both interview counting and
   // attendance session derivation so the same HubSpot data source backs both KPIs.
@@ -912,6 +937,7 @@ function computeKpiSnapshot(rawData, windows, todayKey) {
   const currentMetrics = buildWindowMetrics(normalizedData, windows.current);
   const previousMetrics = buildWindowMetrics(normalizedData, windows.previous);
   const weeklyComparisons = buildWeeklyComparisons(normalizedData, todayKey);
+  const attendanceTrend = buildAttendanceTrend(normalizedData.zoomSessions);
 
   return {
     free: {
@@ -926,6 +952,7 @@ function computeKpiSnapshot(rawData, windows, todayKey) {
       current: currentMetrics.attendance,
       previous: previousMetrics.attendance,
     },
+    attendanceTrend,
     donations: {
       current: currentMetrics.donations,
       previous: previousMetrics.donations,
@@ -1015,10 +1042,29 @@ function buildCardModel({ metricKey, snapshot }) {
   const trend = rawDelta === null ? 'neutral' : rawDelta > 0 ? 'up' : rawDelta < 0 ? 'down' : 'neutral';
   const trendValue = Number.isFinite(Number(periodPct)) ? toTrendValue(periodPct) : 'N/A';
 
+  // For Total Attendance cards, show new/repeat breakdown in the subvalue
+  // and attach sparkline chart data showing attendance over time.
+  let subvalue = definition.note;
+  let chartData = null;
+  let showChart = false;
+  if (metricKey === 'attendanceTotalTue') {
+    const nw = snapshot.metricValues.current.attendanceNewTue ?? 0;
+    const rp = snapshot.metricValues.current.attendanceRepeatTue ?? 0;
+    subvalue = `New: ${nw} · Repeat: ${rp}`;
+    chartData = snapshot.attendanceTrend?.tue || null;
+    showChart = true;
+  } else if (metricKey === 'attendanceTotalThu') {
+    const nw = snapshot.metricValues.current.attendanceNewThu ?? 0;
+    const rp = snapshot.metricValues.current.attendanceRepeatThu ?? 0;
+    subvalue = `New: ${nw} · Repeat: ${rp}`;
+    chartData = snapshot.attendanceTrend?.thu || null;
+    showChart = true;
+  }
+
   return {
     title: definition.title,
     value,
-    subvalue: definition.note,
+    subvalue,
     previousValue,
     previousLabel: 'Prior',
     previousTone,
@@ -1027,7 +1073,8 @@ function buildCardModel({ metricKey, snapshot }) {
     invertColor: definition.direction === KPI_DIRECTION.LOWER_IS_BETTER,
     color: definition.color,
     comparisonRows: [lastWeekComparison, fourWeekAverageComparison],
-    showChart: false,
+    showChart,
+    chartData,
   };
 }
 
@@ -1147,7 +1194,7 @@ function buildSectionRecommendations(snapshot, windows, aiNarrative) {
       {
         id: 'attendance-new-attendee-activation',
         title: 'Improve next-session return rate for new attendees',
-        description: `Net new is Tue ${formatInt(snapshot.attendance.current.netNewTue)} / Thu ${formatInt(snapshot.attendance.current.netNewThu)}. Add a same-day follow-up sequence for first-time attendees.`,
+        description: `New attendees: Tue ${formatInt(snapshot.attendance.current.newTue)} / Thu ${formatInt(snapshot.attendance.current.newThu)}. Total: Tue ${formatInt(snapshot.attendance.current.totalTue)} / Thu ${formatInt(snapshot.attendance.current.totalThu)}. Add a same-day follow-up sequence for first-time attendees.`,
         taskName: `Attendance: launch same-day follow-up for net-new attendees (${windows.current.label})`,
         priority: 'High Priority',
         definitionOfDone: 'Same-day follow-up is live for all new attendees and second-visit rate is tracked daily.',
@@ -1242,8 +1289,8 @@ function buildMustDoToday(snapshot, sectionRecommendations) {
     KPI_DIRECTION.LOWER_IS_BETTER,
   );
   const attendanceDelta = calculateDisplayChange(
-    snapshot.attendance.current.netNewTue + snapshot.attendance.current.netNewThu,
-    snapshot.attendance.previous.netNewTue + snapshot.attendance.previous.netNewThu,
+    snapshot.attendance.current.totalTue + snapshot.attendance.current.totalThu,
+    snapshot.attendance.previous.totalTue + snapshot.attendance.previous.totalThu,
     KPI_DIRECTION.HIGHER_IS_BETTER,
   );
   const donationsDelta = calculateDisplayChange(
