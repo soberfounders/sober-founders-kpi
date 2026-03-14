@@ -322,12 +322,13 @@ function DonationsDashboard() {
       byDonor.set(key, existing);
     });
 
-    return Array.from(byDonor.values()).map((d) => ({
-      ...d,
-      atRiskLevel: d.health_status === 'active_recurring' || d.health_status === 'lapsed_recurring'
-        ? 'none'
-        : computeAtRiskLevel(d.lastGiftAt),
-    }));
+    return Array.from(byDonor.values()).map((d) => {
+      const isRecurring = d.health_status === 'active_recurring' || d.health_status === 'lapsed_recurring';
+      const atRiskLevel = isRecurring ? 'none' : computeAtRiskLevel(d.lastGiftAt);
+      // Override the DB's 90-day at_risk — use frontend 11/12-month logic instead
+      const displayStatus = d.health_status === 'at_risk' ? 'one_time' : d.health_status;
+      return { ...d, atRiskLevel, health_status: displayStatus };
+    });
   }, [transactions, supporterProfileByEmail, donorHealth]);
 
   const displayedDonors = useMemo(() => {
