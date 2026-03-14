@@ -556,7 +556,7 @@ serve(async (req) => {
     for (let idx = 0; idx < activityIds.length; idx += assocChunkSize) {
       const chunk = activityIds.slice(idx, idx + assocChunkSize);
       const { data: assocChunkRows, error: assocError } = await supabase
-        .from("raw_hubspot_activity_contact_associations")
+        .from("hubspot_activity_contact_associations")
         .select("hubspot_activity_id,activity_type,hubspot_contact_id,contact_email")
         .in("hubspot_activity_id", chunk)
         .in("activity_type", ["call", "meeting"]);
