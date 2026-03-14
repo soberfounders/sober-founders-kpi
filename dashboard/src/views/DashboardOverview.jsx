@@ -589,74 +589,120 @@ const _phoenixNameMatcher = createMeetingNameMatcher(PHOENIX_FORUM_MEETING_NAME_
 const _phoenixUrlMatcher = createTokenMatcher(PHOENIX_INTERVIEW_MATCH_TOKENS);
 const matchesPhoenixInterview = (row) => _phoenixNameMatcher(row) || _phoenixUrlMatcher(row);
 
-// Positive title signals that identify Tue/Thu GROUP sessions (not 1-on-1 interviews).
-// Mirrors the detection logic in AttendanceDashboard.inferGroupTypeFromTitle so both
-// modules use the same HubSpot data source for attendance counting.
-const GROUP_ATTENDANCE_TITLE_SIGNALS = [
-  'tactic tuesday',         // Tuesday group call
-  'big book',               // Thursday "Entrepreneur's Big Book" session
-  'all are welcome',        // Thursday session variant
-  'mastermind',             // Thursday SF Mastermind (not containing 'intro')
-];
+// Session classification constants — mirrors AttendanceDashboard thresholds.
+const MIN_GROUP_ATTENDEES = 3;
+const GROUP_CALL_MIN_ATTENDEE_SIGNAL = 5;
+const GROUP_CALL_ET_MINUTES = { Tuesday: 720, Thursday: 660 }; // 12 pm Tue, 11 am Thu
+const GROUP_CALL_TIME_TOLERANCE = 120; // ±2 hours primary window
 
-const MIN_GROUP_ATTENDEES = 3; // Same threshold as AttendanceDashboard
+function inferTitleSignal(textBlob, scheduledDayType) {
+  // Mirrors AttendanceDashboard.inferGroupTypeFromTitle exactly.
+  const likelyOneToOne = (
+    textBlob.includes('intro meeting')
+    || textBlob.includes('meeting with')
+    || textBlob.includes('sober founder interview')
+    || textBlob === 'lunch'
+    || textBlob.startsWith('canceled:')
+    || textBlob.startsWith('not canceled:')
+  );
+  if (textBlob.includes('tactic tuesday')) {
+    return { type: 'Tuesday', strongSignal: true, likelyOneToOne: false };
+  }
+  if (textBlob.includes('all are welcome') || textBlob.includes("entrepreneur's big book") || textBlob.includes('big book')) {
+    return { type: 'Thursday', strongSignal: true, likelyOneToOne: false };
+  }
+  if (textBlob.includes('mastermind') && !textBlob.includes('intro')) {
+    return { type: scheduledDayType || 'Thursday', strongSignal: true, likelyOneToOne: false };
+  }
+  return { type: null, strongSignal: false, likelyOneToOne };
+}
 
 function normalizeHubspotAttendanceSessions(activities = [], associations = []) {
-  // Builds Tue/Thu attendance sessions directly from raw HubSpot activities
-  // and their contact associations. Uses ONE key per contact (email preferred,
-  // name fallback) to match AttendanceDashboard's counting and avoid the
-  // double-counting that collectAttendeeKeys causes.
+  // Builds Tue/Thu attendance sessions from raw HubSpot activities + contact
+  // associations.  Classification mirrors AttendanceDashboard: title signals,
+  // ET time-window, and attendee-count signals are all used so that the
+  // Dashboard Section 3 numbers match the Attendance module exactly.
 
-  // Build a lookup: activityId → Set of unique attendee keys
+  // 1. Build lookup: activityId → Set of unique attendee keys
   const assocByActivity = new Map();
   associations.forEach((row) => {
     const id = String(row.hubspot_activity_id);
     const email = (row.contact_email || '').trim().toLowerCase();
     const name = [row.contact_firstname, row.contact_lastname].filter(Boolean).join(' ').trim().toLowerCase();
-    // One key per contact: prefer email, fall back to name
     const key = email && email.includes('@') ? `email:${email}` : name ? `name:${name}` : null;
     if (!key) return;
     if (!assocByActivity.has(id)) assocByActivity.set(id, new Set());
     assocByActivity.get(id).add(key);
   });
 
-  const sessionsByKey = new Map();
+  // 2. ET-aware formatters (created once, reused per activity)
   const etWeekdayFmt = new Intl.DateTimeFormat('en-US', { timeZone: ET_TIMEZONE, weekday: 'short' });
+  const etTimeFmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: ET_TIMEZONE, hour12: false, hour: '2-digit', minute: '2-digit',
+  });
+
+  const sessionsByKey = new Map();
 
   activities.forEach((row) => {
-    const dateKey = toDateKey(row?.hs_timestamp || row?.created_at_hubspot);
-    if (!dateKey) return;
+    // Use the RAW timestamp for ET classification (not a truncated date key,
+    // which creates midnight-UTC and shifts backward when converted to ET).
+    const rawTs = row?.hs_timestamp || row?.created_at_hubspot;
+    if (!rawTs) return;
+    const ts = new Date(rawTs);
+    if (Number.isNaN(ts.getTime())) return;
 
-    // Build text blob for title signal matching
+    // ET weekday from the actual timestamp
+    const etWeekday = etWeekdayFmt.format(ts);
+    const scheduledDayType = etWeekday === 'Tue' ? 'Tuesday' : etWeekday === 'Thu' ? 'Thursday' : null;
+
+    // Title signal (same keywords as AttendanceDashboard.inferGroupTypeFromTitle)
     const metadata = row?.metadata && typeof row.metadata === 'object' ? row.metadata : {};
     const textBlob = [
       row?.title, row?.body_preview,
       metadata.meeting_name, metadata.meetingName, metadata.subject, metadata.title,
       JSON.stringify(metadata),
     ].map((v) => String(v || '').toLowerCase()).join(' ');
+    const title = inferTitleSignal(textBlob, scheduledDayType);
 
-    const isGroupSession = GROUP_ATTENDANCE_TITLE_SIGNALS.some(
-      (signal) => textBlob.includes(signal) && !(signal === 'mastermind' && textBlob.includes('intro')),
-    );
-    if (!isGroupSession) return;
-
-    const date = toUtcDate(dateKey);
-    const etWeekday = etWeekdayFmt.format(date);
-    const dayType = etWeekday === 'Tue' ? 'Tuesday' : etWeekday === 'Thu' ? 'Thursday' : null;
+    const dayType = title.type || scheduledDayType;
     if (!dayType) return;
 
-    // Get attendees from associations (not from collectAttendeeKeys)
+    // Attendee count for this activity
     const activityId = String(row.hubspot_activity_id);
     const contactKeys = assocByActivity.get(activityId);
+    const attendeeCount = contactKeys ? contactKeys.size : 0;
+
+    // ET time-window check
+    const timeParts = etTimeFmt.formatToParts(ts);
+    const hour = Number(timeParts.find((p) => p.type === 'hour')?.value);
+    const minute = Number(timeParts.find((p) => p.type === 'minute')?.value);
+    const minuteOfDay = Number.isFinite(hour) && Number.isFinite(minute) ? hour * 60 + minute : NaN;
+    const expectedMinute = GROUP_CALL_ET_MINUTES[dayType];
+    const inPrimaryWindow = Number.isFinite(minuteOfDay) && Number.isFinite(expectedMinute)
+      && Math.abs(minuteOfDay - expectedMinute) <= GROUP_CALL_TIME_TOLERANCE;
+
+    const hasAttendanceSignal = attendeeCount >= GROUP_CALL_MIN_ATTENDEE_SIGNAL;
+    const isCallActivity = String(row?.activity_type || '').toLowerCase() === 'call';
+
+    // Exclude likely 1-on-1 meetings unless strong counter-evidence
+    if (title.likelyOneToOne && !title.strongSignal && !hasAttendanceSignal && !isCallActivity) return;
+
+    // Include if any signal fires (mirrors AttendanceDashboard.getSessionCandidateSignals)
+    const include = title.strongSignal || hasAttendanceSignal || inPrimaryWindow
+      || (isCallActivity && scheduledDayType === dayType);
+    if (!include) return;
+
     if (!contactKeys || contactKeys.size === 0) return;
 
+    // UTC date key for grouping (same as AttendanceDashboard's dateLabel)
+    const dateKey = ts.toISOString().slice(0, 10);
     const sessionKey = `${dayType}|${dateKey}`;
     if (!sessionsByKey.has(sessionKey)) {
       sessionsByKey.set(sessionKey, {
         dateKey,
         dayType,
         attendees: new Set(),
-        startTs: Date.parse(`${dateKey}T00:00:00.000Z`),
+        startTs: ts.getTime(),
       });
     }
 
