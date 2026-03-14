@@ -918,7 +918,11 @@ For every non-trivial task:
 
 1. Task Understanding → 2. Decomposition → 3. Agent Assignment → 4. Independent
    Analysis → 5. Cross-Check → 6. Solution → 7. QA Protocol (above) → 8.
-   Verification Spec → 9. Final Synthesis
+   Verification Spec → 9. Final Synthesis → **10. Commit & Push to `main`**
+
+**Step 10 is mandatory.** After self-QA passes (and the Sonnet QA agent confirms),
+commit the changes and `git push origin master:main`. Work is not done until it is
+live on Vercel. Do not ask for permission — just push.
 
 ### Output Sections
 
@@ -939,7 +943,12 @@ CROSS-CHECK · PROPOSED SOLUTION · VERIFICATION · FINAL SYNTHESIS · NEXT ACTI
 
 ## Git Hygiene
 
-- **Always push to `main`.** Do not push to `master` or any other branch.
+- **Every completed task must end with a push to `main`.** No exceptions. Work
+  that passes QA but is not pushed is not done — the user expects changes to be
+  live on Vercel immediately after you finish.
+- Push command: `git push origin master:main` (local branch is `master`, remote
+  deploy branch is `main`).
+- Do not push to `master` remote or any feature branch — always target `main`.
 - Conventional commits: `fix(dashboard):`, `feat(dashboard):`, `chore:`
 - One logical change per commit
 - `git status --short` after finishing: no unexpected modified files under
