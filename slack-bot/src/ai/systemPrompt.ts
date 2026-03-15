@@ -55,21 +55,51 @@ MANAGER REPORT SECTIONS — use with get_manager_report(section="..."):
 `.trim();
 
 const TOOL_GUIDANCE = `
-TOOL USAGE RULES — ALWAYS call at least one tool before answering any data question:
-- "How are leads doing?" → get_manager_report(section="leads") then get_metric_trend(metric="leads")
-- "What's our attendance?" → get_kpi_snapshot(metric="attendance") or get_metric_trend(metric="attendance")
-- "How are donations?" → get_manager_report(section="donations")
-- "What's the org health / overview?" → get_kpi_snapshot(metric="org_health")
-- "Trend / compare to last week?" → get_metric_trend(metric="...", compare_to="previous_period")
-- "Any data issues?" → get_data_quality_warnings()
-- "Open tasks?" → list_open_tasks()
-- "Post a summary" → post_summary(summary_type="weekly_executive", channel="...")
-- Specific metric point-in-time → get_kpi_snapshot(metric="...", date_range={from, to})
-- If unsure what metrics exist → get_kpi_snapshot(metric="list_metrics")
+TOOL USAGE RULES:
 
-DEFAULT DATE RANGE: last 7 days when the user doesn't specify a window.
-NEVER claim you lack data access without calling a tool first.
-If a tool returns null/empty, say the data is unavailable for that window and suggest a broader date range.
+ALWAYS call at least one tool before answering any data question. Never claim you lack access without trying.
+
+MULTI-TOOL PATTERN — broad questions require multiple tool calls in parallel:
+- "marketing" / "leads" / "pipeline" → call ALL THREE:
+    get_manager_report(section="leads")
+    get_metric_trend(metric="leads", compare_to="previous_period")
+    get_metric_trend(metric="qualified_leads", compare_to="previous_period")
+- "overview" / "how are we doing" / "org health" → call ALL THREE:
+    get_kpi_snapshot(metric="org_health")
+    get_manager_report(section="executive")
+    get_metric_trend(metric="leads", compare_to="previous_period")
+- "attendance" → call BOTH:
+    get_metric_trend(metric="attendance", compare_to="previous_period")
+    get_manager_report(section="attendance")
+- "donations" / "fundraising" → call BOTH:
+    get_metric_trend(metric="donations", compare_to="previous_period")
+    get_manager_report(section="donations")
+
+FALLBACK RULE — if get_manager_report returns confidence < 0.6 or empty bullets, ALWAYS follow up
+with get_metric_trend for the same topic. The trend tool queries raw transaction/contact data
+directly and will succeed even when the manager report view has no cached rows.
+
+DATE RANGE RULES:
+- NEVER pass a single-day date_range (e.g. from=today, to=today) — HubSpot data syncs daily
+  and today's data is rarely complete. Single-day queries almost always return empty/null.
+- "today's X" or "today" → omit date_range entirely to use the 7-day default, then note
+  in your answer that data reflects the past 7 days since same-day sync is not guaranteed.
+- Only pass explicit date_range when the user specifies a specific historical range like
+  "last month", "March", "Q1", etc.
+- Default window for all queries: last 7 days (omit date_range argument to use this default).
+
+QUICK REFERENCE — single-question tool mapping:
+- "marketing" / "leads" / "pipeline" → see multi-tool pattern above
+- "qualified leads" / "phoenix pipeline" → get_metric_trend(metric="qualified_leads") + get_metric_trend(metric="leads")
+- "donations" / "fundraising" → get_metric_trend(metric="donations") + get_manager_report(section="donations")
+- "attendance" → get_metric_trend(metric="attendance") + get_manager_report(section="attendance")
+- "email" / "campaigns" → get_metric_trend(metric="email_open_rate") + get_manager_report(section="email")
+- "SEO" / "website" / "traffic" → get_metric_trend(metric="seo") + get_manager_report(section="seo")
+- "operations" / "sync" / "data issues" → get_manager_report(section="operations") + get_data_quality_warnings()
+- "tasks" / "action items" → list_open_tasks()
+- "everything" / "summary" / "overview" → get_kpi_snapshot(metric="org_health") + get_manager_report(section="executive")
+- Post a summary → post_summary(summary_type="weekly_executive", channel="...")
+- Discover available metrics → get_kpi_snapshot(metric="list_metrics")
 `.trim();
 
 export const buildSystemPrompt = (
