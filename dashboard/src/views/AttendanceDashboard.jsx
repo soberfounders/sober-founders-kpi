@@ -3668,7 +3668,7 @@ const AttendanceDashboard = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <div>
             <h3 style={{ fontSize: '18px' }}>Show-Up Drilldown</h3>
-            <p style={{ marginTop: '4px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
+            <p style={{ marginTop: '4px', color: '#94a3b8', fontSize: '13px' }}>
               Click any Tuesday/Thursday bar to inspect attendees, visit counts including that meeting, and possible duplicates.
             </p>
           </div>
@@ -3706,7 +3706,7 @@ const AttendanceDashboard = () => {
         )}
 
         {!selectedSessionDetail && (
-          <p style={{ marginTop: '12px', color: 'var(--color-text-secondary)' }}>
+          <p style={{ marginTop: '12px', color: '#94a3b8' }}>
             No session selected yet. Click a bar in Tuesday or Thursday show-ups.
           </p>
         )}
@@ -3731,7 +3731,7 @@ const AttendanceDashboard = () => {
 
             <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
               <div style={{ backgroundColor: 'var(--color-surface-contrast-alt)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px 12px' }}>
-                <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Total Show-Ups</p>
+                <p style={{ fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase' }}>Total Show-Ups</p>
                 <p style={{ marginTop: '4px', fontSize: '22px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{selectedSessionDetail.session.derivedCount}</p>
               </div>
               <div style={{ backgroundColor: 'var(--color-success-bg)', border: '1px solid var(--color-success)', borderRadius: '10px', padding: '10px 12px' }}>
@@ -3739,7 +3739,7 @@ const AttendanceDashboard = () => {
                 <p style={{ marginTop: '4px', fontSize: '22px', fontWeight: 700, color: 'var(--color-success)' }}>{selectedSessionDetail.session.newCount}</p>
               </div>
               <div style={{ backgroundColor: 'var(--color-surface-contrast-alt)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px 12px' }}>
-                <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Returning</p>
+                <p style={{ fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase' }}>Returning</p>
                 <p style={{ marginTop: '4px', fontSize: '22px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{selectedSessionDetail.session.repeatCount}</p>
               </div>
               <div style={{ backgroundColor: 'rgba(251, 191, 36, 0.08)', border: '1px solid rgba(251, 191, 36, 0.3)', borderRadius: '10px', padding: '10px 12px' }}>
@@ -3752,10 +3752,10 @@ const AttendanceDashboard = () => {
                 {(selectedSessionDetail.donationSummary?.totalAmount > 0) && (
                   <div style={{ marginTop: '4px', display: 'flex', gap: '8px', fontSize: '11px' }}>
                     {selectedSessionDetail.donationSummary.oneTimeAmount > 0 && (
-                      <span style={{ color: 'var(--color-text-secondary)' }}>One-Time: ${selectedSessionDetail.donationSummary.oneTimeAmount.toLocaleString()}</span>
+                      <span style={{ color: '#94a3b8' }}>One-Time: ${selectedSessionDetail.donationSummary.oneTimeAmount.toLocaleString()}</span>
                     )}
                     {selectedSessionDetail.donationSummary.recurringAmount > 0 && (
-                      <span style={{ color: 'var(--color-text-secondary)' }}>Monthly: ${selectedSessionDetail.donationSummary.recurringAmount.toLocaleString()}</span>
+                      <span style={{ color: '#94a3b8' }}>Monthly: ${selectedSessionDetail.donationSummary.recurringAmount.toLocaleString()}</span>
                     )}
                   </div>
                 )}
@@ -3804,17 +3804,17 @@ const AttendanceDashboard = () => {
 
                     <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
                       <div>
-                        <p style={{ fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Revenue</p>
+                        <p style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase' }}>Revenue</p>
                         <p style={{ fontSize: '12px', color: 'var(--color-text-primary)', fontWeight: 700 }}>{formatCurrencyMaybe(row.revenue)}</p>
                       </div>
                       <div>
-                        <p style={{ fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Meeting Visits</p>
+                        <p style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase' }}>Meeting Visits</p>
                         <p style={{ fontSize: '12px', color: 'var(--color-text-primary)', fontWeight: 700 }}>{row.groupVisitsIncludingThisSession} (total {row.totalVisitsIncludingThisSession})</p>
                       </div>
                       <div style={{ gridColumn: '1 / -1' }}>
-                        <p style={{ fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>HubSpot</p>
+                        <p style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase' }}>HubSpot</p>
                         <p style={{ fontSize: '12px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{row.hubspotName || 'Not Found'}</p>
-                        <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>{row.hubspotEmail || 'Not Found'}</p>
+                        <p style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>{row.hubspotEmail || 'Not Found'}</p>
                         {row.hubspotUrl ? (
                           <a href={row.hubspotUrl} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: 'var(--color-info)', fontWeight: 700, textDecoration: 'underline' }}>
                             Open in HubSpot
@@ -3854,7 +3854,7 @@ const AttendanceDashboard = () => {
                   </div>
                 ))}
                 {selectedSessionDetail.attendeeRows.length === 0 && (
-                  <div style={{ padding: '14px', textAlign: 'center', fontSize: '13px', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)', borderRadius: '10px', backgroundColor: 'var(--color-surface-contrast-alt)' }}>
+                  <div style={{ padding: '14px', textAlign: 'center', fontSize: '13px', color: '#94a3b8', border: '1px solid var(--color-border)', borderRadius: '10px', backgroundColor: 'var(--color-surface-contrast-alt)' }}>
                     No attendees found for this session.
                   </div>
                 )}
@@ -3864,13 +3864,13 @@ const AttendanceDashboard = () => {
                 <table style={{ width: '100%', minWidth: '1320px', borderCollapse: 'collapse', color: 'var(--color-text-primary)' }}>
                   <thead>
                     <tr style={{ backgroundColor: 'var(--color-surface-contrast-header)', borderBottom: '1px solid var(--color-border)' }}>
-                      <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Display Name</th>
-                      <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Revenue</th>
-                      <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Sobriety Date</th>
-                      <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Times Visited Meeting</th>
-                      <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Total Visits</th>
-                      <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Email Address</th>
-                      <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>HubSpot Contact</th>
+                      <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase' }}>Display Name</th>
+                      <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase' }}>Revenue</th>
+                      <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase' }}>Sobriety Date</th>
+                      <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase' }}>Times Visited Meeting</th>
+                      <th style={{ textAlign: 'right', padding: '10px', fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase' }}>Total Visits</th>
+                      <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase' }}>Email Address</th>
+                      <th style={{ textAlign: 'left', padding: '10px', fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase' }}>HubSpot Contact</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3920,7 +3920,7 @@ const AttendanceDashboard = () => {
                               )}
                             </div>
                             {normalizeName(row.displayName || '') !== normalizeName(row.name || '') && (
-                              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Attendance row name: {row.name}</span>
+                              <span style={{ fontSize: '11px', color: '#94a3b8' }}>Attendance row name: {row.name}</span>
                             )}
                             {!row.hubspotMatched && row.missingIdentityReason ? (
                               <span style={{ fontSize: '10px', color: 'var(--color-warning)' }}>{row.missingIdentityReason}</span>
@@ -3955,7 +3955,7 @@ const AttendanceDashboard = () => {
                             )}
                           </div>
                         </td>
-                        <td style={{ padding: '10px', fontSize: '12px', textAlign: 'right', color: Number.isFinite(row.revenue) ? 'var(--color-text-primary)' : 'var(--color-text-secondary)', fontWeight: Number.isFinite(row.revenue) ? 700 : 500 }}>
+                        <td style={{ padding: '10px', fontSize: '12px', textAlign: 'right', color: Number.isFinite(row.revenue) ? 'var(--color-text-primary)' : '#94a3b8', fontWeight: Number.isFinite(row.revenue) ? 700 : 500 }}>
                           {formatCurrencyMaybe(row.revenue)}
                         </td>
                         <td style={{ padding: '10px' }}>
@@ -3969,7 +3969,7 @@ const AttendanceDashboard = () => {
                               ) : null}
                             </div>
                           ) : (
-                            <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Not Found</span>
+                            <span style={{ fontSize: '12px', color: '#94a3b8' }}>Not Found</span>
                           )}
                         </td>
                         <td style={{ padding: '10px', fontSize: '13px', color: 'var(--color-text-primary)', textAlign: 'right', fontWeight: 700 }}>
@@ -3978,7 +3978,7 @@ const AttendanceDashboard = () => {
                         <td style={{ padding: '10px', fontSize: '13px', color: 'var(--color-text-primary)', textAlign: 'right', fontWeight: 700 }}>
                           {row.totalVisitsIncludingThisSession}
                         </td>
-                        <td style={{ padding: '10px', fontSize: '12px', color: row.hubspotEmail !== 'Not Found' ? 'var(--color-text-primary)' : 'var(--color-text-secondary)' }}>
+                        <td style={{ padding: '10px', fontSize: '12px', color: row.hubspotEmail !== 'Not Found' ? 'var(--color-text-primary)' : '#94a3b8' }}>
                           {row.hubspotEmail || 'Not Found'}
                         </td>
                         <td style={{ padding: '10px' }}>
@@ -4010,16 +4010,16 @@ const AttendanceDashboard = () => {
                                 Open in HubSpot
                               </a>
                             ) : (
-                              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>No HubSpot link</span>
+                              <span style={{ fontSize: '11px', color: '#94a3b8' }}>No HubSpot link</span>
                             )}
                             {row.hubspotContactId ? (
-                              <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>ID: {row.hubspotContactId}</span>
+                              <span style={{ fontSize: '10px', color: '#94a3b8' }}>ID: {row.hubspotContactId}</span>
                             ) : null}
-                            <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>
+                            <span style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase' }}>
                               {row.identityMappingSource === 'hubspot_call_activity' ? 'HubSpot Session' : (row.identityMappingSource || 'none')}
                             </span>
                             {row.identityMappingSource !== 'hubspot_call_activity' && (
-                              <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>
+                              <span style={{ fontSize: '10px', color: '#94a3b8' }}>
                                 Confidence: {row.identityMappingConfidence || 'Low'}
                               </span>
                             )}
@@ -4029,7 +4029,7 @@ const AttendanceDashboard = () => {
                     ))}
                     {selectedSessionDetail.attendeeRows.length === 0 && (
                       <tr>
-                        <td colSpan={7} style={{ padding: '14px', textAlign: 'center', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+                        <td colSpan={7} style={{ padding: '14px', textAlign: 'center', fontSize: '13px', color: '#94a3b8' }}>
                           No attendees found for this session.
                         </td>
                       </tr>
