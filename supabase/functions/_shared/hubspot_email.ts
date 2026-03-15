@@ -148,6 +148,61 @@ export async function sendHubSpotEmail(
   return { ok: true, emailId };
 }
 
+/* ------------------------------------------------------------------ */
+/*  Fetch inbound email activities for a contact                      */
+/* ------------------------------------------------------------------ */
+
+export interface InboundEmail {
+  id: string;
+  subject: string;
+  body: string;       // plain-text body
+  timestamp: string;  // ISO timestamp
+}
+
+/**
+ * Returns inbound emails (replies) received from a contact after
+ * the given timestamp. Requires the sender inbox to be connected
+ * to HubSpot so replies are tracked automatically.
+ *
+ * Uses the v1 Engagements API which supports filtering by contact.
+ */
+export async function getContactEmailActivities(
+  token: string,
+  contactId: string | number,
+  afterTimestamp: string, // ISO timestamp — only returns emails after this
+): Promise<InboundEmail[]> {
+  // Fetch all email engagements associated with this contact
+  const resp = await fetchWithRetry(
+    token,
+    `https://api.hubapi.com/engagements/v1/engagements/associated/contact/${contactId}/paged?limit=50`,
+    { method: "GET" },
+  );
+
+  if (!resp.ok) return [];
+
+  const json = await resp.json();
+  const engagements: any[] = json?.results || [];
+  const afterMs = new Date(afterTimestamp).getTime();
+
+  return engagements
+    .filter((e: any) => {
+      const type = e?.engagement?.type;
+      const direction = e?.metadata?.direction || e?.engagement?.metadata?.direction;
+      const timestamp = e?.engagement?.createdAt || e?.engagement?.timestamp || 0;
+      return (
+        type === "EMAIL" &&
+        direction === "INCOMING_EMAIL" &&
+        timestamp > afterMs
+      );
+    })
+    .map((e: any) => ({
+      id: String(e.engagement?.id || ""),
+      subject: e.metadata?.subject || "",
+      body: (e.metadata?.text || e.metadata?.html || "").replace(/<[^>]*>/g, "").trim(),
+      timestamp: new Date(e.engagement?.createdAt || e.engagement?.timestamp || 0).toISOString(),
+    }));
+}
+
 /**
  * Look up a HubSpot contact ID by email address.
  * Returns null if not found.

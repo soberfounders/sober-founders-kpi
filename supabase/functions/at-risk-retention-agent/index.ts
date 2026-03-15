@@ -196,16 +196,49 @@ serve(async (req: Request) => {
             if (body?.dry_run === false) dryRun = false;
         } catch { /* default dry_run:true */ }
 
-        // 1. Get at-risk candidates not nudged in last 14 days
-        const { data: candidates, error } = await supabase
+        // 1a. At-risk regulars (attended 2+ times recently, gone quiet)
+        const { data: atRiskData, error: atRiskError } = await supabase
             .from("vw_at_risk_attendees")
             .select("*")
             .is("last_nudge_sent", null)
             .order("days_since_last", { ascending: false });
 
-        if (error) throw error;
+        if (atRiskError) throw atRiskError;
 
-        const realCandidates = (candidates || []).filter(
+        // 1b. No-show follow-ups (got no-show email ≤8 days ago, no negative reply)
+        //     These are people who missed once and haven't responded — day-before nudge
+        //     to bring them back to the next meeting.
+        const { data: followUpData, error: followUpError } = await supabase
+            .from("vw_noshow_followup_candidates")
+            .select("*")
+            .is("last_nudge_sent", null);
+
+        if (followUpError) throw followUpError;
+
+        // Merge both sets, dedup by email (at-risk takes priority if both)
+        const atRiskEmails = new Set(
+            (atRiskData || []).map((c: any) => c.email?.toLowerCase())
+        );
+        const followUpCandidates = (followUpData || []).filter(
+            (c: any) => c.email && !atRiskEmails.has(c.email.toLowerCase())
+        ).map((c: any) => ({
+            // Normalize to at-risk shape so the nudge function works uniformly
+            email: c.email,
+            firstname: c.firstname,
+            lastname: c.lastname,
+            meetings_60d: null,
+            days_since_last: c.days_since_missed,
+            last_attended: c.last_missed_meeting,
+            last_nudge_sent: null,
+            _source: "noshow_followup",
+        }));
+
+        const allCandidates = [
+            ...(atRiskData || []).map((c: any) => ({ ...c, _source: "at_risk" })),
+            ...followUpCandidates,
+        ];
+
+        const realCandidates = allCandidates.filter(
             (c: any) => c.email && !c.email.includes("admin@")
         );
 
