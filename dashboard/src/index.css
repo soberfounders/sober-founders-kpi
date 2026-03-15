@@ -245,3 +245,49 @@ button:active {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-dark-green);
 }
+
+/* ── Mobile optimizations ── */
+@media (max-width: 767px) {
+  /* Prevent horizontal overflow */
+  body {
+    overflow-x: hidden;
+  }
+
+  /* Better touch targets */
+  button {
+    min-height: 36px;
+  }
+
+  /* Recharts: prevent overflow and improve label visibility */
+  .recharts-wrapper {
+    font-size: 11px;
+  }
+
+  .recharts-legend-wrapper {
+    font-size: 11px !important;
+  }
+
+  /* Smooth horizontal scroll for filter rows */
+  .filter-scroll {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .filter-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Improve tap targets for interactive elements */
+  select, input[type="date"] {
+    min-height: 40px;
+    font-size: 16px; /* Prevent iOS zoom on focus */
+  }
+}
+
+@media (max-width: 1023px) {
+  /* Glass panel hover effects can be distracting on touch */
+  .glass-panel:hover {
+    background: var(--color-card);
+    border-color: var(--color-border);
+    box-shadow: var(--glass-shadow);
+  }
+}

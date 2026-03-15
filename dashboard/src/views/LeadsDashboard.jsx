@@ -206,8 +206,8 @@ const fmt = {
 };
 
 // ─── Shared styles ────────────────────────────────────────────────────────────
-const card = { backgroundColor: 'var(--color-card)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: '1px solid var(--color-border)', borderRadius: '16px', padding: '20px' };
-const subCard = { backgroundColor: 'var(--color-surface-elevated)', borderRadius: '10px', padding: '12px' };
+const card = { backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '20px', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.08)' };
+const subCard = { backgroundColor: '#f8fafc', borderRadius: '10px', padding: '12px' };
 
 const HEAR_ABOUT_CATEGORIES = [
   { key: 'meta', label: 'Meta (Facebook/Instagram)', color: '#2563eb' },
@@ -845,7 +845,7 @@ function AIInsightsPanel({ supabaseUrl, supabaseKey, groupedData }) {
       {/* Recommended Actions */}
       {aiData && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '12px' }}>
             <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '12px', padding: '12px' }}>
               <p style={{ margin: '0 0 8px', fontWeight: 700, fontSize: '12px', color: '#1e40af' }}>✅ AI Can Do Autonomously</p>
               {(aiData.autonomous_actions || []).map((a, i) => <p key={i} style={{ margin: '3px 0', fontSize: '11px', color: '#1e40af' }}>• {a}</p>)}
@@ -984,11 +984,29 @@ function DateRangeFilter({ rangeType, setRangeType, customStart, setCustomStart,
 }
 
 // ─── Main component ────────────────────────────────────────────────────────────
+const LEADS_MOBILE_BREAKPOINT = 900;
+
 export default function LeadsDashboard() {
   // Legacy analytics (powers existing charts below the new groups)
   const [analytics, setAnalytics] = useState(null);
   const [loadErrors, setLoadErrors] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isMobile, setIsMobile] = useState(
+    () => (typeof window !== 'undefined' ? window.innerWidth < LEADS_MOBILE_BREAKPOINT : false),
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const mq = window.matchMedia(`(max-width: ${LEADS_MOBILE_BREAKPOINT - 1}px)`);
+    const handler = (e) => setIsMobile(e.matches);
+    handler(mq);
+    if (typeof mq.addEventListener === 'function') {
+      mq.addEventListener('change', handler);
+      return () => mq.removeEventListener('change', handler);
+    }
+    mq.addListener(handler);
+    return () => mq.removeListener(handler);
+  }, []);
 
   // Raw rows for group analytics
   const [rawAds, setRawAds] = useState([]);
@@ -4505,7 +4523,7 @@ export default function LeadsDashboard() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(360px,1fr))', gap: '14px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit,minmax(360px,1fr))', gap: '14px' }}>
         <div style={card}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <div>
@@ -4647,7 +4665,7 @@ export default function LeadsDashboard() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(360px,1fr))', gap: '14px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit,minmax(360px,1fr))', gap: '14px' }}>
         <div style={card}>
           <p style={{ margin: 0, fontSize: '11px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
             What Needs To Happen

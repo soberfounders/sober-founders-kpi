@@ -3261,20 +3261,22 @@ const AttendanceDashboard = () => {
       <h4 style={{ fontSize: '15px', fontWeight: 700, color: accentColor, marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{title}</h4>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
         {data.map((bucket) => (
-          <div key={bucket.label} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ width: '110px', fontSize: '13px', fontWeight: 600, color: '#334155' }}>{bucket.label}</div>
-            <div style={{ flex: 1, height: '24px', backgroundColor: '#f1f5f9', borderRadius: '6px', overflow: 'hidden', position: 'relative' }}>
-              <div style={{
-                width: `${Math.max(bucket.pct * 100, 1)}%`,
-                height: '100%',
-                backgroundColor: bucket.color,
-                borderRadius: '6px',
-                transition: 'width 0.3s ease',
-                opacity: 0.85,
-              }} />
-            </div>
-            <div style={{ width: '90px', textAlign: 'right', fontSize: '13px', fontWeight: 600, color: '#475569' }}>
-              {bucket.count} <span style={{ color: '#94a3b8', fontWeight: 500 }}>({(bucket.pct * 100).toFixed(0)}%)</span>
+          <div key={bucket.label} style={{ display: isMobile ? 'grid' : 'flex', gridTemplateColumns: isMobile ? '1fr auto' : undefined, alignItems: 'center', gap: isMobile ? '4px' : '10px' }}>
+            <div style={{ width: isMobile ? 'auto' : '110px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)' }}>{bucket.label}</div>
+            {!isMobile && (
+              <div style={{ flex: 1, height: '24px', backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: '6px', overflow: 'hidden', position: 'relative' }}>
+                <div style={{
+                  width: `${Math.max(bucket.pct * 100, 1)}%`,
+                  height: '100%',
+                  backgroundColor: bucket.color,
+                  borderRadius: '6px',
+                  transition: 'width 0.3s ease',
+                  opacity: 0.85,
+                }} />
+              </div>
+            )}
+            <div style={{ width: isMobile ? 'auto' : '90px', textAlign: 'right', fontSize: '13px', fontWeight: 600, color: '#94a3b8' }}>
+              {bucket.count} <span style={{ color: '#64748b', fontWeight: 500 }}>({(bucket.pct * 100).toFixed(0)}%)</span>
             </div>
           </div>
         ))}
@@ -3317,35 +3319,35 @@ const AttendanceDashboard = () => {
         <TrendingUp size={17} color={color} />
         <h3 style={{ fontSize: '18px' }}>{title}</h3>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(110px, 1fr))', gap: '10px', marginBottom: '12px' }}>
-        <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px' }}>
-          <p style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Current</p>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, minmax(110px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+        <div style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px' }}>
+          <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Current</p>
           <p style={{ marginTop: '4px', fontSize: '20px', fontWeight: 700, color }}>{summary ? summary.avgVisits : '-'}</p>
-          <p style={{ marginTop: '2px', fontSize: '11px', color: '#64748b' }}>{summary?.asOfMonth || 'N/A'}</p>
+          <p style={{ marginTop: '2px', fontSize: '11px', color: 'var(--color-text-muted)' }}>{summary?.asOfMonth || 'N/A'}</p>
         </div>
-        <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px' }}>
-          <p style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Vs Last Month</p>
-          <p style={{ marginTop: '4px', fontSize: '20px', fontWeight: 700, color: summary?.momChange === null || summary?.momChange === undefined ? '#475569' : (summary?.momChange >= 0 ? '#15803d' : '#b91c1c') }}>
+        <div style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px' }}>
+          <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Vs Last Month</p>
+          <p style={{ marginTop: '4px', fontSize: '20px', fontWeight: 700, color: summary?.momChange === null || summary?.momChange === undefined ? 'var(--color-text-muted)' : (summary?.momChange >= 0 ? '#4ade80' : '#f87171') }}>
             {formatChangePct(summary?.momChange)}
           </p>
-          <p style={{ marginTop: '2px', fontSize: '11px', color: '#64748b' }}>{summary?.prevMonthAvg ?? '-'} prior avg</p>
+          <p style={{ marginTop: '2px', fontSize: '11px', color: 'var(--color-text-muted)' }}>{summary?.prevMonthAvg ?? '-'} prior avg</p>
         </div>
-        <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px' }}>
-          <p style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Vs Previous Year</p>
-          <p style={{ marginTop: '4px', fontSize: '20px', fontWeight: 700, color: summary?.yoyChange === null || summary?.yoyChange === undefined ? '#475569' : (summary?.yoyChange >= 0 ? '#15803d' : '#b91c1c') }}>
+        <div style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px' }}>
+          <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Vs Previous Year</p>
+          <p style={{ marginTop: '4px', fontSize: '20px', fontWeight: 700, color: summary?.yoyChange === null || summary?.yoyChange === undefined ? 'var(--color-text-muted)' : (summary?.yoyChange >= 0 ? '#4ade80' : '#f87171') }}>
             {formatChangePct(summary?.yoyChange)}
           </p>
-          <p style={{ marginTop: '2px', fontSize: '11px', color: '#64748b' }}>{summary?.hasYoY ? `${summary?.prevYearAvg} prior avg` : 'Not available yet'}</p>
+          <p style={{ marginTop: '2px', fontSize: '11px', color: 'var(--color-text-muted)' }}>{summary?.hasYoY ? `${summary?.prevYearAvg} prior avg` : 'Not available yet'}</p>
         </div>
       </div>
-      <div style={{ height: '240px' }}>
+      <div style={{ height: isMobile ? '200px' : '240px' }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={series || []}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis dataKey="monthLabel" tick={{ fill: '#64748b', fontSize: 10 }} />
-            <YAxis domain={[0, 13]} tick={{ fill: '#64748b', fontSize: 10 }} />
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+            <XAxis dataKey="monthLabel" tick={{ fill: 'var(--color-text-muted)', fontSize: isMobile ? 9 : 10 }} interval={isMobile ? 1 : 0} />
+            <YAxis domain={[0, 13]} tick={{ fill: 'var(--color-text-muted)', fontSize: 10 }} />
             <Tooltip content={monthlyTrendTooltip} />
-            <ReferenceLine y={13} stroke="#94a3b8" strokeDasharray="6 3" label={{ value: 'Perfect (13)', position: 'right', fill: '#94a3b8', fontSize: 10 }} />
+            <ReferenceLine y={13} stroke="var(--color-text-muted)" strokeDasharray="6 3" label={{ value: 'Perfect (13)', position: 'right', fill: 'var(--color-text-muted)', fontSize: 10 }} />
             <Line type="monotone" dataKey="avgVisits" name="Avg Visits / Person" stroke={color} strokeWidth={2} dot={false} />
           </LineChart>
         </ResponsiveContainer>
@@ -3356,46 +3358,46 @@ const AttendanceDashboard = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {aliasWarning && (
-        <div style={{ ...cardStyle, borderLeft: '4px solid #f59e0b', backgroundColor: '#fffbeb' }}>
-          <p style={{ color: '#92400e', fontWeight: 700 }}>Alias Warning</p>
-          <p style={{ marginTop: '6px', color: '#92400e' }}>{aliasWarning}</p>
+        <div style={{ ...cardStyle, borderLeft: '4px solid #fbbf24', backgroundColor: 'var(--color-warning-bg)' }}>
+          <p style={{ color: '#fbbf24', fontWeight: 700 }}>Alias Warning</p>
+          <p style={{ marginTop: '6px', color: '#94a3b8' }}>{aliasWarning}</p>
         </div>
       )}
 
       {contactEnrichmentStatus === 'loading' && (
-        <div style={{ ...cardStyle, borderLeft: '4px solid #2563eb', backgroundColor: '#eff6ff' }}>
-          <p style={{ color: '#1d4ed8', fontWeight: 700 }}>Loading Contact Enrichment</p>
-          <p style={{ marginTop: '6px', color: '#1e40af' }}>
+        <div style={{ ...cardStyle, borderLeft: '4px solid #60a5fa', backgroundColor: 'var(--color-info-bg)' }}>
+          <p style={{ color: '#60a5fa', fontWeight: 700 }}>Loading Contact Enrichment</p>
+          <p style={{ marginTop: '6px', color: '#94a3b8' }}>
             Core attendance KPIs are loaded. HubSpot contact details (email/revenue/sobriety enrichment) are still hydrating.
           </p>
         </div>
       )}
 
       {identityWarning && (
-        <div style={{ ...cardStyle, borderLeft: '4px solid #f59e0b', backgroundColor: '#fffbeb' }}>
-          <p style={{ color: '#92400e', fontWeight: 700 }}>Identity Mapping Warning</p>
-          <p style={{ marginTop: '6px', color: '#92400e' }}>{identityWarning}</p>
-          <p style={{ marginTop: '6px', color: '#92400e', fontSize: '12px' }}>
+        <div style={{ ...cardStyle, borderLeft: '4px solid #fbbf24', backgroundColor: 'var(--color-warning-bg)' }}>
+          <p style={{ color: '#fbbf24', fontWeight: 700 }}>Identity Mapping Warning</p>
+          <p style={{ marginTop: '6px', color: '#94a3b8' }}>{identityWarning}</p>
+          <p style={{ marginTop: '6px', color: 'var(--color-text-muted)', fontSize: '12px' }}>
             Attendance counts remain valid. HubSpot contact/email enrichment is partial until contact caches and associations finish syncing.
           </p>
         </div>
       )}
 
       {hostAttendanceDataWarning && (
-        <div style={{ ...cardStyle, borderLeft: '4px solid #dc2626', backgroundColor: '#fef2f2' }}>
-          <p style={{ color: '#991b1b', fontWeight: 700 }}>HubSpot Attendee Marking Required</p>
-          <p style={{ marginTop: '6px', color: '#991b1b' }}>{hostAttendanceDataWarning}</p>
-          <p style={{ marginTop: '6px', color: '#991b1b', fontSize: '12px' }}>
+        <div style={{ ...cardStyle, borderLeft: '4px solid #f87171', backgroundColor: 'var(--color-danger-bg)' }}>
+          <p style={{ color: '#f87171', fontWeight: 700 }}>HubSpot Attendee Marking Required</p>
+          <p style={{ marginTop: '6px', color: '#94a3b8' }}>{hostAttendanceDataWarning}</p>
+          <p style={{ marginTop: '6px', color: 'var(--color-text-muted)', fontSize: '12px' }}>
             This is not a sync outage. Attendance cannot be reconstructed when attendees are not marked on the HubSpot call/meeting record.
           </p>
         </div>
       )}
 
       {scheduleCoverageWarning && (
-        <div style={{ ...cardStyle, borderLeft: '4px solid #f59e0b', backgroundColor: '#fffbeb' }}>
-          <p style={{ color: '#92400e', fontWeight: 700 }}>Weekly Schedule Gap Audit</p>
-          <p style={{ marginTop: '6px', color: '#92400e' }}>{scheduleCoverageWarning}</p>
-          <p style={{ marginTop: '6px', color: '#92400e', fontSize: '12px' }}>
+        <div style={{ ...cardStyle, borderLeft: '4px solid #fbbf24', backgroundColor: 'var(--color-warning-bg)' }}>
+          <p style={{ color: '#fbbf24', fontWeight: 700 }}>Weekly Schedule Gap Audit</p>
+          <p style={{ marginTop: '6px', color: '#94a3b8' }}>{scheduleCoverageWarning}</p>
+          <p style={{ marginTop: '6px', color: 'var(--color-text-muted)', fontSize: '12px' }}>
             The dashboard now anchors sessions to Tuesday 12pm ET and Thursday 11am ET windows and flags missing source weeks immediately.
           </p>
         </div>
@@ -3405,14 +3407,14 @@ const AttendanceDashboard = () => {
         <div
           style={{
             ...cardStyle,
-            borderLeft: syncNowState.status === 'success' ? '4px solid #16a34a' : '4px solid #dc2626',
-            backgroundColor: syncNowState.status === 'success' ? '#f0fdf4' : '#fef2f2',
+            borderLeft: syncNowState.status === 'success' ? '4px solid #4ade80' : '4px solid #f87171',
+            backgroundColor: syncNowState.status === 'success' ? 'var(--color-success-bg)' : 'var(--color-danger-bg)',
           }}
         >
-          <p style={{ color: syncNowState.status === 'success' ? '#166534' : '#991b1b', fontWeight: 700 }}>
+          <p style={{ color: syncNowState.status === 'success' ? '#4ade80' : '#f87171', fontWeight: 700 }}>
             {syncNowState.status === 'success' ? 'Sync Complete' : 'Sync Failed'}
           </p>
-          <p style={{ marginTop: '6px', color: syncNowState.status === 'success' ? '#166534' : '#991b1b' }}>
+          <p style={{ marginTop: '6px', color: '#94a3b8' }}>
             {syncNowState.message || (syncNowState.status === 'success' ? 'HubSpot attendance sync completed.' : 'HubSpot attendance sync failed.')}
           </p>
         </div>
@@ -3425,8 +3427,9 @@ const AttendanceDashboard = () => {
           color: 'white',
           border: 'none',
           display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
           justifyContent: 'space-between',
-          alignItems: 'center',
+          alignItems: isMobile ? 'stretch' : 'center',
           gap: '16px',
         }}
       >
@@ -3566,45 +3569,45 @@ const AttendanceDashboard = () => {
         </div>
       )}
       {/* KPI Stats — Separated by Day */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(180px, 1fr))', gap: isMobile ? '10px' : '16px' }}>
         <div style={cardStyle}>
-          <p style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>Unique Tue</p>
-          <p style={{ fontSize: '28px', fontWeight: 700, marginTop: '8px', color: '#0ea5e9' }}>{analytics.stats.uniqueTue}</p>
-          <p style={{ marginTop: '10px', color: '#64748b', fontSize: '13px' }}>
+          <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Unique Tue</p>
+          <p style={{ fontSize: isMobile ? '22px' : '28px', fontWeight: 700, marginTop: '8px', color: '#0ea5e9' }}>{analytics.stats.uniqueTue}</p>
+          <p style={{ marginTop: '10px', color: 'var(--color-text-muted)', fontSize: '13px' }}>
             Tactic Tuesday
           </p>
         </div>
         <div style={cardStyle}>
-          <p style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>Unique Thu</p>
-          <p style={{ fontSize: '28px', fontWeight: 700, marginTop: '8px', color: '#6366f1' }}>{analytics.stats.uniqueThu}</p>
-          <p style={{ marginTop: '10px', color: '#64748b', fontSize: '13px' }}>
+          <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Unique Thu</p>
+          <p style={{ fontSize: isMobile ? '22px' : '28px', fontWeight: 700, marginTop: '8px', color: '#6366f1' }}>{analytics.stats.uniqueThu}</p>
+          <p style={{ marginTop: '10px', color: 'var(--color-text-muted)', fontSize: '13px' }}>
             SF Mastermind
           </p>
         </div>
         <div style={cardStyle}>
-          <p style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>Repeat Rate Tue</p>
-          <p style={{ fontSize: '28px', fontWeight: 700, marginTop: '8px', color: '#0ea5e9' }}>
+          <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Repeat Rate Tue</p>
+          <p style={{ fontSize: isMobile ? '22px' : '28px', fontWeight: 700, marginTop: '8px', color: '#0ea5e9' }}>
             {formatPct(analytics.stats.repeatRateTue)}
           </p>
-          <p style={{ marginTop: '10px', color: '#64748b', fontSize: '13px' }}>
+          <p style={{ marginTop: '10px', color: 'var(--color-text-muted)', fontSize: '13px' }}>
             Tue Retention
           </p>
         </div>
         <div style={cardStyle}>
-          <p style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>Repeat Rate Thu</p>
-          <p style={{ fontSize: '28px', fontWeight: 700, marginTop: '8px', color: '#6366f1' }}>
+          <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Repeat Rate Thu</p>
+          <p style={{ fontSize: isMobile ? '22px' : '28px', fontWeight: 700, marginTop: '8px', color: '#6366f1' }}>
             {formatPct(analytics.stats.repeatRateThu)}
           </p>
-          <p style={{ marginTop: '10px', color: '#64748b', fontSize: '13px' }}>
+          <p style={{ marginTop: '10px', color: 'var(--color-text-muted)', fontSize: '13px' }}>
             Thu Retention
           </p>
         </div>
         <div style={cardStyle}>
-          <p style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>Sessions</p>
-          <p style={{ fontSize: '28px', fontWeight: 700, marginTop: '8px', color: '#0f766e' }}>
+          <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Sessions</p>
+          <p style={{ fontSize: isMobile ? '22px' : '28px', fontWeight: 700, marginTop: '8px', color: '#0f766e' }}>
             {analytics.stats.sessions}
           </p>
-          <p style={{ marginTop: '10px', color: '#64748b', fontSize: '13px' }}>
+          <p style={{ marginTop: '10px', color: 'var(--color-text-muted)', fontSize: '13px' }}>
             Total analyzed
           </p>
         </div>
@@ -3617,14 +3620,14 @@ const AttendanceDashboard = () => {
             <TrendingUp size={17} color="#0ea5e9" />
             <h3 style={{ fontSize: '18px' }}>Tuesday Show-Ups</h3>
           </div>
-          <div style={{ height: '240px' }}>
+          <div style={{ height: isMobile ? '220px' : '240px', minWidth: 0 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={analytics.trendDataTue} onClick={handleShowUpBarClick}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 10 }} />
-                <YAxis tick={{ fill: '#64748b', fontSize: 10 }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                <XAxis dataKey="date" tick={{ fill: 'var(--color-text-muted)', fontSize: isMobile ? 9 : 10 }} interval={isMobile ? 1 : 0} />
+                <YAxis tick={{ fill: 'var(--color-text-muted)', fontSize: 10 }} width={isMobile ? 28 : 40} />
                 <Tooltip content={showUpTooltip} />
-                <Legend verticalAlign="top" height={36} />
+                <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: isMobile ? '11px' : '12px' }} />
                 <Bar dataKey="newCount" name="New (Tue)" stackId="a" fill="#22c55e" radius={[0, 0, 4, 4]} cursor="pointer" onClick={handleShowUpBarClick} />
                 <Bar dataKey="repeatCount" name="Returning (Tue)" stackId="a" fill="#93c5fd" radius={[4, 4, 0, 0]} cursor="pointer" onClick={handleShowUpBarClick} />
               </BarChart>
@@ -3637,14 +3640,14 @@ const AttendanceDashboard = () => {
             <TrendingUp size={17} color="#6366f1" />
             <h3 style={{ fontSize: '18px' }}>Thursday Show-Ups</h3>
           </div>
-          <div style={{ height: '240px' }}>
+          <div style={{ height: isMobile ? '220px' : '240px', minWidth: 0 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={analytics.trendDataThu} onClick={handleShowUpBarClick}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 10 }} />
-                <YAxis tick={{ fill: '#64748b', fontSize: 10 }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                <XAxis dataKey="date" tick={{ fill: 'var(--color-text-muted)', fontSize: isMobile ? 9 : 10 }} interval={isMobile ? 1 : 0} />
+                <YAxis tick={{ fill: 'var(--color-text-muted)', fontSize: 10 }} width={isMobile ? 28 : 40} />
                 <Tooltip content={showUpTooltip} />
-                <Legend verticalAlign="top" height={36} />
+                <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: isMobile ? '11px' : '12px' }} />
                 <Bar dataKey="newCount" name="New (Thu)" stackId="a" fill="#22c55e" radius={[0, 0, 4, 4]} cursor="pointer" onClick={handleShowUpBarClick} />
                 <Bar dataKey="repeatCount" name="Returning (Thu)" stackId="a" fill="#c4b5fd" radius={[4, 4, 0, 0]} cursor="pointer" onClick={handleShowUpBarClick} />
               </BarChart>

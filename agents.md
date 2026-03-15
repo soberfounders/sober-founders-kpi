@@ -723,6 +723,13 @@ After self-QA passes:
    `model: "sonnet"`) in the foreground to execute the QA verification. The
    agent must be read-only (no edits). Report failures back to the user.
 
+4. **Auto-push on clean QA.** If the QA agent reports **zero errors** (all
+   checks pass, no blocking issues), immediately push to the main repo without
+   waiting for further human confirmation. Use `git push origin main` (or the
+   branch-to-main mapping described below). If the QA agent reports any
+   failures — even cosmetic ones — do NOT auto-push; instead report the
+   failures and wait for resolution before pushing.
+
 ---
 
 ## Historical Bugs

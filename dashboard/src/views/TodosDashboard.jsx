@@ -47,8 +47,10 @@ const getStatusIcon = (status) => {
   }
 };
 
+const TODOS_MOBILE_BREAKPOINT = 768;
+
 /* ── Status Dropdown Component ── */
-const StatusDropdown = ({ todo, onStatusChange }) => {
+const StatusDropdown = ({ todo, onStatusChange, isMobile = false }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -56,8 +58,14 @@ const StatusDropdown = ({ todo, onStatusChange }) => {
     const handleClickOutside = (e) => {
       if (ref.current && !ref.current.contains(e.target)) setOpen(false);
     };
-    if (open) document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    if (open) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
   }, [open]);
 
   const statusStyle = getStatusStyle(todo.status);
@@ -68,25 +76,39 @@ const StatusDropdown = ({ todo, onStatusChange }) => {
       <span
         onClick={() => setOpen(!open)}
         style={{
-          padding: '4px 10px', borderRadius: '12px',
-          fontSize: '11px', fontWeight: '700', cursor: 'pointer',
+          padding: isMobile ? '8px 14px' : '4px 10px', borderRadius: '12px',
+          fontSize: isMobile ? '13px' : '11px', fontWeight: '700', cursor: 'pointer',
           backgroundColor: statusStyle.bg, color: statusStyle.text,
           border: `1px solid ${statusStyle.border}`,
-          display: 'inline-flex', alignItems: 'center', gap: '4px',
+          display: 'inline-flex', alignItems: 'center', gap: '6px',
+          WebkitTapHighlightColor: 'transparent',
+          touchAction: 'manipulation',
         }}
       >
         {currentStatus}
-        <ChevronDown size={10} />
+        <ChevronDown size={isMobile ? 14 : 10} />
       </span>
       {open && (
         <div style={{
-          position: 'absolute', top: '100%', left: 0, marginTop: '4px',
-          zIndex: 50, minWidth: '160px',
+          position: isMobile ? 'fixed' : 'absolute',
+          top: isMobile ? 'auto' : '100%',
+          bottom: isMobile ? 0 : 'auto',
+          left: isMobile ? 0 : 0,
+          right: isMobile ? 0 : 'auto',
+          marginTop: isMobile ? 0 : '4px',
+          zIndex: 999, minWidth: isMobile ? 'auto' : '160px',
           background: 'var(--color-card, #1a1f2e)', backdropFilter: 'blur(16px)',
-          borderRadius: '10px', border: '1px solid var(--color-border)',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+          borderRadius: isMobile ? '16px 16px 0 0' : '10px',
+          border: '1px solid var(--color-border)',
+          boxShadow: '0 -4px 24px rgba(0,0,0,0.5)',
           overflow: 'hidden',
         }}>
+          {isMobile && (
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-text-primary)' }}>Change Status</span>
+              <span onClick={() => setOpen(false)} style={{ fontSize: '14px', color: 'var(--color-text-muted)', cursor: 'pointer', padding: '4px' }}>Done</span>
+            </div>
+          )}
           {STATUS_ORDER.map((s) => {
             const sStyle = getStatusStyle(s);
             const isActive = s.toLowerCase() === currentStatus.toLowerCase();
@@ -98,22 +120,34 @@ const StatusDropdown = ({ todo, onStatusChange }) => {
                   if (!isActive) onStatusChange(todo, s);
                 }}
                 style={{
-                  padding: '8px 14px', cursor: 'pointer',
-                  fontSize: '12px', fontWeight: '600',
+                  padding: isMobile ? '14px 18px' : '8px 14px', cursor: 'pointer',
+                  fontSize: isMobile ? '15px' : '12px', fontWeight: '600',
                   color: sStyle.text,
                   backgroundColor: isActive ? 'rgba(255,255,255,0.08)' : 'transparent',
                   transition: 'background-color 0.15s',
-                  display: 'flex', alignItems: 'center', gap: '8px',
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  touchAction: 'manipulation',
                 }}
                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.06)'}
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = isActive ? 'rgba(255,255,255,0.08)' : 'transparent'}
               >
                 {getStatusIcon(s)}
                 {s}
+                {isActive && <span style={{ marginLeft: 'auto', fontSize: '14px' }}>✓</span>}
               </div>
             );
           })}
         </div>
+      )}
+      {/* Mobile overlay backdrop */}
+      {open && isMobile && (
+        <div
+          onClick={() => setOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 998,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+          }}
+        />
       )}
     </div>
   );
@@ -207,6 +241,22 @@ const TodosDashboard = () => {
   const [editingId, setEditingId] = useState(null);
   const [editTitle, setEditTitle] = useState('');
   const [showAnalysis, setShowAnalysis] = useState(false);
+  const [isMobile, setIsMobile] = useState(
+    () => (typeof window !== 'undefined' ? window.innerWidth < TODOS_MOBILE_BREAKPOINT : false),
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const mq = window.matchMedia(`(max-width: ${TODOS_MOBILE_BREAKPOINT - 1}px)`);
+    const handler = (e) => setIsMobile(e.matches);
+    handler(mq);
+    if (typeof mq.addEventListener === 'function') {
+      mq.addEventListener('change', handler);
+      return () => mq.removeEventListener('change', handler);
+    }
+    mq.addListener(handler);
+    return () => mq.removeListener(handler);
+  }, []);
 
   const fetchTodos = useCallback(async () => {
     setLoading(true);
@@ -384,7 +434,7 @@ const TodosDashboard = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* ═══ Header ═══ */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'stretch' : 'center', gap: isMobile ? '12px' : '0' }}>
         <div>
           <h3 style={{ fontSize: '20px', fontWeight: '600', margin: 0 }}>Notion To-Do List</h3>
           <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
@@ -404,6 +454,8 @@ const TodosDashboard = () => {
               cursor: syncing ? 'wait' : 'pointer',
               fontSize: '13px', fontWeight: '600',
               transition: 'all 0.2s',
+              flex: isMobile ? 1 : undefined,
+              justifyContent: 'center',
             }}
           >
             <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
@@ -419,6 +471,8 @@ const TodosDashboard = () => {
               border: `1px solid ${showAnalysis ? 'var(--color-dark-green)' : 'var(--color-border)'}`,
               cursor: 'pointer', fontSize: '13px', fontWeight: '600',
               transition: 'all 0.2s',
+              flex: isMobile ? 1 : undefined,
+              justifyContent: 'center',
             }}
           >
             <Sparkles size={14} />
@@ -430,7 +484,7 @@ const TodosDashboard = () => {
 
       {/* ═══ Stats Bar ═══ */}
       {analysis && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '12px' }}>
           {[
             { label: 'Total Tasks', value: analysis.stats.total, color: '#60a5fa', bg: 'rgba(59, 130, 246, 0.1)' },
             { label: 'Open', value: analysis.stats.open, color: '#fbbf24', bg: 'rgba(245, 158, 11, 0.1)' },
@@ -460,7 +514,7 @@ const TodosDashboard = () => {
             <Sparkles size={18} color="var(--color-dark-green)" /> AI Task Analysis
           </h4>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '16px' }}>
             {/* AI Can Handle */}
             <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', padding: '16px', border: '1px solid var(--color-border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
@@ -542,7 +596,7 @@ const TodosDashboard = () => {
 
       {/* ═══ Add Task Input ═══ */}
       <form onSubmit={handleCreateTask} style={{
-        ...cardStyle, display: 'flex', gap: '12px', padding: '20px',
+        ...cardStyle, display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: '12px', padding: isMobile ? '14px' : '20px',
         boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
       }}>
         <div style={{ flex: 1 }}>
@@ -575,9 +629,9 @@ const TodosDashboard = () => {
       </form>
 
       {/* ═══ Person Filter + Status Filter ═══ */}
-      <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '10px' : '16px', alignItems: isMobile ? 'stretch' : 'center', flexWrap: 'wrap' }}>
         {/* Person Filter */}
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', overflowX: isMobile ? 'auto' : 'visible', WebkitOverflowScrolling: 'touch', paddingBottom: isMobile ? '4px' : 0 }}>
           <User size={14} color="var(--color-text-secondary)" />
           {PERSON_OPTIONS.map(p => (
             <button
@@ -597,10 +651,10 @@ const TodosDashboard = () => {
           ))}
         </div>
 
-        <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--color-border)' }} />
+        {!isMobile && <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--color-border)' }} />}
 
         {/* Status Filter */}
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', overflowX: isMobile ? 'auto' : 'visible', WebkitOverflowScrolling: 'touch', paddingBottom: isMobile ? '4px' : 0 }}>
           <Filter size={14} color="var(--color-text-secondary)" />
           {['Active', 'All', 'Not started', 'In progress', 'Waiting', 'Done'].map(f => {
             // Count based on person-filtered todos
@@ -634,164 +688,278 @@ const TodosDashboard = () => {
       </div>
 
       {/* ═══ Task List ═══ */}
-      <div style={cardStyle}>
-        {/* Header Row */}
-        <div style={{
-          padding: '16px 24px', backgroundColor: 'rgba(0,0,0,0.2)',
-          borderBottom: '1px solid var(--color-border)',
-          display: 'grid', gridTemplateColumns: '40px 1fr 110px 100px 130px 110px 100px 40px',
-          fontWeight: '600', fontSize: '13px', color: 'var(--color-text-secondary)',
-          textTransform: 'uppercase', letterSpacing: '0.05em',
-        }}>
-          <div></div>
-          <div>Task Name</div>
-          <div>Priority</div>
-          <div>Effort</div>
-          <div>Status</div>
-          <div>Due Date</div>
-          <div>Person</div>
-          <div></div>
-        </div>
-
-        {/* Task Rows */}
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {isMobile ? (
+        /* ── Mobile: Card layout ── */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {filteredTodos.map((todo) => {
             const priorityStyle = getPriorityStyle(todo.priority);
             const effortLevel = getEffortLevel(todo);
             const effortStyle = getEffortStyle(effortLevel);
             const assignee = getAssignee(todo);
             const isEditing = editingId === todo.id;
+            const isDone = todo.status?.toLowerCase() === 'done' || todo.status?.toLowerCase() === 'completed';
 
             return (
               <div key={todo.id} style={{
-                padding: '14px 24px', borderBottom: '1px solid var(--color-border)',
-                display: 'grid', gridTemplateColumns: '40px 1fr 110px 100px 130px 110px 100px 40px',
-                alignItems: 'center', fontSize: '14px',
-                transition: 'background-color 0.15s',
-                backgroundColor: todo.status?.toLowerCase() === 'done' ? 'rgba(0,0,0,0.1)' : 'transparent',
-              }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = todo.status?.toLowerCase() === 'done' ? 'rgba(0,0,0,0.1)' : 'transparent'}
-              >
-                {/* Status Icon */}
-                <div style={{ display: 'flex' }}>
-                  {getStatusIcon(todo.status)}
-                </div>
-
-                {/* Task Title (editable) */}
-                <div>
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={editTitle}
-                      onChange={(e) => setEditTitle(e.target.value)}
-                      onBlur={() => handleTitleSave(todo)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleTitleSave(todo);
-                        if (e.key === 'Escape') setEditingId(null);
-                      }}
-                      autoFocus
-                      style={{
-                        width: '100%', padding: '4px 8px', borderRadius: '6px',
-                        backgroundColor: 'rgba(255,255,255,0.1)', color: 'var(--color-text-primary)',
-                        border: '1px solid var(--color-dark-green)', fontSize: '14px', fontWeight: '500',
-                        outline: 'none',
-                      }}
-                    />
-                  ) : (
-                    <span
-                      onClick={() => { setEditingId(todo.id); setEditTitle(todo.task_title); }}
-                      style={{
-                        fontWeight: '500', cursor: 'text',
-                        color: todo.status?.toLowerCase() === 'done' ? 'var(--color-text-secondary)' : 'var(--color-text-primary)',
-                        textDecoration: todo.status?.toLowerCase() === 'done' ? 'line-through' : 'none',
-                      }}
-                      title="Click to edit"
-                    >
-                      {todo.task_title}
-                    </span>
-                  )}
-                </div>
-
-                {/* Priority */}
-                <div>
-                  {priorityStyle ? (
-                    <span style={{
-                      padding: '3px 10px', borderRadius: '12px',
-                      fontSize: '11px', fontWeight: '700',
-                      backgroundColor: priorityStyle.bg, color: priorityStyle.text,
-                    }}>
-                      {priorityStyle.icon} {todo.priority}
-                    </span>
-                  ) : (
-                    <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>—</span>
-                  )}
-                </div>
-
-                {/* Effort Level */}
-                <div>
-                  {effortStyle ? (
-                    <span style={{
-                      padding: '3px 8px', borderRadius: '12px',
-                      fontSize: '10px', fontWeight: '700',
-                      backgroundColor: effortStyle.bg, color: effortStyle.text,
-                    }}>
-                      {effortLevel}
-                    </span>
-                  ) : (
-                    <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>—</span>
-                  )}
-                </div>
-
-                {/* Status Badge (dropdown) */}
-                <div>
-                  <StatusDropdown todo={todo} onStatusChange={handleUpdateStatus} />
-                </div>
-
-                {/* Due Date */}
-                <div style={{ color: 'var(--color-text-secondary)', fontSize: '13px' }}>
-                  {todo.due_date ? (
-                    <span style={{
-                      color: new Date(todo.due_date) < new Date() && todo.status?.toLowerCase() !== 'done'
-                        ? '#f87171' : 'var(--color-text-secondary)',
-                      fontWeight: new Date(todo.due_date) < new Date() && todo.status?.toLowerCase() !== 'done' ? '600' : '400',
-                    }}>
-                      {new Date(todo.due_date).toLocaleDateString()}
-                    </span>
-                  ) : '—'}
-                </div>
-
-                {/* Person */}
-                <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-                  {assignee || '—'}
-                </div>
-
-                {/* External Link */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                ...cardStyle,
+                padding: '14px 16px',
+                opacity: isDone ? 0.7 : 1,
+              }}>
+                {/* Row 1: Status icon + Title + Notion link */}
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                  <div style={{ marginTop: '2px', flexShrink: 0 }}>{getStatusIcon(todo.status)}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        onBlur={() => handleTitleSave(todo)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleTitleSave(todo);
+                          if (e.key === 'Escape') setEditingId(null);
+                        }}
+                        autoFocus
+                        style={{
+                          width: '100%', padding: '6px 10px', borderRadius: '8px',
+                          backgroundColor: 'rgba(255,255,255,0.1)', color: 'var(--color-text-primary)',
+                          border: '1px solid var(--color-dark-green)', fontSize: '15px', fontWeight: '500',
+                          outline: 'none',
+                        }}
+                      />
+                    ) : (
+                      <span
+                        onClick={() => { setEditingId(todo.id); setEditTitle(todo.task_title); }}
+                        style={{
+                          fontWeight: '600', fontSize: '15px', lineHeight: 1.3, cursor: 'text',
+                          color: isDone ? 'var(--color-text-secondary)' : 'var(--color-text-primary)',
+                          textDecoration: isDone ? 'line-through' : 'none',
+                          display: 'block',
+                        }}
+                      >
+                        {todo.task_title}
+                      </span>
+                    )}
+                  </div>
                   <a href={todo.url} target="_blank" rel="noreferrer"
-                    style={{ color: 'var(--color-text-secondary)', transition: 'color 0.2s' }}
+                    style={{ color: 'var(--color-text-muted)', flexShrink: 0, padding: '4px' }}
                     title="Open in Notion"
                   >
                     <ExternalLink size={16} />
                   </a>
+                </div>
+
+                {/* Row 2: Badges (priority, effort, status, due date) */}
+                <div style={{ marginTop: '10px', display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+                  <StatusDropdown todo={todo} onStatusChange={handleUpdateStatus} isMobile={true} />
+                  {priorityStyle && (
+                    <span style={{
+                      padding: '5px 12px', borderRadius: '12px',
+                      fontSize: '12px', fontWeight: '700',
+                      backgroundColor: priorityStyle.bg, color: priorityStyle.text,
+                    }}>
+                      {priorityStyle.icon} {todo.priority}
+                    </span>
+                  )}
+                  {effortStyle && (
+                    <span style={{
+                      padding: '5px 10px', borderRadius: '12px',
+                      fontSize: '11px', fontWeight: '700',
+                      backgroundColor: effortStyle.bg, color: effortStyle.text,
+                    }}>
+                      {effortLevel}
+                    </span>
+                  )}
+                  {todo.due_date && (
+                    <span style={{
+                      padding: '5px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: '600',
+                      backgroundColor: 'rgba(255,255,255,0.05)',
+                      color: new Date(todo.due_date) < new Date() && !isDone ? '#f87171' : 'var(--color-text-secondary)',
+                      border: `1px solid ${new Date(todo.due_date) < new Date() && !isDone ? 'rgba(248,113,113,0.3)' : 'var(--color-border)'}`,
+                    }}>
+                      {new Date(todo.due_date).toLocaleDateString()}
+                    </span>
+                  )}
+                  {assignee && (
+                    <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                      {assignee}
+                    </span>
+                  )}
                 </div>
               </div>
             );
           })}
 
           {filteredTodos.length === 0 && !loading && (
-            <div style={{ padding: '64px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-              <AlertCircle size={40} style={{ marginBottom: '16px', opacity: 0.3, margin: '0 auto' }} />
-              <p style={{ fontSize: '16px', fontWeight: '500', marginTop: '16px' }}>
-                {filter === 'All' && personFilter === 'All' ? 'Your Notion To-Do list is empty!' : `No tasks found for current filters.`}
+            <div style={{ padding: '48px 16px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
+              <AlertCircle size={36} style={{ opacity: 0.3, margin: '0 auto' }} />
+              <p style={{ fontSize: '15px', fontWeight: '500', marginTop: '12px' }}>
+                {filter === 'All' && personFilter === 'All' ? 'Your Notion To-Do list is empty!' : 'No tasks found for current filters.'}
               </p>
-              {filter === 'All' && personFilter === 'All' && (
-                <p style={{ marginTop: '4px' }}>Add a task above or click "Sync Now" to pull from Notion.</p>
-              )}
             </div>
           )}
         </div>
-      </div>
+      ) : (
+        /* ── Desktop: Table layout ── */
+        <div style={cardStyle}>
+          {/* Header Row */}
+          <div style={{
+            padding: '16px 24px', backgroundColor: 'rgba(0,0,0,0.2)',
+            borderBottom: '1px solid var(--color-border)',
+            display: 'grid', gridTemplateColumns: '40px 1fr 110px 100px 130px 110px 100px 40px',
+            fontWeight: '600', fontSize: '13px', color: 'var(--color-text-secondary)',
+            textTransform: 'uppercase', letterSpacing: '0.05em',
+          }}>
+            <div></div>
+            <div>Task Name</div>
+            <div>Priority</div>
+            <div>Effort</div>
+            <div>Status</div>
+            <div>Due Date</div>
+            <div>Person</div>
+            <div></div>
+          </div>
+
+          {/* Task Rows */}
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {filteredTodos.map((todo) => {
+              const priorityStyle = getPriorityStyle(todo.priority);
+              const effortLevel = getEffortLevel(todo);
+              const effortStyle = getEffortStyle(effortLevel);
+              const assignee = getAssignee(todo);
+              const isEditing = editingId === todo.id;
+
+              return (
+                <div key={todo.id} style={{
+                  padding: '14px 24px', borderBottom: '1px solid var(--color-border)',
+                  display: 'grid', gridTemplateColumns: '40px 1fr 110px 100px 130px 110px 100px 40px',
+                  alignItems: 'center', fontSize: '14px',
+                  transition: 'background-color 0.15s',
+                  backgroundColor: todo.status?.toLowerCase() === 'done' ? 'rgba(0,0,0,0.1)' : 'transparent',
+                }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = todo.status?.toLowerCase() === 'done' ? 'rgba(0,0,0,0.1)' : 'transparent'}
+                >
+                  {/* Status Icon */}
+                  <div style={{ display: 'flex' }}>
+                    {getStatusIcon(todo.status)}
+                  </div>
+
+                  {/* Task Title (editable) */}
+                  <div>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        onBlur={() => handleTitleSave(todo)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleTitleSave(todo);
+                          if (e.key === 'Escape') setEditingId(null);
+                        }}
+                        autoFocus
+                        style={{
+                          width: '100%', padding: '4px 8px', borderRadius: '6px',
+                          backgroundColor: 'rgba(255,255,255,0.1)', color: 'var(--color-text-primary)',
+                          border: '1px solid var(--color-dark-green)', fontSize: '14px', fontWeight: '500',
+                          outline: 'none',
+                        }}
+                      />
+                    ) : (
+                      <span
+                        onClick={() => { setEditingId(todo.id); setEditTitle(todo.task_title); }}
+                        style={{
+                          fontWeight: '500', cursor: 'text',
+                          color: todo.status?.toLowerCase() === 'done' ? 'var(--color-text-secondary)' : 'var(--color-text-primary)',
+                          textDecoration: todo.status?.toLowerCase() === 'done' ? 'line-through' : 'none',
+                        }}
+                        title="Click to edit"
+                      >
+                        {todo.task_title}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Priority */}
+                  <div>
+                    {priorityStyle ? (
+                      <span style={{
+                        padding: '3px 10px', borderRadius: '12px',
+                        fontSize: '11px', fontWeight: '700',
+                        backgroundColor: priorityStyle.bg, color: priorityStyle.text,
+                      }}>
+                        {priorityStyle.icon} {todo.priority}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>—</span>
+                    )}
+                  </div>
+
+                  {/* Effort Level */}
+                  <div>
+                    {effortStyle ? (
+                      <span style={{
+                        padding: '3px 8px', borderRadius: '12px',
+                        fontSize: '10px', fontWeight: '700',
+                        backgroundColor: effortStyle.bg, color: effortStyle.text,
+                      }}>
+                        {effortLevel}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>—</span>
+                    )}
+                  </div>
+
+                  {/* Status Badge (dropdown) */}
+                  <div>
+                    <StatusDropdown todo={todo} onStatusChange={handleUpdateStatus} />
+                  </div>
+
+                  {/* Due Date */}
+                  <div style={{ color: 'var(--color-text-secondary)', fontSize: '13px' }}>
+                    {todo.due_date ? (
+                      <span style={{
+                        color: new Date(todo.due_date) < new Date() && todo.status?.toLowerCase() !== 'done'
+                          ? '#f87171' : 'var(--color-text-secondary)',
+                        fontWeight: new Date(todo.due_date) < new Date() && todo.status?.toLowerCase() !== 'done' ? '600' : '400',
+                      }}>
+                        {new Date(todo.due_date).toLocaleDateString()}
+                      </span>
+                    ) : '—'}
+                  </div>
+
+                  {/* Person */}
+                  <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                    {assignee || '—'}
+                  </div>
+
+                  {/* External Link */}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <a href={todo.url} target="_blank" rel="noreferrer"
+                      style={{ color: 'var(--color-text-secondary)', transition: 'color 0.2s' }}
+                      title="Open in Notion"
+                    >
+                      <ExternalLink size={16} />
+                    </a>
+                  </div>
+                </div>
+              );
+            })}
+
+            {filteredTodos.length === 0 && !loading && (
+              <div style={{ padding: '64px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
+                <AlertCircle size={40} style={{ marginBottom: '16px', opacity: 0.3, margin: '0 auto' }} />
+                <p style={{ fontSize: '16px', fontWeight: '500', marginTop: '16px' }}>
+                  {filter === 'All' && personFilter === 'All' ? 'Your Notion To-Do list is empty!' : `No tasks found for current filters.`}
+                </p>
+                {filter === 'All' && personFilter === 'All' && (
+                  <p style={{ marginTop: '4px' }}>Add a task above or click "Sync Now" to pull from Notion.</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
