@@ -15,7 +15,7 @@ import { X, Loader2, Check, Send } from 'lucide-react';
 const PERSON_OPTIONS = ['Andrew Lassise', 'Kandace'];
 const PRIORITY_OPTIONS = ['High Priority', 'Medium Priority', 'Low Priority'];
 const EFFORT_OPTIONS = ['Easy Effort', 'Medium Effort', 'Hard Effort'];
-const STATUS_OPTIONS = ['Not Started', 'Waiting on Others', 'In Progress', 'Done'];
+const STATUS_OPTIONS = ['Not started', 'Waiting on Others', 'In progress', 'Done'];
 const TASK_TYPE_OPTIONS = [
     '🐞 Bug',
     '💬 Feature request',
@@ -34,7 +34,7 @@ const SendToNotionModal = ({ isOpen, onClose, defaultTaskName = '', onSuccess })
     const [person, setPerson] = useState('Andrew Lassise');
     const [priority, setPriority] = useState('Medium Priority');
     const [effort, setEffort] = useState('Medium Effort');
-    const [status, setStatus] = useState('Not Started');
+    const [status, setStatus] = useState('Not started');
     const [taskType, setTaskType] = useState('');
     const [deadline, setDeadline] = useState('');
     const [description, setDescription] = useState('');
@@ -48,7 +48,7 @@ const SendToNotionModal = ({ isOpen, onClose, defaultTaskName = '', onSuccess })
             setPerson('Andrew Lassise');
             setPriority('Medium Priority');
             setEffort('Medium Effort');
-            setStatus('Not Started');
+            setStatus('Not started');
             setTaskType('');
             setDeadline('');
             setDescription('');
