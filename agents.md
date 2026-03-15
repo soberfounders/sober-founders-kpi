@@ -12,17 +12,19 @@ Structure:
 
 1. [Repository Context](#repository-context) — stack, commands, key files
 2. [Supabase Schema](#supabase-schema) — exact table/column definitions
-3. [Domain Rules](#domain-rules) — business logic that must not be changed
+3. [Strategic Priorities](#strategic-priorities-north-star) — organizational
+   growth objectives that guide all recommendations
+4. [Domain Rules](#domain-rules) — business logic that must not be changed
    without explicit instruction
-4. [Data Flow](#data-flow) — how data moves from source to dashboard
-5. [QA Protocol](#mandatory-qa-protocol) — self-verification steps required
+5. [Data Flow](#data-flow) — how data moves from source to dashboard
+6. [QA Protocol](#mandatory-qa-protocol) — self-verification steps required
    after every change
-6. [Historical Bugs](#historical-bugs) — real failures from this codebase,
+7. [Historical Bugs](#historical-bugs) — real failures from this codebase,
    ordered by frequency
-7. [Open Issues](#open-issues) — known problems not yet fixed
-8. [Resolved Issues](#resolved-issues) — problems fixed, kept as a record
-9. [Agent Workflow](#agent-workflow) — multi-agent decomposition and output
-   format
+8. [Open Issues](#open-issues) — known problems not yet fixed
+9. [Resolved Issues](#resolved-issues) — problems fixed, kept as a record
+10. [Agent Workflow](#agent-workflow) — multi-agent decomposition and output
+    format
 
 ---
 
@@ -218,6 +220,35 @@ Legacy metrics table (Zoom attendance data was stored here).
 **Note:** The Zoom data in this table is deprecated. The table still exists and
 the fetch still runs but results are no longer consumed by the attendance path.
 This is a cleanup item.
+
+---
+
+## Strategic Priorities (North Star)
+
+These are the organization's top-level growth objectives. Every KPI insight,
+recommendation, and action item should ladder up to one of these. When generating
+"so what" summaries or prioritizing actions, weight by impact on these goals.
+
+1. **Grow Phoenix Forum paying membership** — This is the primary revenue driver.
+   More qualified leads → more interviews → more paying Phoenix members. Every
+   funnel metric (CPL, CPQL, qualified lead count, interview count) serves this
+   goal. Phoenix-qualified leads ($1M+ revenue, 1+ year sobriety) are the highest
+   priority segment.
+
+2. **Increase donations and donor retention** — Donations fund operations.
+   Prioritize recurring donor retention over one-time gift acquisition. Track
+   donor lifetime value, not just transaction count. Lapsed donor reactivation
+   is higher ROI than cold acquisition.
+
+3. **Raise attendance and improve retention** — Attendance drives community
+   strength, which drives donations and referrals. Focus on repeat attendance
+   rate (avg visits) over raw headcount. Net-new attendee activation (getting
+   first-timers to return) is the biggest lever. Tuesday and Thursday sessions
+   are both important.
+
+**Priority order when resources conflict:** Phoenix membership > Donations >
+Attendance > Operations. Operations supports all three but should never dominate
+action item selection.
 
 ---
 

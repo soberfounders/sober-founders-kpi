@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Bot, CheckCircle2, Loader2, RefreshCw, Sparkles } from 'lucide-react';
 import KPICard from '../components/KPICard';
+import SectionInsightBar from '../components/SectionInsightBar';
 import SendToNotionModal from '../components/SendToNotionModal';
 import notionLogo from '../assets/notion-logo.png';
 import { supabase } from '../lib/supabaseClient';
@@ -1419,6 +1420,152 @@ function buildMustDoToday(snapshot, sectionRecommendations) {
   };
 }
 
+function buildSectionInsights(snapshot, windows, sectionRecommendations) {
+  const topRec = (section) => (sectionRecommendations[section] || [])[0] || null;
+
+  // --- Phoenix Forum ---
+  const pxLeadsCur = snapshot.phoenix.current.leads ?? 0;
+  const pxLeadsPrev = snapshot.phoenix.previous.leads ?? 0;
+  const pxQualCur = snapshot.phoenix.current.phoenixQualified ?? 0;
+  const pxInterviewsCur = snapshot.phoenix.current.interviews ?? 0;
+  const pxDelta = pxLeadsPrev > 0 ? ((pxLeadsCur - pxLeadsPrev) / pxLeadsPrev) * 100 : null;
+  const pxTrend = pxDelta === null ? 'neutral' : pxDelta > 0 ? 'up' : pxDelta < 0 ? 'down' : 'neutral';
+  let phoenixSummary;
+  if (pxLeadsCur === 0 && pxQualCur === 0) {
+    phoenixSummary = 'No Phoenix leads or qualified contacts this period — the paying-member pipeline is empty.';
+  } else if (pxDelta !== null && pxDelta < -15) {
+    phoenixSummary = `Phoenix leads dropped ${Math.abs(Math.round(pxDelta))}% — fewer people entering the paying-member pipeline.`;
+  } else if (pxDelta !== null && pxDelta > 15) {
+    phoenixSummary = `Phoenix leads up ${Math.round(pxDelta)}% — momentum is building toward more paying members.`;
+  } else if (pxQualCur === 0 && pxLeadsCur > 0) {
+    phoenixSummary = `${formatInt(pxLeadsCur)} Phoenix leads but none qualified yet — ad targeting or audience quality may need attention.`;
+  } else {
+    phoenixSummary = `${formatInt(pxLeadsCur)} Phoenix leads, ${formatInt(pxQualCur)} qualified, ${formatInt(pxInterviewsCur)} interviews this period.`;
+  }
+  const pxRec = topRec('Leads');
+
+  // --- Free Group ---
+  const freeQualCur = snapshot.free.current.qualified ?? 0;
+  const freeQualPrev = snapshot.free.previous.qualified ?? 0;
+  const freeGreatCur = snapshot.free.current.great ?? 0;
+  const freeCPQL = snapshot.free.current.cpql;
+  const freeDelta = freeQualPrev > 0 ? ((freeQualCur - freeQualPrev) / freeQualPrev) * 100 : null;
+  const freeTrend = freeDelta === null ? 'neutral' : freeDelta > 0 ? 'up' : freeDelta < 0 ? 'down' : 'neutral';
+  let freeSummary;
+  if (freeQualCur === 0) {
+    freeSummary = 'No $250k qualified leads this period — the free-to-Phoenix pipeline has no fuel.';
+  } else if (freeDelta !== null && freeDelta < -15) {
+    freeSummary = `Qualified leads dropped ${Math.abs(Math.round(freeDelta))}% — fewer candidates progressing toward Phoenix.`;
+  } else if (freeDelta !== null && freeDelta > 15) {
+    freeSummary = `Qualified leads up ${Math.round(freeDelta)}% with CPQL at ${formatCurrency(freeCPQL)} — the free funnel is feeding Phoenix well.`;
+  } else if (freeGreatCur > 0) {
+    freeSummary = `${formatInt(freeQualCur)} qualified leads including ${formatInt(freeGreatCur)} great ($1M+) — solid pipeline quality.`;
+  } else {
+    freeSummary = `${formatInt(freeQualCur)} qualified leads at ${formatCurrency(freeCPQL)} CPQL this period.`;
+  }
+
+  // --- Attendance ---
+  const attTotalCur = (snapshot.attendance.current.totalTue ?? 0) + (snapshot.attendance.current.totalThu ?? 0);
+  const attTotalPrev = (snapshot.attendance.previous.totalTue ?? 0) + (snapshot.attendance.previous.totalThu ?? 0);
+  const attDelta = attTotalPrev > 0 ? ((attTotalCur - attTotalPrev) / attTotalPrev) * 100 : null;
+  const attTrend = attDelta === null ? 'neutral' : attDelta > 0 ? 'up' : attDelta < 0 ? 'down' : 'neutral';
+  const avgVisitsTue = snapshot.attendance.current.avgVisitsTue ?? 0;
+  const avgVisitsThu = snapshot.attendance.current.avgVisitsThu ?? 0;
+  let attendanceSummary;
+  if (attTotalCur === 0) {
+    attendanceSummary = 'No attendance data this period — check HubSpot sync.';
+  } else if (attDelta !== null && attDelta < -15) {
+    attendanceSummary = `Attendance dropped ${Math.abs(Math.round(attDelta))}% — retention is weakening and community engagement is at risk.`;
+  } else if (attDelta !== null && attDelta > 15) {
+    attendanceSummary = `Attendance up ${Math.round(attDelta)}% — community engagement is strengthening.`;
+  } else if (avgVisitsTue < 2 || avgVisitsThu < 2) {
+    attendanceSummary = `Avg visits (Tue: ${formatDecimal(avgVisitsTue)}, Thu: ${formatDecimal(avgVisitsThu)}) are low — most attendees aren't coming back.`;
+  } else {
+    attendanceSummary = `${formatInt(attTotalCur)} total attendees with avg visits Tue: ${formatDecimal(avgVisitsTue)}, Thu: ${formatDecimal(avgVisitsThu)}.`;
+  }
+  const attRec = topRec('Attendance');
+
+  // --- Donations ---
+  const donAmtCur = snapshot.donations.current.amount ?? 0;
+  const donAmtPrev = snapshot.donations.previous.amount ?? 0;
+  const donCntCur = snapshot.donations.current.count ?? 0;
+  const donDelta = donAmtPrev > 0 ? ((donAmtCur - donAmtPrev) / donAmtPrev) * 100 : null;
+  const donTrend = donDelta === null ? 'neutral' : donDelta > 0 ? 'up' : donDelta < 0 ? 'down' : 'neutral';
+  let donationsSummary;
+  if (donAmtCur === 0) {
+    donationsSummary = 'No donations this period — fundraising momentum has stalled.';
+  } else if (donDelta !== null && donDelta < -20) {
+    donationsSummary = `Donations dropped ${Math.abs(Math.round(donDelta))}% to ${formatCurrency(donAmtCur)} — lapsed donors may need reactivation.`;
+  } else if (donDelta !== null && donDelta > 20) {
+    donationsSummary = `Donations up ${Math.round(donDelta)}% to ${formatCurrency(donAmtCur)} — fundraising momentum is strong.`;
+  } else {
+    donationsSummary = `${formatInt(donCntCur)} donations totaling ${formatCurrency(donAmtCur)} this period.`;
+  }
+  const donRec = topRec('Donations');
+
+  // --- Operations ---
+  const opsCur = snapshot.operations.current.completedItems ?? 0;
+  const opsPrev = snapshot.operations.previous.completedItems ?? 0;
+  const opsDelta = opsPrev > 0 ? ((opsCur - opsPrev) / opsPrev) * 100 : null;
+  const opsTrend = opsDelta === null ? 'neutral' : opsDelta > 0 ? 'up' : opsDelta < 0 ? 'down' : 'neutral';
+  let operationsSummary;
+  if (opsCur === 0) {
+    operationsSummary = 'No tasks completed this period — execution has stalled.';
+  } else if (opsDelta !== null && opsDelta < -25) {
+    operationsSummary = `Task throughput dropped ${Math.abs(Math.round(opsDelta))}% — bottlenecks may be slowing the team.`;
+  } else if (opsDelta !== null && opsDelta > 25) {
+    operationsSummary = `Task throughput up ${Math.round(opsDelta)}% — the team is clearing work faster.`;
+  } else {
+    operationsSummary = `${formatInt(opsCur)} tasks completed this period.`;
+  }
+  const opsRec = topRec('Operations');
+
+  const period = windows.current.label || 'this period';
+
+  return {
+    phoenix: {
+      summary: phoenixSummary,
+      action: pxRec ? pxRec.title : null,
+      taskName: pxRec ? pxRec.taskName : `Phoenix: review funnel performance (${period})`,
+      trend: pxTrend,
+      toneIsGood: pxTrend === 'up',
+      dismissKey: `phoenix-${windows.current.start}`,
+    },
+    free: {
+      summary: freeSummary,
+      action: pxRec ? `${pxRec.title} — these leads feed Phoenix.` : null,
+      taskName: pxRec ? pxRec.taskName : `Free funnel: review qualified lead quality (${period})`,
+      trend: freeTrend,
+      toneIsGood: freeTrend === 'up',
+      dismissKey: `free-${windows.current.start}`,
+    },
+    attendance: {
+      summary: attendanceSummary,
+      action: attRec ? attRec.title : null,
+      taskName: attRec ? attRec.taskName : `Attendance: improve retention (${period})`,
+      trend: attTrend,
+      toneIsGood: attTrend === 'up',
+      dismissKey: `attendance-${windows.current.start}`,
+    },
+    donations: {
+      summary: donationsSummary,
+      action: donRec ? donRec.title : null,
+      taskName: donRec ? donRec.taskName : `Donations: reactivation campaign (${period})`,
+      trend: donTrend,
+      toneIsGood: donTrend === 'up',
+      dismissKey: `donations-${windows.current.start}`,
+    },
+    operations: {
+      summary: operationsSummary,
+      action: opsRec ? opsRec.title : null,
+      taskName: opsRec ? opsRec.taskName : `Operations: clear task backlog (${period})`,
+      trend: opsTrend,
+      toneIsGood: opsTrend === 'up',
+      dismissKey: `operations-${windows.current.start}`,
+    },
+  };
+}
+
 function buildNotionCreateTaskProperties(taskName, priority = 'Medium Priority') {
   return {
     'Task name': { title: [{ text: { content: taskName } }] },
@@ -1631,6 +1778,13 @@ function DashboardOverview() {
     [snapshot, sectionRecommendations],
   );
 
+  const sectionInsights = useMemo(
+    () => buildSectionInsights(snapshot, windows, sectionRecommendations),
+    [snapshot, windows, sectionRecommendations],
+  );
+
+  const openNotionModal = (taskName) => setNotionModal({ open: true, taskName });
+
   const runRecommendationAction = async (recommendation) => {
     setActionState((prev) => ({
       ...prev,
@@ -1810,6 +1964,7 @@ function DashboardOverview() {
             <KPICard key={card.title} {...card} />
           ))}
         </div>
+        <SectionInsightBar {...sectionInsights.phoenix} onAddToNotion={openNotionModal} />
       </section>
 
       <section className="glass-panel" style={{ padding: '14px' }}>
@@ -1819,6 +1974,7 @@ function DashboardOverview() {
             <KPICard key={card.title} {...card} />
           ))}
         </div>
+        <SectionInsightBar {...sectionInsights.free} onAddToNotion={openNotionModal} />
       </section>
 
       <section className="glass-panel" style={{ padding: '14px' }}>
@@ -1828,6 +1984,7 @@ function DashboardOverview() {
             <KPICard key={card.title} {...card} />
           ))}
         </div>
+        <SectionInsightBar {...sectionInsights.attendance} onAddToNotion={openNotionModal} />
       </section>
 
       <section className="glass-panel" style={{ padding: '14px' }}>
@@ -1837,6 +1994,7 @@ function DashboardOverview() {
             <KPICard key={card.title} {...card} />
           ))}
         </div>
+        <SectionInsightBar {...sectionInsights.donations} onAddToNotion={openNotionModal} />
       </section>
 
       <section className="glass-panel" style={{ padding: '14px' }}>
@@ -1849,6 +2007,7 @@ function DashboardOverview() {
             <KPICard key={card.title} {...card} />
           ))}
         </div>
+        <SectionInsightBar {...sectionInsights.operations} onAddToNotion={openNotionModal} />
       </section>
 
       <section className="glass-panel" style={{ padding: '14px' }}>
