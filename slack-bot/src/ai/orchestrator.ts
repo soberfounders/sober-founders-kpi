@@ -227,6 +227,7 @@ export const createKpiOrchestrator = (deps: Partial<OrchestratorDependencies> = 
       temperature: 0.2,
       max_output_tokens: 900,
       tools: openAiTools,
+      tool_choice: "required",
       input: [
         {
           role: "system",
