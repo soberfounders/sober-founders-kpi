@@ -221,6 +221,63 @@ Legacy metrics table (Zoom attendance data was stored here).
 the fetch still runs but results are no longer consumed by the attendance path.
 This is a cleanup item.
 
+### recovery_events
+
+Tracks all outreach attempts across campaigns.
+
+| Column           | Type        | Notes                                                      |
+| ---------------- | ----------- | ---------------------------------------------------------- |
+| `id`             | UUID        | Primary key                                                |
+| `attendee_email` | text        | Recipient email                                            |
+| `event_type`     | text        | `no_show_followup`, `at_risk_nudge`, `winback`             |
+| `meeting_id`     | text        | Optional meeting reference                                 |
+| `meeting_date`   | date        | Date of missed/last meeting                                |
+| `metadata`       | jsonb       | AI message, subject, campaign_type, delivery status        |
+| `delivered_at`   | timestamptz | When the outreach was sent                                 |
+| `created_at`     | timestamptz |                                                            |
+
+### outreach_experiments
+
+A/B experiment tracking for measuring campaign effectiveness.
+
+| Column              | Type        | Notes                                              |
+| ------------------- | ----------- | -------------------------------------------------- |
+| `id`                | UUID        | Primary key                                        |
+| `experiment_name`   | text        | Unique experiment identifier                       |
+| `campaign_type`     | text        | `no_show_recovery`, `at_risk_nudge`, `winback`     |
+| `started_at`        | date        | Experiment start                                   |
+| `ends_at`           | date        | 28-day measurement window                          |
+| `status`            | text        | `active`, `completed`, `paused`                    |
+| `baseline_snapshot` | jsonb       | Pre-experiment retention metrics                   |
+| `metadata`          | jsonb       |                                                    |
+
+### Key Views — Outreach Automation
+
+| View                       | Purpose                                                         |
+| -------------------------- | --------------------------------------------------------------- |
+| `vw_noshow_candidates`     | Luma registrants who didn't show (14d window)                   |
+| `vw_at_risk_attendees`     | 2+ meetings in 60d but missed last 7d, not nudged in 14d       |
+| `vw_winback_candidates`    | Attended exactly once, 30–180d ago, never winback-emailed       |
+| `vw_baseline_retention`    | Monthly cohort repeat rates (14d/30d/60d) — pre-experiment data |
+| `vw_outreach_conversions`  | Did outreach lead to return within 28d?                         |
+| `vw_experiment_results`    | Aggregate conversion rates by campaign type and week            |
+
+### Edge Functions — Outreach Automation
+
+| Function                    | Trigger                          | Purpose                                    |
+| --------------------------- | -------------------------------- | ------------------------------------------ |
+| `no-show-recovery-agent`    | pg_cron Tue 4:15PM / Thu 3:15PM | AI email to no-shows via HubSpot + Notion  |
+| `at-risk-retention-agent`   | pg_cron Mon/Wed 10AM ET          | Day-before nudge to declining attendees    |
+| `winback-campaign-agent`    | pg_cron Mon 11AM ET              | Weekly drip to one-and-done attendees      |
+
+### Shared Modules — `_shared/`
+
+| Module              | Purpose                                                  |
+| ------------------- | -------------------------------------------------------- |
+| `hubspot_sync.ts`   | HubSpot API wrapper, retry, contact/activity sync        |
+| `hubspot_email.ts`  | HubSpot engagement email creation + contact association  |
+| `notion_task.ts`    | Notion follow-up task creation with due dates            |
+
 ---
 
 ## Strategic Priorities (North Star)
