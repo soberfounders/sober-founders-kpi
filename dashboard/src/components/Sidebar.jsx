@@ -10,6 +10,7 @@ import {
   Globe,
   Bot,
   Gift,
+  Send,
   ChevronLeft,
   ChevronRight,
   X,
@@ -24,6 +25,7 @@ const sidebarItems = [
   { id: 'Online Discovery', icon: Globe,           label: 'Online Discovery',  path: '/online-discovery' },
   { id: 'Donations',        icon: Gift,            label: 'Donations',         path: '/donations' },
   { id: 'Marketing',        icon: Megaphone,       label: 'Marketing',         path: '/marketing' },
+  { id: 'Outreach',         icon: Send,            label: 'Outreach',          path: '/outreach' },
   { id: "To-Do's",          icon: CheckSquare,     label: "To-Do's",           path: '/todos' },
   { id: 'AI Manager',       icon: Bot,             label: 'Board of Directors', path: '/ai-manager' },
 ];
