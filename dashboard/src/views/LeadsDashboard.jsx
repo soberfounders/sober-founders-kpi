@@ -207,7 +207,7 @@ const fmt = {
 
 // ─── Shared styles ────────────────────────────────────────────────────────────
 const card = { backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '20px', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.08)' };
-const subCard = { backgroundColor: '#f8fafc', borderRadius: '10px', padding: '12px' };
+const subCard = { backgroundColor: '#f1f5f9', borderRadius: '10px', padding: '12px' };
 
 const HEAR_ABOUT_CATEGORIES = [
   { key: 'meta', label: 'Meta (Facebook/Instagram)', color: '#2563eb' },
@@ -544,8 +544,8 @@ function MetricCell({ label, value, changePct, onClick, invertColor, formatFn = 
       onMouseEnter={e => { if (onClick) e.currentTarget.style.boxShadow = '0 0 0 2px #0f766e'; }}
       onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; }}
     >
-      <p style={{ margin: 0, fontSize: '11px', color: 'var(--color-text-muted)', fontWeight: 500 }}>{label}</p>
-      <p style={{ margin: '4px 0 0', fontWeight: 700, fontSize: '14px', color: 'var(--color-text-primary)' }}>
+      <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 500 }}>{label}</p>
+      <p style={{ margin: '4px 0 0', fontWeight: 700, fontSize: '14px', color: '#0f172a' }}>
         {formatFn(value)}
         {changePct !== undefined && <ChangeBadge changePct={changePct} invertColor={invertColor} />}
       </p>
@@ -588,17 +588,17 @@ function ProgressGapBar({ label, current, target, format = 'count', color = '#0f
   const gap = safeTarget !== null ? Math.max(0, safeTarget - safeCurrent) : null;
 
   return (
-    <div style={{ backgroundColor: 'var(--color-card)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '12px' }}>
+    <div style={{ backgroundColor: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
-        <p style={{ margin: 0, fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>{label}</p>
-        <p style={{ margin: 0, fontSize: '12px', color: 'var(--color-text-muted)' }}>
+        <p style={{ margin: 0, fontSize: '12px', color: '#334155', fontWeight: 700 }}>{label}</p>
+        <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>
           Current {formatter(safeCurrent)}{safeTarget !== null ? ` / Target ${formatter(safeTarget)}` : ''}
         </p>
       </div>
       <div style={{ marginTop: '8px', height: '10px', borderRadius: '999px', backgroundColor: 'rgba(100, 116, 139, 0.2)', overflow: 'hidden' }}>
         <div style={{ width: `${pct || 0}%`, height: '100%', backgroundColor: color }} />
       </div>
-      <p style={{ margin: '6px 0 0', fontSize: '11px', color: 'var(--color-text-muted)' }}>
+      <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#64748b' }}>
         {gap === null ? 'No prior efficiency baseline in comparison window.' : gap > 0 ? `Gap: ${formatter(gap)}` : 'On or above target.'}
       </p>
     </div>
@@ -671,7 +671,7 @@ function GroupPanel({ label, snap, prevSnap, onOpenModal }) {
 
   return (
     <div style={{ ...subCard, marginBottom: '12px' }}>
-      <p style={{ margin: '0 0 10px', fontSize: '13px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>{label}</p>
+      <p style={{ margin: '0 0 10px', fontSize: '13px', fontWeight: 700, color: '#475569' }}>{label}</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: '8px' }}>
         <MetricCell label="Ad Spend" value={snap.spend} changePct={costDiff('spend')} invertColor={true} formatFn={fmt.currency} />
         <MetricCell label="Impressions" value={snap.impressions} changePct={diff('impressions')} formatFn={fmt.int} />
@@ -803,7 +803,7 @@ function AIInsightsPanel({ supabaseUrl, supabaseKey, groupedData }) {
     <div style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
         <div>
-          <h3 style={{ margin: 0, fontSize: '18px', color: 'var(--color-text-primary)' }}>🤖 AI Manager Insights</h3>
+          <h3 style={{ margin: 0, fontSize: '18px', color: '#0f172a' }}>🤖 AI Manager Insights</h3>
           <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748b' }}>On-demand leads analysis. OpenAI and Gemini run through the Supabase Edge Function using server-side secrets.</p>
           <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#92400e', fontWeight: 600 }}>Recommended future: automatic weekly analysis (saved history). For now, run on demand only.</p>
         </div>
@@ -4383,7 +4383,7 @@ export default function LeadsDashboard() {
             </p>
           </div>
         </div>
-        <div style={{ marginTop: '14px', ...subCard, border: '1px solid #dbeafe', backgroundColor: '#f8fafc' }}>
+        <div style={{ marginTop: '14px', ...subCard, border: '1px solid #dbeafe', backgroundColor: '#f1f5f9' }}>
           <DateRangeFilter
             rangeType={rangeType} setRangeType={setRangeType}
             customStart={customStart} setCustomStart={setCustomStart}
@@ -4538,7 +4538,7 @@ export default function LeadsDashboard() {
             <div style={{ marginTop: '12px', height: '310px' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={recentMomentumModule.weeklyRows}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" />
                   <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} />
                   <YAxis yAxisId="left" tick={{ fontSize: 11, fill: '#64748b' }} allowDecimals={false} />
                   <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={(v) => fmt.currency(v)} />
@@ -4823,7 +4823,7 @@ export default function LeadsDashboard() {
               <div style={{ height: '300px' }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={recentMomentumModule.weeklyRows}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" />
                     <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} />
                     <YAxis yAxisId="left" allowDecimals={false} tick={{ fontSize: 11, fill: '#64748b' }} />
                     <YAxis
@@ -4975,7 +4975,7 @@ export default function LeadsDashboard() {
                       <p style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>{section.title}</p>
                       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
-                          <tr style={{ backgroundColor: '#f8fafc' }}>
+                          <tr style={{ backgroundColor: '#eef2f7' }}>
                             <th style={{ textAlign: 'left', padding: '6px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#475569' }}>Confidence</th>
                             <th style={{ textAlign: 'right', padding: '6px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#475569' }}>Count</th>
                             <th style={{ textAlign: 'right', padding: '6px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#475569' }}>Share</th>
@@ -5036,7 +5036,7 @@ export default function LeadsDashboard() {
                 <div style={{ marginTop: '14px', border: '1px solid #e2e8f0', borderRadius: '12px', overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
                     <thead>
-                      <tr style={{ backgroundColor: '#f8fafc' }}>
+                      <tr style={{ backgroundColor: '#eef2f7' }}>
                         <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>Issue Bucket</th>
                         <th style={{ textAlign: 'right', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>Rows</th>
                         <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>Why It Matters</th>
@@ -5183,7 +5183,7 @@ export default function LeadsDashboard() {
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '560px' }}>
                       <thead>
-                        <tr style={{ backgroundColor: '#f8fafc' }}>
+                        <tr style={{ backgroundColor: '#eef2f7' }}>
                           {['Source', 'Great Members', '% Great', 'Repeat (2+)', 'Unique', 'Great Rate'].map((h) => (
                             <th key={h} style={{ textAlign: h === 'Source' ? 'left' : 'right', padding: '6px 8px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#475569' }}>{h}</th>
                           ))}
@@ -5240,7 +5240,7 @@ export default function LeadsDashboard() {
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '820px' }}>
                       <thead>
-                        <tr style={{ backgroundColor: '#f8fafc' }}>
+                        <tr style={{ backgroundColor: '#eef2f7' }}>
                           {['Campaign (HubSpot)', 'Inferred Ad Set', 'Great', 'Acq In Range', 'Campaign Spend', 'Est Cost / Great (Acq)', 'Avg Rev', 'Top Ad (Proxy)'].map((h) => (
                             <th key={h} style={{ textAlign: (h.includes('Campaign') || h.includes('Set') || h.includes('Proxy')) ? 'left' : 'right', padding: '6px 8px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#475569' }}>{h}</th>
                           ))}
@@ -5395,7 +5395,7 @@ export default function LeadsDashboard() {
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '620px' }}>
                   <thead>
-                    <tr style={{ backgroundColor: '#f8fafc' }}>
+                    <tr style={{ backgroundColor: '#eef2f7' }}>
                       {['Date', 'Day', 'Expected Time (ET)', 'HubSpot Call Present'].map((h) => (
                         <th
                           key={h}
@@ -5441,7 +5441,7 @@ export default function LeadsDashboard() {
             <div style={{ marginTop: '12px', border: '1px solid #e2e8f0', borderRadius: '12px', overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
                 <thead>
-                  <tr style={{ backgroundColor: '#f8fafc' }}>
+                  <tr style={{ backgroundColor: '#eef2f7' }}>
                     {['How They Found Us (Source Bucket)', 'Good Members (3+)', '% of Good Members', 'Repeat Members (2+)', 'Unique Attendees', 'Good Member Rate', 'Share of Free Show-Ups'].map((h) => (
                       <th key={h} style={{ textAlign: h === 'Source Bucket' ? 'left' : 'right', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>{h}</th>
                     ))}
@@ -5567,7 +5567,7 @@ export default function LeadsDashboard() {
                 <div style={{ height: '260px' }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={hearAboutModule.trendRows}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" />
                       <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} />
                       <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#64748b' }} />
                       <Tooltip formatter={(v, n) => [Number(v || 0).toLocaleString(), n]} />
@@ -5672,7 +5672,7 @@ export default function LeadsDashboard() {
             <div style={{ marginTop: '14px', border: '1px solid #e2e8f0', borderRadius: '12px', overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '980px' }}>
                 <thead>
-                  <tr style={{ backgroundColor: '#f8fafc' }}>
+                  <tr style={{ backgroundColor: '#eef2f7' }}>
                     {['Source Bucket', 'Registrations', 'Show-Ups', 'Net New Show-Ups', 'Repeat Members', 'Good Repeat Members', 'Show-Up Rate', '% of Show-Ups', 'Cost / Show-Up'].map((h) => (
                       <th key={h} style={{ textAlign: h === 'Source Bucket' ? 'left' : 'right', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>{h}</th>
                     ))}
@@ -5848,7 +5848,7 @@ export default function LeadsDashboard() {
                   Matched-rows share: <strong>{fmtMaybePct(zoomSourceModule.current.tuesdayAssumptionTest.paidMetaShareOfMatchedTuesday)}</strong>.
                 </p>
               </div>
-              <div style={{ ...subCard, border: '1px solid #cbd5e1', backgroundColor: '#f8fafc' }}>
+              <div style={{ ...subCard, border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9' }}>
                 <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#334155' }}>What to Read First</p>
                 <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#475569' }}>
                   Use <strong>Paid Meta Cost / Good Repeat</strong> as the north-star metric.
@@ -5860,7 +5860,7 @@ export default function LeadsDashboard() {
             <div style={{ marginTop: '14px', border: '1px solid #e2e8f0', borderRadius: '12px', overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1220px' }}>
                 <thead>
-                  <tr style={{ backgroundColor: '#f8fafc' }}>
+                  <tr style={{ backgroundColor: '#eef2f7' }}>
                     {['Source Bucket', 'Show-Up Rows', 'Unique Attendees', 'Tuesday', 'Thursday', 'Net New Rows', 'Repeat Members', 'Good Repeat Members', 'Repeat Rate', 'Good Repeat Rate', 'Share of Show-Ups', 'HubSpot Match Rate', 'Cost / Show-Up'].map((h) => (
                       <th key={h} style={{ textAlign: h === 'Source Bucket' ? 'left' : 'right', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>{h}</th>
                     ))}
@@ -6001,7 +6001,7 @@ export default function LeadsDashboard() {
                 <div style={{ height: '310px' }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={analytics.funnelStages} layout="vertical" margin={{ left: 24, right: 24 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" />
                       <XAxis type="number" tick={{ fontSize: 12, fill: '#64748b' }} />
                       <YAxis dataKey="label" type="category" width={140} tick={{ fontSize: 12, fill: '#334155' }} />
                       <Tooltip formatter={(v, _, p) => [Number(v || 0).toLocaleString(), p?.payload?.label || '']} labelFormatter={(_, p) => { const r = p?.[0]?.payload; if (!r) return ''; return r.conversionFromPrevious === null ? 'Stage start' : `From previous: ${(r.conversionFromPrevious * 100).toFixed(1)}%`; }} />
@@ -6040,7 +6040,7 @@ export default function LeadsDashboard() {
                   <div style={{ height: '240px' }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={showupRows}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" />
                         <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} />
                         <YAxis tick={{ fontSize: 11, fill: '#64748b' }} />
                         <Tooltip /><Legend />
@@ -6093,7 +6093,7 @@ export default function LeadsDashboard() {
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1200px' }}>
                     <thead>
-                      <tr style={{ backgroundColor: '#f8fafc' }}>
+                      <tr style={{ backgroundColor: '#eef2f7' }}>
                         {['Campaign', 'Ad Set', 'Ad', 'Spend', 'Meta Leads', 'Attr Leads', 'Attr Regs', 'Attr Show-Ups', 'Attr Qual', 'Attr Phx Qual', 'Attr Great', 'CPL', 'CPQL', 'CPGL', 'Show-Up Rate', 'Quality Score'].map((h) => (
                           <th key={h} style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>{h}</th>
                         ))}
@@ -6149,7 +6149,7 @@ export default function LeadsDashboard() {
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '780px' }}>
                     <thead>
-                      <tr style={{ backgroundColor: '#f8fafc' }}>
+                      <tr style={{ backgroundColor: '#eef2f7' }}>
                         {['Metric', 'Current', 'WoW', 'MoM'].map((h) => (
                           <th key={h} style={{ textAlign: h === 'Metric' ? 'left' : 'right', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569' }}>{h}</th>
                         ))}
@@ -6206,7 +6206,7 @@ export default function LeadsDashboard() {
                         <div style={{ marginTop: '10px', border: '1px solid #e2e8f0', borderRadius: '12px', overflowX: 'auto' }}>
                           <table style={{ width: '100%', minWidth: '900px', borderCollapse: 'collapse' }}>
                             <thead>
-                              <tr style={{ backgroundColor: '#f8fafc' }}>
+                              <tr style={{ backgroundColor: '#eef2f7' }}>
                                 {activeDrilldownTable.columns.map((col) => (
                                   <th key={col.key} style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>{col.label}</th>
                                 ))}
