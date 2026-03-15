@@ -72,9 +72,9 @@ const SectionInsightBar = ({
   const isGreen = (isUp && toneIsGood) || (isDown && toneIsGood);
 
   const borderColor = isRedFlag
-    ? 'rgba(220, 38, 38, 0.45)'
+    ? 'var(--color-danger-border)'
     : isGreen
-      ? 'rgba(22, 163, 74, 0.35)'
+      ? 'var(--color-success-border)'
       : 'var(--color-border)';
 
   const accentColor = isRedFlag

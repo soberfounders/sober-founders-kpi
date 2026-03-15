@@ -27,10 +27,13 @@
   /* Status / semantic colors (dark-bg safe) */
   --color-success: #16a34a;
   --color-success-bg: rgba(22, 163, 74, 0.15);
+  --color-success-border: rgba(22, 163, 74, 0.35);
   --color-danger: #dc2626;
   --color-danger-bg: rgba(220, 38, 38, 0.15);
+  --color-danger-border: rgba(220, 38, 38, 0.45);
   --color-warning: #f59e0b;
   --color-warning-bg: rgba(245, 158, 11, 0.15);
+  --color-warning-border: rgba(245, 158, 11, 0.35);
   --color-info: #3b82f6;
   --color-info-bg: rgba(59, 130, 246, 0.15);
   --color-surface-elevated: rgba(30, 45, 75, 0.6);
