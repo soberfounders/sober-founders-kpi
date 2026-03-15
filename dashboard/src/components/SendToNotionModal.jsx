@@ -15,14 +15,29 @@ import { X, Loader2, Check, Send } from 'lucide-react';
 const PERSON_OPTIONS = ['Andrew Lassise', 'Kandace'];
 const PRIORITY_OPTIONS = ['High Priority', 'Medium Priority', 'Low Priority'];
 const EFFORT_OPTIONS = ['Easy Effort', 'Medium Effort', 'Hard Effort'];
-const STATUS_OPTIONS = ['Not started', 'In progress', 'Waiting on Others', 'Done'];
+const STATUS_OPTIONS = ['Not Started', 'Waiting on Others', 'In Progress', 'Done'];
+const TASK_TYPE_OPTIONS = [
+    '🐞 Bug',
+    '💬 Feature request',
+    '🎓 Education / Research',
+    '⌨️ Admin / Clerical',
+    '💻 Tech',
+    '🤝 Deals',
+    'Money / Donations / Grants',
+    '🤝 Partnerships',
+    'Social Media',
+    'Email',
+];
 
 const SendToNotionModal = ({ isOpen, onClose, defaultTaskName = '', onSuccess }) => {
     const [taskName, setTaskName] = useState(defaultTaskName);
     const [person, setPerson] = useState('Andrew Lassise');
     const [priority, setPriority] = useState('Medium Priority');
     const [effort, setEffort] = useState('Medium Effort');
-    const [status, setStatus] = useState('Not started');
+    const [status, setStatus] = useState('Not Started');
+    const [taskType, setTaskType] = useState('');
+    const [deadline, setDeadline] = useState('');
+    const [description, setDescription] = useState('');
     const [loading, setLoading] = useState(false);
     const [done, setDone] = useState(false);
 
@@ -33,7 +48,10 @@ const SendToNotionModal = ({ isOpen, onClose, defaultTaskName = '', onSuccess })
             setPerson('Andrew Lassise');
             setPriority('Medium Priority');
             setEffort('Medium Effort');
-            setStatus('Not started');
+            setStatus('Not Started');
+            setTaskType('');
+            setDeadline('');
+            setDescription('');
             setDone(false);
         }
     }, [isOpen, defaultTaskName]);
@@ -52,6 +70,16 @@ const SendToNotionModal = ({ isOpen, onClose, defaultTaskName = '', onSuccess })
                 'Priority': { select: { name: priority } },
                 'Effort level': { select: { name: effort } },
             };
+
+            if (taskType) {
+                properties['Task Type'] = { select: { name: taskType } };
+            }
+            if (deadline) {
+                properties['Deadline'] = { date: { start: deadline } };
+            }
+            if (description.trim()) {
+                properties['Description'] = { rich_text: [{ text: { content: description.trim() } }] };
+            }
 
             // Person field requires Notion user IDs — pass as metadata for backend lookup
             if (person) {
@@ -247,6 +275,45 @@ const SendToNotionModal = ({ isOpen, onClose, defaultTaskName = '', onSuccess })
                                     ))}
                                 </select>
                             </div>
+
+                            {/* Task Type */}
+                            <div>
+                                <label style={labelStyle}>Task Type</label>
+                                <select value={taskType} onChange={(e) => setTaskType(e.target.value)} style={selectStyle}>
+                                    <option value="">— None —</option>
+                                    {TASK_TYPE_OPTIONS.map(t => (
+                                        <option key={t} value={t}>{t}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Deadline */}
+                            <div>
+                                <label style={labelStyle}>Deadline</label>
+                                <input
+                                    type="date"
+                                    value={deadline}
+                                    onChange={(e) => setDeadline(e.target.value)}
+                                    style={inputStyle}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Description */}
+                        <div>
+                            <label style={labelStyle}>Description <span style={{ fontWeight: 400, opacity: 0.6 }}>(optional)</span></label>
+                            <textarea
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                                placeholder="Additional context..."
+                                rows={2}
+                                style={{
+                                    ...inputStyle,
+                                    resize: 'vertical',
+                                    minHeight: '56px',
+                                    fontFamily: 'inherit',
+                                }}
+                            />
                         </div>
                     </div>
 
