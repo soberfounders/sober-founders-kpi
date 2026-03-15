@@ -16,6 +16,7 @@ import type {
   ToolExecutionContext,
 } from "../types.js";
 import { getOrgContext } from "../data/managers.js";
+import { getThreadHistory } from "../slack/services/threading.js";
 import { logger } from "../observability/logger.js";
 
 interface ResponseClient {
@@ -211,6 +212,16 @@ export const createKpiOrchestrator = (deps: Partial<OrchestratorDependencies> = 
     const intentHint = classifyIntent(request.prompt);
     const orgContext = await resolved.getOrgContext().catch(() => null);
 
+    const { actor } = request.context;
+    const historyItems = actor.threadTs
+      ? await getThreadHistory(actor.channelId, actor.threadTs, actor.messageTs, 10).catch(() => [])
+      : [];
+
+    const historyMessages: Array<Record<string, unknown>> = historyItems.map((item) => ({
+      role: item.direction === "inbound" ? "user" : "assistant",
+      content: [{ type: "input_text", text: item.messageText }],
+    }));
+
     let response = await resolved.responseClient.create({
       model: resolved.model,
       temperature: 0.2,
@@ -221,6 +232,7 @@ export const createKpiOrchestrator = (deps: Partial<OrchestratorDependencies> = 
           role: "system",
           content: [{ type: "input_text", text: buildSystemPrompt(orgContext, intentHint) }],
         },
+        ...historyMessages,
         {
           role: "user",
           content: [{ type: "input_text", text: request.prompt }],

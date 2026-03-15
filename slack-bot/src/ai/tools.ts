@@ -154,10 +154,23 @@ const toolJsonSchemas: Record<ToolName, Record<string, unknown>> = {
   },
 };
 
+const toolDescriptions: Record<ToolName, string> = {
+  get_kpi_snapshot: "Fetch a point-in-time value for a single KPI metric. Use metric='leads', 'qualified_leads', 'donations', 'attendance', 'email_open_rate', 'seo', 'phoenix_forum_paid_members', 'free_tuesday_repeat_attendance', 'free_thursday_repeat_attendance', 'operations', or 'org_health' for a composite score. Use metric='list_metrics' to discover all available metric names. Default window is last 7 days.",
+  get_metric_trend: "Fetch a metric's current value and compare it to a prior period. Returns current, previous, delta, and delta_pct. compare_to options: previous_period (default), previous_week, previous_month, year_ago. Use for trend questions like 'are leads up or down?'",
+  get_manager_report: "Fetch a section-level summary with bullets and WoW trends. Sections: leads, attendance, donations, email, seo, operations, executive. Use for broad 'how is X doing?' questions. Falls back to vw_kpi_trend rows if no AI analysis is cached.",
+  list_open_tasks: "List open tasks from Notion. Optionally filter by owner (assignee name fragment), team (tag), or priority ('High Priority', 'Medium Priority', 'Low Priority'). Returns task title, owner, due date, status.",
+  create_task: "Create a new task in Notion with title, description, owner, priority, due date, and source. Requires confirmation for high-impact channels. Priority must be one of: 'High Priority', 'Medium Priority', 'Low Priority'.",
+  create_followup: "Create a follow-up item in Notion for a specific owner with a topic, due date, and context. Used for softer action items that don't need full task tracking.",
+  send_slack_message: "Send a Slack message to a specific channel. Requires permission and confirmation for high-impact channels. Use for targeted notifications, not for KPI summaries (use post_summary for that).",
+  post_summary: "Generate and post a formatted KPI summary to a Slack channel. summary_type options: weekly_executive, daily_health, attendance_focus, leads_focus, donor_health. Always requires confirmation before posting.",
+  get_data_quality_warnings: "Check HubSpot sync health: staleness, error counts, and sync run status. Use when the user asks about data freshness, sync issues, or data quality.",
+  get_org_context: "Fetch org-level config: dashboard URL, timezone, executive channel IDs, and active RBAC capabilities. Use when you need to know where to post or what permissions are in play.",
+};
+
 export const openAiTools: Array<Record<string, unknown>> = (Object.keys(toolArgSchemas) as ToolName[]).map((name) => ({
   type: "function",
   name,
-  description: `KPI Copilot tool: ${name}`,
+  description: toolDescriptions[name],
   parameters: toolJsonSchemas[name],
 }));
 

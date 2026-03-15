@@ -2,8 +2,43 @@ import { supabase } from "../../clients/supabase.js";
 import { logger } from "../../observability/logger.js";
 import type { IntentType } from "../../types.js";
 
-export const resolveThreadTs = (eventTs?: string, threadTs?: string): string | undefined => {
-  return threadTs || eventTs;
+export const resolveThreadTs = (_eventTs?: string, threadTs?: string): string | undefined => {
+  return threadTs;
+};
+
+export interface ConversationHistoryItem {
+  direction: "inbound" | "outbound";
+  messageText: string;
+}
+
+export const getThreadHistory = async (
+  channelId: string,
+  threadTs: string,
+  beforeMessageTs?: string,
+  limit = 10,
+): Promise<ConversationHistoryItem[]> => {
+  let query = supabase
+    .from("slack_conversations")
+    .select("direction,message_text,created_at")
+    .eq("channel_id", channelId)
+    .eq("thread_ts", threadTs)
+    .order("created_at", { ascending: true })
+    .limit(limit);
+
+  if (beforeMessageTs) {
+    query = query.lt("message_ts", beforeMessageTs);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    logger.warn({ err: error, channelId, threadTs }, "Failed to fetch thread history");
+    return [];
+  }
+
+  return (data || []).map((row: Record<string, unknown>) => ({
+    direction: String(row.direction || "inbound") as "inbound" | "outbound",
+    messageText: String(row.message_text || ""),
+  }));
 };
 
 export interface ConversationLogInput {
