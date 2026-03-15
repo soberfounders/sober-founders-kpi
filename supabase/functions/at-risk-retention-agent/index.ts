@@ -21,13 +21,16 @@ function safeJsonParse<T = any>(value: string): T | null {
     try { return JSON.parse(value) as T; } catch { return null; }
 }
 
-function nextMeetingDay(): string {
-    const now = new Date();
-    const dow = now.getUTCDay(); // 0=Sun
-    // Monday run → Tuesday meeting; Wednesday run → Thursday meeting
-    const tomorrow = new Date(now);
-    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
-    return dow === 1 ? "Tuesday" : dow === 3 ? "Thursday" : "upcoming";
+// Cron runs Monday (for Tuesday) or Wednesday (for Thursday)
+function nextMeetingDay(): "Tuesday" | "Thursday" {
+    const dow = new Date().getUTCDay(); // 0=Sun
+    return dow === 3 ? "Thursday" : "Tuesday"; // Wednesday run → Thursday; everything else → Tuesday
+}
+
+function calendarUrl(meetingDay: "Tuesday" | "Thursday"): string {
+    return meetingDay === "Thursday"
+        ? "https://soberfounders.org/thursday"
+        : "https://soberfounders.org/tuesday";
 }
 
 /* ------------------------------------------------------------------ */
@@ -36,25 +39,29 @@ function nextMeetingDay(): string {
 
 async function generateNudgeMessages(candidates: any[]): Promise<any[]> {
     const geminiKey = Deno.env.get("GEMINI_API_KEY");
+    const meetingDay = nextMeetingDay();
+    const calLink = calendarUrl(meetingDay);
 
     if (!geminiKey) {
         return candidates.map(c => ({
             email: c.email,
             name: `${c.firstname || ""} ${c.lastname || ""}`.trim() || "there",
             subject: `Hope to see you tomorrow`,
-            message: `Hey ${c.firstname || "there"}, we noticed you haven't been around in a bit. Tomorrow's meeting would be a great time to reconnect — we'd love to see you there!`,
+            message:
+                `Hey ${c.firstname || "there"}, just wanted to reach out — we'd love to see you at tomorrow's ${meetingDay} meeting! ` +
+                `You can easily add it to your calendar at ${calLink}. Hope to see you there!`,
             reason: "fallback_template",
         }));
     }
 
-    const meetingDay = nextMeetingDay();
     const prompt = [
         "You are the 'Sober Founders' community manager writing a personal check-in email.",
         `Tomorrow is ${meetingDay} — our regular group meeting.`,
         "These people have been regulars (attended 2+ times recently) but missed the last meeting.",
-        "Write a short (2-3 sentences), warm, personal email for each person.",
+        "Write a short (2–3 sentences), warm, personal email for each person.",
         "Make it feel like a friend reaching out, not a system notification.",
         "Don't mention 'attendance tracking' or 'data' — just a genuine 'hope to see you tomorrow'.",
+        `End with a line letting them know they can add it to their calendar at ${calLink}.`,
         "Use their first name.",
         "",
         "Candidates:",
@@ -83,14 +90,16 @@ async function generateNudgeMessages(candidates: any[]): Promise<any[]> {
         const json = await resp.json();
         const text = json?.candidates?.[0]?.content?.parts?.[0]?.text || "";
         const parsed = safeJsonParse(stripCodeFences(text));
-        return parsed?.nudges || [];
+        if (parsed?.nudges?.length) return parsed.nudges;
     }
 
     return candidates.map(c => ({
         email: c.email,
         name: `${c.firstname || ""} ${c.lastname || ""}`.trim() || "there",
         subject: `Hope to see you tomorrow`,
-        message: `Hey ${c.firstname || "there"}, just wanted to reach out — we'd love to see you at tomorrow's meeting. It's always better when you're there!`,
+        message:
+            `Hey ${c.firstname || "there"}, just wanted to reach out — we'd love to see you at tomorrow's ${meetingDay} meeting! ` +
+            `You can easily add it to your calendar at ${calLink}. Hope to see you there!`,
         reason: "fallback_template",
     }));
 }
@@ -99,14 +108,16 @@ async function generateNudgeMessages(candidates: any[]): Promise<any[]> {
 /*  Slack Alert                                                        */
 /* ------------------------------------------------------------------ */
 
-async function alertSlack(stats: any): Promise<boolean> {
+async function alertSlack(stats: any, dryRun: boolean): Promise<boolean> {
     const webhookUrl = Deno.env.get("SLACK_WEBHOOK_URL");
     if (!webhookUrl) return false;
 
-    const blocks = [
+    const modeLabel = dryRun ? "DRY RUN — no emails sent" : "LIVE";
+
+    const blocks: any[] = [
         {
             type: "header",
-            text: { type: "plain_text", text: "At-Risk Retention Agent Run", emoji: true },
+            text: { type: "plain_text", text: `At-Risk Retention Agent — ${modeLabel}`, emoji: true },
         },
         {
             type: "section",
@@ -115,15 +126,37 @@ async function alertSlack(stats: any): Promise<boolean> {
                 text: [
                     `*Retention Nudge Summary:*`,
                     `- At-Risk Attendees Found: ${stats.totalAtRisk}`,
-                    `- Nudge Emails Sent: ${stats.emailsSent}`,
-                    `- Notion Follow-ups Created: ${stats.notionTasks}`,
+                    `- Queued This Run: ${stats.processed}`,
+                    dryRun ? `- Emails Sent: 0 (dry run)` : `- Nudge Emails Sent: ${stats.emailsSent}`,
+                    dryRun ? `- Notion Tasks: 0 (dry run)` : `- Notion Follow-ups Created: ${stats.notionTasks}`,
                     stats.errors > 0 ? `- Errors: ${stats.errors}` : "",
                 ].filter(Boolean).join("\n"),
             },
         },
     ];
 
-    if (stats.recipients && stats.recipients.length > 0) {
+    if (dryRun && stats.previews?.length > 0) {
+        blocks.push({
+            type: "section",
+            text: {
+                type: "mrkdwn",
+                text: `*Preview — nudges that would be sent:*\n${
+                    stats.previews.map((p: any) =>
+                        `• *${p.name || p.email}* (${p.email})\n  _Subject:_ ${p.subject}\n  _Message:_ ${p.message}`
+                    ).join("\n\n")
+                }`,
+            },
+        });
+        blocks.push({
+            type: "section",
+            text: {
+                type: "mrkdwn",
+                text: `*To approve and send live:* POST \`/at-risk-retention-agent\` with \`{"dry_run": false}\``,
+            },
+        });
+    }
+
+    if (!dryRun && stats.recipients?.length > 0) {
         blocks.push({
             type: "section",
             text: {
@@ -157,7 +190,13 @@ serve(async (req: Request) => {
         const hubspotToken = Deno.env.get("HUBSPOT_PRIVATE_APP_TOKEN");
         const senderEmail = Deno.env.get("HUBSPOT_SENDER_EMAIL") || "";
 
-        // 1. Get at-risk candidates who haven't been nudged recently
+        let dryRun = true;
+        try {
+            const body = await req.json();
+            if (body?.dry_run === false) dryRun = false;
+        } catch { /* default dry_run:true */ }
+
+        // 1. Get at-risk candidates not nudged in last 14 days
         const { data: candidates, error } = await supabase
             .from("vw_at_risk_attendees")
             .select("*")
@@ -166,101 +205,109 @@ serve(async (req: Request) => {
 
         if (error) throw error;
 
-        const realCandidates = (candidates || []).filter((c: any) => c.email && !c.email.includes("admin@"));
+        const realCandidates = (candidates || []).filter(
+            (c: any) => c.email && !c.email.includes("admin@")
+        );
 
-        // 2. Generate personalized nudge messages (max 10 per run)
+        // 2. Generate nudge messages (max 10 per run)
         const targets = realCandidates.slice(0, 10);
         let nudges: any[] = [];
         if (targets.length > 0) {
             nudges = await generateNudgeMessages(targets);
         }
 
-        // 3. Send via HubSpot + create Notion follow-ups
         let emailsSent = 0;
         let notionTasks = 0;
         let errors = 0;
         const recipients: string[] = [];
 
-        for (const nudge of nudges) {
-            const targetInfo = targets.find((t: any) => t.email?.toLowerCase() === nudge.email?.toLowerCase());
+        if (!dryRun) {
+            const meetingDay = nextMeetingDay();
 
-            // Send HubSpot email
-            if (hubspotToken && senderEmail) {
-                const { data: contact } = await supabase
-                    .from("raw_hubspot_contacts")
-                    .select("hubspot_contact_id")
-                    .ilike("email", nudge.email)
-                    .limit(1)
-                    .single();
+            for (const nudge of nudges) {
+                const targetInfo = targets.find(
+                    (t: any) => t.email?.toLowerCase() === nudge.email?.toLowerCase()
+                );
 
-                let contactId = contact?.hubspot_contact_id;
-                if (!contactId) {
-                    contactId = await lookupContactByEmail(hubspotToken, nudge.email);
-                }
+                if (hubspotToken && senderEmail) {
+                    const { data: contact } = await supabase
+                        .from("raw_hubspot_contacts")
+                        .select("hubspot_contact_id")
+                        .ilike("email", nudge.email)
+                        .limit(1)
+                        .single();
 
-                if (contactId) {
-                    const emailResult = await sendHubSpotEmail(hubspotToken, {
-                        contactId,
-                        contactEmail: nudge.email,
-                        senderEmail,
-                        subject: nudge.subject || "Hope to see you tomorrow",
-                        htmlBody: `<p>${nudge.message}</p>`,
-                        campaignType: "at_risk_nudge",
-                    });
+                    let contactId = contact?.hubspot_contact_id;
+                    if (!contactId) {
+                        contactId = await lookupContactByEmail(hubspotToken, nudge.email);
+                    }
 
-                    if (emailResult.ok) {
-                        emailsSent++;
-                        recipients.push(`${nudge.name || nudge.email} (${targetInfo?.days_since_last || "?"}d since last)`);
+                    if (contactId) {
+                        const emailResult = await sendHubSpotEmail(hubspotToken, {
+                            contactId,
+                            contactEmail: nudge.email,
+                            senderEmail,
+                            subject: nudge.subject || "Hope to see you tomorrow",
+                            htmlBody: `<p>${nudge.message}</p>`,
+                            campaignType: "at_risk_nudge",
+                        });
+
+                        if (emailResult.ok) {
+                            emailsSent++;
+                            recipients.push(
+                                `${nudge.name || nudge.email} (${targetInfo?.days_since_last || "?"}d since last)`
+                            );
+                        } else {
+                            errors++;
+                        }
                     } else {
                         errors++;
                     }
-                } else {
-                    errors++;
                 }
+
+                const notionResult = await createNotionFollowUp({
+                    title: `Check: did ${nudge.name || nudge.email} attend ${meetingDay}?`,
+                    description: `At-risk nudge sent.\n\nAttendance: ${targetInfo?.meetings_60d || "?"}x in 60d, last ${targetInfo?.days_since_last || "?"}d ago.\n\nEmail: "${nudge.subject}"\nCheck HubSpot timeline for delivery + reply.`,
+                    dueDate: new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10),
+                    priority: "High",
+                    tags: ["outreach", "at-risk-retention", "automated"],
+                });
+
+                if (notionResult.ok) notionTasks++;
             }
 
-            // Create Notion follow-up
-            const meetingDay = nextMeetingDay();
-            const notionResult = await createNotionFollowUp({
-                title: `Check: did ${nudge.name || nudge.email} attend ${meetingDay}?`,
-                description: `At-risk retention nudge sent.\n\nAttendance history: ${targetInfo?.meetings_60d || "?"}x in 60d, last attended ${targetInfo?.days_since_last || "?"}d ago.\n\nEmail: "${nudge.subject}"\nCheck HubSpot timeline for delivery + reply.`,
-                dueDate: new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10), // day after meeting
-                priority: "High",
-                tags: ["outreach", "at-risk-retention", "automated"],
-            });
-
-            if (notionResult.ok) notionTasks++;
+            // Log recovery events
+            if (nudges.length > 0) {
+                const events = nudges.map((n: any) => ({
+                    attendee_email: n.email,
+                    event_type: "at_risk_nudge",
+                    meeting_date: targets.find((t: any) => t.email === n.email)?.last_attended,
+                    metadata: {
+                        ai_message: n.message,
+                        subject: n.subject,
+                        campaign_type: "at_risk_nudge",
+                        days_since_last: targets.find((t: any) => t.email === n.email)?.days_since_last,
+                        meetings_60d: targets.find((t: any) => t.email === n.email)?.meetings_60d,
+                    },
+                }));
+                await supabase.from("recovery_events").insert(events);
+            }
         }
 
-        // 4. Log recovery events
-        if (nudges.length > 0) {
-            const events = nudges.map((n: any) => ({
-                attendee_email: n.email,
-                event_type: "at_risk_nudge",
-                meeting_date: targets.find((t: any) => t.email === n.email)?.last_attended,
-                metadata: {
-                    ai_message: n.message,
-                    subject: n.subject,
-                    campaign_type: "at_risk_nudge",
-                    days_since_last: targets.find((t: any) => t.email === n.email)?.days_since_last,
-                    meetings_60d: targets.find((t: any) => t.email === n.email)?.meetings_60d,
-                },
-            }));
-            await supabase.from("recovery_events").insert(events);
-        }
-
-        // 5. Slack summary
         await alertSlack({
             totalAtRisk: realCandidates.length,
+            processed: nudges.length,
             emailsSent,
             notionTasks,
             errors,
             recipients,
-        });
+            previews: dryRun ? nudges : [],
+        }, dryRun);
 
         return new Response(
             JSON.stringify({
                 ok: true,
+                dry_run: dryRun,
                 processed: nudges.length,
                 emails_sent: emailsSent,
                 notion_tasks: notionTasks,

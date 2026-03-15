@@ -21,57 +21,60 @@ function safeJsonParse<T = any>(value: string): T | null {
     try { return JSON.parse(value) as T; } catch { return null; }
 }
 
-/* ------------------------------------------------------------------ */
-/*  AI Winback Message Generation                                      */
-/* ------------------------------------------------------------------ */
-
 function calendarUrl(isThursday: boolean): string {
     return isThursday
         ? "https://soberfounders.org/thursday"
         : "https://soberfounders.org/tuesday";
 }
 
-async function generateWinbackMessages(candidates: any[]): Promise<any[]> {
+/* ------------------------------------------------------------------ */
+/*  AI Message Generation                                              */
+/* ------------------------------------------------------------------ */
+
+async function generateStreakBreakMessages(candidates: any[]): Promise<any[]> {
     const geminiKey = Deno.env.get("GEMINI_API_KEY");
 
     if (!geminiKey) {
         return candidates.map(c => {
-            const calLink = calendarUrl(c.is_thursday_attendee === true);
+            const firstName = c.firstname || "there";
+            const calLink = calendarUrl(c.last_was_thursday === true);
             return {
                 email: c.email,
                 name: `${c.firstname || ""} ${c.lastname || ""}`.trim() || "there",
-                subject: `Thinking of you`,
+                subject: `Hey ${firstName}, haven't seen you in a bit`,
                 message:
-                    `Hey ${c.firstname || "there"}, it's been a while since you joined us at Sober Founders — just wanted to reach out and let you know you're always welcome back. ` +
-                    `A lot has happened since your last visit and the community keeps growing. ` +
-                    `If you'd like to reconnect, you can easily add the meeting to your calendar at ${calLink} — hope to see you soon!`,
+                    `Hey ${firstName}, you were coming pretty regularly and we haven't seen you in a little while — just wanted to check in and make sure everything's okay! ` +
+                    `If life just got busy, no worries at all — here's the link to add us back to your calendar: ${calLink}. ` +
+                    `If something about the meetings wasn't working for you, we'd really love to hear your feedback on how to make it better.`,
                 reason: "fallback_template",
             };
         });
     }
 
     const prompt = [
-        "You are the 'Sober Founders' community leader writing personal winback emails.",
-        "These people attended ONE meeting and never came back.",
-        "Write a short (3-4 sentences), warm, personal email for each person.",
-        "Key guidelines:",
-        "- Don't guilt-trip. Don't say 'we noticed you stopped coming'.",
-        "- Instead, share something positive that's happened in the community recently.",
-        "- Make them feel like they'd be welcomed back warmly.",
-        "- Reference roughly how long it's been (e.g., 'a couple months', 'a few weeks').",
-        "- End with a line: 'You can easily add the meeting to your calendar at [calendar_url]'",
-        "- Use their first name. Feel like a personal note, not a system email.",
+        "You are the 'Sober Founders' community leader writing a personal check-in to people who used to come regularly but have gone quiet.",
+        "",
+        "These people attended 3 or more meetings in a row, but haven't been back in 2–8 weeks.",
+        "",
+        "Guidelines:",
+        "- 2–3 sentences, warm and personal.",
+        "- Acknowledge they were a regular (don't make it feel like a form letter).",
+        "- Don't guilt-trip or make them feel bad for not coming.",
+        "- Ask if everything is okay — genuine concern.",
+        "- If life just got busy, give them the calendar link to add it back.",
+        "- End with: 'If something about the meetings wasn't working for you, we'd really love to hear your feedback.'",
+        "- Use their first name.",
         "",
         "Candidates:",
         JSON.stringify(candidates.map(c => ({
             email: c.email,
             name: `${c.firstname || ""} ${c.lastname || ""}`.trim(),
-            first_attended: c.first_attended,
-            days_since: c.days_since_last,
-            calendar_url: calendarUrl(c.is_thursday_attendee === true),
+            total_meetings: c.total_meetings,
+            days_since_last: c.days_since_last,
+            calendar_url: calendarUrl(c.last_was_thursday === true),
         }))),
         "",
-        "Return JSON: { winbacks: [ { email: string, name: string, subject: string, message: string } ] }",
+        "Return JSON: { messages: [ { email: string, name: string, subject: string, message: string } ] }",
     ].join("\n");
 
     const model = "gemini-2.0-flash";
@@ -81,7 +84,7 @@ async function generateWinbackMessages(candidates: any[]): Promise<any[]> {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.5, responseMimeType: "application/json" },
+            generationConfig: { temperature: 0.4, responseMimeType: "application/json" },
         }),
     });
 
@@ -89,16 +92,24 @@ async function generateWinbackMessages(candidates: any[]): Promise<any[]> {
         const json = await resp.json();
         const text = json?.candidates?.[0]?.content?.parts?.[0]?.text || "";
         const parsed = safeJsonParse(stripCodeFences(text));
-        return parsed?.winbacks || [];
+        if (parsed?.messages?.length) return parsed.messages;
     }
 
-    return candidates.map(c => ({
-        email: c.email,
-        name: `${c.firstname || ""} ${c.lastname || ""}`.trim() || "there",
-        subject: `Thinking of you`,
-        message: `Hey ${c.firstname || "there"}, it's been a little while since you joined us and I just wanted to say — you're always welcome back at Sober Founders. The community has been growing and the conversations keep getting better. Would love to see you at an upcoming meeting!`,
-        reason: "fallback_template",
-    }));
+    // Fallback templates
+    return candidates.map(c => {
+        const firstName = c.firstname || "there";
+        const calLink = calendarUrl(c.last_was_thursday === true);
+        return {
+            email: c.email,
+            name: `${c.firstname || ""} ${c.lastname || ""}`.trim() || "there",
+            subject: `Hey ${firstName}, haven't seen you in a bit`,
+            message:
+                `Hey ${firstName}, you were coming pretty regularly and we haven't seen you in a little while — just wanted to check in and make sure everything's okay! ` +
+                `If life just got busy, no worries at all — here's the link to add us back to your calendar: ${calLink}. ` +
+                `If something about the meetings wasn't working for you, we'd really love to hear your feedback on how to make it better.`,
+            reason: "fallback_template",
+        };
+    });
 }
 
 /* ------------------------------------------------------------------ */
@@ -114,19 +125,18 @@ async function alertSlack(stats: any, dryRun: boolean): Promise<boolean> {
     const blocks: any[] = [
         {
             type: "header",
-            text: { type: "plain_text", text: `Winback Campaign Agent — ${modeLabel}`, emoji: true },
+            text: { type: "plain_text", text: `Streak Break Agent — ${modeLabel}`, emoji: true },
         },
         {
             type: "section",
             text: {
                 type: "mrkdwn",
                 text: [
-                    `*Winback Summary:*`,
-                    `- Total One-and-Done Candidates: ${stats.totalWinback}`,
-                    `- Queued This Batch: ${stats.processed}`,
+                    `*Streak Break Summary:*`,
+                    `- Regulars Who Went Quiet: ${stats.totalCandidates}`,
+                    `- Queued This Run: ${stats.processed}`,
                     dryRun ? `- Emails Sent: 0 (dry run)` : `- Emails Sent: ${stats.emailsSent}`,
                     dryRun ? `- Notion Tasks: 0 (dry run)` : `- Notion Tasks: ${stats.notionTasks}`,
-                    `- Remaining in Pipeline: ${stats.remaining}`,
                     stats.errors > 0 ? `- Errors: ${stats.errors}` : "",
                 ].filter(Boolean).join("\n"),
             },
@@ -138,7 +148,7 @@ async function alertSlack(stats: any, dryRun: boolean): Promise<boolean> {
             type: "section",
             text: {
                 type: "mrkdwn",
-                text: `*Preview — winback emails that would be sent:*\n${
+                text: `*Preview — emails that would be sent:*\n${
                     stats.previews.map((p: any) =>
                         `• *${p.name || p.email}* (${p.email})\n  _Subject:_ ${p.subject}\n  _Message:_ ${p.message}`
                     ).join("\n\n")
@@ -149,7 +159,7 @@ async function alertSlack(stats: any, dryRun: boolean): Promise<boolean> {
             type: "section",
             text: {
                 type: "mrkdwn",
-                text: `*To approve and send live:* POST \`/winback-campaign-agent\` with \`{"dry_run": false}\``,
+                text: `*To approve and send live:* POST \`/streak-break-agent\` with \`{"dry_run": false}\``,
             },
         });
     }
@@ -188,21 +198,20 @@ serve(async (req: Request) => {
         const hubspotToken = Deno.env.get("HUBSPOT_PRIVATE_APP_TOKEN");
         const senderEmail = Deno.env.get("HUBSPOT_SENDER_EMAIL") || "";
 
-        // Parse request params
-        let batchSize = 10;
         let dryRun = true;
         try {
             const body = await req.json();
-            if (body?.batch_size) batchSize = Math.min(Number(body.batch_size) || 10, 20);
             if (body?.dry_run === false) dryRun = false;
-        } catch { /* defaults */ }
+        } catch { /* default dry_run:true */ }
 
-        // 1. Get winback candidates who haven't been contacted
+        // 1. Get streak-break candidates not reached in last 28 days
+        //    (view already excludes people nudged via at_risk_nudge in last 14d)
         const { data: candidates, error } = await supabase
-            .from("vw_winback_candidates")
+            .from("vw_streak_break_candidates")
             .select("*")
-            .is("last_winback_sent", null)
-            .order("days_since_last", { ascending: true });
+            .is("last_streak_break_sent", null)
+            .is("last_at_risk_nudge_sent", null)
+            .order("days_since_last", { ascending: true }); // most recently quiet first
 
         if (error) throw error;
 
@@ -210,11 +219,11 @@ serve(async (req: Request) => {
             (c: any) => c.email && !c.email.includes("admin@")
         );
 
-        // 2. Generate personalized winback messages
-        const targets = realCandidates.slice(0, batchSize);
-        let winbacks: any[] = [];
+        // 2. Generate messages (max 5 per run — these are more personal outreaches)
+        const targets = realCandidates.slice(0, 5);
+        let messages: any[] = [];
         if (targets.length > 0) {
-            winbacks = await generateWinbackMessages(targets);
+            messages = await generateStreakBreakMessages(targets);
         }
 
         let emailsSent = 0;
@@ -223,92 +232,93 @@ serve(async (req: Request) => {
         const recipients: string[] = [];
 
         if (!dryRun) {
-            // 3. Send live — HubSpot + Notion
-            for (const wb of winbacks) {
+            for (const msg of messages) {
                 const targetInfo = targets.find(
-                    (t: any) => t.email?.toLowerCase() === wb.email?.toLowerCase()
+                    (t: any) => t.email?.toLowerCase() === msg.email?.toLowerCase()
                 );
 
                 if (hubspotToken && senderEmail) {
                     const { data: contact } = await supabase
                         .from("raw_hubspot_contacts")
                         .select("hubspot_contact_id")
-                        .ilike("email", wb.email)
+                        .ilike("email", msg.email)
                         .limit(1)
                         .single();
 
                     let contactId = contact?.hubspot_contact_id;
                     if (!contactId) {
-                        contactId = await lookupContactByEmail(hubspotToken, wb.email);
+                        contactId = await lookupContactByEmail(hubspotToken, msg.email);
                     }
 
                     if (contactId) {
                         const emailResult = await sendHubSpotEmail(hubspotToken, {
                             contactId,
-                            contactEmail: wb.email,
+                            contactEmail: msg.email,
                             senderEmail,
-                            subject: wb.subject || "Thinking of you",
-                            htmlBody: `<p>${wb.message}</p>`,
-                            campaignType: "winback",
+                            subject: msg.subject,
+                            htmlBody: `<p>${msg.message}</p>`,
+                            campaignType: "streak_break",
                         });
 
                         if (emailResult.ok) {
                             emailsSent++;
-                            recipients.push(`${wb.name || wb.email} (${targetInfo?.days_since_last || "?"}d ago)`);
+                            recipients.push(
+                                `${msg.name || msg.email} (${targetInfo?.total_meetings || "?"}x, ${targetInfo?.days_since_last || "?"}d ago)`
+                            );
                         } else {
+                            console.error(`Email failed for ${msg.email}:`, emailResult.error);
                             errors++;
                         }
                     } else {
+                        console.warn(`No HubSpot contact found for ${msg.email}`);
                         errors++;
                     }
                 }
 
                 const notionResult = await createNotionFollowUp({
-                    title: `Winback check: ${wb.name || wb.email} — did they return?`,
-                    description: `Winback email sent to one-time attendee.\n\nFirst attended: ${targetInfo?.first_attended || "unknown"}\nDays since: ${targetInfo?.days_since_last || "?"}\nSession: ${targetInfo?.is_thursday_attendee ? "Thursday" : "Tuesday"}\n\nCheck HubSpot timeline and attendance data to see if they returned.`,
+                    title: `Streak break check: ${msg.name || msg.email} — did they return?`,
+                    description: `Streak break outreach sent.\n\nTotal meetings: ${targetInfo?.total_meetings || "?"}\nDays since last: ${targetInfo?.days_since_last || "?"}\nLast session: ${targetInfo?.last_was_thursday ? "Thursday" : "Tuesday"}\n\nEmail: "${msg.subject}"\nCheck HubSpot timeline for delivery + reply.`,
                     dueDate: new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10),
-                    priority: "Low",
-                    tags: ["outreach", "winback", "automated"],
+                    priority: "Medium",
+                    tags: ["outreach", "streak-break", "automated"],
                 });
 
                 if (notionResult.ok) notionTasks++;
             }
 
-            // 4. Log recovery events
-            if (winbacks.length > 0) {
-                const events = winbacks.map((w: any) => ({
-                    attendee_email: w.email,
-                    event_type: "winback",
-                    meeting_date: targets.find((t: any) => t.email === w.email)?.first_attended,
+            // Log recovery events
+            if (messages.length > 0) {
+                const events = messages.map((m: any) => ({
+                    attendee_email: m.email,
+                    event_type: "streak_break",
+                    meeting_date: targets.find((t: any) => t.email === m.email)?.last_attended,
                     metadata: {
-                        ai_message: w.message,
-                        subject: w.subject,
-                        campaign_type: "winback",
-                        days_since_last: targets.find((t: any) => t.email === w.email)?.days_since_last,
-                        is_thursday_attendee: targets.find((t: any) => t.email === w.email)?.is_thursday_attendee,
+                        ai_message: m.message,
+                        subject: m.subject,
+                        campaign_type: "streak_break",
+                        total_meetings: targets.find((t: any) => t.email === m.email)?.total_meetings,
+                        days_since_last: targets.find((t: any) => t.email === m.email)?.days_since_last,
                     },
                 }));
                 await supabase.from("recovery_events").insert(events);
             }
         }
 
-        // 5. Slack summary
         await alertSlack({
-            totalWinback: realCandidates.length,
-            processed: winbacks.length,
+            totalCandidates: realCandidates.length,
+            processed: messages.length,
             emailsSent,
             notionTasks,
             errors,
-            remaining: realCandidates.length - targets.length,
             recipients,
-            previews: dryRun ? winbacks : [],
+            previews: dryRun ? messages : [],
         }, dryRun);
 
         return new Response(
             JSON.stringify({
                 ok: true,
                 dry_run: dryRun,
-                processed: winbacks.length,
+                processed: messages.length,
                 emails_sent: emailsSent,
                 notion_tasks: notionTasks,
                 candidates_remaining: realCandidates.length - targets.length,
@@ -317,7 +327,7 @@ serve(async (req: Request) => {
         );
 
     } catch (err: any) {
-        console.error("Winback Campaign Agent Error:", err);
+        console.error("Streak Break Agent Error:", err);
         return new Response(
             JSON.stringify({ ok: false, error: err.message }),
             { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
