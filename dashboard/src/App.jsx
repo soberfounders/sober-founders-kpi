@@ -17,7 +17,7 @@ const DonationsDashboard = lazy(() => import('./views/DonationsDashboard'));
 const OutreachExperimentDashboard = lazy(() => import('./views/OutreachExperimentDashboard'));
 
 /* ── route ↔ tab mapping ── */
-export const ROUTES = [
+const ROUTES = [
   { path: '/',                 tabId: 'Dashboard',        label: 'Dashboard',         element: <DashboardOverview /> },
   { path: '/attendance',       tabId: 'Attendance',       label: 'Attendance',         element: <AttendanceDashboard /> },
   { path: '/leads',            tabId: 'Leads',            label: 'Leads',              element: <LeadsDashboard /> },

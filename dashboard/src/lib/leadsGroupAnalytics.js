@@ -102,7 +102,7 @@ function parseDateKeyInTimeZone(value, timeZone) {
     return dateKeyInTimeZone(d, timeZone);
 }
 
-function parseHubspotCreatedDateKey(value) {
+export function parseHubspotCreatedDateKey(value) {
     return parseDateKeyInTimeZone(value, HUBSPOT_REPORTING_TIMEZONE);
 }
 
@@ -789,7 +789,7 @@ function sumAds(adsRows, startKey, endKey, funnelFilter) {
 // Lead categorization with mismatch detection
 // ---------------------------------------------------------------------------
 
-function buildDedupedPaidHubspotContacts(hubspotRows, funnelFilter) {
+export function buildDedupedPaidHubspotContacts(hubspotRows, funnelFilter) {
     const dedup = new Map();
     const keyByEmail = new Map();
 

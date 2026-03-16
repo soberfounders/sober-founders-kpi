@@ -9,6 +9,8 @@ import { DASHBOARD_LOOKBACK_DAYS } from '../lib/env';
 import { evaluateLeadQualification, isPhoenixQualifiedLead, parseOfficialRevenue } from '../lib/leadsQualificationRules';
 import {
   buildDateRangeWindows,
+  buildDedupedPaidHubspotContacts,
+  parseHubspotCreatedDateKey,
 } from '../lib/leadsGroupAnalytics';
 import {
   KPI_DIRECTION,
@@ -75,11 +77,13 @@ const HUBSPOT_CONTACT_SELECT_COLUMNS = [
   'is_deleted',
   'hubspot_archived',
   'merged_into_hubspot_contact_id',
+  'hs_additional_emails',
 ];
 
 const HUBSPOT_OPTIONAL_COLUMNS = new Set([
   'campaign_source',
   'sobriety_date__official_',
+  'hs_additional_emails',
 ]);
 
 const LOOKBACK_DAYS_SAFE = Number.isFinite(Number(DASHBOARD_LOOKBACK_DAYS))
@@ -472,49 +476,6 @@ function classifyAdFunnel(row) {
   return blob.includes('phoenix') ? 'phoenix' : 'free';
 }
 
-function classifyHubspotFunnel(row) {
-  const blob = [
-    row?.campaign,
-    row?.campaign_source,
-    row?.membership_s,
-    row?.hs_analytics_source_data_2,
-    row?.hs_latest_source_data_2,
-  ]
-    .map((value) => normalizeText(value))
-    .join(' ');
-
-  return blob.includes('phoenix') ? 'phoenix' : 'free';
-}
-
-function isPaidSocialContact(row) {
-  const source = normalizeText(row?.hs_analytics_source || row?.hs_latest_source);
-  return source.includes('paid_social') || source.includes('paid social');
-}
-
-function isActiveHubspotContact(row) {
-  if (row?.is_deleted === true) return false;
-  if (row?.hubspot_archived === true) return false;
-  const mergedIntoRaw = row?.merged_into_hubspot_contact_id;
-  const mergedIntoNumber = Number(mergedIntoRaw);
-  const hasMergedInto = mergedIntoRaw !== null
-    && mergedIntoRaw !== undefined
-    && mergedIntoRaw !== ''
-    && Number.isFinite(mergedIntoNumber)
-    && mergedIntoNumber > 0;
-  return !hasMergedInto;
-}
-
-function contactCreatedAtTs(row) {
-  const ts = Date.parse(row?.createdate || '');
-  return Number.isFinite(ts) ? ts : 0;
-}
-
-function chooseNewerContact(previous, next) {
-  if (!previous) return next;
-  if (!next) return previous;
-  return contactCreatedAtTs(next) > contactCreatedAtTs(previous) ? next : previous;
-}
-
 function normalizeAdsRows(rows = []) {
   return rows
     .map((row) => ({
@@ -527,37 +488,30 @@ function normalizeAdsRows(rows = []) {
 }
 
 function normalizeHubspotContacts(rows = []) {
-  const deduped = new Map();
+  // Use the same cross-email identity-resolution dedup that the Leads module
+  // uses so that Dashboard KPI counts match exactly.
+  const freeContacts = buildDedupedPaidHubspotContacts(rows, 'free');
+  const phoenixContacts = buildDedupedPaidHubspotContacts(rows, 'phoenix');
 
-  rows.forEach((row) => {
-    if (!isActiveHubspotContact(row)) return;
-    if (!isPaidSocialContact(row)) return;
-    const createdDateKey = toDateKey(row?.createdate);
-    if (!createdDateKey) return;
+  function mapRow(row, funnel) {
+    const createdDateKey = parseHubspotCreatedDateKey(row?.createdate);
+    if (!createdDateKey) return null;
+    const qualification = evaluateLeadQualification({ revenue: row, sobrietyDate: row });
+    const phoenixQual = isPhoenixQualifiedLead({ revenue: row, sobrietyDate: row });
+    const revenue = parseOfficialRevenue(row);
+    return {
+      createdDateKey,
+      funnel,
+      qualified: qualification.qualified,
+      phoenixQualified: phoenixQual,
+      great: Number.isFinite(Number(revenue)) && Number(revenue) >= 1_000_000,
+    };
+  }
 
-    const key = Number.isFinite(Number(row?.hubspot_contact_id)) && Number(row.hubspot_contact_id) > 0
-      ? `id:${Number(row.hubspot_contact_id)}`
-      : `email:${normalizeText(row?.email)}`;
-    if (!key || key === 'email:') return;
-
-    deduped.set(key, chooseNewerContact(deduped.get(key), row));
-  });
-
-  return Array.from(deduped.values())
-    .map((row) => {
-      const createdDateKey = toDateKey(row?.createdate);
-      const qualification = evaluateLeadQualification({ revenue: row, sobrietyDate: row });
-      const phoenixQual = isPhoenixQualifiedLead({ revenue: row, sobrietyDate: row });
-      const revenue = parseOfficialRevenue(row);
-      return {
-        createdDateKey,
-        funnel: classifyHubspotFunnel(row),
-        qualified: qualification.qualified,
-        phoenixQualified: phoenixQual,
-        great: Number.isFinite(Number(revenue)) && Number(revenue) >= 1_000_000,
-      };
-    })
-    .filter((row) => row.createdDateKey);
+  return [
+    ...freeContacts.map((row) => mapRow(row, 'free')),
+    ...phoenixContacts.map((row) => mapRow(row, 'phoenix')),
+  ].filter(Boolean);
 }
 
 const _freeGroupNameMatcher = createMeetingNameMatcher(FREE_GROUP_INTERVIEW_MEETING_NAME);
