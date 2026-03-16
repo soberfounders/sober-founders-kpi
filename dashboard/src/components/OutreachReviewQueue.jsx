@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import {
   Mail, Send, Loader2, RefreshCw, CheckCircle2, XCircle,
-  ChevronDown, ChevronUp, AlertTriangle, TrendingUp, Users, Clock,
+  ChevronDown, ChevronUp, TrendingUp,
 } from 'lucide-react';
 
 /* ── Style constants ── */
@@ -239,7 +239,7 @@ function CandidateCard({ candidate, onSend, sendState }) {
 
 /* ── Comeback rate card ── */
 
-function ComebackRateCard({ experimentResults, conversions }) {
+function ComebackRateCard({ conversions }) {
   const stats = useMemo(() => {
     const byCampaign = {};
     for (const c of conversions) {
@@ -305,14 +305,13 @@ export default function OutreachReviewQueue() {
   const [loading, setLoading] = useState(true);
   const [candidates, setCandidates] = useState([]);
   const [conversions, setConversions] = useState([]);
-  const [experimentResults, setExperimentResults] = useState([]);
   const [sendStates, setSendStates] = useState({});
   const [collapsed, setCollapsed] = useState(false);
 
   const fetchCandidates = useCallback(async () => {
     setLoading(true);
     try {
-      const [noShowRes, atRiskRes, winbackRes, streakRes, convRes, expRes] = await Promise.all([
+      const [noShowRes, atRiskRes, winbackRes, streakRes, convRes] = await Promise.all([
         supabase.from('vw_noshow_candidates')
           .select('*')
           .eq('attendance_status', 'no_show')
@@ -338,9 +337,6 @@ export default function OutreachReviewQueue() {
         supabase.from('vw_outreach_conversions')
           .select('*')
           .order('delivered_at', { ascending: false }),
-        supabase.from('vw_experiment_results')
-          .select('*')
-          .order('week_cohort', { ascending: false }),
       ]);
 
       const tagged = [
@@ -362,7 +358,6 @@ export default function OutreachReviewQueue() {
 
       setCandidates(deduped);
       setConversions(convRes.data || []);
-      setExperimentResults(expRes.data || []);
     } catch (err) {
       console.error('OutreachReviewQueue fetch error:', err);
     } finally {
@@ -471,7 +466,7 @@ export default function OutreachReviewQueue() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {/* Comeback rates */}
-              <ComebackRateCard conversions={conversions} experimentResults={experimentResults} />
+              <ComebackRateCard conversions={conversions} />
 
               {/* Candidate list grouped by campaign */}
               {['no_show_followup', 'at_risk_nudge', 'streak_break', 'winback'].map(campaignType => {
