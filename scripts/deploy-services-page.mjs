@@ -380,35 +380,23 @@ const PAGE_CONTENT = `<!-- wp:html -->
       </div>
     </div>
 
-    <!-- 02 — Networking Events -->
+    <!-- 02 — Private WhatsApp Community -->
     <div class="sf-svc-card">
-      <img class="sf-svc-card-img" src="https://soberfounders.org/wp-content/uploads/2024/10/pexels-photo-8349428.jpeg" alt="Entrepreneurs networking at a sober event" />
+      <img class="sf-svc-card-img" src="https://soberfounders.org/wp-content/uploads/2024/10/pexels-photo-8349428.jpeg" alt="Sober entrepreneurs connecting in a private community" />
       <div class="sf-svc-card-body">
         <div class="sf-svc-card-num">02</div>
-        <h3>Networking Events</h3>
-        <p>Connect with sober entrepreneurs from every industry in a safe, substance-free environment. Our in-person and virtual events are designed to spark collaboration, partnerships, and friendships that fuel both recovery and revenue.</p>
+        <h3>Private WhatsApp Community</h3>
+        <p>Get instant access to our private WhatsApp group&mdash;a 24/7 lifeline of sober entrepreneurs who get it. Share wins, ask for advice, and stay connected between meetings. Real-time support from people who understand both the grind and the recovery.</p>
         <span class="sf-svc-tag sf-tag-free">Free</span>
-        <a href="/events/" class="sf-svc-card-link">See What's Coming Up</a>
+        <a href="https://chat.whatsapp.com/HfxeP3enQtN3oGFnwVOH8D" class="sf-svc-card-link">Join the Community</a>
       </div>
     </div>
 
-    <!-- 03 — Workshops & Resources -->
-    <div class="sf-svc-card">
-      <img class="sf-svc-card-img" src="https://soberfounders.org/wp-content/uploads/2024/10/pexels-photo-5257759.jpeg" alt="Workshop session for sober entrepreneurs" />
-      <div class="sf-svc-card-body">
-        <div class="sf-svc-card-num">03</div>
-        <h3>Workshops &amp; Resources</h3>
-        <p>Sharpen your skills with workshops on business strategy, financial management, and personal development. Plus, access our growing library of articles, templates, and guides built specifically for founders in recovery.</p>
-        <span class="sf-svc-tag sf-tag-free">Free</span>
-        <a href="/events/" class="sf-svc-card-link">Browse Workshops</a>
-      </div>
-    </div>
-
-    <!-- 04 — Phoenix Forum (Featured, full-width) -->
+    <!-- 03 — Phoenix Forum (Featured, full-width) -->
     <div class="sf-svc-card sf-svc-featured">
       <img class="sf-svc-card-img" src="https://soberfounders.org/wp-content/uploads/2025/01/pexels-rdne-5756743-1024x683.jpg" alt="Intimate peer advisory group discussion" />
       <div class="sf-svc-card-body">
-        <div class="sf-svc-card-num">04</div>
+        <div class="sf-svc-card-num">03</div>
         <h3>Phoenix Forum</h3>
         <p>An exclusive peer advisory board for sober entrepreneurs generating $1M+ in revenue with multiple years of sobriety. Intimate groups of up to 10 members engage in curated, high-trust discussions around business growth, sobriety, and personal life&mdash;because at this level, the stakes are higher and the isolation is real.</p>
         <span class="sf-svc-tag sf-svc-tag">Curated &bull; Application Only</span>
