@@ -18,9 +18,8 @@ if (!RESEND_KEY) {
 async function main() {
   console.log("=== Resend Personal Email Test ===\n");
 
-  // Use onboarding@resend.dev for testing (no domain verification needed)
-  // Switch to alassise@soberfounders.org after domain is verified in Resend
-  const fromEmail = "onboarding@resend.dev";
+  // Domain verified 2026-03-16 — send from verified soberfounders.org
+  const fromEmail = "alassise@soberfounders.org";
   const fromName = "Andrew Lassise";
 
   const resp = await fetch("https://api.resend.com/emails", {
@@ -55,8 +54,7 @@ async function main() {
   if (resp.ok) {
     console.log(`\n✅ Email sent! (ID: ${result.id})`);
     console.log(`Check ${TEST_RECIPIENT} inbox — should arrive in seconds.`);
-    console.log("\nNote: Test uses onboarding@resend.dev as sender.");
-    console.log("Add soberfounders.org domain in Resend dashboard to send from alassise@soberfounders.org.");
+    console.log("\nSent from: alassise@soberfounders.org (domain verified)");
   } else {
     console.log("\n❌ Send failed — check error above.");
   }

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 /* Data source priority: HubSpot call/meeting activities + associations only. */
 import { supabase } from '../lib/supabaseClient';
+import OutreachReviewQueue from '../components/OutreachReviewQueue';
 import {
   ANTHROPIC_API_KEY,
   ATTENDANCE_BACKFILL_DAYS,
@@ -3408,6 +3409,9 @@ const AttendanceDashboard = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {/* Outreach review queue — manual send approval */}
+      <OutreachReviewQueue />
+
       {aliasWarning && (
         <div style={{ ...cardStyle, borderLeft: '4px solid #f59e0b', backgroundColor: '#fffbeb' }}>
           <p style={{ color: '#92400e', fontWeight: 700 }}>Alias Warning</p>
