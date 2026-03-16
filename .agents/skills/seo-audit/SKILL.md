@@ -65,6 +65,7 @@ Reporting "no schema found" based solely on `web_fetch` or `curl` leads to false
 - Check for unintentional blocks
 - Verify important pages allowed
 - Check sitemap reference
+- **Bot Governance (2026):** Audit robots.txt to ensure you are allowing `OAI-SearchBot` (OpenAI) and `Google-Extended` (Gemini) if you want to be cited in AI live answers. Block training bots (`GPTBot`) but allow search bots (`OAI-SearchBot`).
 
 **XML Sitemap**
 - Exists and accessible
@@ -72,12 +73,17 @@ Reporting "no schema found" based solely on `web_fetch` or `curl` leads to false
 - Contains only canonical, indexable URLs
 - Updated regularly
 - Proper formatting
+- **IndexNow (2026):** Use both sitemaps (for the "map") and IndexNow (for instant update "speed"). Sitemaps are not legacy but IndexNow accelerates discovery.
 
 **Site Architecture**
 - Important pages within 3 clicks of homepage
 - Logical hierarchy
 - Internal linking structure
 - No orphan pages
+
+**Crawl & Render Alignment (2026)**
+- Audit the **JavaScript Rendering** path — not just HTML crawling. If primary facts or code snippets require heavy client-side JS to load, LLMs and Googlebot Smartphone will struggle to ground their answers in your data.
+- **Index Budget Management:** Audit for "Indexation Bloat" — low-value pages (tags, empty categories, thin AI-generated scraps). Use `noindex` or `404` to focus your Index Budget on high-value expert content.
 
 **Crawl Budget Issues** (for large sites)
 - Parameterized URLs under control
@@ -110,7 +116,7 @@ Reporting "no schema found" based solely on `web_fetch` or `curl` leads to false
 
 **Core Web Vitals**
 - LCP (Largest Contentful Paint): < 2.5s
-- INP (Interaction to Next Paint): < 200ms
+- **INP (Interaction to Next Paint): < 200ms** — this is the dominant UX signal in 2026. Prioritize minimizing "Main Thread Blocking" so the site responds instantly to user taps.
 - CLS (Cumulative Layout Shift): < 0.1
 
 **Speed Factors**
@@ -130,6 +136,7 @@ Reporting "no schema found" based solely on `web_fetch` or `curl` leads to false
 
 ### Mobile-Friendliness
 
+- **Mobile-First Verification (2026):** Perform 100% of the audit using the Googlebot Smartphone user agent. Desktop-only issues are secondary.
 - Responsive design (not separate m. site)
 - Tap target sizes
 - Viewport configured
@@ -143,7 +150,8 @@ Reporting "no schema found" based solely on `web_fetch` or `curl` leads to false
 - Valid SSL certificate
 - No mixed content
 - HTTP → HTTPS redirects
-- HSTS header (bonus)
+- HSTS header (required, not bonus)
+- **Security Headers (2026):** Audit for CSP (Content Security Policy) and HSTS to prove to search engines that the site is a safe, enterprise-grade environment. Non-negotiable for E-E-A-T.
 
 ### URL Structure
 
@@ -152,6 +160,41 @@ Reporting "no schema found" based solely on `web_fetch` or `curl` leads to false
 - Consistent structure
 - No unnecessary parameters
 - Lowercase and hyphen-separated
+
+---
+
+## GEO (Generative Engine Optimization) Audit Layer
+
+*New for 2026: Ensuring visibility in ChatGPT, Gemini, and Perplexity.*
+
+### Machine-Extractable Patterns
+- Audit content for the **"BLUF" Method** (Bottom Line Up Front). The primary answer to a user's prompt should be in the first 50 words of a section to facilitate AI "chunking."
+- Every H2 question heading should have a 40–60 word "Atomic Answer" block immediately following it.
+
+### Schema Entity Mapping
+- Go beyond basic schema. Audit for **Organization**, **Author**, and **Product** schema that links to existing entities in the Knowledge Graph.
+- Use `sameAs` links to verified social profiles and Wikipedia entries.
+- Validate that `Author` credentials are complete (E-E-A-T).
+
+### Internal Link Silos
+- Ensure no high-value page is more than 3 clicks from the homepage.
+- Use "Related Articles" sections to reinforce topical clusters.
+
+### Log File Analysis
+- Use server logs to see which pages Google *actually* visits vs. what it *claims* to visit in Search Console.
+- Compare AI bot crawl patterns (OAI-SearchBot, Google-Extended) against Googlebot.
+
+### Structured Data Validation
+- Use the Schema.org validator to ensure no "Missing Field" warnings.
+- Verify `Author` schema has full credentials for E-E-A-T signals.
+
+### 2026 Audit Conflict Resolutions
+
+| Audit Conflict | Opinion A (Traditionalists) | Opinion B (Modernists/GEO-First) | Resolved Directive |
+| :--- | :--- | :--- | :--- |
+| **Sitemaps** | Multiple small sitemaps are best for tracking. | Sitemaps are legacy; use IndexNow for instant updates. | Use both. Sitemaps for the "map," IndexNow for the "speed." |
+| **Backlink Audits** | Regularly disavow low-quality links to avoid penalties. | Google ignores bad links; disavowing is a waste of time. | Only disavow if you see a manual action or extreme "Negative SEO" spam. |
+| **Crawl Frequency** | High crawl frequency is a sign of health. | Excessive crawling by AI "training" bots wastes server resources. | Block training bots (`GPTBot`) but allow search bots (`OAI-SearchBot`). |
 
 ---
 
