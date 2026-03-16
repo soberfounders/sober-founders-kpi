@@ -135,6 +135,28 @@ Before presenting, gut-check:
 
 ---
 
+## 2026 Cold Outreach & Sequence Framework
+
+### The "Intent-First" Mandate
+*Weighted consensus (>90% agreement) from Hypergen, Outbound System, and Belkins.*
+
+- **Intent Over Demographics:** "Spray-and-pray" is dead. High-performing sequences trigger based on **Intent Signals** (funding, hiring, or tech-stack changes) rather than generic job titles.
+- **The "Brevity Peak":** 50–125 words is the 2026 "Goldilocks zone." Emails exceeding this length are flagged as "Marketing/Bulk" by AI filters and ignored by busy executives.
+- **Subject Line Minimalism:** Curiosity + Relevance beats cleverness. 4–7 word subject lines that mimic internal company emails (e.g., "Question about [Specific Project]") drive the highest open rates.
+- **Deliverability is Foundational:** SPF, DKIM, and DMARC are no longer optional. Maintaining a spam complaint rate below 0.3% is required to keep your domain out of "inbox purgatory."
+
+### 2026 Sequence Performance Benchmarks
+*Synthesized from PixTeller and Hypergen 2026 data.*
+
+| Metric | "Old-School" Outreach | 2026 Intent-Based |
+|:-------|:---------------------:|:-----------------:|
+| **Response Rate** | 1–2% (Mostly Negative) | 5–6% (Mostly Positive) |
+| **Time to Meeting** | 2–3 Weeks | 8 Days Average |
+| **Conversion (Email to Client)** | 0.7% | 1.2% – 5.0% |
+| **Follow-up Weight** | 1–2 touches | 5–6 touches (55% of replies) |
+
+---
+
 ## Data & Benchmarks
 
 The references contain performance data if you need to make informed choices:
