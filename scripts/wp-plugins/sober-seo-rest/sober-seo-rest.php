@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Sober SEO REST
- * Description: Exposes a REST endpoint to write Yoast SEO meta (title, description, focus keyword) per post.
- * Version: 1.1.0
+ * Description: REST endpoints for Yoast SEO meta writes + 301 redirect management.
+ * Version: 1.2.0
  * Author: Sober Founders Dev
  */
 
@@ -10,7 +10,27 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+// ── Redirects: perform redirect on front-end requests ────────────────────────
+add_action( 'template_redirect', function () {
+    $redirects = get_option( 'sober_redirects', [] );
+    if ( empty( $redirects ) ) {
+        return;
+    }
+
+    $request_path = trailingslashit( wp_parse_url( $_SERVER['REQUEST_URI'], PHP_URL_PATH ) );
+
+    foreach ( $redirects as $redirect ) {
+        $from = trailingslashit( $redirect['from'] );
+        if ( strcasecmp( $request_path, $from ) === 0 ) {
+            wp_redirect( esc_url_raw( $redirect['to'] ), 301 );
+            exit;
+        }
+    }
+} );
+
 add_action( 'rest_api_init', function () {
+
+    // ── SEO endpoints ────────────────────────────────────────────────────────
     register_rest_route( 'sober/v1', '/seo', [
         'methods'             => 'POST',
         'callback'            => 'sober_seo_update',
@@ -60,7 +80,53 @@ add_action( 'rest_api_init', function () {
             ],
         ],
     ] );
+
+    // ── Redirect endpoints ───────────────────────────────────────────────────
+    register_rest_route( 'sober/v1', '/redirects', [
+        'methods'             => 'GET',
+        'callback'            => 'sober_redirects_list',
+        'permission_callback' => function () {
+            return current_user_can( 'edit_posts' );
+        },
+    ] );
+
+    register_rest_route( 'sober/v1', '/redirects', [
+        'methods'             => 'POST',
+        'callback'            => 'sober_redirects_add',
+        'permission_callback' => function () {
+            return current_user_can( 'edit_posts' );
+        },
+        'args' => [
+            'from' => [
+                'required'          => true,
+                'type'              => 'string',
+                'sanitize_callback' => 'sanitize_text_field',
+            ],
+            'to' => [
+                'required'          => true,
+                'type'              => 'string',
+                'sanitize_callback' => 'esc_url_raw',
+            ],
+        ],
+    ] );
+
+    register_rest_route( 'sober/v1', '/redirects', [
+        'methods'             => 'DELETE',
+        'callback'            => 'sober_redirects_delete',
+        'permission_callback' => function () {
+            return current_user_can( 'edit_posts' );
+        },
+        'args' => [
+            'from' => [
+                'required'          => true,
+                'type'              => 'string',
+                'sanitize_callback' => 'sanitize_text_field',
+            ],
+        ],
+    ] );
 } );
+
+// ── SEO callbacks ────────────────────────────────────────────────────────────
 
 function sober_seo_update( WP_REST_Request $request ) {
     $post_id       = absint( $request->get_param( 'post_id' ) );
@@ -156,4 +222,72 @@ function sober_seo_read( WP_REST_Request $request ) {
         'description'   => get_post_meta( $post_id, '_yoast_wpseo_metadesc', true ),
         'focus_keyword' => get_post_meta( $post_id, '_yoast_wpseo_focuskw', true ),
     ];
+}
+
+// ── Redirect callbacks ───────────────────────────────────────────────────────
+
+function sober_redirects_list() {
+    return get_option( 'sober_redirects', [] );
+}
+
+function sober_redirects_add( WP_REST_Request $request ) {
+    $from = sanitize_text_field( $request->get_param( 'from' ) );
+    $to   = esc_url_raw( $request->get_param( 'to' ) );
+
+    // Normalize: ensure path starts with / and has trailing slash
+    if ( strpos( $from, '/' ) !== 0 ) {
+        // Extract path from full URL
+        $parsed = wp_parse_url( $from );
+        $from   = isset( $parsed['path'] ) ? $parsed['path'] : '/' . $from;
+    }
+    $from = trailingslashit( $from );
+
+    $redirects = get_option( 'sober_redirects', [] );
+
+    // Check for duplicate
+    foreach ( $redirects as $key => $r ) {
+        if ( trailingslashit( $r['from'] ) === $from ) {
+            // Update existing
+            $redirects[ $key ]['to'] = $to;
+            update_option( 'sober_redirects', $redirects );
+            return [
+                'success' => true,
+                'action'  => 'updated',
+                'from'    => $from,
+                'to'      => $to,
+            ];
+        }
+    }
+
+    $redirects[] = [ 'from' => $from, 'to' => $to ];
+    update_option( 'sober_redirects', $redirects );
+
+    return [
+        'success' => true,
+        'action'  => 'created',
+        'from'    => $from,
+        'to'      => $to,
+    ];
+}
+
+function sober_redirects_delete( WP_REST_Request $request ) {
+    $from = sanitize_text_field( $request->get_param( 'from' ) );
+    if ( strpos( $from, '/' ) !== 0 ) {
+        $parsed = wp_parse_url( $from );
+        $from   = isset( $parsed['path'] ) ? $parsed['path'] : '/' . $from;
+    }
+    $from = trailingslashit( $from );
+
+    $redirects = get_option( 'sober_redirects', [] );
+    $filtered  = array_values( array_filter( $redirects, function ( $r ) use ( $from ) {
+        return trailingslashit( $r['from'] ) !== $from;
+    } ) );
+
+    if ( count( $filtered ) === count( $redirects ) ) {
+        return new WP_Error( 'not_found', 'Redirect not found.', [ 'status' => 404 ] );
+    }
+
+    update_option( 'sober_redirects', $filtered );
+
+    return [ 'success' => true, 'action' => 'deleted', 'from' => $from ];
 }

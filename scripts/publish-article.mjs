@@ -145,7 +145,7 @@ In 2026, SEO has shifted from "Ranking Links" to "Owning the Answer." Every arti
 
 ## Internal Linking (MANDATORY)
 Every article MUST include these internal links woven naturally into the content:
-- Link to the Phoenix Forum application: <a href="https://soberfounders.org/phoenix-forum-registration/">Phoenix Forum</a> — mention once in the body and/or FAQ as the flagship program for founders with $1M+ revenue and 1+ year sobriety.
+- Link to the Phoenix Forum application: <a href="https://soberfounders.org/phoenix-forum-2nd-group/">Phoenix Forum</a> — mention once in the body and/or FAQ as the flagship program for founders with $1M+ revenue and 1+ year sobriety.
 - Link to the weekly mastermind: <a href="https://soberfounders.org/weekly-mastermind-group/">free weekly mastermind</a> — for founders who want to start with the free community.
 - Link to at least 1 existing blog post from this list (pick whichever is most relevant to the topic):
   - <a href="https://soberfounders.org/entrepreneurs-in-recovery/">Entrepreneurs in Recovery</a>

@@ -78,7 +78,7 @@ Core pain points to weave in where relevant:
 - Add a FAQ section at the end with 4-5 Q&A pairs matching real search queries.
 
 ## Internal Linking (MANDATORY)
-- Link to Phoenix Forum: <a href="https://soberfounders.org/phoenix-forum-registration/">Phoenix Forum</a>
+- Link to Phoenix Forum: <a href="https://soberfounders.org/phoenix-forum-2nd-group/">Phoenix Forum</a>
 - Link to weekly mastermind: <a href="https://soberfounders.org/weekly-mastermind-group/">free weekly mastermind</a>
 - Link to at least 1 existing blog post:
   - <a href="https://soberfounders.org/12-steps-and-your-business/">12 Steps and Your Business</a>
