@@ -202,6 +202,27 @@ When recommending experiments, consider tests for:
 
 ---
 
+## 2026 User Activation & Time-to-Value Framework
+
+### The "Scientific Onboarding"
+*Weighted consensus (>90% agreement) from Enboarder, Brandon Hall Group, and Josh Bersin.*
+
+- **Preboarding is Retention:** The period between signup and "First Login" is the new battleground. 2026 leaders use personalized welcome videos and "IT-Ready" signals to reduce user anxiety.
+- **AI-Powered Personalization:** Onboarding is no longer a static checklist. It is a dynamic journey that adjusts modules based on the user's specific role and confidence levels.
+- **Predictive Analytics:** Use data to identify "At-Risk" users who show signs of disengagement within the first 48 hours. Intervention at this stage is 10x more effective than "Win-back" emails.
+- **Wellness & Workload:** Successful onboarding in 2026 accounts for "Cognitive Overload." It spaces out learning so the user feels "Certified" and confident, not overwhelmed.
+
+### The 2026 Onboarding Roadmap
+
+| Stage | Duration | Primary Focus |
+|:------|:---------|:-------------|
+| **Preboarding** | Day 0 | Connection, Culture, and "Welcome" signals. |
+| **Induction** | Week 1 | Compliance, Systems Access, and Team Intro. |
+| **Performance** | Month 1 | Role-specific knowledge and initial milestones. |
+| **Embed** | Quarter 1 | Ongoing development and performance support. |
+
+---
+
 ## Task-Specific Questions
 
 1. What action most correlates with retention?

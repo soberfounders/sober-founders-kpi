@@ -220,6 +220,25 @@ Identifies which features customers value most:
 
 ---
 
+## 2026 Value-Based & Hybrid Pricing Framework
+
+### The "Outcome-Based" Evolution
+*Weighted consensus (>90% agreement) from Sciative and Revenue Management Labs.*
+
+- **Outcome-Based Pricing:** AI-driven analytics now allow companies to measure the exact value received. Pricing tied to performance, savings, or business results is the new B2B gold standard.
+- **The Hybrid Pivot:** Successful 2026 models combine a "Subscription Layer" (for predictability) with a "Usage-Based Layer" (for fairness).
+- **The "Pruning" Mandate:** Complexity is a conversion killer. 2026 leaders are "pruning" their portfolios to create a "Good, Better, Best" structure that supports speed and clarity.
+- **Hyper-Personalization:** Use AI-driven price testing to identify the "sweet spot" for specific customer segments without appearing discriminatory.
+
+### Pricing Conflicting Opinions & Directives
+
+| Topic | Opinion A (Simplification) | Opinion B (Dynamic Scaling) | Directive |
+|:------|:--------------------------|:---------------------------|:----------|
+| **Freemium** | Freemium is dead; it attracts "tire-kickers." | Freemium is essential for "Product-Led" discovery in 2026. | Use "Value-Gated" Freemium (Usage caps, not feature caps). |
+| **Transparency** | Hide prices to force a sales call. | Transparency is a trust signal; list all pricing upfront. | Transparent pricing for Standard; custom for Enterprise. |
+
+---
+
 ## Related Skills
 
 - **churn-prevention**: For cancel flows, save offers, and reducing revenue churn

@@ -361,6 +361,22 @@ node tools/clis/google-ads.js reports get --type ad_performance --date-range las
 
 ---
 
+## 2026 Creative-First Advertising Framework
+
+### The "Human Connection" Shift
+*Weighted consensus (>90% agreement) from Adobe, Quad, and Moburst.*
+
+- **Creative-as-Targeting:** In 2026, the Creative (the visual/hook) is what does the targeting. Algorithms use user reactions to the creative to determine who else should see the ad.
+- **The "Messy" Advantage:** Adobe's 2026 report shows users are embracing the "Analog/Tactile." Ads that look like "real people" (UGC) outperform polished corporate creative.
+- **Sensory-Rich Activations:** Successful ads evoke feeling, not just aesthetics. Use "Local Flavor" and "Surreal Silliness" to spark emotional resonance rather than just listing features.
+- **Creative Diversity:** Scale is achieved by adding new Hooks and Angles, not just increasing budget on one winning ad.
+
+### 2026 Ad Performance Principles
+- **Clarity = Conversion:** Aim for immediate impact. If a user doesn't know what you're solving in 1.5 seconds, they won't stop scrolling.
+- **Concrete Visual Language:** Use analogies and visual similes to make technical concepts instantly imaginable.
+
+---
+
 ## Related Skills
 
 - **paid-ads**: For campaign strategy, targeting, budgets, and optimization

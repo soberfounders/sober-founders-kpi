@@ -341,6 +341,26 @@ Organized by:
 
 ---
 
+## 2026 Frictionless Registration & Signup Framework
+
+### The "Minimalist Entry"
+*Weighted consensus (>90% agreement) from Eleken, CXL, and Contentsquare.*
+
+- **The "Single-Field" Victory:** Trimming a form from 4 fields to 3 can boost conversion by 50%. Top brands like ClickUp now ask for just an email to enter, delaying all other details until the user is "engaged."
+- **Gradual Engagement:** "Sign-up forms must die." Experts like Luke Wroblewski advocate for letting users experience the product (the "Aha!" moment) before asking for an account.
+- **Identity Orchestration:** Social Sign-On (Google/LinkedIn) is the 2026 standard. Manual password creation is a high-friction "abandonment trigger."
+- **Matching Intent to Reward:** If a user completes a goal, reward them immediately. The signup completion page should land them exactly where they expected to be, with no secondary "Confirm your email" friction.
+
+### Strategic Signup Models
+
+| Model | Example | Benefit |
+|:------|:--------|:--------|
+| **Access-First** | Typeform | User enters the app immediately; friction is zero. |
+| **Gated Curiosity** | Pinterest | Preview of value + quick 2-field gate to capture intent. |
+| **Work-Only Gating** | Asana | Gently nudging for "Work Emails" to improve lead quality. |
+
+---
+
 ## Task-Specific Questions
 
 1. What's your current signup completion rate?

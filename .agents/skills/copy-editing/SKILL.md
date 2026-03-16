@@ -427,6 +427,22 @@ This iterative process ensures each edit doesn't create new problems while respe
 
 ---
 
+## 2026 Conversion Copy-Editing Framework
+
+### The "Seven Sweeps" Reinforcement
+*Weighted consensus (>90% agreement) from LobeHub and Keo Marketing.*
+
+- **Systematic Passes:** Do not try to fix everything at once. Edit through sequential passes: Clarity, Voice/Tone, Information Gain, Proof, Specificity, Emotion, and Friction.
+- **The "So What?" Test:** Every feature mentioned must be bridge-linked to a reader desire. If a claim doesn't have a "benefit bridge," it's probably filler.
+- **Prove It (Sweep 4):** Unsupported assertions kill E-E-A-T. Every claim must be supported by a testimonial, case study, statistic, or third-party validation nearby.
+- **Cognitive Load Reduction:** Ensure every sentence is immediately understandable. Avoid jargon unless it's explicitly part of the target audience's "insider language."
+
+### 2026 Editing Principles
+- **Inverted Pyramid:** Direct Answer → Support Data → Nuanced Context.
+- **Machine-Readable Formatting:** Use Markdown tables and bulleted lists. AI agents prefer structured data for extracting facts and citing sources.
+
+---
+
 ## Task-Specific Questions
 
 1. What's the goal of this copy? (Awareness, conversion, retention)

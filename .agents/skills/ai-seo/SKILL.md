@@ -479,6 +479,25 @@ For implementation, see the [tools registry](../../tools/REGISTRY.md).
 
 ---
 
+## 2026 Generative Engine Optimization (GEO) Framework
+
+### The "Source of Truth" Mandate
+*Weighted consensus (>90% agreement) from LSEO, Sitebulb, and iPullRank.*
+
+- **From Rankings to Citations:** In 2026, SEO is no longer about "ranking pages"; it is about being the Source that AI trusts and cites. If you aren't one of the 3–5 sources in a Gemini summary, you are invisible.
+- **Entity-Based Semantic SEO:** Optimize for "Entities" rather than just keywords. Build "Topical Maps" that help AI interpret the relationships between your concepts.
+- **The "Atomic Answer" Architecture:** Structure content for machine-readability. Place factual, citable "chunks" (40–60 words) near the top of headers to facilitate AI extraction.
+- **Citations are the New Backlinks:** Brand mentions on high-authority sites (Reddit, Wiki, News) are the primary credibility signals for LLM algorithms.
+
+### GEO Conflicting Opinions & Directives
+
+| Conflict Topic | Opinion A (The Basics) | Opinion B (The Futurists) | Directive |
+|:---------------|:-----------------------|:--------------------------|:----------|
+| **AI vs. Human Content** | AI content is fine if it's "useful." | AI-hype content is "slop"; only human E-E-A-T survives. | Use AI to fund the basics; use Humans to be the source. |
+| **Keyword Difficulty** | Use traditional KD scores to pick targets. | KD is dead; optimize for specific "Prompt Velocity." | Use KD for Search; use Prompt Analysis for GEO. |
+
+---
+
 ## Task-Specific Questions
 
 1. What are your top 10-20 most important queries?

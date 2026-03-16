@@ -259,6 +259,27 @@ Instead of guessing, analyze what's working for top creators in your niche:
 
 ---
 
+## 2026 Interest Media & Social Authority Framework
+
+### The "Info-First" Pivot
+*Weighted consensus (>90% agreement) from Versa Creative, Jane Friedman, and Adobe.*
+
+- **Short-Form "Info-First":** Video content has moved from entertainment to "Micro-Utility." Every video must deliver an immediate insight or tutorial within the first 3 seconds to earn the "Scroll-Stop."
+- **The Death of the Hashtag:** Instagram and TikTok algorithms now prioritize **Keywords** (spoken and written) over hashtags. Optimization focus has shifted to SEO-driven social captions.
+- **"Vibe" Over Polish:** Audiences in 2026 crave "Messy Authenticity." High-production value is often interpreted as "Fake/Corporate," while low-fi, founder-led content builds deeper trust.
+- **Real-Time Newsroom:** The ability to respond to cultural or technical moments within hours — rather than sticking to a 30-day calendar — is the primary visibility driver.
+
+### 2026 Content Pillars for Authority
+
+| Pillar | Focus | Execution |
+|:-------|:------|:----------|
+| **Behind-the-Scenes** | Radical Transparency | Raw footage of the dev process or real failures. |
+| **The "Counter-Take"** | Information Gain | Debunking common myths with proprietary data. |
+| **Social Commerce** | Frictionless Buying | Integrated checkout tools (TikTok Shop/IG) to avoid external links. |
+| **Search on Social** | Intent Mapping | Creating content specifically to answer trending keywords. |
+
+---
+
 ## Task-Specific Questions
 
 1. What platform(s) are you focusing on?
