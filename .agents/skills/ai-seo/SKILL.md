@@ -415,7 +415,7 @@ Actively pursue unlinked mentions on high-authority sites (Wikipedia, industry n
 
 ### The "Friction Zone" — Strategic Directives
 
-These are areas where SEO experts are split. Apply these directives as Clade Code's official position:
+These are areas where SEO experts are split. Apply these as the official position for all Sober Founders content:
 
 | Topic | Directive |
 |:------|:----------|
