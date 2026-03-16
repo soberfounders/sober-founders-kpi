@@ -5,20 +5,20 @@
 
 ---
 
-## Block 1: Atomic Answer (GEO Optimization) — DEPLOYED 2026-03-16
+## Block 1: Tier Differentiation (GEO + CRO) — DEPLOYED 2026-03-16 (v2)
 
-Prepended above the event calendar. AI-extractable definition block with tier descriptions.
+Inserted after the hero banner. Focuses on tier differentiation and correct CTAs — avoids repeating format info already on the page ("What Are The Mastermind Events?" section covers that).
 
 ```html
 <div class="sf-events-geo-block" style="max-width: 760px; margin: 2em auto; font-family: inherit; line-height: 1.7;">
 
-<h2 style="font-size: 1.4em; margin-bottom: 0.5em;">What is the Sober Founders Mastermind?</h2>
+<h2 style="font-size: 1.4em; margin-bottom: 0.5em;">Three Ways to Get Involved</h2>
 
-<p>Sober Founders hosts free weekly virtual mastermind sessions for entrepreneurs in recovery. Every <strong>Thursday at 12 PM ET</strong>, any sober entrepreneur can join a Zoom-based forum with 10–25 business owners solving real scaling challenges — hiring, fundraising, partnerships — through the lens of sobriety.</p>
+<p><strong><a href="/events/">Thursday Mastermind</a></strong> — Free and open to all sober entrepreneurs. No revenue minimum, no interview. <a href="/events/">Sign up for this Thursday &rarr;</a></p>
 
-<p>Our <strong>Tuesday "All Our Affairs"</strong> session is for founders with $250K+ in annual revenue, 2+ full-time employees, 1+ year of sobriety, and actively working the 12 steps. It's a tighter room focused on scaling and systems.</p>
+<p><strong><a href="/apply/">Tuesday "All Our Affairs"</a></strong> — For founders with $250K+ revenue, 2+ full-time employees, 1+ year sober, and actively working the 12 steps. Requires a short verification interview. Thursday members are always welcome too. <a href="/apply/">Apply here &rarr;</a></p>
 
-<p>The <strong>Phoenix Forum</strong> is a separate paid monthly membership for $1M+ revenue founders with 1+ year sober — an exclusive peer group focused on legacy and leadership.</p>
+<p><strong><a href="/phoenix-forum-2nd-group/">Phoenix Forum</a></strong> — A paid monthly membership for $1M+ revenue founders with 1+ year sober. A separate, exclusive peer group focused on legacy and leadership. <a href="/phoenix-forum-2nd-group/">Learn more &rarr;</a></p>
 
 </div>
 ```

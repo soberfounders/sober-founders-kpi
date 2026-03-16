@@ -68,13 +68,13 @@ const BLOCK_1_HTML = `<!-- wp:html -->
 <!-- SF Events Block 1: Atomic Answer (GEO) — deployed by deploy-events-block1.mjs -->
 <div class="sf-events-geo-block" style="max-width: 760px; margin: 2em auto; font-family: inherit; line-height: 1.7;">
 
-<h2 style="font-size: 1.4em; margin-bottom: 0.5em;">What is the Sober Founders Mastermind?</h2>
+<h2 style="font-size: 1.4em; margin-bottom: 0.5em;">Three Ways to Get Involved</h2>
 
-<p>Sober Founders hosts free weekly virtual mastermind sessions for entrepreneurs in recovery. Every <strong>Thursday at 12 PM ET</strong>, any sober entrepreneur can join a Zoom-based forum with 10–25 business owners solving real scaling challenges — hiring, fundraising, partnerships — through the lens of sobriety.</p>
+<p><strong><a href="/events/">Thursday Mastermind</a></strong> — Free and open to all sober entrepreneurs. No revenue minimum, no interview. <a href="/events/">Sign up for this Thursday &rarr;</a></p>
 
-<p>Our <strong>Tuesday "All Our Affairs"</strong> session is for founders with $250K+ in annual revenue, 2+ full-time employees, 1+ year of sobriety, and actively working the 12 steps. It's a tighter room focused on scaling and systems.</p>
+<p><strong><a href="/apply/">Tuesday "All Our Affairs"</a></strong> — For founders with $250K+ revenue, 2+ full-time employees, 1+ year sober, and actively working the 12 steps. Requires a short verification interview. Thursday members are always welcome too. <a href="/apply/">Apply here &rarr;</a></p>
 
-<p>The <strong>Phoenix Forum</strong> is a separate paid monthly membership for $1M+ revenue founders with 1+ year sober — an exclusive peer group focused on legacy and leadership.</p>
+<p><strong><a href="/phoenix-forum-2nd-group/">Phoenix Forum</a></strong> — A paid monthly membership for $1M+ revenue founders with 1+ year sober. A separate, exclusive peer group focused on legacy and leadership. <a href="/phoenix-forum-2nd-group/">Learn more &rarr;</a></p>
 
 </div>
 <!-- /wp:html -->`;
@@ -102,32 +102,34 @@ async function main() {
   const full = await wpFetch(`/pages/${eventsPage.id}?context=edit`);
   const currentContent = full.content?.raw || "";
 
-  if (currentContent.includes(MARKER)) {
-    console.log("  Block 1 already present — replacing with updated version.");
-    // Remove old block and re-prepend
-    const cleaned = currentContent.replace(
-      /<!-- wp:html -->\s*<!-- SF Events Block 1:.*?<!-- \/wp:html -->/s,
+  // Strip any existing Block 1
+  let cleaned = currentContent;
+  if (cleaned.includes(MARKER)) {
+    console.log("  Removing existing Block 1...");
+    cleaned = cleaned.replace(
+      /<!-- wp:html -->\s*<!-- SF Events Block 1:.*?<!-- \/wp:html -->\s*/s,
       ""
     ).trim();
-    if (DRY_RUN) {
-      console.log("  [DRY RUN] Would replace Block 1 content.");
-      return;
-    }
-    await wpFetch(`/pages/${eventsPage.id}`, {
-      method: "POST",
-      body: JSON.stringify({ content: BLOCK_1_HTML + "\n\n" + cleaned }),
-    });
-  } else {
-    if (DRY_RUN) {
-      console.log("  [DRY RUN] Would prepend Block 1 above existing content.");
-      console.log(`  Content preview:\n${BLOCK_1_HTML.slice(0, 200)}...`);
-      return;
-    }
-    await wpFetch(`/pages/${eventsPage.id}`, {
-      method: "POST",
-      body: JSON.stringify({ content: BLOCK_1_HTML + "\n\n" + currentContent }),
-    });
   }
+
+  // Insert AFTER the first hero container (the full-width image banner)
+  // The hero is the first <!-- wp:uagb/container --> ... <!-- /wp:uagb/container --> block
+  const heroEndTag = "<!-- /wp:uagb/container -->";
+  const heroEndIdx = cleaned.indexOf(heroEndTag);
+  if (heroEndIdx === -1) {
+    throw new Error("Could not find hero banner end tag. Page structure may have changed.");
+  }
+  const insertAt = heroEndIdx + heroEndTag.length;
+  const newContent = cleaned.slice(0, insertAt) + "\n\n" + BLOCK_1_HTML + "\n\n" + cleaned.slice(insertAt);
+
+  if (DRY_RUN) {
+    console.log("  [DRY RUN] Would insert Block 1 after hero banner.");
+    return;
+  }
+  await wpFetch(`/pages/${eventsPage.id}`, {
+    method: "POST",
+    body: JSON.stringify({ content: newContent }),
+  });
 
   console.log("  Block 1 deployed successfully.");
   console.log(`\n  Check it live: ${SITE}/events/\n`);
