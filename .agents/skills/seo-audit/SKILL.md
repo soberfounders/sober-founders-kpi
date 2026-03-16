@@ -251,12 +251,23 @@ Reporting "no schema found" based solely on `web_fetch` or `curl` leads to false
 - Title, H1, URL aligned
 - Content satisfies search intent
 - Not competing with other pages (cannibalization)
+- **Answer-First block** (40–60 words) directly below the H1/H2 for AI extractability
+- **Co-occurring entities** present (use Surfer/MarketMuse to verify semantic coverage)
 
 **Site-Wide**
 - Keyword mapping document
 - No major gaps in coverage
 - No keyword cannibalization
-- Logical topical clusters
+- Logical topical clusters (5–10 related keywords per cluster, not one article per keyword)
+- **Entity alignment:** Content consistently reinforces the brand's target entity associations
+- **Zero-volume coverage:** Check for niche questions with no competing content — these are high-value for LLM citations
+- **Prompt coverage:** Verify content addresses the top prompts users would type into AI assistants, not just Google queries
+
+**Keyword Difficulty Assessment (2026)**
+- Standard KD scores (1-100) are insufficient alone
+- Use "Personalized KD" based on site's current topical authority in the niche
+- For GEO: target short-tail terms (AI Overviews capture these)
+- For SEO clicks: target long-tail terms (only long-tail still drives organic clicks)
 
 ---
 

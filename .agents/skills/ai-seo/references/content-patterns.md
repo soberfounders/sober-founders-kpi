@@ -5,7 +5,7 @@ Reusable content block patterns optimized for answer engines and AI citation.
 ---
 
 ## Contents
-- Answer Engine Optimization (AEO) Patterns (Definition Block, Step-by-Step Block, Comparison Table Block, Pros and Cons Block, FAQ Block, Listicle Block)
+- Answer Engine Optimization (AEO) Patterns (Atomic Answer Block, Definition Block, Step-by-Step Block, Comparison Table Block, Pros and Cons Block, FAQ Block, Listicle Block)
 - Generative Engine Optimization (GEO) Patterns (Statistic Citation Block, Expert Quote Block, Authoritative Claim Block, Self-Contained Answer Block, Evidence Sandwich Block)
 - Domain-Specific GEO Tactics (Technology Content, Health/Medical Content, Financial Content, Legal Content, Business/Marketing Content)
 - Voice Search Optimization (Question Formats for Voice, Voice-Optimized Answer Structure)
@@ -13,6 +13,46 @@ Reusable content block patterns optimized for answer engines and AI citation.
 ## Answer Engine Optimization (AEO) Patterns
 
 These patterns help content appear in featured snippets, AI Overviews, voice search results, and answer boxes.
+
+### Atomic Answer Block (2026 Priority Pattern)
+
+The single most important structural pattern for GEO in 2026. Place a concise, self-contained answer immediately below every H2 question header. AI agents prioritize these "citable blocks" for synthesized answers.
+
+**Rules:**
+- 40–60 words, no more
+- Must be self-contained (makes sense without reading anything else on the page)
+- Factual, wiki-voice tone — no marketing language
+- Include at least one specific data point or source where possible
+
+```markdown
+## [Question phrased as users search it]?
+
+[40–60 word direct answer. State the conclusion first. Include one specific number or source. Write in neutral, wiki-style tone so AI agents can extract and cite this block verbatim.]
+
+[Expanded section below with supporting evidence, examples, data, and nuance — this is where depth lives.]
+```
+
+**Example:**
+```markdown
+## What percentage of Google searches trigger AI Overviews?
+
+As of early 2026, AI Overviews appear in approximately 45% of Google searches, according to SE Ranking and BrightEdge research. This represents a significant increase from 2024 levels and means nearly half of all search queries now display an AI-generated summary above traditional results.
+
+### Why This Matters for Content Strategy
+
+The rise of AI Overviews has fundamentally changed click-through behavior...
+[expanded content continues]
+```
+
+**Anti-pattern (don't do this):**
+```markdown
+## AI Overviews in Google Search
+
+In this article, we'll explore the fascinating world of AI Overviews
+and what they mean for your business. Let's dive in!
+```
+
+---
 
 ### Definition Block
 

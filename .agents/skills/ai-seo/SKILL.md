@@ -130,6 +130,35 @@ See [references/platform-ranking-factors.md](references/platform-ranking-factors
 
 ---
 
+## The "Prompt-First" Research Approach
+
+In 2026, research the *prompts* users type into Claude or ChatGPT, not just the *queries* they type into Google. Conversational AI queries are longer, more specific, and reveal deeper intent than traditional search queries.
+
+### How to Apply
+
+1. **Mine AI prompts:** Study how users phrase questions to LLMs — these are often full sentences or multi-part requests, not 2-3 word keywords.
+2. **Answer-First blocks:** Place a direct, self-contained answer (40–60 words) at the top of every section to satisfy these conversational prompts. This is the single most extractable pattern for LLM citation.
+3. **Prompt-to-content mapping:** For each target topic, identify the top 5–10 prompts users would type into ChatGPT/Claude/Perplexity, then ensure your content directly addresses each one.
+
+### Zero-Volume Keywords Are the New Gold
+
+Experts (Matt Diggity, Nathan Gotch, Ahrefs) agree: "Zero-Volume" keywords — highly specific, niche questions — are often the primary sources for LLM citations because they provide **"Information Gain"** that generic high-volume terms lack.
+
+- LLMs need unique, specific content to cite — they already know the generic answers
+- Zero-volume terms often represent the exact prompts users type into AI assistants
+- These terms face minimal competition, making them easier to own
+- A single zero-volume page cited by an LLM can drive more qualified traffic than a high-volume page buried on page 2
+
+### From Keywords to Entities
+
+Google and LLMs no longer look for word matches — they look for **Entities** (Brand, Person, Concept, Product). Research must focus on **Semantic Coverage**: covering all related concepts in a topic to be deemed an authority.
+
+- Map your brand to specific entities (e.g., "Sober Founders" = Nonprofit + Addiction Recovery + Entrepreneurship)
+- Use consistent entity associations across all content and schema
+- Co-occurring entities must appear alongside your main term (use Surfer or MarketMuse to identify them)
+
+---
+
 ## Optimization Strategy
 
 ### The Three Pillars
@@ -345,6 +374,79 @@ Monthly manual check:
 - HowTo schema markup
 - Screenshots with descriptive alt text
 - Clear prerequisites and expected outcomes
+
+---
+
+## 2026 Content & Authority Directives
+
+These directives reflect the weighted consensus of current SEO/GEO authorities (>90% agreement) as of early 2026. Apply them to all content produced or audited through this skill.
+
+### The "Atomic Answer" Framework
+
+Place a concise (40–60 word) direct answer immediately below every H2 question header. AI agents (Gemini, Claude, GPT) prioritize these "citable blocks" for synthesized answers. This is the single most important structural pattern for GEO in 2026.
+
+See [references/content-patterns.md](references/content-patterns.md) for the full template.
+
+### Fact-Density Over Keyword Density
+
+The Princeton GEO study confirms that adding verifiable statistics, source citations, and primary data increases AI citation probability by up to 40%. In 2026, keyword density is irrelevant — **fact density is the ranking signal.** Every major claim should include a specific number, a named source, and a date.
+
+### Entity Authority (The Knowledge Graph)
+
+Content must link your brand to specific Entities (e.g., "Software Development," "Addiction Recovery," "Nonprofit Leadership"). Use consistent Brand/Author Schema across all platforms to build an "AI Trust Moat." This means:
+- Same organization name, logo, and description in Organization schema across every property
+- Author schema with consistent `sameAs` links (LinkedIn, Twitter, personal site)
+- Topic alignment — every piece of content should reinforce the entity associations you want AI to make
+
+### Machine-Readable Structure for LLMs
+
+Use high-contrast hierarchy (H1–H4). Avoid burying data in accordions, tabs, or complex JS rendering. **Rule of thumb:** if a human can't skim the answer in 3 seconds, an LLM will likely miss the "chunk." This means:
+- No important content behind click-to-expand elements
+- No data-heavy content rendered only via client-side JavaScript
+- Tables and lists over prose for structured information
+
+### Citation Velocity (Off-Site Signals)
+
+Actively pursue unlinked mentions on high-authority sites (Wikipedia, industry news, Reddit). Research shows **70% of what an AI recommends comes from off-site sources**, not your own domain. Actions:
+- Monitor for unlinked brand mentions and request link additions
+- Contribute expert quotes to industry publications
+- Maintain presence on review platforms, directories, and community forums
+- Build a Wikipedia presence where notable
+
+### The "Friction Zone" — Strategic Directives
+
+These are areas where SEO experts are split. Apply these directives as Clade Code's official position:
+
+| Topic | Directive |
+|:------|:----------|
+| **AI-Generated Content** | **The 80/20 Rule:** Use AI for the 80% (structure, drafting, research synthesis), but 20% must be "Human-Only" expert insight — original case studies, proprietary data, first-hand experience. Pure AI content kills E-E-A-T. |
+| **Traffic Focus** | **Hybrid:** Optimize for the click on "Buying" intent terms (decision/transaction stage), but optimize for "Brand Mention" on "Educational" terms (awareness stage). Zero-click brand impressions are the new SEO for informational queries. |
+| **Backlinks vs Citations** | **Evidence-Based:** Links build the site's floor (traditional SEO); Citations build the site's ceiling (GEO). Do both. Neither alone is sufficient in 2026. |
+| **Search Volume Relevance** | Use Volume for *ad spend prioritization*, use "Search Intent Depth" for *content decisions*. Volume is unreliable due to AI chatbot traffic (Gartner). |
+| **Long-Tail vs Short-Tail** | Target Short-Tail for *GEO Citation* (AI Overviews capture these), Long-Tail for *SEO Clicks* (only long-tail still gets organic clicks). |
+| **Keyword Difficulty (KD)** | Standard KD scores (1-100) are insufficient. Use "Personalized KD" based on your brand's current topical authority in the niche (Semrush/Ahrefs Personalized Difficulty). |
+
+### Execution Pillars
+
+- **The "Journalist Keyword" Strategy:** Target terms that journalists or AI researchers search for (e.g., "Agentic AI market statistics 2026," "addiction recovery entrepreneurship statistics") to earn high-authority citations and backlinks.
+- **Comparison & "Vs" Keywords:** These are high-intent and highly citable. Create "[Brand] vs [Competitor]" or "[Product A] vs [Product B]" pages with structured comparison tables.
+- **Technical Schema:** Every keyword-targeted page must include `FAQPage` and `Organization` schema to help LLMs map the keyword to your brand entity.
+
+### Wiki-Voice Tone
+
+Write objectively. LLMs are risk-averse and prefer "Wiki-style" factual reporting over promotional marketing speak. This means:
+- Third-person perspective for factual claims
+- Neutral, evidence-based language
+- No superlatives without data ("the best" → "rated #1 by [Source]")
+- No marketing fluff — every sentence must convey information
+
+### Inverted Pyramid Structure
+
+Lead with the conclusion, follow with the data, end with the nuance. This matches how AI systems extract information (they read top-down and stop when they have enough) and how busy humans scan content.
+
+### Freshness Cycle
+
+Update core content every 30–90 days. Freshness is a dominant signal for 2026 AI Overviews. ChatGPT cites content updated within 30 days **3.2x more often** than older content. For competitive topics, monthly updates are non-negotiable.
 
 ---
 

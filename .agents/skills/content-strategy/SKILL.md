@@ -57,6 +57,9 @@ Every piece of content must be searchable, shareable, or both. Prioritize in tha
 - Provide comprehensive coverage (don't leave questions unanswered)
 - Include data, examples, and links to authoritative sources
 - Optimize for AI/LLM discovery: clear positioning, structured content, brand consistency across the web
+- **Information Gain (2026):** Google's algorithms ignore content that merely summarizes the web. You must provide unique reporting, proprietary data, original case studies, or first-hand experience. If you can't add something the reader can't find elsewhere, don't publish it.
+- **Inverted Pyramid:** Lead with the conclusion, follow with the data, end with the nuance. AI systems read top-down and stop when they have enough.
+- **Wiki-Voice Tone:** Write factually and objectively. LLMs prefer wiki-style reporting over promotional language. No superlatives without data.
 
 ### When Writing Shareable Content
 
@@ -160,6 +163,46 @@ Good pillars should:
 - Match what your audience cares about
 - Have search volume and/or social interest
 - Be broad enough for many subtopics
+
+---
+
+## Keyword Research 3.0 Workflow (2026)
+
+Synthesized from Ahrefs, Semrush, and Backlinko 2026 guides. This replaces the old "find a keyword, write a post" approach.
+
+### Step 1: Seed Discovery — Identify the Main Entity
+
+Don't start with a keyword — start with the **Entity** you want to own. An entity is a concept, brand, person, or thing that search engines and LLMs recognize as a distinct topic.
+
+Example: "Addiction Recovery Entrepreneurship" (not just "sober business owners").
+
+### Step 2: Expansion via PAA (People Also Ask)
+
+Use AlsoAsked or AnswerThePublic to map the full question landscape. In 2026, PAA is the direct roadmap for what LLMs consider "related context" — every PAA question is a potential AI prompt.
+
+### Step 3: Sentiment & NLP Analysis
+
+Use Surfer or MarketMuse to find **Co-occurring Entities** — terms that *must* appear alongside your main term to signal topical completeness (e.g., for "recovery entrepreneurship": "12-step," "relapse prevention," "business growth," "peer support").
+
+### Step 4: Information Gain Audit
+
+Ask: "What can we add that isn't already in the top 10 results or the LLM's training data?" Prioritize:
+- Proprietary data and case studies
+- First-hand experience and original research
+- Contrarian takes backed by evidence
+- Specific numbers, timelines, and outcomes
+
+### Step 5: Intent Clustering
+
+Stop writing one article per keyword. Group 5–10 related keywords into a single **Topic Cluster** to build **Topical Authority.** One comprehensive piece targeting a cluster outranks five thin pieces targeting individual keywords.
+
+### Step 6: Zero-Volume Keyword Mining
+
+Actively seek out zero-volume keywords — highly specific niche questions that traditional tools show as "0 volume." These are gold for LLM citations because they provide Information Gain that generic terms lack. Sources:
+- Reddit/Quora threads with engagement but no ranking content
+- Customer support tickets and sales call transcripts
+- PAA questions with no dedicated content in the SERPs
+- AI assistant logs (what prompts do users type into ChatGPT/Claude?)
 
 ---
 
@@ -277,6 +320,27 @@ Extract from customer-facing teams:
 - Support ticket patterns
 - Success stories
 - Feature requests and underlying problems
+
+---
+
+## 2026 Strategic Directives
+
+Apply these directives when making content strategy decisions. These reflect the current expert consensus and resolve areas where SEO authorities disagree.
+
+### AI Content — The 80/20 Rule
+Use AI for the 80% (structure, drafting, research synthesis), but 20% must be "Human-Only" expert insight — original case studies, proprietary data, first-hand experience. Pure AI content kills E-E-A-T.
+
+### Traffic Focus — Hybrid Approach
+Optimize for the **click** on "Buying" intent terms (decision/transaction stage), but optimize for **Brand Mention** on "Educational" terms (awareness stage). Zero-click brand impressions are the new SEO for informational queries (Gartner). Don't measure all content by clicks alone.
+
+### Backlinks vs Citations
+Links build the site's floor (traditional SEO). Citations build the site's ceiling (GEO). Do both. Neither alone is sufficient in 2026.
+
+### Entity Authority
+Every piece of content should reinforce the entity associations you want AI systems to make about your brand. Consistent Brand/Author Schema across all platforms builds an "AI Trust Moat."
+
+### Freshness Cycle
+Update core content every 30–90 days. ChatGPT cites content updated within 30 days 3.2x more often than older content. Build content refresh into your editorial calendar as a first-class activity, not an afterthought.
 
 ---
 

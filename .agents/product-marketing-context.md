@@ -45,6 +45,54 @@
 **Style:** Direct, clear, action-oriented
 **Personality:** Trustworthy, analytical, mission-focused
 
+## Ideal Customer Persona (ICP)
+
+Fill in this section to ensure all content, copy, and outreach is written for a specific person — not a generic audience. Every skill that reads this file (content-strategy, ai-seo, copywriting, email-sequence, social-content, etc.) will use this persona to tailor tone, examples, pain points, and calls to action.
+
+### Primary Persona
+- **Name (archetype):** <!-- e.g., "Recovering Founder Ryan" -->
+- **Demographics:** <!-- Age range, gender, location, income/revenue level -->
+- **Role/Title:** <!-- e.g., "Founder/CEO of a $500K–$5M company" -->
+- **Recovery stage:** <!-- e.g., "1–5 years sober, actively rebuilding" -->
+- **Industry:** <!-- e.g., "Tech, services, e-commerce — varies" -->
+
+### Psychographics
+- **Identity statement:** <!-- How they describe themselves, e.g., "I'm a founder who happens to be in recovery" -->
+- **Core values:** <!-- e.g., accountability, growth, community, transparency -->
+- **Biggest fear:** <!-- e.g., "Relapsing under business stress" or "Being judged by investors" -->
+- **Aspirations:** <!-- e.g., "Build a meaningful business while maintaining sobriety" -->
+
+### Pain Points & Triggers
+- **Top 3 problems:**
+  1. <!-- e.g., "Isolation — no peer group that understands both recovery and entrepreneurship" -->
+  2. <!-- e.g., "Stress management — business pressure without substance as a coping mechanism" -->
+  3. <!-- e.g., "Stigma — fear of being 'found out' in professional contexts" -->
+- **What keeps them up at night:** <!-- e.g., "Am I doing this alone?" -->
+- **Trigger moments (when they search/act):** <!-- e.g., "After a hard week, after a relapse scare, after reading about another founder's burnout" -->
+
+### Content Preferences
+- **Where they consume content:** <!-- e.g., LinkedIn, podcasts, email newsletters, YouTube -->
+- **Content formats they prefer:** <!-- e.g., short-form video, long-form articles, peer stories -->
+- **Tone they respond to:** <!-- e.g., "Direct, no-BS, vulnerable but not pity-driven" -->
+- **Language they use:** <!-- e.g., specific phrases, recovery terminology, business jargon -->
+
+### Objections & Barriers
+- **Why they hesitate to join/engage:**
+  1. <!-- e.g., "Is this just another networking group?" -->
+  2. <!-- e.g., "Will this 'out' me?" -->
+  3. <!-- e.g., "I don't have time for another commitment" -->
+- **What convinced past members:** <!-- e.g., "Hearing a peer's story on the podcast" -->
+
+### Search Behavior
+- **Queries they type:** <!-- e.g., "sober entrepreneurs," "founders in recovery," "business stress and sobriety" -->
+- **Questions they ask AI:** <!-- e.g., "How do other founders manage stress without drinking?" -->
+- **Platforms they ask on:** <!-- e.g., Reddit r/stopdrinking, LinkedIn, ChatGPT -->
+
+### Secondary Personas (optional)
+Add additional personas below if you serve distinct segments (e.g., donors, board members, family members of founders in recovery).
+
+---
+
 ## Goals
 **Business goal:** Grow Phoenix Forum membership and sustain donor retention
 **Conversion action:** Qualify and convert leads through the Phoenix Forum pipeline
