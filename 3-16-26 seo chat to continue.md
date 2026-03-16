@@ -62,7 +62,7 @@ Use the pipeline to generate and write meta descriptions for all 30 existing pos
 
 ## WordPress API credentials
 - **User:** andrew
-- **App password:** EWqW lnfe Ara0 PGys lcBj 9x01
+- **App password:** (stored in Claude memory - ask Claude to recall)
 - **REST base:** https://soberfounders.org/wp-json/
 
 ## Minor items
