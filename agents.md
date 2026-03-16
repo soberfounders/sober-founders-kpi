@@ -652,11 +652,12 @@ descriptions when generating content, outreach, or marketing materials.
 | Page | URL | Purpose |
 |------|-----|---------|
 | Homepage | `/` | Main landing, Elementor-designed |
+| Thursday Mastermind | `/thursday/` | Combined free mastermind landing (Thursday meeting details + format + benefits + Luma calendar) |
 | Phoenix Forum | `/phoenix-forum-2nd-group/` | Phoenix Forum details (canonical) |
 | Phoenix Forum redirect | `/phoenix-forum/` → 301 to above | SEO redirect |
+| Weekly Mastermind redirect | `/weekly-mastermind-group/` → meta-refresh to `/thursday/` | Needs server-level 301 via Yoast/Redirection plugin |
 | FAQ | `/resources/faq/` | 15-question FAQ with FAQPage schema |
 | Apply | `/apply/` | Membership application |
-| Weekly Mastermind | `/weekly-mastermind-group/` | Free group info |
 | Donate | `/donate/` | 501(c)(3) donations |
 
 ### SEO / Schema Infrastructure (via Code Snippets plugin)
