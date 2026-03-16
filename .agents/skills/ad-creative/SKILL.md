@@ -377,6 +377,35 @@ node tools/clis/google-ads.js reports get --type ad_performance --date-range las
 
 ---
 
+## Meta Ads: Creative-as-Targeting (2026)
+
+*Synthesized from Jon Loomer, Common Thread Collective, and Madgicx (March 2026). Meta's Andromeda engine now handles targeting better than humans — ad creative and signal hygiene are the only true competitive moats.*
+
+### The "Signal" Hook
+Since Meta now uses "Broad" targeting by default, your creative must do the targeting. The first 3 seconds must contain "Entity Signals" — keywords and visuals that tell the AI exactly who the customer is.
+
+### UGC 2.0 (The "Raw" Moat)
+High-production ads are filtered out by users. The highest-converting Meta ads in 2026 are "Lo-fi" videos shot on mobile that look like a friend's recommendation. Authenticity > polish.
+
+### Dynamic Creative Optimization (DCO)
+Use "Flex" or "Advantage+" ad sets where you provide 10+ images and 5+ headlines, letting Meta's AI assemble the winning combination for each specific user.
+
+### 2026 Meta High-Performance Creative Types
+
+| Type | Description | Why It Works Now |
+| :--- | :--- | :--- |
+| **The "Problem/Solution" Split** | Side-by-side vertical video comparing "Before" and "After." | Instant visual proof that bypasses language barriers. |
+| **Founder POV** | A raw, talking-head video from the founder explaining the "Why." | Counteracts "AI-slop" skepticism with human authority. |
+| **Static "Press" Screenshots** | A screenshot of a tweet or headline about the brand. | Uses external social proof to lower "Ad Blindness." |
+
+### Meta Creative Execution Pillars
+1. **The "Creative Refresh" Cycle:** Launch 3–5 new creative *concepts* (not just tweaks) every week to prevent ad fatigue.
+2. **Vertical-First (9:16):** 90% of budget should go to Reels and Stories placements. Square (1:1) is now secondary.
+3. **Hook Rate vs. Hold Rate:** Audit ads for the 3-second Hook Rate. If people aren't stopping, the creative is failing. If they stop but don't click, the Hold Rate (storytelling) is failing.
+4. **Lattice Architecture:** Fewer campaigns + more creative variations = faster AI learning. Simplify account structure.
+
+---
+
 ## Related Skills
 
 - **paid-ads**: For campaign strategy, targeting, budgets, and optimization

@@ -255,6 +255,35 @@ Before launching campaigns, ensure proper tracking and account setup.
 
 ---
 
+## Meta Ads: Signal Hygiene & Account Architecture (2026)
+
+*Synthesized from Jon Loomer, Common Thread Collective, and Madgicx. Meta's Andromeda engine now handles targeting better than humans — signal hygiene and account structure are the competitive moats.*
+
+### Server-Side Superiority (CAPI)
+- **The 100% CAPI Requirement:** Browser-based tracking (Pixel) loses 30–40% of data to privacy filters. Server-Side Conversions API is mandatory to maintain accurate ROAS.
+- **Event Match Quality (EMQ):** Sending "Deep Data" (hashed email, phone, city) back to Meta via CAPI is the primary driver of lower CPAs.
+- **The "Feedback Loop" Rule:** If you don't send "Offline Conversions" (sales that happen after the click, e.g. from CRM), Meta's AI optimizes for "Clickers" instead of "Buyers."
+
+### Meta Account Architecture — The Lattice Model
+- Simplify your account: fewer campaigns + more creative variations = faster AI learning.
+- Stop micro-segmenting audiences into separate ad sets — Broad targeting with strong creative outperforms manual audience curation.
+- Let Advantage+ handle most audience decisions; use Lookalikes only for "Cold Starts" with no conversion data.
+
+### 2026 Meta Strategic Trade-offs
+
+| Topic | Opinion A (The Old Guard) | Opinion B (The Futurists) | Resolved Stance |
+| :--- | :--- | :--- | :--- |
+| **Targeting** | Use Interest/Lookalike audiences to find users. | Go "Broad" (no interests) and let the creative find the user. | Use "Broad" for scaling; use Lookalikes for "Cold Starts." |
+| **Attribution** | 7-day click / 1-day view is the truth. | Attribution is a lie; use MMM (Media Mix Modeling). | Use Meta's 7/1 for daily tactics, use Incrementality Tests for budget allocation. |
+
+### Meta Execution Pillars
+1. **Vertical-First (9:16):** 90% of budget on Reels and Stories placements. Square is secondary.
+2. **Creative Refresh Cycle:** Launch 3–5 new creative *concepts* (not tweaks) every week to prevent fatigue.
+3. **Hook Rate Auditing:** Monitor 3-second Hook Rate on every ad. If people aren't stopping, the creative is failing. If they stop but don't click, the storytelling is failing.
+4. **EMQ Score Target:** Aim for Event Match Quality > 6.0 across all events. Below 6.0 means your CAPI implementation is leaking data.
+
+---
+
 ## Common Mistakes to Avoid
 
 ### Strategy
