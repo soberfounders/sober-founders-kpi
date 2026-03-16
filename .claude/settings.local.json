@@ -6,7 +6,9 @@
       "Write(*)",
       "Read(*)",
       "Glob(*)",
-      "Grep(*)"
+      "Grep(*)",
+      "WebFetch(domain:soberfounders.org)",
+      "WebFetch(domain:www.soberfounders.org)"
     ]
   }
 }

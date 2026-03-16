@@ -1,19 +1,23 @@
 import { createSlackApp } from "./slack/app.js";
 import { SummaryScheduler } from "./slack/services/scheduler.js";
+import { DailyManagerScheduler } from "./slack/services/managerScheduler.js";
 import { logger } from "./observability/logger.js";
 
 const app = createSlackApp();
 const scheduler = new SummaryScheduler();
+const managerScheduler = new DailyManagerScheduler();
 
 const start = async () => {
   await app.start();
   scheduler.start();
+  managerScheduler.start();
   logger.info("Slack KPI Copilot started");
 };
 
 const shutdown = async (signal: string) => {
   logger.info({ signal }, "Shutting down Slack KPI Copilot");
   scheduler.stop();
+  managerScheduler.stop();
   await app.stop();
 };
 

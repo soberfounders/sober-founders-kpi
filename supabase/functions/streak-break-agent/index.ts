@@ -294,6 +294,7 @@ serve(async (req: Request) => {
                             );
                         } else {
                             console.error(`Email failed for ${msg.email}:`, emailResult.error);
+                            msg._deliveryError = emailResult.error || "unknown";
                             errors++;
                         }
                     } else {
@@ -313,20 +314,24 @@ serve(async (req: Request) => {
                 if (notionResult.ok) notionTasks++;
             }
 
-            // Log recovery events
+            // Log recovery events (successes AND failures for dashboard health monitoring)
             if (messages.length > 0) {
-                const events = messages.map((m: any) => ({
-                    attendee_email: m.email,
-                    event_type: "streak_break",
-                    meeting_date: targets.find((t: any) => t.email === m.email)?.last_attended,
-                    metadata: {
-                        ai_message: m.message,
-                        subject: m.subject,
-                        campaign_type: "streak_break",
-                        total_meetings: targets.find((t: any) => t.email === m.email)?.total_meetings,
-                        days_since_last: targets.find((t: any) => t.email === m.email)?.days_since_last,
-                    },
-                }));
+                const events = messages.map((m: any) => {
+                    const targetInfo = targets.find((t: any) => t.email === m.email);
+                    return {
+                        attendee_email: m.email,
+                        event_type: "streak_break",
+                        meeting_date: targetInfo?.last_attended,
+                        metadata: {
+                            ai_message: m.message,
+                            subject: m.subject,
+                            campaign_type: "streak_break",
+                            total_meetings: targetInfo?.total_meetings,
+                            days_since_last: targetInfo?.days_since_last,
+                            ...(m._deliveryError ? { delivery_failed: m._deliveryError } : {}),
+                        },
+                    };
+                });
                 await supabase.from("recovery_events").insert(events);
             }
         }

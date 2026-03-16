@@ -32,17 +32,16 @@ QUALIFICATION GATES:
 
 const METRICS_REFERENCE = `
 AVAILABLE METRICS — use these exact names with get_kpi_snapshot or get_metric_trend:
-  leads                          → new HubSpot contacts created (hs_contacts_created)
-  qualified_leads                → leads passing $250k + 1yr sobriety gate
-  attendance                     → Zoom meeting attendees summed across sessions
+  leads                          → new HubSpot contacts created (raw_hubspot_contacts by createdate)
+  qualified_leads                → leads with revenue ≥ $250k (sobriety gate is approximate server-side)
+  attendance                     → attendee-sessions across Tuesday + Thursday group calls
   donations                      → total USD from donation_transactions_unified
   email_open_rate                → avg Mailchimp campaign open rate (0–1 ratio)
   seo                            → organic search sessions from vw_seo_channel_daily
-  phoenix_forum_paid_members     → Phoenix paid member count (proxy via kpi_metrics)
   free_tuesday_repeat_attendance → ratio of Tuesday attendees who returned
   free_thursday_repeat_attendance→ ratio of Thursday attendees who returned
   operations                     → HubSpot sync error count
-  org_health / overview          → composite score: leads + attendance + donations + phoenix members
+  org_health / overview          → composite score: leads + attendance + donations
 
 MANAGER REPORT SECTIONS — use with get_manager_report(section="..."):
   leads       → lead funnel KPIs with WoW trends from vw_kpi_trend
@@ -74,6 +73,10 @@ MULTI-TOOL PATTERN — broad questions require multiple tool calls in parallel:
 - "donations" / "fundraising" → call BOTH:
     get_metric_trend(metric="donations", compare_to="previous_period")
     get_manager_report(section="donations")
+- "what can you help" / "review my tasks" / "what should I do" / "what's on my plate" → call ALL THREE:
+    list_open_tasks()
+    get_kpi_snapshot(metric="org_health")
+    get_manager_report(section="executive")
 
 FALLBACK RULE — if get_manager_report returns confidence < 0.6 or empty bullets, ALWAYS follow up
 with get_metric_trend for the same topic. The trend tool queries raw transaction/contact data
@@ -88,6 +91,23 @@ DATE RANGE RULES:
   "last month", "March", "Q1", etc.
 - Default window for all queries: last 7 days (omit date_range argument to use this default).
 
+TASK ANALYSIS — when list_open_tasks() returns results, always reason about them:
+1. CAN HANDLE NOW — tasks I can complete autonomously with available tools:
+   - "post weekly summary" / "send report" → post_summary(...)
+   - "create follow-up for [person]" → create_followup(...)
+   - "create task for [person]" → create_task(...)
+   - "check data quality" / "sync health" → get_data_quality_warnings()
+2. DATA TASKS — tasks that need KPI data I can pull and report on:
+   - Anything involving leads, attendance, donations, SEO, email trends
+   - Pull the relevant metrics and include the answer in your response
+3. NEEDS HUMAN — surface clearly, do not attempt:
+   - HubSpot configuration, Notion page edits, outreach decisions requiring judgment
+Format task analysis as:
+  ✅ Can handle now: [list with offer to execute]
+  📊 Here's the data you need: [pull and include inline]
+  🚩 Needs your attention: [list — no action taken]
+Only include categories that have items. If you offer to execute something, wait for confirmation unless it is a read-only data pull.
+
 QUICK REFERENCE — single-question tool mapping:
 - "marketing" / "leads" / "pipeline" → see multi-tool pattern above
 - "qualified leads" / "phoenix pipeline" → get_metric_trend(metric="qualified_leads") + get_metric_trend(metric="leads")
@@ -96,7 +116,7 @@ QUICK REFERENCE — single-question tool mapping:
 - "email" / "campaigns" → get_metric_trend(metric="email_open_rate") + get_manager_report(section="email")
 - "SEO" / "website" / "traffic" → get_metric_trend(metric="seo") + get_manager_report(section="seo")
 - "operations" / "sync" / "data issues" → get_manager_report(section="operations") + get_data_quality_warnings()
-- "tasks" / "action items" → list_open_tasks()
+- "tasks" / "action items" / "what can you help" → list_open_tasks() + get_kpi_snapshot(metric="org_health")
 - "everything" / "summary" / "overview" → get_kpi_snapshot(metric="org_health") + get_manager_report(section="executive")
 - Post a summary → post_summary(summary_type="weekly_executive", channel="...")
 - Discover available metrics → get_kpi_snapshot(metric="list_metrics")

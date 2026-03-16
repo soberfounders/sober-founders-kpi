@@ -206,20 +206,17 @@ Meta/Facebook ads data.
 
 ### kpi_metrics
 
-Legacy metrics table (Zoom attendance data was stored here).
+**DEPRECATED — DO NOT QUERY.** This table stored legacy Zoom attendance data that
+is no longer accurate or populated. All Slack bot metric queries have been migrated
+away from this table. Do not reference `kpi_metrics` for any KPI lookups.
 
-| Column         | Type    | Notes                          |
-| -------------- | ------- | ------------------------------ |
-| `source_slug`  | text    | e.g., `zoom_meeting_attendees` |
-| `metric_name`  | text    |                                |
-| `metric_value` | numeric |                                |
-| `metric_date`  | date    |                                |
-| `period`       | text    |                                |
-| `metadata`     | jsonb   |                                |
-
-**Note:** The Zoom data in this table is deprecated. The table still exists and
-the fetch still runs but results are no longer consumed by the attendance path.
-This is a cleanup item.
+Correct sources for each metric type:
+- Leads / qualified leads → `raw_hubspot_contacts` (by `createdate`)
+- Attendance → `raw_hubspot_meeting_activities` + `hubspot_activity_contact_associations`
+- Donations → `donation_transactions_unified`
+- Email → `mailchimp_campaigns`
+- SEO → `vw_seo_channel_daily`
+- Operations → `hubspot_sync_errors` / `hubspot_sync_runs`
 
 ### recovery_events
 
@@ -611,6 +608,65 @@ if (enrichmentInvocationRef.current !== myInvocation) return;
   `hubspot_activity_contact_associations` — verify exact name
 - Metrics that are computed must be surfaced in dashboard — orphaned metrics are
   bugs
+
+---
+
+## Program Structure & Messaging
+
+Sober Founders runs three distinct programs. All agents must use these exact
+descriptions when generating content, outreach, or marketing materials.
+
+### Free Group: Tuesday — "All Our Affairs"
+
+- **Schedule:** Every Tuesday
+- **Format:** Business mastermind for entrepreneurs and business owners in
+  recovery from addiction
+- **Requirements:**
+  - Revenue over $250k/yr
+  - Over 1 year of sobriety through 12-step fellowship
+  - At least two full-time employees
+- **Cost:** Free
+
+### Free Group: Thursday — "Business Mastermind"
+
+- **Schedule:** Every Thursday
+- **Format:** Business mastermind open to all sober entrepreneurs
+- **Requirements:** Own a business and be sober (no revenue or employee
+  minimums)
+- **Cost:** Free
+
+### Phoenix Forum (Premium Membership)
+
+- **Schedule:** Weekly (details on application)
+- **Details page:** https://soberfounders.org/phoenix-forum-2nd-group/
+- **Requirements:**
+  - Revenue ≥ $1,000,000/yr
+  - Sobriety strictly > 1 year
+- **Cost:** Not published publicly — contact via application page
+- **Positioning:** Exclusive peer mastermind group modeled after YPO/EO/Vistage
+  but built specifically for founders in recovery. Sobriety is a membership
+  prerequisite and competitive advantage, not a personal detail.
+
+### WordPress Site Architecture
+
+| Page | URL | Purpose |
+|------|-----|---------|
+| Homepage | `/` | Main landing, Elementor-designed |
+| Phoenix Forum | `/phoenix-forum-2nd-group/` | Phoenix Forum details (canonical) |
+| Phoenix Forum redirect | `/phoenix-forum/` → 301 to above | SEO redirect |
+| FAQ | `/resources/faq/` | 15-question FAQ with FAQPage schema |
+| Apply | `/apply/` | Membership application |
+| Weekly Mastermind | `/weekly-mastermind-group/` | Free group info |
+| Donate | `/donate/` | 501(c)(3) donations |
+
+### SEO / Schema Infrastructure (via Code Snippets plugin)
+
+| Snippet | Scope | What it does |
+|---------|-------|-------------|
+| SF Custom Robots.txt | Global | Allows AI bots (GPTBot, ClaudeBot, etc.), blocks CCBot |
+| SF Homepage Schemas | Homepage only | NGO Organization + EventSeries JSON-LD in `<head>` |
+| SF Phoenix Forum Schemas | Phoenix Forum page only | Article + FAQPage + BreadcrumbList JSON-LD in `<head>` |
+| FAQ page | Inline on page | FAQPage JSON-LD embedded in page content |
 
 ---
 

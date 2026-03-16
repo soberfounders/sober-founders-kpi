@@ -283,6 +283,7 @@ serve(async (req: Request) => {
                             emailsSent++;
                             recipients.push(`${wb.name || wb.email} (${targetInfo?.days_since_last || "?"}d ago)`);
                         } else {
+                            wb._deliveryError = emailResult.error || "unknown";
                             errors++;
                         }
                     } else {
@@ -301,20 +302,24 @@ serve(async (req: Request) => {
                 if (notionResult.ok) notionTasks++;
             }
 
-            // 4. Log recovery events
+            // 4. Log recovery events (successes AND failures for dashboard health monitoring)
             if (winbacks.length > 0) {
-                const events = winbacks.map((w: any) => ({
-                    attendee_email: w.email,
-                    event_type: "winback",
-                    meeting_date: targets.find((t: any) => t.email === w.email)?.first_attended,
-                    metadata: {
-                        ai_message: w.message,
-                        subject: w.subject,
-                        campaign_type: "winback",
-                        days_since_last: targets.find((t: any) => t.email === w.email)?.days_since_last,
-                        is_thursday_attendee: targets.find((t: any) => t.email === w.email)?.is_thursday_attendee,
-                    },
-                }));
+                const events = winbacks.map((w: any) => {
+                    const targetInfo = targets.find((t: any) => t.email === w.email);
+                    return {
+                        attendee_email: w.email,
+                        event_type: "winback",
+                        meeting_date: targetInfo?.first_attended,
+                        metadata: {
+                            ai_message: w.message,
+                            subject: w.subject,
+                            campaign_type: "winback",
+                            days_since_last: targetInfo?.days_since_last,
+                            is_thursday_attendee: targetInfo?.is_thursday_attendee,
+                            ...(w._deliveryError ? { delivery_failed: w._deliveryError } : {}),
+                        },
+                    };
+                });
                 await supabase.from("recovery_events").insert(events);
             }
         }

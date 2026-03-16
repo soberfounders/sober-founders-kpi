@@ -49,6 +49,10 @@ const envSchema = z.object({
   FREE_CHAT_CHANNEL_IDS: z.string().optional(),
   SLACK_FREE_CHAT_CHANNEL_IDS: z.string().optional(),
   DEFAULT_SUMMARY_CHANNEL: z.string().optional(),
+  MANAGER_ENABLED: z.string().optional(),
+  MANAGER_TARGET_SLACK_USER_ID: z.string().optional(),
+  MANAGER_BRIEFING_HOUR_ET: z.string().optional(),
+  MANAGER_CHECKIN_HOURS_ET: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -89,6 +93,13 @@ export const env = {
     .map((channel) => channel.trim())
     .filter(Boolean),
   defaultSummaryChannel: data.DEFAULT_SUMMARY_CHANNEL || "",
+  managerEnabled: toBoolean(data.MANAGER_ENABLED, true),
+  managerTargetSlackUserId: data.MANAGER_TARGET_SLACK_USER_ID || "",
+  managerBriefingHourEt: toInt(data.MANAGER_BRIEFING_HOUR_ET, 8, 0, 23),
+  managerCheckinHoursEt: (data.MANAGER_CHECKIN_HOURS_ET || "12,15,17")
+    .split(",")
+    .map((h) => toInt(h.trim(), -1, 0, 23))
+    .filter((h) => h >= 0),
 } as const;
 
 export type AppEnv = typeof env;

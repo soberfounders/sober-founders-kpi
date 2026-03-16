@@ -1,9 +1,9 @@
 /**
- * HubSpot Engagement Email Sender
+ * Email Delivery + HubSpot CRM Logger
  *
- * Creates email engagements on HubSpot contact timelines.
- * Emails appear as if sent from the specified sender, logged on
- * the contact record for full visibility in HubSpot CRM.
+ * Sends emails via Resend for actual SMTP delivery, then logs the
+ * email on the HubSpot contact timeline for CRM visibility.
+ * Requires RESEND_API_KEY env var — hard-fails if not set.
  */
 
 /* ------------------------------------------------------------------ */
@@ -70,25 +70,58 @@ async function fetchWithRetry(
 }
 
 /* ------------------------------------------------------------------ */
-/*  Send engagement email                                              */
+/*  Resend — actual SMTP delivery                                      */
 /* ------------------------------------------------------------------ */
 
-/**
- * Creates an email engagement in HubSpot, associated with the contact.
- * The email appears on the contact's timeline in HubSpot CRM.
- *
- * NOTE: This creates a LOGGED email engagement — it does NOT send an
- * actual email via SMTP. To actually deliver the email, pair this with
- * HubSpot's single-send API or a transactional email workflow. The
- * engagement record ensures it shows on the contact timeline regardless.
- */
-export async function sendHubSpotEmail(
+interface EmailDeliveryResult {
+  ok: boolean;
+  emailId?: string;
+  error?: string;
+}
+
+async function sendViaResend(params: {
+  toEmail: string;
+  fromEmail: string;
+  fromName: string;
+  subject: string;
+  textBody: string;
+}): Promise<EmailDeliveryResult> {
+  const resendKey = Deno.env.get("RESEND_API_KEY");
+  if (!resendKey) return { ok: false, error: "RESEND_API_KEY not set" };
+
+  const resp = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${resendKey}`,
+    },
+    body: JSON.stringify({
+      from: `${params.fromName} <${params.fromEmail}>`,
+      to: [params.toEmail],
+      subject: params.subject,
+      text: params.textBody,
+    }),
+  });
+
+  if (!resp.ok) {
+    const errText = await resp.text();
+    return { ok: false, error: `Resend HTTP ${resp.status}: ${errText}` };
+  }
+
+  const result = await resp.json();
+  return { ok: true, emailId: result?.id };
+}
+
+/* ------------------------------------------------------------------ */
+/*  HubSpot CRM timeline logging                                      */
+/* ------------------------------------------------------------------ */
+
+async function logToHubSpotTimeline(
   token: string,
   params: HubSpotEmailParams,
-): Promise<HubSpotEmailResult> {
-  const { contactId, contactEmail, senderEmail, subject, htmlBody, campaignType } = params;
+): Promise<{ emailId?: string; error?: string }> {
+  const { contactId, contactEmail, senderEmail, subject, htmlBody } = params;
 
-  // 1. Create the email engagement object
   const createResp = await fetchWithRetry(
     token,
     "https://api.hubapi.com/crm/v3/objects/emails",
@@ -100,17 +133,12 @@ export async function sendHubSpotEmail(
           hs_email_direction: "EMAIL",
           hs_email_status: "SENT",
           hs_email_subject: subject,
-          hs_email_text: htmlBody.replace(/<[^>]*>/g, ""),  // plain-text fallback
+          hs_email_text: htmlBody.replace(/<[^>]*>/g, ""),
           hs_email_html: htmlBody,
-          hs_email_sender_email: senderEmail,
-          hs_email_sender_firstname: "",  // HubSpot will resolve from owner
-          hs_email_to_email: contactEmail,
           hs_email_headers: JSON.stringify({
             from: { email: senderEmail },
             to: [{ email: contactEmail }],
           }),
-          hubspot_owner_id: "",  // auto-resolved
-          hs_email_campaign_type: campaignType,
         },
       }),
     },
@@ -118,34 +146,70 @@ export async function sendHubSpotEmail(
 
   if (!createResp.ok) {
     const errText = await createResp.text();
-    console.error(`HubSpot email create failed (${createResp.status}):`, errText);
-    return { ok: false, error: `Create failed: ${createResp.status} ${errText}` };
+    console.error(`HubSpot timeline log failed (${createResp.status}):`, errText);
+    return { error: `HubSpot log failed: ${createResp.status}` };
   }
 
   const emailObj = await createResp.json();
   const emailId = emailObj?.id;
+  if (!emailId) return { error: "No email ID from HubSpot" };
 
-  if (!emailId) {
-    return { ok: false, error: "No email ID returned from HubSpot" };
-  }
-
-  // 2. Associate the email with the contact
+  // Associate with contact
   const assocResp = await fetchWithRetry(
     token,
     `https://api.hubapi.com/crm/v3/objects/emails/${emailId}/associations/contacts/${contactId}/198`,
-    {
-      method: "PUT",
-    },
+    { method: "PUT" },
   );
 
   if (!assocResp.ok) {
     const errText = await assocResp.text();
-    console.error(`HubSpot email association failed (${assocResp.status}):`, errText);
-    // Email was created but association failed — still partially successful
-    return { ok: true, emailId, error: `Association failed: ${assocResp.status}` };
+    console.warn(`HubSpot association failed (${assocResp.status}): ${errText}`);
   }
 
-  return { ok: true, emailId };
+  return { emailId };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Send email (Resend delivery + HubSpot CRM log)                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Sends an email via Resend for actual inbox delivery, then logs it
+ * on the HubSpot contact timeline for CRM visibility.
+ *
+ * Requires RESEND_API_KEY env var. Hard-fails if not set or if
+ * delivery fails — no silent fallback.
+ */
+export async function sendHubSpotEmail(
+  token: string,
+  params: HubSpotEmailParams,
+): Promise<HubSpotEmailResult> {
+  const { contactEmail, senderEmail, subject, htmlBody, campaignType } = params;
+  const plainText = htmlBody.replace(/<[^>]*>/g, "").trim();
+
+  // 1. Send via Resend (actual delivery)
+  const deliveryResult = await sendViaResend({
+    toEmail: contactEmail,
+    fromEmail: senderEmail,
+    fromName: "Andrew Lassise",
+    subject,
+    textBody: plainText,
+  });
+
+  if (!deliveryResult.ok) {
+    console.error(`Resend delivery failed for ${contactEmail}:`, deliveryResult.error);
+    return { ok: false, error: `Email delivery failed: ${deliveryResult.error}` };
+  }
+
+  console.log(`Resend: email delivered to ${contactEmail} (${deliveryResult.emailId})`);
+
+  // 2. Log on HubSpot timeline (CRM visibility)
+  const hubspotLog = await logToHubSpotTimeline(token, params);
+  if (hubspotLog.error) {
+    console.warn(`HubSpot CRM log failed (email was still delivered): ${hubspotLog.error}`);
+  }
+
+  return { ok: true, emailId: hubspotLog.emailId };
 }
 
 /* ------------------------------------------------------------------ */

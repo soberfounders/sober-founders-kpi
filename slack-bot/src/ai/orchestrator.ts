@@ -132,6 +132,12 @@ export const classifyIntent = (prompt: string): IntentType => {
     || text.includes("should we")
     || text.includes("what should")
     || text.includes("next step")
+    || text.includes("what can you")
+    || text.includes("what can i")
+    || text.includes("help me")
+    || text.includes("review my tasks")
+    || text.includes("what's on my plate")
+    || text.includes("action items")
   ) {
     return "recommendation";
   }
@@ -155,11 +161,22 @@ const normalizeEnvelope = (
 ): SlackResponseEnvelope => {
   const text = rawText.trim();
   const maybeJson = (() => {
-    try {
-      return JSON.parse(text);
-    } catch {
-      return null;
+    const candidates = [
+      text,
+      // Strip ```json ... ``` or ``` ... ``` wrappers
+      text.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim(),
+      // Strip bare "json\n{...}" prefix (no backticks — LLM sometimes emits this)
+      text.replace(/^json\s*\n/i, "").trim(),
+    ];
+    for (const candidate of candidates) {
+      try {
+        const parsed = JSON.parse(candidate);
+        if (parsed && typeof parsed === "object") return parsed;
+      } catch {
+        // try next candidate
+      }
     }
+    return null;
   })();
 
   if (maybeJson) {
@@ -243,8 +260,14 @@ export const createKpiOrchestrator = (deps: Partial<OrchestratorDependencies> = 
 
     const toolExecutions: ToolExecutionResult[] = [];
 
+    logger.info(
+      { prompt: request.prompt, outputTypes: Array.isArray(response?.output) ? response.output.map((o: any) => o?.type) : "none" },
+      "orchestrator: initial response output types",
+    );
+
     for (let step = 0; step < resolved.maxToolTurns; step += 1) {
       const calls = readFunctionCalls(response);
+      logger.info({ step, callCount: calls.length, calls: calls.map((c) => c.name) }, "orchestrator: tool calls in step");
       if (!calls.length) break;
 
       const outputs: Array<Record<string, unknown>> = [];

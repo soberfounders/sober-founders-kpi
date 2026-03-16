@@ -2050,6 +2050,7 @@ const AttendanceDashboard = () => {
     message: '',
     lastRunAtIso: '',
   });
+  const [outreachHealth, setOutreachHealth] = useState({ status: 'loading', message: '' });
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -2140,6 +2141,58 @@ const AttendanceDashboard = () => {
   useEffect(() => {
     loadAll(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Outreach email health check — surfaces Mandrill/delivery failures
+  useEffect(() => {
+    (async () => {
+      try {
+        // Check for recent outreach failures in recovery_events metadata
+        const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+        const { data: recentEvents, error: evError } = await supabase
+          .from('recovery_events')
+          .select('event_type,metadata,delivered_at')
+          .gte('delivered_at', sevenDaysAgo)
+          .order('delivered_at', { ascending: false })
+          .limit(20);
+
+        if (evError) {
+          // Table may not exist yet — not a blocking error
+          setOutreachHealth({ status: 'unknown', message: '' });
+          return;
+        }
+
+        const failures = (recentEvents || []).filter(
+          (e) => e.metadata?.mandrill_error || e.metadata?.delivery_failed
+        );
+
+        if (failures.length > 0) {
+          const latestError = failures[0].metadata?.mandrill_error || failures[0].metadata?.delivery_failed || 'Unknown delivery failure';
+          setOutreachHealth({
+            status: 'error',
+            message: `Outreach email delivery is broken — ${failures.length} failed in the last 7 days. Latest error: ${latestError}. Check MANDRILL_API_KEY in Supabase secrets and domain verification in Mandrill.`,
+          });
+          return;
+        }
+
+        // Check if any outreach has ever run (no events = agents may not be active)
+        const { count } = await supabase
+          .from('recovery_events')
+          .select('id', { count: 'exact', head: true });
+
+        if (count === 0) {
+          setOutreachHealth({
+            status: 'warning',
+            message: 'No outreach emails have been sent yet. All 4 outreach agents (no-show, at-risk, streak-break, winback) are likely still in dry-run mode. Flip to live when ready.',
+          });
+          return;
+        }
+
+        setOutreachHealth({ status: 'ok', message: '' });
+      } catch {
+        setOutreachHealth({ status: 'unknown', message: '' });
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -3398,6 +3451,20 @@ const AttendanceDashboard = () => {
           <p style={{ marginTop: '6px', color: '#92400e', fontSize: '12px' }}>
             The dashboard now anchors sessions to Tuesday 12pm ET and Thursday 11am ET windows and flags missing source weeks immediately.
           </p>
+        </div>
+      )}
+
+      {outreachHealth.status === 'error' && (
+        <div style={{ ...cardStyle, borderLeft: '4px solid #dc2626', backgroundColor: '#fef2f2' }}>
+          <p style={{ color: '#991b1b', fontWeight: 700 }}>Outreach Email Delivery Broken</p>
+          <p style={{ marginTop: '6px', color: '#991b1b' }}>{outreachHealth.message}</p>
+        </div>
+      )}
+
+      {outreachHealth.status === 'warning' && (
+        <div style={{ ...cardStyle, borderLeft: '4px solid #f59e0b', backgroundColor: '#fffbeb' }}>
+          <p style={{ color: '#92400e', fontWeight: 700 }}>Outreach Agents Not Active</p>
+          <p style={{ marginTop: '6px', color: '#92400e' }}>{outreachHealth.message}</p>
         </div>
       )}
 

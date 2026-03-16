@@ -1,6 +1,5 @@
 import type { DateRangeInput } from "../types.js";
 import { normalizeDateRange, queryMetricAggregate, computeRepeatAttendanceRates } from "./trends.js";
-import { supabase } from "../clients/supabase.js";
 
 export interface KpiSnapshotResult {
   metric: string;
@@ -52,7 +51,7 @@ export const getKpiSnapshot = async (
       metric,
       value: score,
       window: range.label,
-      source: "kpi_metrics + donation_transactions_unified",
+      source: "raw_hubspot_contacts + raw_hubspot_meeting_activities + donation_transactions_unified",
       confidence: score === null ? 0.35 : 0.7,
       notes: score === null ? ["Org health is incomplete due to missing source values"] : [],
       components: [
@@ -79,26 +78,18 @@ export const getKpiSnapshot = async (
   }
 
   if (normalizedMetric === "list_metrics") {
-    const { data, error } = await supabase
-      .from("kpi_metrics")
-      .select("metric_name")
-      .gte("metric_date", range.from)
-      .lte("metric_date", range.to)
-      .limit(5000);
-
-    if (error) {
-      throw new Error(`Failed to list metrics: ${error.message}`);
-    }
-
-    const unique = Array.from(new Set((data || []).map((row) => String(row.metric_name || "")).filter(Boolean))).sort();
+    const available = [
+      "leads", "qualified_leads", "attendance", "donations", "email_open_rate",
+      "seo", "operations", "free_tuesday_repeat_attendance", "free_thursday_repeat_attendance",
+    ];
     return {
       metric,
-      value: unique.length,
+      value: available.length,
       unit: "count",
       window: range.label,
-      source: "kpi_metrics",
-      confidence: 0.9,
-      notes: [`Available metrics: ${unique.slice(0, 50).join(", ")}${unique.length > 50 ? " ..." : ""}`],
+      source: "static",
+      confidence: 1.0,
+      notes: [`Available metrics: ${available.join(", ")}`],
     };
   }
 

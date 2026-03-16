@@ -321,6 +321,7 @@ serve(async (req: Request) => {
                             recipients.push(`${recovery.name || recovery.email} (${recovery.email})`);
                         } else {
                             console.error(`Email failed for ${recovery.email}:`, emailResult.error);
+                            recovery._deliveryError = emailResult.error || "unknown";
                             errors++;
                         }
                     } else {
@@ -341,20 +342,25 @@ serve(async (req: Request) => {
                 if (notionResult.ok) notionTasks++;
             }
 
-            // 4. Log to recovery_events (only when actually sending)
+            // 4. Log to recovery_events (successes AND failures for dashboard health monitoring)
             if (recoveries.length > 0) {
-                const events = recoveries.map((r: any) => ({
-                    attendee_email: r.email,
-                    event_type: "no_show_followup",
-                    meeting_date: targets.find((t: any) => t.email === r.email)?.meeting_date,
-                    metadata: {
-                        ai_message: r.message,
-                        subject: r.subject,
-                        campaign_type: "no_show_recovery",
-                        prior_meeting_count: targets.find((t: any) => t.email === r.email)?.prior_meeting_count ?? 0,
-                        is_thursday: targets.find((t: any) => t.email === r.email)?.is_thursday,
-                    },
-                }));
+                const events = recoveries.map((r: any) => {
+                    const targetInfo = targets.find((t: any) => t.email === r.email);
+                    const failed = !recipients.some((rec: string) => rec.includes(r.email));
+                    return {
+                        attendee_email: r.email,
+                        event_type: "no_show_followup",
+                        meeting_date: targetInfo?.meeting_date,
+                        metadata: {
+                            ai_message: r.message,
+                            subject: r.subject,
+                            campaign_type: "no_show_recovery",
+                            prior_meeting_count: targetInfo?.prior_meeting_count ?? 0,
+                            is_thursday: targetInfo?.is_thursday,
+                            ...(failed ? { delivery_failed: r._deliveryError || "delivery failed" } : {}),
+                        },
+                    };
+                });
                 await supabase.from("recovery_events").insert(events);
             }
         }

@@ -318,6 +318,7 @@ serve(async (req: Request) => {
                                 `${nudge.name || nudge.email} (${targetInfo?.days_since_last || "?"}d since last)`
                             );
                         } else {
+                            nudge._deliveryError = emailResult.error || "unknown";
                             errors++;
                         }
                     } else {
@@ -336,20 +337,24 @@ serve(async (req: Request) => {
                 if (notionResult.ok) notionTasks++;
             }
 
-            // Log recovery events
+            // Log recovery events (successes AND failures for dashboard health monitoring)
             if (nudges.length > 0) {
-                const events = nudges.map((n: any) => ({
-                    attendee_email: n.email,
-                    event_type: "at_risk_nudge",
-                    meeting_date: targets.find((t: any) => t.email === n.email)?.last_attended,
-                    metadata: {
-                        ai_message: n.message,
-                        subject: n.subject,
-                        campaign_type: "at_risk_nudge",
-                        days_since_last: targets.find((t: any) => t.email === n.email)?.days_since_last,
-                        meetings_60d: targets.find((t: any) => t.email === n.email)?.meetings_60d,
-                    },
-                }));
+                const events = nudges.map((n: any) => {
+                    const targetInfo = targets.find((t: any) => t.email === n.email);
+                    return {
+                        attendee_email: n.email,
+                        event_type: "at_risk_nudge",
+                        meeting_date: targetInfo?.last_attended,
+                        metadata: {
+                            ai_message: n.message,
+                            subject: n.subject,
+                            campaign_type: "at_risk_nudge",
+                            days_since_last: targetInfo?.days_since_last,
+                            meetings_60d: targetInfo?.meetings_60d,
+                            ...(n._deliveryError ? { delivery_failed: n._deliveryError } : {}),
+                        },
+                    };
+                });
                 await supabase.from("recovery_events").insert(events);
             }
         }

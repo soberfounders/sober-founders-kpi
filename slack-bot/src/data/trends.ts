@@ -1,8 +1,10 @@
 import { supabase } from "../clients/supabase.js";
 import type { DateRangeInput } from "../types.js";
 
-const TUESDAY_MEETING_ID = "87199667045";
-const THURSDAY_MEETING_ID = "84242212480";
+// Group session title signals — mirrors DashboardOverview.jsx inferTitleSignal
+const TUESDAY_TITLE_SIGNALS = ["tactic tuesday"];
+const THURSDAY_TITLE_SIGNALS = ["all are welcome", "entrepreneur's big book", "big book"];
+const GROUP_TITLE_SIGNALS = [...TUESDAY_TITLE_SIGNALS, ...THURSDAY_TITLE_SIGNALS, "mastermind"];
 
 export interface NormalizedDateRange {
   from: string;
@@ -61,34 +63,72 @@ interface AggregateResult {
   notes: string[];
 }
 
-const aggregateKpiMetric = async (metricNames: string[], from: string, to: string, agg: "sum" | "avg"): Promise<AggregateResult> => {
-  const query = supabase
-    .from("kpi_metrics")
-    .select("metric_name,metric_value,metric_date")
-    .gte("metric_date", from)
-    .lte("metric_date", to)
-    .in("metric_name", metricNames);
+// New leads = active, non-merged HubSpot contacts created in window
+const aggregateLeads = async (from: string, to: string): Promise<AggregateResult> => {
+  const { count, error } = await supabase
+    .from("raw_hubspot_contacts")
+    .select("*", { count: "exact", head: true })
+    .gte("createdate", `${from}T00:00:00.000Z`)
+    .lte("createdate", `${to}T23:59:59.999Z`)
+    .neq("is_deleted", true)
+    .neq("hubspot_archived", true)
+    .is("merged_into_hubspot_contact_id", null);
 
-  const { data, error } = await query;
-  if (error) {
-    throw new Error(`kpi_metrics query failed: ${error.message}`);
+  if (error) throw new Error(`raw_hubspot_contacts leads query failed: ${error.message}`);
+  return { value: count ?? 0, source: "raw_hubspot_contacts", notes: [] };
+};
+
+// Qualified leads = leads with revenue >= $250k (sobriety gate requires in-memory parsing; not applied here)
+const aggregateQualifiedLeads = async (from: string, to: string): Promise<AggregateResult> => {
+  const { count, error } = await supabase
+    .from("raw_hubspot_contacts")
+    .select("*", { count: "exact", head: true })
+    .gte("createdate", `${from}T00:00:00.000Z`)
+    .lte("createdate", `${to}T23:59:59.999Z`)
+    .neq("is_deleted", true)
+    .neq("hubspot_archived", true)
+    .is("merged_into_hubspot_contact_id", null)
+    .or("annual_revenue_in_dollars__official_.gte.250000,and(annual_revenue_in_dollars__official_.is.null,annual_revenue_in_dollars.gte.250000)");
+
+  if (error) throw new Error(`raw_hubspot_contacts qualified_leads query failed: ${error.message}`);
+  return {
+    value: count ?? 0,
+    source: "raw_hubspot_contacts",
+    notes: ["Revenue ≥ $250k filter applied; sobriety gate requires in-memory parsing and is not applied"],
+  };
+};
+
+const buildGroupSessionTitleFilter = (): string =>
+  GROUP_TITLE_SIGNALS.map((signal) => `title.ilike.%${signal}%`).join(",");
+
+// Total attendee-sessions across Tuesday + Thursday group calls in window
+const aggregateAttendance = async (from: string, to: string): Promise<AggregateResult> => {
+  const { data: sessions, error: sessErr } = await supabase
+    .from("raw_hubspot_meeting_activities")
+    .select("hubspot_activity_id")
+    .gte("hs_timestamp", `${from}T00:00:00.000Z`)
+    .lte("hs_timestamp", `${to}T23:59:59.999Z`)
+    .eq("activity_type", "MEETING")
+    .or(buildGroupSessionTitleFilter());
+
+  if (sessErr) throw new Error(`raw_hubspot_meeting_activities query failed: ${sessErr.message}`);
+
+  const ids = (sessions || []).map((s: Record<string, unknown>) => s.hubspot_activity_id);
+  if (!ids.length) {
+    return { value: 0, source: "raw_hubspot_meeting_activities", notes: ["No group sessions found in selected window"] };
   }
 
-  const rows = data || [];
-  if (!rows.length) {
-    return { value: null, source: "kpi_metrics", notes: [`No ${metricNames.join(", ")} records in selected window`] };
-  }
+  const { count, error: assocErr } = await supabase
+    .from("hubspot_activity_contact_associations")
+    .select("*", { count: "exact", head: true })
+    .in("hubspot_activity_id", ids);
 
-  const values = rows.map((row) => Number(row.metric_value)).filter((value) => Number.isFinite(value));
-  if (!values.length) {
-    return { value: null, source: "kpi_metrics", notes: ["Metric values are non-numeric"] };
-  }
-
-  const value = agg === "sum"
-    ? values.reduce((sum, current) => sum + current, 0)
-    : values.reduce((sum, current) => sum + current, 0) / values.length;
-
-  return { value, source: "kpi_metrics", notes: [] };
+  if (assocErr) throw new Error(`hubspot_activity_contact_associations query failed: ${assocErr.message}`);
+  return {
+    value: count ?? 0,
+    source: "raw_hubspot_meeting_activities + hubspot_activity_contact_associations",
+    notes: [],
+  };
 };
 
 const aggregateDonations = async (from: string, to: string): Promise<AggregateResult> => {
@@ -185,93 +225,114 @@ const aggregateOperationsErrors = async (from: string, to: string): Promise<Aggr
   };
 };
 
-const extractSessionGroup = (row: Record<string, unknown>): "tuesday" | "thursday" | null => {
-  const metadata = (row.metadata ?? {}) as Record<string, unknown>;
-  const groupName = String(metadata.group_name || "").toLowerCase();
-  if (groupName === "tuesday") return "tuesday";
-  if (groupName === "thursday") return "thursday";
+// Phoenix Forum paid members — contacts whose membership_s field contains "Paid Groups"
+// HubSpot property label is "Phoenix Forum" but the stored value is "Paid Groups"
+const aggregatePhoenixForumMembers = async (_from: string, _to: string): Promise<AggregateResult> => {
+  // Total active Phoenix Forum members (regardless of date window)
+  const { count, error } = await supabase
+    .from("raw_hubspot_contacts")
+    .select("*", { count: "exact", head: true })
+    .neq("is_deleted", true)
+    .neq("hubspot_archived", true)
+    .is("merged_into_hubspot_contact_id", null)
+    .ilike("membership_s", "%Paid Groups%");
 
-  const meetingId = String(metadata.meeting_id || metadata.zoom_meeting_id || "").trim();
-  if (meetingId === TUESDAY_MEETING_ID) return "tuesday";
-  if (meetingId === THURSDAY_MEETING_ID) return "thursday";
-
-  const dateValue = String(metadata.start_time || row.metric_date || "");
-  const parsedDate = new Date(dateValue);
-  if (Number.isNaN(parsedDate.getTime())) return null;
-  const day = parsedDate.getUTCDay();
-  if (day === 2) return "tuesday";
-  if (day === 4) return "thursday";
-  return null;
-};
-
-const extractAttendees = (row: Record<string, unknown>): string[] => {
-  const metadata = (row.metadata ?? {}) as Record<string, unknown>;
-  const raw = Array.isArray(metadata.attendees)
-    ? metadata.attendees
-    : Array.isArray(metadata.participant_names)
-      ? metadata.participant_names
-      : [];
-
-  const normalized = raw
-    .map((entry) => String(typeof entry === "string" ? entry : (entry as Record<string, unknown>).name || ""))
-    .map((name) => name.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim())
-    .filter(Boolean);
-
-  return Array.from(new Set(normalized));
+  if (error) throw new Error(`raw_hubspot_contacts phoenix_forum query failed: ${error.message}`);
+  return {
+    value: count ?? 0,
+    source: "raw_hubspot_contacts (membership_s ilike '%Paid Groups%')",
+    notes: ["Total active Phoenix Forum members (all-time, not window-scoped)"],
+  };
 };
 
 export const computeRepeatAttendanceRates = async (range: DateRangeInput | undefined): Promise<{ tuesday: number | null; thursday: number | null; source: string; notes: string[] }> => {
   const normalizedRange = normalizeDateRange(range, 30);
-  const { data, error } = await supabase
-    .from("kpi_metrics")
-    .select("metric_date,metric_name,metadata")
-    .eq("metric_name", "Zoom Meeting Attendees")
-    .gte("metric_date", normalizedRange.from)
-    .lte("metric_date", normalizedRange.to)
-    .order("metric_date", { ascending: true });
 
-  if (error) {
-    throw new Error(`Repeat attendance query failed: ${error.message}`);
-  }
+  const { data: sessions, error: sessErr } = await supabase
+    .from("raw_hubspot_meeting_activities")
+    .select("hubspot_activity_id, hs_timestamp, title")
+    .gte("hs_timestamp", `${normalizedRange.from}T00:00:00.000Z`)
+    .lte("hs_timestamp", `${normalizedRange.to}T23:59:59.999Z`)
+    .eq("activity_type", "MEETING")
+    .or(buildGroupSessionTitleFilter());
 
-  const rows = data || [];
+  if (sessErr) throw new Error(`Repeat attendance session query failed: ${sessErr.message}`);
+
+  const rows = (sessions || []) as Array<Record<string, unknown>>;
   if (!rows.length) {
     return {
       tuesday: null,
       thursday: null,
-      source: "kpi_metrics:Zoom Meeting Attendees",
-      notes: ["No attendance sessions in selected window"],
+      source: "raw_hubspot_meeting_activities + hubspot_activity_contact_associations",
+      notes: ["No group sessions in selected window"],
     };
   }
 
-  const counters: Record<"tuesday" | "thursday", Map<string, number>> = {
-    tuesday: new Map<string, number>(),
-    thursday: new Map<string, number>(),
-  };
+  // Classify sessions as Tuesday or Thursday by title then by day-of-week fallback
+  const tuesdayIds: unknown[] = [];
+  const thursdayIds: unknown[] = [];
 
-  for (const row of rows as Array<Record<string, unknown>>) {
-    const group = extractSessionGroup(row);
-    if (!group) continue;
+  for (const session of rows) {
+    const title = String(session.title || "").toLowerCase();
+    const ts = new Date(String(session.hs_timestamp || ""));
+    const dayOfWeek = Number.isNaN(ts.getTime()) ? -1 : ts.getUTCDay(); // 2=Tue, 4=Thu
+    const id = session.hubspot_activity_id;
 
-    const attendees = extractAttendees(row);
-    for (const attendee of attendees) {
-      counters[group].set(attendee, (counters[group].get(attendee) || 0) + 1);
+    const isTuesdayTitle = TUESDAY_TITLE_SIGNALS.some((sig) => title.includes(sig));
+    const isThursdayTitle = THURSDAY_TITLE_SIGNALS.some((sig) => title.includes(sig));
+
+    if (isTuesdayTitle || (!isThursdayTitle && dayOfWeek === 2)) {
+      tuesdayIds.push(id);
+    } else if (isThursdayTitle || dayOfWeek === 4) {
+      thursdayIds.push(id);
     }
   }
 
-  const computeRate = (map: Map<string, number>): number | null => {
-    if (map.size === 0) return null;
+  const allIds = [...tuesdayIds, ...thursdayIds];
+  if (!allIds.length) {
+    return {
+      tuesday: null,
+      thursday: null,
+      source: "raw_hubspot_meeting_activities + hubspot_activity_contact_associations",
+      notes: ["Sessions found but could not classify as Tuesday or Thursday"],
+    };
+  }
+
+  const { data: associations, error: assocErr } = await supabase
+    .from("hubspot_activity_contact_associations")
+    .select("hubspot_activity_id, hubspot_contact_id, contact_email")
+    .in("hubspot_activity_id", allIds);
+
+  if (assocErr) throw new Error(`Repeat attendance associations query failed: ${assocErr.message}`);
+
+  const assocRows = (associations || []) as Array<Record<string, unknown>>;
+
+  const computeRate = (sessionIds: unknown[]): number | null => {
+    if (!sessionIds.length) return null;
+    const idSet = new Set(sessionIds.map(String));
+    const visitCounts = new Map<string, number>();
+
+    for (const row of assocRows) {
+      if (!idSet.has(String(row.hubspot_activity_id))) continue;
+      const key = row.hubspot_contact_id
+        ? `id:${row.hubspot_contact_id}`
+        : `email:${String(row.contact_email || "").toLowerCase()}`;
+      if (!key || key === "email:") continue;
+      visitCounts.set(key, (visitCounts.get(key) || 0) + 1);
+    }
+
+    if (!visitCounts.size) return null;
     let repeaters = 0;
-    for (const count of map.values()) {
+    for (const count of visitCounts.values()) {
       if (count > 1) repeaters += 1;
     }
-    return repeaters / map.size;
+    return repeaters / visitCounts.size;
   };
 
   return {
-    tuesday: computeRate(counters.tuesday),
-    thursday: computeRate(counters.thursday),
-    source: "kpi_metrics:Zoom Meeting Attendees",
+    tuesday: computeRate(tuesdayIds),
+    thursday: computeRate(thursdayIds),
+    source: "raw_hubspot_meeting_activities + hubspot_activity_contact_associations",
     notes: [],
   };
 };
@@ -280,15 +341,15 @@ export const queryMetricAggregate = async (metric: string, range: NormalizedDate
   const normalized = metric.trim().toLowerCase();
 
   if (["leads", "hs_contacts_created", "new_leads"].includes(normalized)) {
-    return aggregateKpiMetric(["hs_contacts_created"], range.from, range.to, "sum");
+    return aggregateLeads(range.from, range.to);
   }
 
   if (["qualified_leads", "hs_contacts_qualified_created"].includes(normalized)) {
-    return aggregateKpiMetric(["hs_contacts_qualified_created"], range.from, range.to, "sum");
+    return aggregateQualifiedLeads(range.from, range.to);
   }
 
   if (["attendance", "showups", "zoom_meeting_attendees"].includes(normalized)) {
-    return aggregateKpiMetric(["Zoom Meeting Attendees"], range.from, range.to, "sum");
+    return aggregateAttendance(range.from, range.to);
   }
 
   if (["donations", "donations_total", "revenue_donations"].includes(normalized)) {
@@ -308,14 +369,7 @@ export const queryMetricAggregate = async (metric: string, range: NormalizedDate
   }
 
   if (["phoenix_forum_paid_members", "phoenix_paid_members", "phoenix_new_members"].includes(normalized)) {
-    const result = await aggregateKpiMetric(["phoenix_new_members", "phoenix_forum_paid_members"], range.from, range.to, "sum");
-    if (result.value === null) {
-      return {
-        ...result,
-        notes: [...result.notes, "Falling back to phoenix_new_members as proxy for paid members"],
-      };
-    }
-    return result;
+    return aggregatePhoenixForumMembers(range.from, range.to);
   }
 
   if (["free_tuesday_repeat_attendance", "free_thursday_repeat_attendance"].includes(normalized)) {
@@ -327,7 +381,11 @@ export const queryMetricAggregate = async (metric: string, range: NormalizedDate
     };
   }
 
-  return aggregateKpiMetric([metric], range.from, range.to, "sum");
+  return {
+    value: null,
+    source: "unknown",
+    notes: [`Metric '${metric}' is not mapped to a data source. Available: leads, qualified_leads, attendance, donations, email_open_rate, seo, operations, free_tuesday_repeat_attendance, free_thursday_repeat_attendance`],
+  };
 };
 
 export const getMetricTrend = async (
