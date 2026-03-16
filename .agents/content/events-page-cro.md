@@ -14,7 +14,7 @@ Inserted after the hero banner. Focuses on tier differentiation and correct CTAs
 
 <h2 style="font-size: 1.4em; margin-bottom: 0.5em;">Three Ways to Get Involved</h2>
 
-<p><strong>Thursday Mastermind</strong> — Free and open to all sober entrepreneurs. No revenue minimum, no interview. Sign up below &darr;</p>
+<p><strong>Thursday Mastermind</strong> — Free and open to all sober entrepreneurs. No revenue minimum, no interview. <a href="#thursday-signup">Sign up below &darr;</a></p>
 
 <p><strong><a href="/apply/">Tuesday "All Our Affairs"</a></strong> — For founders with $250K+ revenue, 2+ full-time employees, 1+ year sober, and actively working the 12 steps. Requires a short verification interview. Thursday members are always welcome too. <a href="/apply/">Apply here &rarr;</a></p>
 

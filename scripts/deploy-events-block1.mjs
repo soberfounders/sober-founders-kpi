@@ -70,7 +70,7 @@ const BLOCK_1_HTML = `<!-- wp:html -->
 
 <h2 style="font-size: 1.4em; margin-bottom: 0.5em;">Three Ways to Get Involved</h2>
 
-<p><strong>Thursday Mastermind</strong> — Free and open to all sober entrepreneurs. No revenue minimum, no interview. Sign up below &darr;</p>
+<p><strong>Thursday Mastermind</strong> — Free and open to all sober entrepreneurs. No revenue minimum, no interview. <a href="#thursday-signup">Sign up below &darr;</a></p>
 
 <p><strong><a href="/apply/">Tuesday "All Our Affairs"</a></strong> — For founders with $250K+ revenue, 2+ full-time employees, 1+ year sober, and actively working the 12 steps. Requires a short verification interview. Thursday members are always welcome too. <a href="/apply/">Apply here &rarr;</a></p>
 
@@ -120,7 +120,17 @@ async function main() {
     throw new Error("Could not find hero banner end tag. Page structure may have changed.");
   }
   const insertAt = heroEndIdx + heroEndTag.length;
-  const newContent = cleaned.slice(0, insertAt) + "\n\n" + BLOCK_1_HTML + "\n\n" + cleaned.slice(insertAt);
+  let assembled = cleaned.slice(0, insertAt) + "\n\n" + BLOCK_1_HTML + "\n\n" + cleaned.slice(insertAt);
+
+  // Add anchor id to the Luma calendar heading so #thursday-signup works
+  const ANCHOR_ID = 'id="thursday-signup"';
+  if (!assembled.includes(ANCHOR_ID)) {
+    assembled = assembled.replace(
+      '>Free Events for Sober Business Owners<',
+      ` ${ANCHOR_ID}>Free Events for Sober Business Owners<`
+    );
+  }
+  const newContent = assembled;
 
   if (DRY_RUN) {
     console.log("  [DRY RUN] Would insert Block 1 after hero banner.");
