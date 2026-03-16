@@ -20,7 +20,7 @@ import https from 'node:https';
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const REFRESH_TOKEN = process.env.GOOGLE_REFRESH_TOKEN;
-const SITE_URL = process.env.GSC_SITE_URL || 'https://soberfounders.org/';
+const SITE_URL = process.env.GSC_SITE_URL || 'sc-domain:soberfounders.org';
 
 if (!CLIENT_ID || !CLIENT_SECRET || !REFRESH_TOKEN) {
   console.error('Missing GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, or GOOGLE_REFRESH_TOKEN in .env');
