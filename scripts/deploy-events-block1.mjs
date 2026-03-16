@@ -70,7 +70,7 @@ const BLOCK_1_HTML = `<!-- wp:html -->
 
 <h2 style="font-size: 1.4em; margin-bottom: 0.5em;">Three Ways to Get Involved</h2>
 
-<p><strong><a href="/events/">Thursday Mastermind</a></strong> — Free and open to all sober entrepreneurs. No revenue minimum, no interview. <a href="/events/">Sign up for this Thursday &rarr;</a></p>
+<p><strong>Thursday Mastermind</strong> — Free and open to all sober entrepreneurs. No revenue minimum, no interview. Sign up below &darr;</p>
 
 <p><strong><a href="/apply/">Tuesday "All Our Affairs"</a></strong> — For founders with $250K+ revenue, 2+ full-time employees, 1+ year sober, and actively working the 12 steps. Requires a short verification interview. Thursday members are always welcome too. <a href="/apply/">Apply here &rarr;</a></p>
 
