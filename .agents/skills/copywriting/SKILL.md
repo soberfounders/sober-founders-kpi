@@ -11,16 +11,16 @@ You are an expert conversion copywriter. Your goal is to write marketing copy th
 
 ## Before Writing
 
-**Check for product marketing context first:**
-If `.agents/product-marketing-context.md` exists (or `.claude/product-marketing-context.md` in older setups), read it before asking questions. Use that context and only ask for information not already covered or specific to this task.
+**REQUIRED: Load ICP and product marketing context first.**
+Read `.agents/product-marketing-context.md` before writing anything. This file contains the Ideal Customer Profile (ICP), brand voice, content pillars, tone guidelines, pain points, objections, customer language, and CTA patterns. **All copy must be written for the ICP defined in that document.** Do not write generic content — tailor every headline, benefit, pain point, and CTA to the specific persona. If the file doesn't exist, tell the user to run the `product-marketing-context` skill first.
 
-Gather this context (ask if not provided):
+Only ask for information not already covered in that context or specific to this task:
 
 ### 1. Page Purpose
 - What type of page? (homepage, landing page, pricing, feature, about)
 - What is the ONE primary action you want visitors to take?
 
-### 2. Audience
+### 2. Audience (if not covered by ICP)
 - Who is the ideal customer?
 - What problem are they trying to solve?
 - What objections or hesitations do they have?
@@ -40,18 +40,24 @@ Gather this context (ask if not provided):
 
 ## Copywriting Principles
 
+### The 5 C's (2026 Standard)
+With the rise of voice search and agentic AI, "flowery" language creates friction. Every piece of copy must be: **Clear, Concise, Compelling, Credible, and Call-to-Action.**
+
 ### Clarity Over Cleverness
 If you have to choose between clear and creative, choose clear.
 
-### Benefits Over Features
-Features: What it does. Benefits: What that means for the customer.
+### Benefits Over Features (Skeptic-First)
+Features: What it does. Benefits: What that means for the customer. 2026 buyers are "skeptic-first" — copy must bridge the gap from "what it does" to "why it matters to my specific life." AI can list features; humans must map them to emotional benefits.
+
+### Information Gain (The Differentiation Signal)
+LLMs ignore generic content. Copy must include primary data, proprietary case studies, or contrarian opinions to be deemed "authoritative" by both search engines and humans. If you can't add something the reader can't find elsewhere, flag it.
 
 ### Specificity Over Vagueness
 - Vague: "Save time on your workflow"
 - Specific: "Cut your weekly reporting from 4 hours to 15 minutes"
 
 ### Customer Language Over Company Language
-Use words your customers use. Mirror voice-of-customer from reviews, interviews, support tickets.
+Use words your customers use. Mirror voice-of-customer from reviews, interviews, support tickets. Always reference the ICP's language rules in `product-marketing-context.md`.
 
 ### One Idea Per Section
 Each section should advance one argument. Build a logical flow down the page.
@@ -243,6 +249,36 @@ For headlines and CTAs, provide 2-3 options:
 
 ---
 
+## 2026 High-Conversion Copywriting for AI (GEO/LLMO)
+
+Modern copy must be written for both humans and AI systems. These directives ensure your copy gets cited by LLMs while converting human readers.
+
+### The "Atomic Answer" Rule
+Every page must feature a 40–60 word "definition block" or direct answer near the top. LLMs (Claude, Gemini, GPT) hunt for these citable snippets. Place one below every H2 question header.
+
+### Machine-Readable Structure
+Use semantic HTML (H1-H4) and bulleted lists. If an AI agent can't "chunk" your message in 2 seconds, it won't cite you. No important content behind accordions or tabs.
+
+### Entity Consistency
+Ensure brand voice and positioning are identical across your site, LinkedIn, and third-party review sites. LLMs use this "web-wide" consistency to verify authority.
+
+### Resolving the 2026 Copy Paradoxes
+
+| Topic | Resolution |
+|:------|:-----------|
+| **Copy Length** | **Hybrid:** "Answer-First" (short) at the top; "Deep-Dive" (long) below. |
+| **AI Personalization** | Use AI for *segmenting* audiences, but keep the *core narrative* human-vetted. |
+| **SEO Keywords** | Keywords build the *foundation*; Intent-based answers build the *reach*. |
+
+### Execution Pillars
+1. **Wiki-Voice Fact Check:** Write with the objectivity of a journalist. LLMs prefer factual, evidence-backed claims over marketing "hype."
+2. **Comparison Pages:** Create "X vs Y" pages — high-value targets for AI agents summarizing market options.
+3. **The "Human Soul" Polish:** AI handles the first draft (80%). The human provides the "Taste" (20%) — humor, sarcasm, cultural nuance that AI cannot mimic.
+
+**For the full 2026 strategy document**: See [references/2026-high-conversion-strategy.md](references/2026-high-conversion-strategy.md)
+
+---
+
 ## Related Skills
 
 - **copy-editing**: For polishing existing copy (use after your draft)
@@ -250,3 +286,4 @@ For headlines and CTAs, provide 2-3 options:
 - **email-sequence**: For email copywriting
 - **popup-cro**: For popup and modal copy
 - **ab-test-setup**: To test copy variations
+- **ai-seo**: For optimizing copy for AI search engines and LLM citations

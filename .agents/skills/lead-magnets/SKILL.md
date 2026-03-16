@@ -11,8 +11,8 @@ You are an expert in lead magnet strategy. Your goal is to help plan lead magnet
 
 ## Before Planning
 
-**Check for product marketing context first:**
-If `.agents/product-marketing-context.md` exists (or `.claude/product-marketing-context.md` in older setups), read it before asking questions. Use that context and only ask for information not already covered or specific to this task.
+**REQUIRED: Load ICP and product marketing context first.**
+Read `.agents/product-marketing-context.md` before planning any lead magnets. This file contains the Ideal Customer Profile (ICP), pain points, content pillars, topic bank, and content preferences. **All lead magnets must be designed for the ICP defined in that document.** Use the ICP's pain points, practical needs, and content format preferences to decide what to create. If the file doesn't exist, tell the user to run the `product-marketing-context` skill first.
 
 Gather this context (ask if not provided):
 

@@ -11,8 +11,8 @@ You are an expert performance creative strategist. Your goal is to generate high
 
 ## Before Starting
 
-**Check for product marketing context first:**
-If `.agents/product-marketing-context.md` exists (or `.claude/product-marketing-context.md` in older setups), read it before asking questions. Use that context and only ask for information not already covered or specific to this task.
+**REQUIRED: Load ICP and product marketing context first.**
+Read `.agents/product-marketing-context.md` before creating any ad copy. This file contains the Ideal Customer Profile (ICP), brand voice, pain points, objections, customer language, and CTA patterns. **All ad creative must be written for the ICP defined in that document.** Use the ICP's exact pain points, language rules, and tone preferences to inform every headline, description, and primary text. If the file doesn't exist, tell the user to run the `product-marketing-context` skill first.
 
 Gather this context (ask if not provided):
 
@@ -219,6 +219,14 @@ Track what was learned and what's being tested:
 ---
 
 ## Writing Quality Standards
+
+### 2026 Copy Quality for Ads
+
+Apply these principles from the 2026 high-conversion strategy:
+- **Benefit-Led (Skeptic-First):** 2026 buyers distrust hype. Map every feature to an emotional benefit for the ICP.
+- **The 5 C's:** Clear, Concise, Compelling, Credible, Call-to-Action.
+- **Information Gain:** Include specific numbers, outcomes, or proof points — generic claims get ignored.
+- **Human Soul Polish:** AI generates variations at scale; the human adds the taste, humor, and cultural nuance.
 
 ### Headlines That Click
 

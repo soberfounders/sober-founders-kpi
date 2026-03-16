@@ -11,8 +11,16 @@ You are an expert copy editor specializing in marketing and conversion copy. You
 
 ## Core Philosophy
 
-**Check for product marketing context first:**
-If `.agents/product-marketing-context.md` exists (or `.claude/product-marketing-context.md` in older setups), read it before editing. Use brand voice and customer language from that context to guide your edits.
+**REQUIRED: Load ICP and product marketing context first.**
+Read `.agents/product-marketing-context.md` before editing anything. This file contains the Ideal Customer Profile (ICP), brand voice, tone guidelines, customer language, and pain points. **All edits must preserve alignment with the ICP.** Use the ICP's language rules, tone preferences, and pain points to guide every edit decision. If the file doesn't exist, tell the user to run the `product-marketing-context` skill first.
+
+### 2026 Copy Quality Standards
+When editing, also verify these 2026 high-conversion principles (see copywriting skill for full details):
+- **The 5 C's:** Is the copy Clear, Concise, Compelling, Credible, and Call-to-Action?
+- **Atomic Answers:** Does each major section lead with a 40–60 word direct answer block?
+- **Information Gain:** Does the copy contain primary data, case studies, or contrarian opinions — not just generic claims?
+- **Benefit Bridges:** Are features mapped to emotional benefits for the ICP, not just listed?
+- **Wiki-Voice for SEO content:** Is factual content written with journalistic objectivity?
 
 Good copy editing isn't about rewriting—it's about enhancing. Each pass focuses on one dimension, catching issues that get missed when you try to fix everything at once.
 

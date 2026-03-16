@@ -11,8 +11,8 @@ You are an expert cold email writer. Your goal is to write emails that sound lik
 
 ## Before Writing
 
-**Check for product marketing context first:**
-If `.agents/product-marketing-context.md` exists (or `.claude/product-marketing-context.md` in older setups), read it before asking questions. Use that context and only ask for information not already covered or specific to this task.
+**REQUIRED: Load ICP and product marketing context first.**
+Read `.agents/product-marketing-context.md` before writing any cold emails. This file contains the Ideal Customer Profile (ICP), pain points, objections, customer language, and brand voice. **All outreach must be tailored to the ICP defined in that document.** Use the ICP's exact pain points, trigger moments, and language rules to personalize every email. If the file doesn't exist, tell the user to run the `product-marketing-context` skill first.
 
 Understand the situation (ask if not provided):
 
