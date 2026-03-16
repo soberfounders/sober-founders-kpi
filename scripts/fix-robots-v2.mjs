@@ -1,74 +1,81 @@
 #!/usr/bin/env node
+/**
+ * fix-robots-v2.mjs — Update the robots.txt Code Snippet to use
+ * remove_all_filters approach for a clean, single-block output.
+ */
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const envLines = readFileSync(resolve(__dirname, "..", ".env.local"), "utf8").split("\n");
-const env = {};
-for (const line of envLines) {
-  const m = line.match(/^([A-Z_]+)\s*[=\-]\s*(.+)$/);
-  if (m) env[m[1].trim()] = m[2].trim();
+const ROOT = resolve(__dirname, "..");
+
+function loadEnv() {
+  let envPath = resolve(ROOT, ".env.local");
+  try { readFileSync(envPath, "utf8"); } catch { envPath = resolve(ROOT, ".env"); }
+  const lines = readFileSync(envPath, "utf8").replace(/\r/g, "").split("\n");
+  const env = {};
+  for (const line of lines) {
+    const m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/);
+    if (m) env[m[1].trim()] = m[2].trim();
+  }
+  return env;
 }
 
+const env = loadEnv();
 const SITE = env.WP_SITE_URL;
 const auth = Buffer.from(`${env.WP_USERNAME}:${env.WP_APP_PASSWORD}`).toString("base64");
 const headers = { "Content-Type": "application/json", Authorization: `Basic ${auth}` };
 
-const phpCode = `// Override robots.txt: use output buffering to capture and replace everything
-add_action('do_robotstxt', function() {
-    // Start output buffering to capture Yoast's echo output
-    ob_start();
-}, 0);
-
-add_action('do_robotstxt', function() {
-    // Discard whatever Yoast/WP core echoed
-    ob_end_clean();
-    // Echo our clean robots.txt
-    echo "User-agent: *\\nDisallow:\\n\\n";
-    echo "Sitemap: https://www.soberfounders.org/sitemap_index.xml\\n\\n";
-    echo "# AI Search Bot Access Policy — Sober Founders\\n\\n";
-    echo "User-agent: GPTBot\\nAllow: /\\n\\n";
-    echo "User-agent: ChatGPT-User\\nAllow: /\\n\\n";
-    echo "User-agent: PerplexityBot\\nAllow: /\\n\\n";
-    echo "User-agent: ClaudeBot\\nAllow: /\\n\\n";
-    echo "User-agent: anthropic-ai\\nAllow: /\\n\\n";
-    echo "User-agent: Google-Extended\\nAllow: /\\n\\n";
-    echo "User-agent: Bingbot\\nAllow: /\\n\\n";
-    echo "# Block training-only crawlers\\n";
-    echo "User-agent: CCBot\\nDisallow: /\\n";
-}, 99999);`;
+// PHP code: clear ALL robots_txt filters after plugins load, add ours as the only one
+const phpCode = `// Clear all robots_txt filters after all plugins load, then register ours
+add_action('init', function() {
+    remove_all_filters('robots_txt');
+    add_filter('robots_txt', function() {
+        $r  = "# robots.txt - Sober Founders (soberfounders.org)\\n";
+        $r .= "# Managed via Code Snippets\\n\\n";
+        $r .= "User-agent: *\\nDisallow:\\n\\n";
+        $r .= "Sitemap: https://www.soberfounders.org/sitemap_index.xml\\n\\n";
+        $r .= "# AI Search Bot Access Policy\\n";
+        $r .= "# We ALLOW AI search engines so founders find us via AI tools.\\n\\n";
+        $r .= "User-agent: GPTBot\\nAllow: /\\n\\n";
+        $r .= "User-agent: ChatGPT-User\\nAllow: /\\n\\n";
+        $r .= "User-agent: PerplexityBot\\nAllow: /\\n\\n";
+        $r .= "User-agent: ClaudeBot\\nAllow: /\\n\\n";
+        $r .= "User-agent: anthropic-ai\\nAllow: /\\n\\n";
+        $r .= "User-agent: Google-Extended\\nAllow: /\\n\\n";
+        $r .= "User-agent: Bingbot\\nAllow: /\\n\\n";
+        $r .= "# Block training-only crawlers (no search citation value)\\n";
+        $r .= "User-agent: CCBot\\nDisallow: /\\n";
+        return $r;
+    }, 0, 2);
+}, 999);`;
 
 async function main() {
-  console.log("Updating snippet #6...");
-  const res = await fetch(`${SITE}/wp-json/code-snippets/v1/snippets/6`, {
+  // Update snippet #12
+  console.log("Updating snippet #12 with remove_all_filters approach...");
+  const res = await fetch(`${SITE}/wp-json/code-snippets/v1/snippets/12`, {
     method: "PUT",
     headers,
     body: JSON.stringify({ code: phpCode, active: true }),
   });
   const data = await res.json();
-  console.log("Active:", data.active, "| Error:", data.code_error || "none");
+  console.log(`Active: ${data.active} | Error: ${data.code_error || "none"}`);
 
-  if (!data.active) {
-    console.log("Activating...");
-    const actRes = await fetch(`${SITE}/wp-json/code-snippets/v1/snippets/6/activate`, {
-      method: "POST",
-      headers,
-    });
-    const actData = await actRes.json();
-    console.log("Now active:", actData.active);
+  if (data.code_error) {
+    console.log("Code error detected, aborting.");
+    return;
   }
 
-  console.log("\nVerifying robots.txt...");
-  const robots = await fetch(`${SITE}/robots.txt?cb=${Date.now()}`, {
-    headers: { "Cache-Control": "no-cache" },
-  }).then(r => r.text());
-  const sitemapCount = (robots.match(/Sitemap:/g) || []).length;
-  const hasHttps = robots.includes("Sitemap: https://");
-  const hasHttp = robots.includes("Sitemap: http://soberfounders");
-  console.log(robots);
-  console.log(`Sitemap count: ${sitemapCount} | HTTPS: ${hasHttps} | HTTP duplicate: ${hasHttp}`);
-  console.log(sitemapCount === 1 && hasHttps && !hasHttp ? "PASS" : "Needs attention");
+  // Verify
+  console.log("\nVerifying robots.txt...\n");
+  const robotsRes = await fetch(`${SITE}/robots.txt`);
+  const txt = await robotsRes.text();
+  const sitemapCount = (txt.match(/Sitemap:/g) || []).length;
+  const hasHttp = txt.includes("http://soberfounders");
+  console.log(txt);
+  console.log(`\nSitemap count: ${sitemapCount} | HTTP leak: ${hasHttp}`);
+  console.log(sitemapCount === 1 && !hasHttp ? "PASS" : "NEEDS ATTENTION");
 }
 
 main().catch(console.error);

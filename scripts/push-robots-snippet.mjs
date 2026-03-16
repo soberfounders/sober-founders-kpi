@@ -8,13 +8,19 @@ import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Load env
-const envLines = readFileSync(resolve(__dirname, "..", ".env.local"), "utf8").split("\n");
-const env = {};
-for (const line of envLines) {
-  const m = line.match(/^([A-Z_]+)\s*[=\-]\s*(.+)$/);
-  if (m) env[m[1].trim()] = m[2].trim();
+// Load env (.env.local if present, otherwise .env)
+function loadEnv() {
+  let envPath = resolve(__dirname, "..", ".env.local");
+  try { readFileSync(envPath, "utf8"); } catch { envPath = resolve(__dirname, "..", ".env"); }
+  const lines = readFileSync(envPath, "utf8").replace(/\r/g, "").split("\n");
+  const env = {};
+  for (const line of lines) {
+    const m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/);
+    if (m) env[m[1].trim()] = m[2].trim();
+  }
+  return env;
 }
+const env = loadEnv();
 
 const SITE = env.WP_SITE_URL;
 const auth = Buffer.from(`${env.WP_USERNAME}:${env.WP_APP_PASSWORD}`).toString("base64");

@@ -26,11 +26,12 @@ const ROOT = resolve(__dirname, "..");
 // Config
 // ---------------------------------------------------------------------------
 function loadEnv() {
-  const envPath = resolve(ROOT, ".env.local");
-  const lines = readFileSync(envPath, "utf8").split("\n");
+  let envPath = resolve(ROOT, ".env.local");
+  try { readFileSync(envPath, "utf8"); } catch { envPath = resolve(ROOT, ".env"); }
+  const lines = readFileSync(envPath, "utf8").replace(/\r/g, "").split("\n");
   const env = {};
   for (const line of lines) {
-    const match = line.match(/^([A-Z_]+)\s*[=\-]\s*(.+)$/);
+    const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/);
     if (match) env[match[1].trim()] = match[2].trim();
   }
   return env;
