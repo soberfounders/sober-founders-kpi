@@ -263,14 +263,14 @@ const PAGE_CONTENT = `<!-- wp:html -->
     transform: translateY(-1px);
   }
   .sf-thu-btn-donate {
-    background: transparent;
-    color: #667085 !important;
-    border: 1px solid #e5e7eb;
+    background: #dc2626;
+    color: #ffffff !important;
+    border: 1px solid #dc2626;
   }
   .sf-thu-btn-donate:hover {
-    background: #f9fafb;
-    color: #475467 !important;
-    border-color: #d1d5db;
+    background: #b91c1c;
+    color: #ffffff !important;
+    border-color: #b91c1c;
     transform: translateY(-1px);
   }
 
