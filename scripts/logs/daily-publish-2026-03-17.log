@@ -99,3 +99,117 @@ SEO Score: 90/110 (PASS — threshold: 88)
 [2026-03-17T18:39:20.774Z] Calendar updated.
 [2026-03-17T18:39:20.775Z] 
 Done. Post live at: https://soberfounders.org/best-mastermind-group-for-founders-in-recovery/
+[2026-03-17T18:53:41.162Z] === Daily Blog Publisher v2 ===
+[2026-03-17T18:53:41.162Z] Mode: DRY-RUN
+[2026-03-17T18:53:41.163Z] Calendar: 40 total, 37 queued
+[2026-03-17T18:53:41.163Z] Selected: [4] "What It Really Means to Be a Sober Entrepreneur in 2026"
+[2026-03-17T18:53:41.164Z] Keyword: "sober entrepreneur" | Priority: critical | Category: recovery-business
+[2026-03-17T18:53:41.164Z] Generating article with SEO validation...
+[2026-03-17T18:54:06.525Z]   Article generated (8011 chars, attempt 1)
+[2026-03-17T18:54:08.281Z]   SEO Score: 90/113 (PASS)
+[2026-03-17T18:54:08.281Z] 
+SEO Score: 90/113 (PASS — threshold: 88)
+
+  ✓ bluf: 10/10 — BLUF block: 53 words
+  ✓ questionH2s: 10/10 — 6 question-based H2s
+  ✓ keywordFirst100: 8/8 — Keyword in first 100 words
+  ✓ keywordInH2: 5/5 — Keyword in H2
+  ✓ keywordDensity: 8/8 — Keyword appears 3x
+  ✗ wordCount: 0/10 — 1133 words (too short, need 1800+)
+  ✓ faqSection: 8/8 — FAQ section with 5 Q&As
+  ~ statsCitations: 4/8 — 6 stats, 0 source citations (need both 2+)
+  ~ blockquote: 3/5 — 1 blockquote(s) but missing name/industry attribution
+  ✓ internalLinks: 10/10 — All 3 internal link types present
+  ✓ phoenixCTA: 5/5 — Phoenix Forum CTA present
+  ✓ metaTitleLen: 3/3 — Title: 51 chars
+  ~ metaDescLen: 1/3 — Description: 126 chars (ideal: 130-155)
+  ✓ lastUpdated: 2/2 — Last updated date present
+  ✗ imageAltComment: 0/2 — Missing <!-- Alt: ... --> comment
+  ✓ shortParagraphs: 3/3 — All paragraphs 5 sentences or fewer
+  ✓ noForbiddenOpeners: 2/2 — No forbidden openers
+  ✓ semanticVariations: 5/5 — 2 semantic variations found
+  ✗ modularChunking: 0/3 — No lists or tables found
+  ✓ antiSlop: 3/3 — No slop phrases detected
+
+[2026-03-17T18:54:08.283Z] Meta title: Being a Sober Entrepreneur in 2026 | Sober Founders (51 chars)
+[2026-03-17T18:54:08.284Z] Meta desc: Explore the journey of sober entrepreneurs in 2026, balancing business pressures with recovery, and finding community support. (126 chars)
+[2026-03-17T18:54:08.284Z] Slug: sober-entrepreneur-2026
+[2026-03-17T18:54:08.284Z] 
+=== DRY RUN - Article Preview ===
+[2026-03-17T18:54:08.284Z] === End Preview ===
+[2026-03-17T18:54:24.650Z] === Daily Blog Publisher v2 ===
+[2026-03-17T18:54:24.651Z] Mode: DRY-RUN
+[2026-03-17T18:54:24.651Z] Calendar: 40 total, 37 queued
+[2026-03-17T18:54:24.652Z] Selected: [4] "What It Really Means to Be a Sober Entrepreneur in 2026"
+[2026-03-17T18:54:24.652Z] Keyword: "sober entrepreneur" | Priority: critical | Category: recovery-business
+[2026-03-17T18:54:24.652Z] Generating article with SEO validation...
+[2026-03-17T18:54:56.469Z]   Article generated (9640 chars, attempt 1)
+[2026-03-17T18:54:58.689Z]   SEO Score: 92/113 (PASS)
+[2026-03-17T18:54:58.689Z] 
+SEO Score: 92/113 (PASS — threshold: 91)
+
+  ✓ bluf: 10/10 — BLUF block: 47 words
+  ✓ questionH2s: 10/10 — 7 question-based H2s
+  ✓ keywordFirst100: 8/8 — Keyword in first 100 words
+  ✓ keywordInH2: 5/5 — Keyword in H2
+  ✓ keywordDensity: 8/8 — Keyword appears 4x
+  ✗ wordCount: 0/10 — 1302 words (too short, need 1800+)
+  ✓ faqSection: 8/8 — FAQ section with 5 Q&As
+  ~ statsCitations: 4/8 — 10 stats, 0 source citations (need both 2+)
+  ~ blockquote: 3/5 — 2 blockquote(s) but missing name/industry attribution
+  ✓ internalLinks: 10/10 — All 3 internal link types present
+  ✓ phoenixCTA: 5/5 — Phoenix Forum CTA present
+  ~ metaTitleLen: 1/3 — Title: 48 chars (ideal: 50-60)
+  ✓ metaDescLen: 3/3 — Description: 149 chars
+  ✓ lastUpdated: 2/2 — Last updated date present
+  ✓ imageAltComment: 2/2 — Image alt comment present
+  ~ shortParagraphs: 1/3 — 1 paragraph(s) exceed 5 sentences
+  ✓ noForbiddenOpeners: 2/2 — No forbidden openers
+  ✓ semanticVariations: 5/5 — 2 semantic variations found
+  ~ modularChunking: 2/3 — Has list(s)
+  ✓ antiSlop: 3/3 — No slop phrases detected
+
+[2026-03-17T18:54:58.691Z] Meta title: What It Means to Be a Sober Entrepreneur in 2026 (48 chars)
+[2026-03-17T18:54:58.692Z] Meta desc: Explore the unique challenges and strengths of being a sober entrepreneur in 2026, balancing sobriety with business pressures and redefining success. (149 chars)
+[2026-03-17T18:54:58.692Z] Slug: sober-entrepreneur-2026-meaning
+[2026-03-17T18:54:58.692Z] 
+=== DRY RUN - Article Preview ===
+[2026-03-17T18:54:58.693Z] === End Preview ===
+[2026-03-17T18:55:49.432Z] === Daily Blog Publisher v2 ===
+[2026-03-17T18:55:49.433Z] Mode: DRY-RUN
+[2026-03-17T18:55:49.433Z] Calendar: 40 total, 37 queued
+[2026-03-17T18:55:49.434Z] Selected: [4] "What It Really Means to Be a Sober Entrepreneur in 2026"
+[2026-03-17T18:55:49.434Z] Keyword: "sober entrepreneur" | Priority: critical | Category: recovery-business
+[2026-03-17T18:55:49.434Z] Generating article with SEO validation...
+[2026-03-17T18:56:39.841Z]   Article generated (11015 chars, attempt 1)
+[2026-03-17T18:56:41.598Z]   SEO Score: 99/113 (PASS)
+[2026-03-17T18:56:41.599Z] 
+SEO Score: 99/113 (PASS — threshold: 91)
+
+  ✓ bluf: 10/10 — BLUF block: 54 words
+  ✓ questionH2s: 10/10 — 7 question-based H2s
+  ✓ keywordFirst100: 8/8 — Keyword in first 100 words
+  ✓ keywordInH2: 5/5 — Keyword in H2
+  ✓ keywordDensity: 8/8 — Keyword appears 4x
+  ~ wordCount: 5/10 — 1553 words (target: 1800+)
+  ✓ faqSection: 8/8 — FAQ section with 5 Q&As
+  ✓ statsCitations: 8/8 — 9 stats, 3 source citations
+  ~ blockquote: 3/5 — 1 blockquote(s) but missing name/industry attribution
+  ✓ internalLinks: 10/10 — All 3 internal link types present
+  ✓ phoenixCTA: 5/5 — Phoenix Forum CTA present
+  ~ metaTitleLen: 1/3 — Title: 48 chars (ideal: 50-60)
+  ✓ metaDescLen: 3/3 — Description: 138 chars
+  ✓ lastUpdated: 2/2 — Last updated date present
+  ✗ imageAltComment: 0/2 — Missing <!-- Alt: ... --> comment
+  ✓ shortParagraphs: 3/3 — All paragraphs 5 sentences or fewer
+  ✓ noForbiddenOpeners: 2/2 — No forbidden openers
+  ~ semanticVariations: 2/5 — 1 semantic variation found (need 2+)
+  ✓ modularChunking: 3/3 — Has both lists and tables
+  ✓ antiSlop: 3/3 — No slop phrases detected
+
+[2026-03-17T18:56:41.599Z] Meta title: What It Means to Be a Sober Entrepreneur in 2026 (48 chars)
+[2026-03-17T18:56:41.599Z] Meta desc: Explore the unique challenges and rewards of being a sober entrepreneur in 2026, balancing business pressures with recovery and integrity. (138 chars)
+[2026-03-17T18:56:41.600Z] Slug: sober-entrepreneur-2026-meaning
+[2026-03-17T18:56:41.600Z] 
+=== DRY RUN - Article Preview ===
+[2026-03-17T18:56:41.600Z] === End Preview ===

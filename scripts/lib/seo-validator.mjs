@@ -289,6 +289,26 @@ function checkNoForbiddenOpeners(html) {
   return { earned: 0, detail: `Forbidden opener found: "${found[0]}"` };
 }
 
+const SLOP_PHRASES = [
+  'in today\'s fast-paced', 'it\'s no secret that', 'let\'s dive in',
+  'without further ado', 'in this comprehensive guide', 'buckle up',
+  'game-changer', 'think about it', 'here\'s the thing',
+  'at the end of the day', 'it goes without saying', 'the reality is',
+  'navigate the complexities', 'unlock your potential', 'take it to the next level',
+  'leverage your', 'in the ever-evolving', 'the landscape of',
+  'a holistic approach', 'paradigm shift', 'synergy', 'deep dive',
+  'on this journey', 'embark on', 'revolutionize', 'empower you to',
+  'in conclusion', 'to sum it up', 'all in all',
+];
+
+function checkAntiSlop(html) {
+  const text = stripHtml(html).toLowerCase();
+  const found = SLOP_PHRASES.filter((p) => text.includes(p));
+  if (found.length === 0) return { earned: 3, detail: 'No slop phrases detected' };
+  if (found.length <= 2) return { earned: 1, detail: `${found.length} slop phrase(s): "${found.join('", "')}"` };
+  return { earned: 0, detail: `${found.length} slop phrases: "${found.slice(0, 3).join('", "')}"...` };
+}
+
 function checkSemanticVariations(html, keyword) {
   const text = stripHtml(html).toLowerCase();
   const variations = getSemanticVariations(keyword);
@@ -308,8 +328,8 @@ function checkModularChunking(html) {
 
 // ── Main validator ──────────────────────────────────────────────────────────
 
-const PASS_THRESHOLD = 88;
-const MAX_SCORE = 110;
+const PASS_THRESHOLD = 91;
+const MAX_SCORE = 113;
 
 /**
  * Validate an article against the 2026 SEO+GEO checklist.
@@ -340,6 +360,7 @@ export function validateArticle(html, keyword, meta) {
     { name: 'noForbiddenOpeners', points: 2, ...checkNoForbiddenOpeners(html) },
     { name: 'semanticVariations', points: 5, ...checkSemanticVariations(html, keyword) },
     { name: 'modularChunking', points: 3, ...checkModularChunking(html) },
+    { name: 'antiSlop', points: 3, ...checkAntiSlop(html) },
   ];
 
   const score = checks.reduce((sum, c) => sum + c.earned, 0);
@@ -395,6 +416,7 @@ export function buildFeedbackPrompt(result) {
       case 'noForbiddenOpeners': return 'Do not start with "Discover", "Learn", or generic filler phrases.';
       case 'semanticVariations': return 'Use at least 2 semantic variations of the focus keyword (synonyms, related phrases).';
       case 'modularChunking': return 'Include at least one <table> or <ul>/<ol> list for structured, scannable content.';
+      case 'antiSlop': return 'Remove generic AI filler phrases like "game-changer", "let\'s dive in", "in today\'s fast-paced", "navigate the complexities", etc. Write like a real person.';
       default: return `Fix: ${c.detail}`;
     }
   });
