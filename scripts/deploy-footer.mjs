@@ -50,6 +50,17 @@ const headers = {
 // ---------------------------------------------------------------------------
 const FOOTER_HTML = `
 <style>
+  /* ── Hide Astra default footer (replaced by this custom footer) ── */
+  footer#colophon {
+    display: none !important;
+  }
+
+  /* ── Hide Elementor "Check Out Our Free Online Events!" CTA on blog posts ── */
+  .elementor-element-43a11a7 {
+    display: none !important;
+  }
+
+  /* ── Custom footer ── */
   .sf-site-footer {
     max-width: 1100px;
     margin: 0 auto;
@@ -99,6 +110,30 @@ const FOOTER_HTML = `
       text-align: center;
       padding: 20px;
     }
+  }
+
+  /* ── Donate button ── */
+  .sf-footer-donate {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  .sf-footer-donate a {
+    display: inline-block;
+    padding: 16px 48px;
+    background: #dc2626;
+    color: #fff !important;
+    font-family: 'Outfit', 'Inter', -apple-system, sans-serif;
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    text-decoration: none !important;
+    border-radius: 10px;
+    transition: background 0.2s, transform 0.15s;
+  }
+  .sf-footer-donate a:hover {
+    background: #b91c1c;
+    transform: translateY(-1px);
   }
 
   /* ── Footer columns ── */
@@ -189,6 +224,11 @@ const FOOTER_HTML = `
     <p><strong>501(c)(3) Nonprofit</strong> &middot; Candid Silver Seal &mdash; the highest transparency rating a first-year nonprofit can earn. Every dollar is spent on the mission.</p>
   </div>
 
+  <!-- Donate button -->
+  <div class="sf-footer-donate">
+    <a href="/donate/">Donate to Support Entrepreneurs in Recovery</a>
+  </div>
+
   <!-- Footer columns -->
   <div class="sf-footer-grid">
 
@@ -213,7 +253,6 @@ const FOOTER_HTML = `
         <li><a href="/blog/">Blog</a></li>
         <li><a href="/resources/faq/">FAQ</a></li>
         <li><a href="/resources/">Guides</a></li>
-        <li><a href="/donate/">Donate</a></li>
       </ul>
     </div>
 
