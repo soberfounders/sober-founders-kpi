@@ -1,7 +1,7 @@
 {
   "meta": {
     "lastExpanded": "2026-03-17",
-    "totalPublished": 0
+    "totalPublished": 1
   },
   "entries": [
     {
@@ -10,11 +10,11 @@
       "topic": "Why Entrepreneurs Struggle with Addiction — And How Recovery Becomes a Business Advantage",
       "category": "recovery-business",
       "priority": "critical",
-      "status": "queued",
-      "publishedDate": null,
-      "wpPostId": null,
-      "wpSlug": null,
-      "seoScore": null
+      "status": "published",
+      "publishedDate": "2026-03-17",
+      "wpPostId": 4405,
+      "wpSlug": "addiction-and-entrepreneurship-business-advantage",
+      "seoScore": "draft"
     },
     {
       "id": 2,

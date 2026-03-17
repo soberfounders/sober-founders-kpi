@@ -219,7 +219,7 @@ async function generateWithValidation(topic, keyword) {
 
     // Generate article
     const userPrompt = `Write an article about: "${topic}"\n\nPrimary focus keyword: "${keyword}"\n\nTarget audience: sober entrepreneurs and founders in recovery.${feedback}`;
-    const article = await callOpenAI(ARTICLE_SYSTEM_PROMPT, userPrompt, { temperature: 0.7, maxTokens: 6000 });
+    const article = await callOpenAI(ARTICLE_SYSTEM_PROMPT, userPrompt, { temperature: 0.7, maxTokens: 8000 });
     log(`  Article generated (${article.length} chars, attempt ${attempt + 1})`);
 
     // Generate metadata
@@ -254,7 +254,7 @@ async function generateWithValidation(topic, keyword) {
   log('  Max retries exceeded. Will publish as draft.');
   const article = await callOpenAI(ARTICLE_SYSTEM_PROMPT,
     `Write an article about: "${topic}"\n\nPrimary focus keyword: "${keyword}"\n\nTarget audience: sober entrepreneurs and founders in recovery.${feedback}`,
-    { temperature: 0.7, maxTokens: 6000 });
+    { temperature: 0.7, maxTokens: 8000 });
   const metaRaw = await callOpenAI(META_SYSTEM_PROMPT,
     `Article topic: "${topic}"\nFocus keyword: "${keyword}"\n\nArticle excerpt:\n${article.substring(0, 500)}`,
     { temperature: 0.3, maxTokens: 200 });

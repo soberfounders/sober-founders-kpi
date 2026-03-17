@@ -21,7 +21,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Publish daily blog post
         run: node scripts/daily-publish.mjs
@@ -35,7 +35,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -- package-lock.json || true
           git add scripts/content-calendar.json scripts/logs/
           git diff --staged --quiet || git commit -m "chore: daily blog publish $(date +%Y-%m-%d)"
-          git pull --rebase
           git push

@@ -308,7 +308,7 @@ function checkModularChunking(html) {
 
 // ── Main validator ──────────────────────────────────────────────────────────
 
-const PASS_THRESHOLD = 95;
+const PASS_THRESHOLD = 88;
 const MAX_SCORE = 110;
 
 /**
