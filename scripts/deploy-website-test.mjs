@@ -56,8 +56,20 @@ const PAGE_CONTENT = `<!-- wp:html -->
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Outfit:wght@300;400;500;600;700;800&display=swap');
 
-  /* ── RESET for Elementor Canvas ── */
-  html, body { margin: 0; padding: 0; background: #0a0a0a; overflow-x: hidden; }
+  /* ── RESET for Elementor Canvas + Astra theme override ── */
+  html, body { margin: 0; padding: 0; background: #0a0a0a !important; overflow-x: hidden; }
+  /* Force full-width on Astra containers when used as homepage */
+  .ast-container, .site-content .ast-container,
+  .elementor-section-wrap, .elementor-element,
+  .entry-content, .page-content,
+  .ast-page-builder-template .site-content > .ast-container,
+  .ast-plain-container .site-content > .ast-container,
+  #content, .site-content, #primary, #main,
+  .ast-separate-container .ast-article-single { width: 100% !important; max-width: 100% !important; padding: 0 !important; margin: 0 !important; background: #0a0a0a !important; border: none !important; }
+  .ast-separate-container .ast-article-single { box-shadow: none !important; }
+  /* Hide Astra header/footer on this page (Elementor Canvas should do it, but just in case) */
+  .home .site-header, .home .site-footer, .home .ast-footer-overlay,
+  .elementor-template-canvas .site-header, .elementor-template-canvas .site-footer { display: none !important; }
 
   /* ── BASE ── */
   .sf-test { font-family: 'Outfit', 'Inter', sans-serif; color: #fff; line-height: 1.7; -webkit-font-smoothing: antialiased; }
