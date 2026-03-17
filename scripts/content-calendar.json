@@ -1,7 +1,7 @@
 {
   "meta": {
     "lastExpanded": "2026-03-17",
-    "totalPublished": 3
+    "totalPublished": 4
   },
   "entries": [
     {
@@ -46,11 +46,11 @@
       "topic": "What It Really Means to Be a Sober Entrepreneur in 2026",
       "category": "recovery-business",
       "priority": "critical",
-      "status": "queued",
-      "publishedDate": null,
-      "wpPostId": null,
-      "wpSlug": null,
-      "seoScore": null
+      "status": "published",
+      "publishedDate": "2026-03-17",
+      "wpPostId": 4620,
+      "wpSlug": "sober-entrepreneur-2026-meaning",
+      "seoScore": "91/113"
     },
     {
       "id": 5,
