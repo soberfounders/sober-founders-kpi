@@ -48,10 +48,9 @@ const headers = {
 const PAGE_CONTENT = `<!-- wp:html -->
 <!-- SF Website Test — scroll-scrub animation + glassmorphism — deployed by deploy-website-test.mjs -->
 
-<!-- CDN: GSAP + ScrollTrigger + Lenis Smooth Scroll -->
+<!-- CDN: GSAP + ScrollTrigger -->
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"><\/script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"><\/script>
-<script src="https://cdn.jsdelivr.net/npm/lenis@1.1.18/dist/lenis.min.js"><\/script>
 
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Outfit:wght@300;400;500;600;700;800&display=swap');
@@ -934,15 +933,15 @@ const PAGE_CONTENT = `<!-- wp:html -->
         </div>
         <div class="sf-testimonials-grid">
           <div class="sf-testimonial-card">
-            <blockquote>&ldquo;Sober Founders helped me 6x my business in just a year and helped me get 1 year sober for the first time in my life!&rdquo;</blockquote>
+            <blockquote>"Sober Founders helped me 6x my business in just a year and helped me get 1 year sober for the first time in my life!"</blockquote>
             <cite>Adam C.<span>Sober Founders Member</span></cite>
           </div>
           <div class="sf-testimonial-card">
-            <blockquote>&ldquo;This group has been one of the most impactful things I've ever been part of.&rdquo;</blockquote>
+            <blockquote>"This group has been one of the most impactful things I've ever been part of."</blockquote>
             <cite>Josh C.<span>Sober Founders Member</span></cite>
           </div>
           <div class="sf-testimonial-card">
-            <blockquote>&ldquo;I love that it combines two of my biggest passions, business and recovery.&rdquo;</blockquote>
+            <blockquote>"I love that it combines two of my biggest passions, business and recovery."</blockquote>
             <cite>Matt S.<span>Sober Founders Member</span></cite>
           </div>
         </div>
@@ -1002,7 +1001,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
 
     <!-- Closing Tagline -->
     <div class="sf-closing-tagline">
-      <h2>&ldquo;It's not the stopping of using, it's the <span class="sf-accent">starting of living.</span>&rdquo;</h2>
+      <h2>"It's not the stopping of using, it's the <span class="sf-accent">starting of living.</span>"</h2>
     </div>
 
     <!-- Internal Links (SEO) -->
@@ -1032,11 +1031,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
 
   gsap.registerPlugin(ScrollTrigger);
 
-  // ── Lenis smooth scroll ──
-  var lenis = new Lenis({ duration: 1.4, easing: function(t) { return Math.min(1, 1.001 - Math.pow(2, -10 * t)); } });
-  lenis.on('scroll', ScrollTrigger.update);
-  gsap.ticker.add(function(time) { lenis.raf(time * 1000); });
-  gsap.ticker.lagSmoothing(0);
+  // Native scroll — no Lenis (it conflicts with WordPress themes and causes jank)
 
   // ── Image sequence config ──
   var FRAME_COUNT = 122;
