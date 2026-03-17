@@ -547,51 +547,52 @@ const PAGE_CONTENT = `<!-- wp:html -->
     width: 90%; max-width: 600px;
     max-height: 85vh;
     overflow-y: auto;
-    background: #1e2330;
-    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(240,243,248,0.93);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255,255,255,0.6);
     border-radius: 20px;
     padding: 48px 36px 36px;
-    box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+    box-shadow: 0 24px 80px rgba(0,0,0,0.4);
     z-index: 9999;
   }
   .sf-modal-close {
     position: absolute; top: 16px; right: 20px;
     background: none; border: none;
-    color: rgba(255,255,255,0.5);
+    color: rgba(0,0,0,0.35);
     font-size: 1.6rem; cursor: pointer;
     transition: color 0.2s;
     line-height: 1;
   }
-  .sf-modal-close:hover { color: #fff; }
+  .sf-modal-close:hover { color: #111; }
   .sf-modal h3 {
     font-family: 'DM Serif Display', serif;
     font-size: 1.5rem; font-weight: 400;
-    color: #fff; margin: 0 0 6px; text-align: center;
+    color: #111 !important; margin: 0 0 6px; text-align: center;
   }
-  .sf-modal p {
-    font-size: 0.9rem; color: rgba(255,255,255,0.55);
+  .sf-modal > p {
+    font-size: 0.9rem; color: #555 !important;
     text-align: center; margin: 0 0 24px;
   }
-  /* Force ALL HubSpot form text to light on dark */
-  .sf-modal, .sf-modal * { color: #fff !important; }
+  /* Dark text on frost background */
   .sf-modal .hs-form,
   .sf-modal .hs-form *,
   .sf-modal .hs-form fieldset,
   .sf-modal .hs-form .hs-field-desc,
-  .sf-modal .hs-form .hs-form-field > label,
   .sf-modal .hs-form .hs-richtext,
   .sf-modal .hs-form .hs-richtext *,
   .sf-modal .hs-form span,
   .sf-modal .hs-form p,
   .sf-modal .hs-form legend {
-    color: rgba(255,255,255,0.85) !important;
+    color: #333 !important;
     font-family: 'Outfit', 'Inter', sans-serif !important;
   }
   .sf-modal .hs-form label,
+  .sf-modal .hs-form .hs-form-field > label,
   .sf-modal .hs-form .hs-form-field > label span {
-    color: rgba(255,255,255,0.75) !important;
+    color: #333 !important;
     font-size: 0.85rem !important;
-    font-weight: 500 !important;
+    font-weight: 600 !important;
   }
   .sf-modal .hs-form input[type="text"],
   .sf-modal .hs-form input[type="email"],
@@ -601,8 +602,8 @@ const PAGE_CONTENT = `<!-- wp:html -->
   .sf-modal .hs-form textarea,
   .sf-modal .hs-form select,
   .sf-modal .hs-form .hs-input {
-    background: rgba(255,255,255,0.95) !important;
-    border: 1px solid rgba(255,255,255,0.3) !important;
+    background: #fff !important;
+    border: 1px solid #d0d5dd !important;
     border-radius: 10px !important;
     color: #111 !important;
     padding: 12px 14px !important;
@@ -611,7 +612,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
   }
   .sf-modal .hs-form input::placeholder,
   .sf-modal .hs-form textarea::placeholder {
-    color: rgba(0,0,0,0.4) !important;
+    color: #999 !important;
   }
   .sf-modal .hs-form select option {
     background: #fff !important;
@@ -619,7 +620,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
   }
   .sf-modal .hs-form .hs-button,
   .sf-modal .hs-form input[type="submit"] {
-    background: #60a5fa !important;
+    background: #00b286 !important;
     color: #fff !important;
     border: none !important;
     border-radius: 30px !important;
@@ -632,13 +633,13 @@ const PAGE_CONTENT = `<!-- wp:html -->
     margin-top: 8px !important;
   }
   .sf-modal .hs-form .hs-button:hover,
-  .sf-modal .hs-form input[type="submit"]:hover { background: #3b82f6 !important; }
+  .sf-modal .hs-form input[type="submit"]:hover { background: #00c090 !important; }
   .sf-modal .hs-form .hs-error-msgs label,
-  .sf-modal .hs-form .hs-error-msgs span { color: #f87171 !important; }
-  .sf-modal .hs-form .hs-form-required { color: #f87171 !important; }
+  .sf-modal .hs-form .hs-error-msgs span { color: #dc2626 !important; }
+  .sf-modal .hs-form .hs-form-required { color: #dc2626 !important; }
   .sf-modal .hs-form .legal-consent-container,
-  .sf-modal .hs-form .legal-consent-container * { color: rgba(255,255,255,0.55) !important; font-size: 0.8rem !important; }
-  .sf-modal .hs-form a { color: #5eecc0 !important; }
+  .sf-modal .hs-form .legal-consent-container * { color: #888 !important; font-size: 0.8rem !important; }
+  .sf-modal .hs-form a { color: #00b286 !important; }
 </style>
 
 <!-- Hidden video source for canvas scrubbing -->
