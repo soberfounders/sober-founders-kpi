@@ -2,7 +2,7 @@ name: Daily Blog Publish
 
 on:
   schedule:
-    - cron: '0 14 * * *'  # 10 AM ET (UTC-4) daily
+    - cron: '0 20 * * *'  # 3 PM EST (UTC-5) daily
   workflow_dispatch:        # Manual trigger for testing
 
 permissions:

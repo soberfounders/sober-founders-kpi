@@ -34,7 +34,7 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 const CALENDAR_PATH = path.join(__dirname, 'content-calendar.json');
 const LOGS_DIR = path.join(__dirname, 'logs');
 
-const MAX_RETRIES = 2;
+const MAX_RETRIES = 5;
 const QUEUE_LOW_THRESHOLD = 7;
 
 // ── Validate environment ────────────────────────────────────────────────────
@@ -263,22 +263,8 @@ CRITICAL REQUIREMENTS — your article will be automatically scored and rejected
     log(`  Failing checks: ${result.checks.filter((c) => c.earned < c.points).map((c) => c.name).join(', ')}`);
   }
 
-  // Final attempt — return whatever we have
-  log('  Max retries exceeded. Will publish as draft.');
-  const article = await callOpenAI(ARTICLE_SYSTEM_PROMPT,
-    `Write an article about: "${topic}"\n\nPrimary focus keyword: "${keyword}"\n\nTarget audience: sober entrepreneurs and founders in recovery.\n\nCRITICAL: Article MUST be at least 2,000 words. Use the keyword "${keyword}" at least 3 times. Include a <blockquote>, a <table>, and <!-- Alt: --> comment.${feedback}`,
-    { temperature: 0.7, maxTokens: 8000 });
-  const metaRaw = await callOpenAI(META_SYSTEM_PROMPT,
-    `Article topic: "${topic}"\nFocus keyword: "${keyword}"\n\nArticle excerpt:\n${article.substring(0, 500)}`,
-    { temperature: 0.3, maxTokens: 200 });
-  let meta;
-  try {
-    meta = JSON.parse(metaRaw.replace(/```json\n?/g, '').replace(/```\n?/g, ''));
-  } catch {
-    meta = { seo_title: topic.substring(0, 60), meta_description: topic.substring(0, 155), slug: keyword.toLowerCase().replace(/\s+/g, '-').substring(0, 60) };
-  }
-  const result = validateArticle(article, keyword, meta);
-  return { article, meta, result, forceDraft: true };
+  // Should never reach here with MAX_RETRIES=5, but safety net
+  throw new Error(`Article failed SEO validation after ${MAX_RETRIES + 1} attempts. Last score: ${feedback ? 'see log' : 'unknown'}`);
 }
 
 // ── WordPress publish ───────────────────────────────────────────────────────
@@ -355,7 +341,7 @@ async function main() {
 
   // Generate + validate
   log('Generating article with SEO validation...');
-  const { article, meta, result, forceDraft } = await generateWithValidation(entry.topic, entry.keyword);
+  const { article, meta, result } = await generateWithValidation(entry.topic, entry.keyword);
 
   log('\n' + formatReport(result) + '\n');
   log(`Meta title: ${meta.seo_title} (${meta.seo_title.length} chars)`);
@@ -376,11 +362,8 @@ async function main() {
     log(`Slug collision — using: ${meta.slug}`);
   }
 
-  // Publish
-  const publishStatus = (AS_DRAFT || forceDraft) ? 'draft' : 'publish';
-  if (forceDraft && !AS_DRAFT) {
-    log('SEO validation failed after retries — publishing as DRAFT for manual review');
-  }
+  // Publish — always publish (SEO validation guarantees quality)
+  const publishStatus = AS_DRAFT ? 'draft' : 'publish';
 
   log(`Publishing to WordPress as ${publishStatus}...`);
   const { postId, postLink, slug } = await publishToWordPress(article, meta, publishStatus);
