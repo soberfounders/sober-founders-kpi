@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Sober SEO REST
  * Description: REST endpoints for Yoast SEO meta writes, 301 redirect management, and site-wide footer injection.
- * Version: 1.3.0
+ * Version: 1.4.0
  * Author: Sober Founders Dev
  */
 
@@ -108,7 +108,7 @@ add_action( 'rest_api_init', function () {
             'html' => [
                 'required'          => true,
                 'type'              => 'string',
-                'sanitize_callback' => 'wp_kses_post',
+                'sanitize_callback' => 'sober_kses_footer',
             ],
         ],
     ] );
@@ -157,6 +157,15 @@ add_action( 'rest_api_init', function () {
         ],
     ] );
 } );
+
+// ── Footer sanitizer (wp_kses_post + <style> tags) ──────────────────────────
+
+function sober_kses_footer( $html ) {
+    // Allow everything wp_kses_post allows, plus <style> tags.
+    $allowed = wp_kses_allowed_html( 'post' );
+    $allowed['style'] = [];
+    return wp_kses( $html, $allowed );
+}
 
 // ── SEO callbacks ────────────────────────────────────────────────────────────
 
