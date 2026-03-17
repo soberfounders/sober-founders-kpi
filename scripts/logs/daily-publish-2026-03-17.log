@@ -50,3 +50,52 @@ SEO Score: 68/110 (FAIL — threshold: 88)
 [2026-03-17T18:33:51.245Z] Calendar updated.
 [2026-03-17T18:33:51.245Z] 
 Done. Post drafted at: https://soberfounders.org/?p=4407
+[2026-03-17T18:36:42.176Z] === Daily Blog Publisher ===
+[2026-03-17T18:36:42.179Z] Mode: PUBLISH
+[2026-03-17T18:36:42.179Z] Calendar: 40 total, 38 queued
+[2026-03-17T18:36:42.179Z] Selected: [3] "The Best Mastermind Group for Founders in Recovery — What to Look For and Where to Find It"
+[2026-03-17T18:36:42.179Z] Keyword: "best mastermind group for founders in recovery" | Priority: critical | Category: peer-advisory
+[2026-03-17T18:36:42.180Z] Generating article with SEO validation...
+[2026-03-17T18:37:21.268Z]   Article generated (9603 chars, attempt 1)
+[2026-03-17T18:37:22.696Z]   SEO Score: 86/110 (FAIL)
+[2026-03-17T18:37:22.696Z]   Failing checks: wordCount, statsCitations, metaTitleLen, imageAltComment, semanticVariations, modularChunking
+[2026-03-17T18:37:22.696Z]   Retry 1/2...
+[2026-03-17T18:38:10.608Z]   Article generated (11085 chars, attempt 2)
+[2026-03-17T18:38:12.523Z]   SEO Score: 79/110 (FAIL)
+[2026-03-17T18:38:12.524Z]   Failing checks: wordCount, statsCitations, blockquote, internalLinks, metaTitleLen, imageAltComment, semanticVariations
+[2026-03-17T18:38:12.524Z]   Retry 2/2...
+[2026-03-17T18:39:16.811Z]   Article generated (10255 chars, attempt 3)
+[2026-03-17T18:39:18.380Z]   SEO Score: 90/110 (PASS)
+[2026-03-17T18:39:18.381Z] 
+SEO Score: 90/110 (PASS — threshold: 88)
+
+  ✓ bluf: 10/10 — BLUF block: 58 words
+  ✓ questionH2s: 10/10 — 9 question-based H2s
+  ✓ keywordFirst100: 8/8 — Keyword in first 100 words
+  ✓ keywordInH2: 5/5 — Keyword in H2
+  ✓ keywordDensity: 8/8 — Keyword appears 4x
+  ✗ wordCount: 0/10 — 1304 words (too short, need 1800+)
+  ✓ faqSection: 8/8 — FAQ section with 5 Q&As
+  ✓ statsCitations: 8/8 — 5 stats, 3 source citations
+  ✓ blockquote: 5/5 — 1 blockquote(s) with attribution
+  ~ internalLinks: 7/10 — Missing: existing blog post
+  ✓ phoenixCTA: 5/5 — Phoenix Forum CTA present
+  ~ metaTitleLen: 1/3 — Title: 63 chars (ideal: 50-60)
+  ✓ metaDescLen: 3/3 — Description: 151 chars
+  ✓ lastUpdated: 2/2 — Last updated date present
+  ✓ imageAltComment: 2/2 — Image alt comment present
+  ✓ shortParagraphs: 3/3 — All paragraphs 5 sentences or fewer
+  ✓ noForbiddenOpeners: 2/2 — No forbidden openers
+  ✗ semanticVariations: 0/5 — No semantic variations found
+  ✓ modularChunking: 3/3 — Has both lists and tables
+
+[2026-03-17T18:39:18.381Z] Meta title: Best Mastermind Group for Founders in Recovery | Sober Founders (63 chars)
+[2026-03-17T18:39:18.381Z] Meta desc: Find the best mastermind group for founders in recovery, offering peer support and business insights. Discover where to connect with like-minded peers. (151 chars)
+[2026-03-17T18:39:18.381Z] Slug: best-mastermind-group-for-founders-in-recovery
+[2026-03-17T18:39:19.014Z] Publishing to WordPress as publish...
+[2026-03-17T18:39:20.259Z] Published: ID 4410 | https://soberfounders.org/best-mastermind-group-for-founders-in-recovery/
+[2026-03-17T18:39:20.259Z] Setting Yoast SEO fields...
+[2026-03-17T18:39:20.774Z] SEO fields set: title, description, primary_focus_keyword
+[2026-03-17T18:39:20.774Z] Calendar updated.
+[2026-03-17T18:39:20.775Z] 
+Done. Post live at: https://soberfounders.org/best-mastermind-group-for-founders-in-recovery/
