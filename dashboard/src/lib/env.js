@@ -64,3 +64,5 @@ export const GEMINI_API_KEY = getString('VITE_GEMINI_API_KEY');
 export const CLAUDE_API_KEY = getString('VITE_CLAUDE_API_KEY');
 export const ANTHROPIC_API_KEY = getString('VITE_ANTHROPIC_API_KEY');
 export const CLAUDE_OR_ANTHROPIC_API_KEY = CLAUDE_API_KEY || ANTHROPIC_API_KEY;
+
+export const DEMO_MODE = getBoolean('VITE_DEMO_MODE', false);

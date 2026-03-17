@@ -1,6 +1,7 @@
 import React from 'react';
 import { Bell, Menu, Search, Settings, User } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { DEMO_MODE } from '../lib/env';
 
 const Header = ({ activeTab, onMenuClick, isMobile = false }) => {
   const triggerRefresh = async () => {
@@ -41,6 +42,22 @@ const Header = ({ activeTab, onMenuClick, isMobile = false }) => {
       gap: '12px',
       zIndex: 50,
     }}>
+      {DEMO_MODE && (
+        <div style={{
+          background: 'linear-gradient(90deg, #ff6b35, #f7c948)',
+          color: '#1a1a2e',
+          padding: '4px 14px',
+          borderRadius: '20px',
+          fontSize: '11px',
+          fontWeight: 700,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          whiteSpace: 'nowrap',
+          flexShrink: 0,
+        }}>
+          Demo Mode — Sample Data
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
         <button
           className="btn-glass"
