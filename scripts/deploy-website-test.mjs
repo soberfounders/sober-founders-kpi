@@ -515,7 +515,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
     transition: color 0.2s;
   }
   .sf-svc-card-link:hover { color: #8ff4d8 !important; }
-  .sf-svc-card-link::after { content: " \\2192"; }
+  .sf-svc-card-link::after { content: " \u2192"; }
 
   /* ── TESTIMONIALS ── */
   .sf-testimonials-bg {
@@ -877,11 +877,11 @@ const PAGE_CONTENT = `<!-- wp:html -->
 
       <div class="sf-svc-grid">
 
-        <!-- 01 — Thursday Open Mastermind -->
+        <!-- 01 — Free Business Mastermind -->
         <div class="sf-svc-card">
           <div class="sf-svc-card-body">
             <div class="sf-svc-card-num">01</div>
-            <h3>Thursday Open Mastermind</h3>
+            <h3>Free Business Mastermind</h3>
             <p>Open to any sober entrepreneur. Show up, share what's real, and get honest feedback from peers who understand the intersection of business pressure and recovery. No application required&mdash;just be sober and own a business.</p>
             <span class="sf-tag sf-tag-free">Free &bull; Open to All</span>
             <a href="/events/" class="sf-svc-card-link">View Upcoming Events</a>
@@ -983,7 +983,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
     <div style="max-width:1100px;margin:0 auto;padding:0 24px 60px;">
       <div class="sf-trust">
         <img src="https://soberfounders.org/wp-content/uploads/2025/09/candid-seal-silver-2025.png" alt="Candid Silver Transparency Seal 2025" />
-        <p><strong>Highest Transparency Rating for a First-Year Nonprofit</strong> &mdash; Candid (formerly GuideStar) awarded Sober Founders their Silver Transparency Seal&mdash;the highest level a nonprofit can earn in its first year. Every dollar is accounted for, every program is open to scrutiny.</p>
+        <p><strong>Transparency</strong> - Candid (formerly GuideStar) awarded Sober Founders Inc their Silver Transparency Seal - the highest level a nonprofit can earn in its first year. Every dollar is accounted for and goes directly toward the mission!</p>
       </div>
     </div>
 
