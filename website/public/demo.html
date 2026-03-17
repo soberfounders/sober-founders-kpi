@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sober Founders KPI Dashboard — Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --dark-green: #03dac6;
+  --light-green: #00e676;
+  --brand-glow: rgba(3,218,198,0.4);
+  --orange: #ff9800;
+  --bg: #0a0f18;
+  --sidebar: rgba(16,24,39,0.65);
+  --card: rgba(22,33,53,0.6);
+  --card-hover: rgba(30,45,75,0.8);
+  --text: #f8fafc;
+  --text2: #94a3b8;
+  --text3: #64748b;
+  --border: rgba(255,255,255,0.08);
+  --border-glow: rgba(3,218,198,0.2);
+  --shadow: 0 8px 32px 0 rgba(0,0,0,0.4);
+  --success: #16a34a;
+  --danger: #dc2626;
+  --font: 'Outfit','Inter',sans-serif;
+  --font-logo: 'DM Serif Display',serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:var(--bg);background-image:radial-gradient(circle at top left,#1a2942 0%,#0a0f18 100%);background-attachment:fixed;color:var(--text);overflow-x:hidden;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:var(--font-logo);font-weight:normal;letter-spacing:.02em}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:rgba(0,0,0,.2)}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:10px}
+
+.app{display:flex;height:100vh;overflow:hidden;background-image:radial-gradient(circle at 15% 50%,rgba(3,218,198,.04),transparent 30%),radial-gradient(circle at 85% 30%,rgba(0,230,118,.04),transparent 30%)}
+
+/* Sidebar */
+.sidebar{width:260px;background:var(--sidebar);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:24px 16px;flex-shrink:0}
+.logo{font-family:var(--font-logo);font-size:22px;color:var(--text);padding:8px 12px 24px;display:flex;align-items:center;gap:10px}
+.logo-icon{width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,var(--dark-green),var(--light-green));display:flex;align-items:center;justify-content:center;font-size:16px;color:#0a0f18;font-weight:800}
+.nav{display:flex;flex-direction:column;gap:4px}
+.nav-item{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:12px;font-size:14px;font-weight:500;color:var(--text2);cursor:pointer;transition:all .2s}
+.nav-item:hover{background:rgba(255,255,255,.05);color:var(--text)}
+.nav-item.active{background:rgba(3,218,198,.12);color:var(--dark-green);font-weight:600;border:1px solid var(--border-glow)}
+.nav-icon{width:20px;text-align:center;font-size:16px}
+
+/* Main */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.header{background:var(--card);backdrop-filter:blur(16px);border:1px solid var(--border);border-radius:16px;margin:24px 40px 0;height:70px;display:flex;align-items:center;justify-content:space-between;padding:0 24px}
+.header h2{font-size:18px;color:var(--text)}
+.header-crumb{font-size:12px;color:var(--text2);margin-top:2px}
+.header-crumb span.active{color:var(--dark-green)}
+.demo-badge{background:linear-gradient(90deg,#ff6b35,#f7c948);color:#1a1a2e;padding:4px 14px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap}
+.content{flex:1;overflow-y:auto;padding:32px 40px}
+
+/* KPI Cards */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:28px}
+.kpi-card{background:var(--card);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:16px;padding:24px;position:relative;overflow:hidden;min-height:160px;transition:all .3s}
+.kpi-card:hover{background:var(--card-hover);border-color:var(--border-glow);transform:translateY(-4px);box-shadow:0 12px 40px rgba(0,0,0,.6)}
+.kpi-title{font-size:14px;font-weight:700;color:var(--text2);margin-bottom:8px;font-family:var(--font)}
+.kpi-value{font-size:31px;font-weight:800;color:var(--text)}
+.kpi-bar{position:absolute;bottom:0;left:0;right:0;height:4px;border-radius:0 0 16px 16px}
+.kpi-trend{display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:20px;font-size:12px;font-weight:600;font-family:var(--font)}
+.kpi-trend.up{background:rgba(22,163,74,.15);color:#16a34a}
+.kpi-trend.down{background:rgba(220,38,38,.15);color:#dc2626}
+.kpi-sub{font-size:12px;color:var(--text2);margin-top:8px;font-family:var(--font)}
+.kpi-top{display:flex;justify-content:space-between;align-items:flex-start}
+
+/* Section headers */
+.section-title{font-size:18px;color:var(--text);margin:8px 0 16px;display:flex;align-items:center;gap:10px}
+.section-tag{font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--dark-green);font-family:var(--font);margin-bottom:4px}
+
+/* Tables */
+.table-panel{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:28px}
+table{width:100%;border-collapse:collapse;font-size:14px;font-family:var(--font)}
+th{padding:12px 16px;text-align:left;font-weight:600;color:var(--text2);border-bottom:1px solid var(--border);background:rgba(0,0,0,.2);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+td{padding:12px 16px;color:var(--text);border-bottom:1px solid var(--border)}
+tr:last-child td{border-bottom:none}
+tr:nth-child(even){background:rgba(0,0,0,.06)}
+.status{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.status-active{background:rgba(22,163,74,.15);color:#16a34a}
+.status-lapsed{background:rgba(220,38,38,.15);color:#dc2626}
+.status-risk{background:rgba(245,158,11,.15);color:#f59e0b}
+.status-onetime{background:rgba(148,163,184,.15);color:#94a3b8}
+td.right,th.right{text-align:right}
+.donor-company{font-size:11px;color:var(--text3)}
+
+/* Two-col layout */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:28px}
+@media(max-width:1100px){.two-col{grid-template-columns:1fr}.sidebar{display:none}.header{margin:12px}.content{padding:16px}}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="logo"><div class="logo-icon">SF</div> Sober Founders</div>
+  <nav class="nav">
+    <div class="nav-item active"><span class="nav-icon">&#9632;</span> Dashboard</div>
+    <div class="nav-item"><span class="nav-icon">&#128197;</span> Attendance</div>
+    <div class="nav-item"><span class="nav-icon">&#128101;</span> Leads</div>
+    <div class="nav-item"><span class="nav-icon">&#9993;</span> Email</div>
+    <div class="nav-item"><span class="nav-icon">&#127760;</span> Online Discovery</div>
+    <div class="nav-item"><span class="nav-icon">&#127873;</span> Donations</div>
+    <div class="nav-item"><span class="nav-icon">&#128226;</span> Marketing</div>
+    <div class="nav-item"><span class="nav-icon">&#128228;</span> Outreach</div>
+    <div class="nav-item"><span class="nav-icon">&#9745;</span> To-Do's</div>
+    <div class="nav-item"><span class="nav-icon">&#129302;</span> Board of Directors</div>
+  </nav>
+</aside>
+
+<!-- Main -->
+<div class="main">
+  <header class="header">
+    <div class="demo-badge">Demo Mode &mdash; Sample Data</div>
+    <div>
+      <h2>Dashboard Overview</h2>
+      <div class="header-crumb">Home / <span class="active">Dashboard</span></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);padding:8px 18px;border-radius:20px;font-size:13px;font-weight:600;color:var(--text2)">Refresh Data</div>
+      <div style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--text2)">&#9881;</div>
+    </div>
+  </header>
+
+  <div class="content">
+
+    <!-- Free Group Leads -->
+    <div class="section-tag">Free Group Funnel</div>
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-top">
+          <div><p class="kpi-title">Free Meeting Leads</p><h3 class="kpi-value">24</h3></div>
+          <span class="kpi-trend up">&#9650; +18%</span>
+        </div>
+        <p class="kpi-sub">vs 20 previous period</p>
+        <div class="kpi-bar" style="background:linear-gradient(90deg,#0f766e,#14b8a6)"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-top">
+          <div><p class="kpi-title">New $250k Qualified Leads</p><h3 class="kpi-value">8</h3></div>
+          <span class="kpi-trend up">&#9650; +33%</span>
+        </div>
+        <p class="kpi-sub">Revenue &ge; $250k &amp; sobriety &gt; 1 yr</p>
+        <div class="kpi-bar" style="background:linear-gradient(90deg,#166534,#16a34a)"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-top">
+          <div><p class="kpi-title">New Phoenix Qualified</p><h3 class="kpi-value">3</h3></div>
+          <span class="kpi-trend up">&#9650; +50%</span>
+        </div>
+        <p class="kpi-sub">Revenue &ge; $1M &amp; sobriety &gt; 1 yr</p>
+        <div class="kpi-bar" style="background:linear-gradient(90deg,#b45309,#f59e0b)"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-top">
+          <div><p class="kpi-title">Cost Per Qualified Lead</p><h3 class="kpi-value">$127</h3></div>
+          <span class="kpi-trend up">&#9660; -12%</span>
+        </div>
+        <p class="kpi-sub">vs $144 previous period</p>
+        <div class="kpi-bar" style="background:linear-gradient(90deg,#0369a1,#38bdf8)"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-top">
+          <div><p class="kpi-title">Free Group Interviews</p><h3 class="kpi-value">11</h3></div>
+          <span class="kpi-trend up">&#9650; +22%</span>
+        </div>
+        <p class="kpi-sub">Intro meetings booked</p>
+        <div class="kpi-bar" style="background:linear-gradient(90deg,#0ea5e9,#7dd3fc)"></div>
+      </div>
+    </div>
+
+    <!-- Attendance -->
+    <div class="section-tag">Attendance</div>
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-top">
+          <div><p class="kpi-title">Tuesday Attendance</p><h3 class="kpi-value">42</h3></div>
+          <span class="kpi-trend up">&#9650; +8%</span>
+        </div>
+        <p class="kpi-sub">vs 39 previous period</p>
+        <div class="kpi-bar" style="background:linear-gradient(90deg,#0ea5e9,#38bdf8)"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-top">
+          <div><p class="kpi-title">Avg Visits (Tuesday)</p><h3 class="kpi-value">2.8</h3></div>
+          <span class="kpi-trend up">&#9650; +0.3</span>
+        </div>
+        <p class="kpi-sub">Rolling 90-day avg</p>
+        <div class="kpi-bar" style="background:linear-gradient(90deg,#38bdf8,#7dd3fc)"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-top">
+          <div><p class="kpi-title">Thursday Attendance</p><h3 class="kpi-value">56</h3></div>
+          <span class="kpi-trend up">&#9650; +14%</span>
+        </div>
+        <p class="kpi-sub">vs 49 previous period</p>
+        <div class="kpi-bar" style="background:linear-gradient(90deg,#6366f1,#818cf8)"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-top">
+          <div><p class="kpi-title">Avg Visits (Thursday)</p><h3 class="kpi-value">3.1</h3></div>
+          <span class="kpi-trend up">&#9650; +0.4</span>
+        </div>
+        <p class="kpi-sub">Rolling 90-day avg</p>
+        <div class="kpi-bar" style="background:linear-gradient(90deg,#818cf8,#a5b4fc)"></div>
+      </div>
+    </div>
+
+    <!-- Donations -->
+    <div class="section-tag">Donations</div>
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-top">
+          <div><p class="kpi-title"># Donations</p><h3 class="kpi-value">47</h3></div>
+          <span class="kpi-trend up">&#9650; +21%</span>
+        </div>
+        <p class="kpi-sub">vs 39 previous period</p>
+        <div class="kpi-bar" style="background:linear-gradient(90deg,#16a34a,#4ade80)"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-top">
+          <div><p class="kpi-title">$ Donations</p><h3 class="kpi-value">$8,420</h3></div>
+          <span class="kpi-trend up">&#9650; +27%</span>
+        </div>
+        <p class="kpi-sub">vs $6,630 previous period</p>
+        <div class="kpi-bar" style="background:linear-gradient(90deg,#15803d,#22c55e)"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-top">
+          <div><p class="kpi-title">Completed To-Do Items</p><h3 class="kpi-value">18</h3></div>
+          <span class="kpi-trend up">&#9650; +38%</span>
+        </div>
+        <p class="kpi-sub">Notion status &rarr; Done</p>
+        <div class="kpi-bar" style="background:linear-gradient(90deg,#f97316,#fb923c)"></div>
+      </div>
+    </div>
+
+    <!-- Donor Roster -->
+    <div class="two-col">
+      <div>
+        <div class="section-tag">Top Donors</div>
+        <div class="table-panel">
+          <table>
+            <thead><tr><th>Donor</th><th class="right">Total Given</th><th class="right">Gifts</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td>Kevin Nguyen<br><span class="donor-company">Nguyen Import/Export</span></td><td class="right">$12,500</td><td class="right">14</td><td><span class="status status-active">Active Recurring</span></td></tr>
+              <tr><td>Michael Anderson<br><span class="donor-company">Anderson Manufacturing</span></td><td class="right">$8,200</td><td class="right">9</td><td><span class="status status-active">Active Recurring</span></td></tr>
+              <tr><td>Sarah Chen<br><span class="donor-company">Greenfield Ventures</span></td><td class="right">$5,750</td><td class="right">6</td><td><span class="status status-active">Active Recurring</span></td></tr>
+              <tr><td>David Kim<br><span class="donor-company">Brightpath Software</span></td><td class="right">$4,100</td><td class="right">4</td><td><span class="status status-onetime">One-Time</span></td></tr>
+              <tr><td>Lauren Hayes<br><span class="donor-company">Hayes Financial</span></td><td class="right">$3,600</td><td class="right">8</td><td><span class="status status-active">Active Recurring</span></td></tr>
+              <tr><td>Daniel Morales<br><span class="donor-company">Morales Construction</span></td><td class="right">$2,500</td><td class="right">1</td><td><span class="status status-onetime">One-Time</span></td></tr>
+              <tr><td>Priya Patel<br><span class="donor-company">Patel Logistics LLC</span></td><td class="right">$2,100</td><td class="right">7</td><td><span class="status status-risk">At Risk</span></td></tr>
+              <tr><td>Marcus Rivera<br><span class="donor-company">Rivera Capital Group</span></td><td class="right">$1,800</td><td class="right">12</td><td><span class="status status-lapsed">Lapsed Recurring</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-tag">Recent Leads</div>
+        <div class="table-panel">
+          <table>
+            <thead><tr><th>Contact</th><th class="right">Revenue</th><th>Source</th><th>Tier</th></tr></thead>
+            <tbody>
+              <tr><td>Kevin Nguyen<br><span class="donor-company">Nguyen Import/Export</span></td><td class="right">$6.2M</td><td>Meta Ads</td><td><span class="status status-active">Phoenix</span></td></tr>
+              <tr><td>Michael Anderson<br><span class="donor-company">Anderson Manufacturing</span></td><td class="right">$5.8M</td><td>Meta Ads</td><td><span class="status status-active">Phoenix</span></td></tr>
+              <tr><td>Sarah Chen<br><span class="donor-company">Greenfield Ventures</span></td><td class="right">$4.2M</td><td>Organic</td><td><span class="status status-active">Phoenix</span></td></tr>
+              <tr><td>Daniel Morales<br><span class="donor-company">Morales Construction</span></td><td class="right">$3.4M</td><td>Meta Ads</td><td><span class="status status-active">Phoenix</span></td></tr>
+              <tr><td>David Kim<br><span class="donor-company">Brightpath Software</span></td><td class="right">$3.1M</td><td>Referral</td><td><span class="status status-active">Phoenix</span></td></tr>
+              <tr><td>Marcus Rivera<br><span class="donor-company">Rivera Capital Group</span></td><td class="right">$2.5M</td><td>Meta Ads</td><td><span class="status" style="background:rgba(99,102,241,.15);color:#818cf8">$250k+</span></td></tr>
+              <tr><td>Lauren Hayes<br><span class="donor-company">Hayes Financial</span></td><td class="right">$2.1M</td><td>Organic</td><td><span class="status" style="background:rgba(99,102,241,.15);color:#818cf8">$250k+</span></td></tr>
+              <tr><td>Priya Patel<br><span class="donor-company">Patel Logistics LLC</span></td><td class="right">$1.75M</td><td>Google</td><td><span class="status" style="background:rgba(99,102,241,.15);color:#818cf8">$250k+</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Email Campaigns -->
+    <div class="section-tag">Email Campaign Performance</div>
+    <div class="table-panel">
+      <table>
+        <thead><tr><th>Campaign</th><th>Send Date</th><th class="right">Delivered</th><th class="right">Open Rate</th><th class="right">CTR</th><th class="right">CTOR</th><th class="right">Unsub</th></tr></thead>
+        <tbody>
+          <tr><td>Tuesday Group</td><td>Mar 11, 2026</td><td class="right">218</td><td class="right" style="color:var(--dark-green);font-weight:700">42.1%</td><td class="right">6.2%</td><td class="right">14.7%</td><td class="right">0.1%</td></tr>
+          <tr><td>Thursday Group</td><td>Mar 13, 2026</td><td class="right">247</td><td class="right" style="color:var(--dark-green);font-weight:700">38.6%</td><td class="right">7.8%</td><td class="right">20.2%</td><td class="right">0.0%</td></tr>
+          <tr><td>Tuesday Group</td><td>Mar 4, 2026</td><td class="right">211</td><td class="right" style="color:var(--dark-green);font-weight:700">39.8%</td><td class="right">5.1%</td><td class="right">12.8%</td><td class="right">0.2%</td></tr>
+          <tr><td>Thursday Group</td><td>Mar 6, 2026</td><td class="right">253</td><td class="right" style="color:var(--dark-green);font-weight:700">41.3%</td><td class="right">6.9%</td><td class="right">16.7%</td><td class="right">0.1%</td></tr>
+          <tr><td>Tuesday Group</td><td>Feb 25, 2026</td><td class="right">205</td><td class="right" style="color:var(--dark-green);font-weight:700">36.4%</td><td class="right">4.8%</td><td class="right">13.2%</td><td class="right">0.1%</td></tr>
+          <tr><td>Thursday Group</td><td>Feb 27, 2026</td><td class="right">239</td><td class="right" style="color:var(--dark-green);font-weight:700">43.7%</td><td class="right">8.1%</td><td class="right">18.5%</td><td class="right">0.0%</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- To-Do's -->
+    <div class="section-tag">Operations &mdash; To-Do's</div>
+    <div class="table-panel">
+      <table>
+        <thead><tr><th>Task</th><th>Assignee</th><th>Priority</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Review Q1 marketing budget proposal</td><td>Demo User</td><td><span class="status status-lapsed">High</span></td><td><span class="status status-onetime">Not Started</span></td></tr>
+          <tr><td>Update Phoenix Forum landing page copy</td><td>Team Member</td><td><span class="status status-risk">Medium</span></td><td><span class="status" style="background:rgba(59,130,246,.15);color:#60a5fa">In Progress</span></td></tr>
+          <tr><td>Schedule next board meeting agenda</td><td>Demo User</td><td><span class="status status-onetime">Low</span></td><td><span class="status status-active">Done</span></td></tr>
+          <tr><td>Finalize partnership agreement with recovery center</td><td>Team Member</td><td><span class="status status-lapsed">High</span></td><td><span class="status status-risk">Waiting</span></td></tr>
+          <tr><td>Create social media content calendar for April</td><td>Demo User</td><td><span class="status status-risk">Medium</span></td><td><span class="status status-onetime">Not Started</span></td></tr>
+          <tr><td>Prepare monthly donor impact report</td><td>Team Member</td><td><span class="status status-lapsed">High</span></td><td><span class="status" style="background:rgba(59,130,246,.15);color:#60a5fa">In Progress</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+</div>
+</body>
+</html>
