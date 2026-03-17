@@ -1070,7 +1070,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
     // Hero text fade-out
     gsap.to(heroText, {
       opacity: 0, y: -60, ease: 'power2.in',
-      scrollTrigger: { trigger: document.body, start: 'top top', end: '12% top', scrub: 0.3 }
+      scrollTrigger: { trigger: document.body, start: 'top top', end: '5% top', scrub: 0.3 }
     });
 
     // Main scroll-scrub
