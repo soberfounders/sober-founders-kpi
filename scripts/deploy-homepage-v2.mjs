@@ -49,7 +49,9 @@ if (!contentMatch) {
   console.error("ERROR: Could not extract PAGE_CONTENT from deploy-website-test.mjs");
   process.exit(1);
 }
-const PAGE_CONTENT = contentMatch[1];
+// Unescape template literal escapes — the source has <\/script> to avoid
+// breaking the JS parser, but WordPress needs real </script> tags.
+const PAGE_CONTENT = contentMatch[1].replace(/<\\\/script>/g, "</script>");
 
 const PAGE_ID = 1989; // WordPress homepage
 
