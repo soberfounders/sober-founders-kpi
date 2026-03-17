@@ -927,26 +927,24 @@ const PAGE_CONTENT = `<!-- wp:html -->
     video.addEventListener('seeked', drawFrame, { once: true });
     renderLoop();
 
-    /* GSAP ScrollTrigger scrub — same pattern as homepage HeroScroll.tsx
-       scrub: 0.3 = tight interpolation for smooth frame transitions.
-       Video completes in first 40% of scroll (faster than homepage 55%
-       because the events page has less content to scroll through). */
+    /* GSAP ScrollTrigger scrub — video plays across full page scroll.
+       scrub: 0.5 = smooth half-second interpolation between frames.
+       No acceleration — 1:1 mapping so user sees the entire
+       bottle → explosion → phoenix transition as they scroll. */
     ScrollTrigger.create({
       trigger: document.documentElement,
       start: 'top top',
       end: 'bottom bottom',
-      scrub: 0.3,
+      scrub: 0.5,
       onUpdate: function(self) {
-        var accelerated = Math.min(1, self.progress / 0.40);
-        var eased = Math.pow(accelerated, 1.3);
-        video.currentTime = eased * duration;
+        video.currentTime = self.progress * duration;
 
-        /* Motion blur based on scroll velocity (matches homepage) */
+        /* Motion blur based on scroll velocity */
         var velocity = Math.abs(self.getVelocity());
         var blur = Math.min(velocity / 2000, 4);
         canvas.style.filter = blur > 0.2 ? 'blur(' + blur + 'px)' : 'none';
 
-        /* Overlay dimming — tuned for events page */
+        /* Overlay dimming */
         var p = self.progress;
         var darkness;
         if (p < 0.05) {
