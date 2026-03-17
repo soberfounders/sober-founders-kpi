@@ -37,7 +37,9 @@ async function main() {
 
   const snippetCode = `$path = WP_PLUGIN_DIR . '/sober-seo-rest/sober-seo-rest.php';
 $content = base64_decode('${b64}');
-file_put_contents($path, $content);`;
+file_put_contents($path, $content);
+if (function_exists('opcache_invalidate')) { opcache_invalidate($path, true); }
+if (function_exists('opcache_reset')) { opcache_reset(); }`;
 
   // Create and run the snippet
   const res = await fetch(`${SITE}/wp-json/code-snippets/v1/snippets`, {

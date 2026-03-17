@@ -161,10 +161,20 @@ add_action( 'rest_api_init', function () {
 // ── Footer sanitizer (wp_kses_post + <style> tags) ──────────────────────────
 
 function sober_kses_footer( $html ) {
-    // Allow everything wp_kses_post allows, plus <style> tags.
-    $allowed = wp_kses_allowed_html( 'post' );
-    $allowed['style'] = [];
-    return wp_kses( $html, $allowed );
+    // wp_kses strips <style> content, so extract style blocks first,
+    // sanitize the HTML portion, then re-attach styles.
+    $styles = '';
+    $html_only = preg_replace_callback(
+        '/<style[^>]*>(.*?)<\/style>/si',
+        function ( $m ) use ( &$styles ) {
+            // Strip any tags inside CSS (basic XSS prevention)
+            $css = wp_strip_all_tags( $m[1] );
+            $styles .= '<style>' . $css . '</style>';
+            return '';
+        },
+        $html
+    );
+    return $styles . wp_kses_post( $html_only );
 }
 
 // ── SEO callbacks ────────────────────────────────────────────────────────────
