@@ -55,7 +55,6 @@ const PAGE_CONTENT = `<!-- wp:html -->
     background: #0a0a0a !important;
     margin: 0; padding: 0;
     overflow-x: hidden;
-    scroll-behavior: smooth;
   }
 
   /* ── Canvas scroll animation background ── */
@@ -868,28 +867,34 @@ const PAGE_CONTENT = `<!-- wp:html -->
 ]
 </script>
 
-<!-- Scroll-synced canvas animation (smooth lerp-based rAF loop) -->
+<!-- Lenis smooth scroll + GSAP ScrollTrigger (same stack as homepage) -->
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.1.18/dist/lenis.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/ScrollTrigger.min.js"></script>
 <script>
 (function() {
+  /* ── Lenis smooth scroll (mirrors homepage SmoothScroll.tsx) ── */
+  var lenis = new Lenis({
+    duration: 1.0,
+    easing: function(t) { return Math.min(1, 1.001 - Math.pow(2, -10 * t)); },
+    touchMultiplier: 1.5
+  });
+  lenis.on('scroll', ScrollTrigger.update);
+  function raf(time) { lenis.raf(time); requestAnimationFrame(raf); }
+  requestAnimationFrame(raf);
+
+  /* ── Canvas scroll-scrub animation ── */
   var video = document.getElementById('sf-scroll-video');
   var canvas = document.getElementById('sf-scroll-canvas');
   var overlay = document.getElementById('sf-scroll-overlay');
   if (!video || !canvas || !overlay) return;
-  if (window.innerWidth < 768) return; /* mobile uses static image */
+  if (window.innerWidth < 768) return;
+
+  gsap.registerPlugin(ScrollTrigger);
 
   var ctx = canvas.getContext('2d');
   if (!ctx) return;
-  var ready = false;
-  var currentTime = 0;   /* smoothed time (lerped toward target) */
-  var targetTime = 0;    /* where scroll says we should be */
-  var currentDark = 0.25;
-  var targetDark = 0.25;
-  var LERP = 0.08;       /* smoothing factor — lower = silkier */
-
-  function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-  }
+  var animId;
 
   function drawFrame() {
     var vw = video.videoWidth, vh = video.videoHeight;
@@ -905,60 +910,57 @@ const PAGE_CONTENT = `<!-- wp:html -->
     ctx.drawImage(video, sx, sy, sw, sh, 0, 0, cw, ch);
   }
 
-  /* Continuous rAF loop — lerps toward scroll target every frame */
-  function tick() {
-    if (!ready) { requestAnimationFrame(tick); return; }
+  function renderLoop() { drawFrame(); animId = requestAnimationFrame(renderLoop); }
 
-    /* Lerp the video time smoothly toward the scroll target */
-    var diff = targetTime - currentTime;
-    if (Math.abs(diff) > 0.001) {
-      currentTime += diff * LERP;
-      video.currentTime = currentTime;
-    }
-
-    /* Lerp the overlay darkness */
-    var darkDiff = targetDark - currentDark;
-    if (Math.abs(darkDiff) > 0.001) {
-      currentDark += darkDiff * LERP;
-      overlay.style.backgroundColor = 'rgba(10,10,10,' + currentDark.toFixed(3) + ')';
-    }
-
-    requestAnimationFrame(tick);
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
   }
-
-  function onScroll() {
-    var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-    var maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-    if (maxScroll <= 0) return;
-    var progress = Math.min(1, scrollTop / maxScroll);
-
-    /* Video plays through full page scroll — bottle at top, phoenix at bottom */
-    var eased = Math.pow(progress, 1.4);
-    targetTime = eased * video.duration;
-
-    /* Overlay: light at top (see bottle), darker mid-scroll, settles for content */
-    if (progress < 0.1) {
-      targetDark = 0.25;
-    } else if (progress < 0.4) {
-      targetDark = 0.25 + ((progress - 0.1) / 0.3) * 0.25;
-    } else {
-      targetDark = 0.5;
-    }
-  }
-
-  video.addEventListener('seeked', drawFrame);
 
   function init() {
-    if (!video.duration || !isFinite(video.duration)) return;
-    ready = true;
+    var duration = video.duration;
+    if (!duration || !isFinite(duration)) return;
+
     resize();
-    video.currentTime = 0;
-    currentTime = 0;
-    targetTime = 0;
-    drawFrame();
-    window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', resize);
-    requestAnimationFrame(tick);
+    video.currentTime = 0;
+    video.addEventListener('seeked', drawFrame, { once: true });
+    renderLoop();
+
+    /* GSAP ScrollTrigger scrub — same pattern as homepage HeroScroll.tsx
+       scrub: 0.3 = tight interpolation for smooth frame transitions.
+       Video completes in first 40% of scroll (faster than homepage 55%
+       because the events page has less content to scroll through). */
+    ScrollTrigger.create({
+      trigger: document.documentElement,
+      start: 'top top',
+      end: 'bottom bottom',
+      scrub: 0.3,
+      onUpdate: function(self) {
+        var accelerated = Math.min(1, self.progress / 0.40);
+        var eased = Math.pow(accelerated, 1.3);
+        video.currentTime = eased * duration;
+
+        /* Motion blur based on scroll velocity (matches homepage) */
+        var velocity = Math.abs(self.getVelocity());
+        var blur = Math.min(velocity / 2000, 4);
+        canvas.style.filter = blur > 0.2 ? 'blur(' + blur + 'px)' : 'none';
+
+        /* Overlay dimming — tuned for events page */
+        var p = self.progress;
+        var darkness;
+        if (p < 0.05) {
+          darkness = 0.15;
+        } else if (p < 0.25) {
+          darkness = 0.15 + ((p - 0.05) / 0.2) * 0.35;
+        } else if (p < 0.4) {
+          darkness = 0.5 - ((p - 0.25) / 0.15) * 0.15;
+        } else {
+          darkness = 0.35;
+        }
+        overlay.style.backgroundColor = 'rgba(10,10,10,' + darkness + ')';
+      }
+    });
   }
 
   if (video.readyState >= 1) init();
