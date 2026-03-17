@@ -531,6 +531,75 @@ const PAGE_CONTENT = `<!-- wp:html -->
   }
   .sf-ev-internal a:hover { color: #8ff4d8 !important; }
   .sf-ev-sep { margin: 0 6px; color: rgba(255,255,255,0.15); }
+
+  /* ── Application modal ── */
+  .sf-modal-backdrop {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 9998;
+  }
+  .sf-modal-backdrop.sf-modal-open { display: flex; align-items: center; justify-content: center; }
+  .sf-modal {
+    position: relative;
+    width: 90%; max-width: 600px;
+    max-height: 85vh;
+    overflow-y: auto;
+    background: rgba(15,15,20,0.92);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 20px;
+    padding: 48px 36px 36px;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+    z-index: 9999;
+  }
+  .sf-modal-close {
+    position: absolute; top: 16px; right: 20px;
+    background: none; border: none;
+    color: rgba(255,255,255,0.5);
+    font-size: 1.6rem; cursor: pointer;
+    transition: color 0.2s;
+    line-height: 1;
+  }
+  .sf-modal-close:hover { color: #fff; }
+  .sf-modal h3 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.5rem; font-weight: 400;
+    color: #fff; margin: 0 0 6px; text-align: center;
+  }
+  .sf-modal p {
+    font-size: 0.9rem; color: rgba(255,255,255,0.55);
+    text-align: center; margin: 0 0 24px;
+  }
+  /* Style HubSpot form inside modal */
+  .sf-modal .hs-form input,
+  .sf-modal .hs-form textarea,
+  .sf-modal .hs-form select {
+    background: rgba(255,255,255,0.08) !important;
+    border: 1px solid rgba(255,255,255,0.15) !important;
+    border-radius: 10px !important;
+    color: #fff !important;
+    padding: 12px 14px !important;
+    font-size: 0.9rem !important;
+  }
+  .sf-modal .hs-form label { color: rgba(255,255,255,0.7) !important; font-size: 0.85rem !important; }
+  .sf-modal .hs-form .hs-button {
+    background: #60a5fa !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 30px !important;
+    padding: 14px 32px !important;
+    font-weight: 600 !important;
+    font-size: 0.95rem !important;
+    cursor: pointer !important;
+    width: 100% !important;
+    transition: background 0.2s !important;
+  }
+  .sf-modal .hs-form .hs-button:hover { background: #3b82f6 !important; }
+  .sf-modal .hs-form .hs-error-msgs label { color: #f87171 !important; }
 </style>
 
 <!-- Hidden video source for canvas scrubbing -->
@@ -590,7 +659,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
           <li>1+ year sober &amp; working the steps</li>
           <li>Short verification interview</li>
         </ul>
-        <a href="/apply/" class="sf-ev-tier-cta sf-ev-cta-outline">Apply Now</a>
+        <a href="javascript:void(0)" onclick="document.getElementById('sf-apply-modal').classList.add('sf-modal-open')" class="sf-ev-tier-cta sf-ev-cta-outline">Apply Now</a>
       </div>
 
       <!-- Phoenix Forum -->
@@ -841,6 +910,24 @@ const PAGE_CONTENT = `<!-- wp:html -->
   if (video.readyState >= 1) init();
   else video.addEventListener('loadedmetadata', init, { once: true });
 })();
+</script>
+
+<!-- Application modal -->
+<div id="sf-apply-modal" class="sf-modal-backdrop" onclick="if(event.target===this)this.classList.remove('sf-modal-open')">
+  <div class="sf-modal">
+    <button class="sf-modal-close" onclick="document.getElementById('sf-apply-modal').classList.remove('sf-modal-open')">&times;</button>
+    <h3>Apply for Tuesday Mastermind</h3>
+    <p>Fill out a quick application and we&rsquo;ll reach out to schedule a verification call.</p>
+    <div id="sf-hs-form"></div>
+  </div>
+</div>
+<script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
+<script>
+  hbspt.forms.create({
+    portalId: "45070276",
+    formId: "c5d12c41-5cf8-40a3-b559-810375c6fd99",
+    target: "#sf-hs-form"
+  });
 </script>
 <!-- /wp:html -->`;
 
