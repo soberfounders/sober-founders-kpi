@@ -113,7 +113,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
     padding: 0 32px;
   }
   .sf-hero-card {
-    max-width: 520px;
+    max-width: 680px;
     background: rgba(10,10,10,0.25);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
