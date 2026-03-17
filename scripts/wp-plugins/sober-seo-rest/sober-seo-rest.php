@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Sober SEO REST
- * Description: REST endpoints for Yoast SEO meta writes + 301 redirect management.
- * Version: 1.2.0
+ * Description: REST endpoints for Yoast SEO meta writes, 301 redirect management, and site-wide footer injection.
+ * Version: 1.3.0
  * Author: Sober Founders Dev
  */
 
@@ -25,6 +25,14 @@ add_action( 'template_redirect', function () {
             wp_redirect( esc_url_raw( $redirect['to'] ), 301 );
             exit;
         }
+    }
+} );
+
+// ── Site-wide footer: inject custom HTML before Astra footer ────────────────
+add_action( 'astra_footer_before', function () {
+    $footer_html = get_option( 'sober_footer_html', '' );
+    if ( ! empty( $footer_html ) ) {
+        echo $footer_html; // Already sanitized on write via wp_kses_post.
     }
 } );
 
@@ -77,6 +85,30 @@ add_action( 'rest_api_init', function () {
                 'validate_callback' => function ( $value ) {
                     return is_numeric( $value ) && (int) $value > 0;
                 },
+            ],
+        ],
+    ] );
+
+    // ── Footer endpoints ─────────────────────────────────────────────────────
+    register_rest_route( 'sober/v1', '/footer', [
+        'methods'             => 'GET',
+        'callback'            => 'sober_footer_read',
+        'permission_callback' => function () {
+            return current_user_can( 'edit_posts' );
+        },
+    ] );
+
+    register_rest_route( 'sober/v1', '/footer', [
+        'methods'             => 'POST',
+        'callback'            => 'sober_footer_update',
+        'permission_callback' => function () {
+            return current_user_can( 'manage_options' );
+        },
+        'args' => [
+            'html' => [
+                'required'          => true,
+                'type'              => 'string',
+                'sanitize_callback' => 'wp_kses_post',
             ],
         ],
     ] );
@@ -221,6 +253,23 @@ function sober_seo_read( WP_REST_Request $request ) {
         'title'         => get_post_meta( $post_id, '_yoast_wpseo_title', true ),
         'description'   => get_post_meta( $post_id, '_yoast_wpseo_metadesc', true ),
         'focus_keyword' => get_post_meta( $post_id, '_yoast_wpseo_focuskw', true ),
+    ];
+}
+
+// ── Footer callbacks ────────────────────────────────────────────────────────
+
+function sober_footer_read() {
+    return [
+        'html' => get_option( 'sober_footer_html', '' ),
+    ];
+}
+
+function sober_footer_update( WP_REST_Request $request ) {
+    $html = $request->get_param( 'html' ); // Already sanitized by wp_kses_post.
+    update_option( 'sober_footer_html', $html );
+    return [
+        'success' => true,
+        'length'  => strlen( $html ),
     ];
 }
 
