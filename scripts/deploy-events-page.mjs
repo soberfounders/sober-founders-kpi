@@ -547,13 +547,11 @@ const PAGE_CONTENT = `<!-- wp:html -->
     width: 90%; max-width: 600px;
     max-height: 85vh;
     overflow-y: auto;
-    background: rgba(15,15,20,0.92);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border: 1px solid rgba(255,255,255,0.1);
+    background: #1e2330;
+    border: 1px solid rgba(255,255,255,0.12);
     border-radius: 20px;
     padding: 48px 36px 36px;
-    box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+    box-shadow: 0 24px 80px rgba(0,0,0,0.6);
     z-index: 9999;
   }
   .sf-modal-close {
@@ -603,21 +601,21 @@ const PAGE_CONTENT = `<!-- wp:html -->
   .sf-modal .hs-form textarea,
   .sf-modal .hs-form select,
   .sf-modal .hs-form .hs-input {
-    background: rgba(255,255,255,0.08) !important;
-    border: 1px solid rgba(255,255,255,0.2) !important;
+    background: rgba(255,255,255,0.95) !important;
+    border: 1px solid rgba(255,255,255,0.3) !important;
     border-radius: 10px !important;
-    color: #fff !important;
+    color: #111 !important;
     padding: 12px 14px !important;
     font-size: 0.9rem !important;
     width: 100% !important;
   }
   .sf-modal .hs-form input::placeholder,
   .sf-modal .hs-form textarea::placeholder {
-    color: rgba(255,255,255,0.35) !important;
+    color: rgba(0,0,0,0.4) !important;
   }
   .sf-modal .hs-form select option {
-    background: #1a1a2e !important;
-    color: #fff !important;
+    background: #fff !important;
+    color: #111 !important;
   }
   .sf-modal .hs-form .hs-button,
   .sf-modal .hs-form input[type="submit"] {
