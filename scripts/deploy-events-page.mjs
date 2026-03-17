@@ -50,28 +50,12 @@ const PAGE_CONTENT = `<!-- wp:html -->
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap');
 
-  /* ── Hide WordPress header & force full-bleed dark canvas ── */
-  header.site-header,
-  #ast-desktop-header,
-  .ast-desktop-header-content,
-  .ast-main-header-wrap,
-  .ast-above-header-wrap,
-  .ast-below-header-wrap { display: none !important; }
-
-  body.page-template-default {
+  /* ── Full-bleed dark canvas (elementor_canvas template) ── */
+  html, body {
     background: #0a0a0a !important;
     margin: 0; padding: 0;
     overflow-x: hidden;
   }
-  .ast-container, .site-content,
-  .site-content .ast-container { background: transparent !important; max-width: 100% !important; padding: 0 !important; }
-  .entry-content { padding: 0 !important; max-width: 100% !important; width: 100% !important; }
-  #primary { padding: 0 !important; margin: 0 !important; max-width: 100% !important; width: 100% !important; }
-  .ast-separate-container .ast-article-single { padding: 0 !important; margin: 0 !important; background: transparent !important; max-width: 100% !important; box-shadow: none !important; }
-  .ast-separate-container #primary { padding: 0 !important; }
-  #content, .ast-row { max-width: 100% !important; }
-  .ast-page-builder-template .entry-header { display: none; }
-  .ast-separate-container .ast-article-single:nth-child(n) { margin: 0 !important; }
 
   /* ── Canvas scroll animation background ── */
   #sf-scroll-canvas {
@@ -100,9 +84,6 @@ const PAGE_CONTENT = `<!-- wp:html -->
     #sf-scroll-canvas { display: none; }
     .sf-ev-mobile-bg { display: block; }
   }
-
-  /* ── Scroll spacer — animation plays through here ── */
-  .sf-ev-scroll-spacer { height: 250vh; position: relative; z-index: 2; }
 
   .sf-ev { font-family: 'Outfit', 'Inter', sans-serif; color: #fff; line-height: 1.7; -webkit-font-smoothing: antialiased; position: relative; z-index: 2; }
   .sf-ev * { box-sizing: border-box; }
@@ -563,9 +544,6 @@ const PAGE_CONTENT = `<!-- wp:html -->
 <!-- Mobile fallback: static image -->
 <img class="sf-ev-mobile-bg" src="https://soberfounders.org/wp-content/uploads/2026/03/phoenix-static.jpg" alt="" />
 
-<!-- Scroll spacer — animation plays as user scrolls through this -->
-<div class="sf-ev-scroll-spacer"></div>
-
 <div class="sf-ev">
 
   <!-- ═══ Three Ways to Get Involved ═══ -->
@@ -824,9 +802,8 @@ const PAGE_CONTENT = `<!-- wp:html -->
       if (maxScroll <= 0) { ticking = false; return; }
       var progress = Math.min(1, scrollTop / maxScroll);
 
-      /* Video completes in first 35% of scroll (before content) */
-      var accelerated = Math.min(1, progress / 0.35);
-      var eased = Math.pow(accelerated, 1.5);
+      /* Video plays through full page scroll — bottle at top, phoenix at bottom */
+      var eased = Math.pow(progress, 1.4);
       var targetTime = eased * video.duration;
 
       /* Only seek if time changed enough (avoid redundant seeks) */
@@ -835,16 +812,14 @@ const PAGE_CONTENT = `<!-- wp:html -->
         video.currentTime = targetTime;
       }
 
-      /* Dynamic overlay dimming — match homepage feel */
+      /* Overlay: light at top (see bottle), darker mid-scroll, settles for content */
       var darkness;
-      if (progress < 0.03) {
-        darkness = 0.1;
-      } else if (progress < 0.15) {
-        darkness = 0.1 + ((progress - 0.03) / 0.12) * 0.4;
-      } else if (progress < 0.3) {
-        darkness = 0.5 - ((progress - 0.15) / 0.15) * 0.15;
+      if (progress < 0.1) {
+        darkness = 0.25;
+      } else if (progress < 0.4) {
+        darkness = 0.25 + ((progress - 0.1) / 0.3) * 0.25;
       } else {
-        darkness = 0.35;
+        darkness = 0.5;
       }
       overlay.style.backgroundColor = 'rgba(10,10,10,' + darkness + ')';
       ticking = false;
@@ -898,7 +873,7 @@ async function main() {
   const updateRes = await fetch(`${SITE}/wp-json/wp/v2/pages/${pageId}`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ content: PAGE_CONTENT }),
+    body: JSON.stringify({ content: PAGE_CONTENT, template: "elementor_canvas" }),
   });
 
   if (!updateRes.ok) {
