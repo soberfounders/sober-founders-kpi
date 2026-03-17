@@ -1,7 +1,7 @@
 {
   "meta": {
     "lastExpanded": "2026-03-17",
-    "totalPublished": 2
+    "totalPublished": 3
   },
   "entries": [
     {
@@ -34,11 +34,11 @@
       "topic": "The Best Mastermind Group for Founders in Recovery — What to Look For and Where to Find It",
       "category": "peer-advisory",
       "priority": "critical",
-      "status": "queued",
-      "publishedDate": null,
-      "wpPostId": null,
-      "wpSlug": null,
-      "seoScore": null
+      "status": "published",
+      "publishedDate": "2026-03-17",
+      "wpPostId": 4410,
+      "wpSlug": "best-mastermind-group-for-founders-in-recovery",
+      "seoScore": "90/110"
     },
     {
       "id": 4,
