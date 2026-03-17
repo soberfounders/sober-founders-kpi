@@ -46,7 +46,7 @@ const headers = {
 // Page content — Glassmorphism dark-theme homepage (from Next.js /test)
 // ---------------------------------------------------------------------------
 const PAGE_CONTENT = `<!-- wp:html -->
-<!-- SF Website Test — scroll-scrub animation + glassmorphism — deployed by deploy-website-test.mjs -->
+<!-- SF Homepage — cinematic scroll — v${Date.now()} -->
 
 <!-- CDN: GSAP + ScrollTrigger -->
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"><\/script>
@@ -559,7 +559,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
   }
   .sf-testimonial-card:hover { border-color: rgba(255,255,255,0.15); }
   .sf-testimonial-card::before {
-    content: "\\201C";
+    content: "\u201C";
     font-family: 'DM Serif Display', serif;
     font-size: 4rem;
     color: rgba(94,236,192,0.15);
