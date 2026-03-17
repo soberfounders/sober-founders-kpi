@@ -1,7 +1,7 @@
 {
   "meta": {
     "lastExpanded": "2026-03-17",
-    "totalPublished": 1
+    "totalPublished": 2
   },
   "entries": [
     {
@@ -22,11 +22,11 @@
       "topic": "The Hidden Link Between Entrepreneurship and Addiction: What the Research Actually Says",
       "category": "recovery-business",
       "priority": "critical",
-      "status": "queued",
-      "publishedDate": null,
-      "wpPostId": null,
-      "wpSlug": null,
-      "seoScore": null
+      "status": "published",
+      "publishedDate": "2026-03-17",
+      "wpPostId": 4407,
+      "wpSlug": "why-entrepreneurs-struggle-with-addiction",
+      "seoScore": "68/110"
     },
     {
       "id": 3,

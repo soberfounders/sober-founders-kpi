@@ -1,0 +1,52 @@
+[2026-03-17T18:31:47.619Z] === Daily Blog Publisher ===
+[2026-03-17T18:31:47.622Z] Mode: PUBLISH
+[2026-03-17T18:31:47.622Z] Calendar: 40 total, 39 queued
+[2026-03-17T18:31:47.622Z] Selected: [2] "The Hidden Link Between Entrepreneurship and Addiction: What the Research Actually Says"
+[2026-03-17T18:31:47.622Z] Keyword: "why entrepreneurs struggle with addiction" | Priority: critical | Category: recovery-business
+[2026-03-17T18:31:47.623Z] Generating article with SEO validation...
+[2026-03-17T18:32:09.897Z]   Article generated (6531 chars, attempt 1)
+[2026-03-17T18:32:11.282Z]   SEO Score: 66/110 (FAIL)
+[2026-03-17T18:32:11.282Z]   Failing checks: keywordFirst100, keywordInH2, keywordDensity, wordCount, blockquote, imageAltComment, semanticVariations, modularChunking
+[2026-03-17T18:32:11.282Z]   Retry 1/2...
+[2026-03-17T18:32:47.297Z]   Article generated (9896 chars, attempt 2)
+[2026-03-17T18:32:48.328Z]   SEO Score: 77/110 (FAIL)
+[2026-03-17T18:32:48.329Z]   Failing checks: keywordFirst100, keywordInH2, wordCount, blockquote, shortParagraphs, semanticVariations, modularChunking
+[2026-03-17T18:32:48.329Z]   Retry 2/2...
+[2026-03-17T18:33:16.435Z]   Article generated (8031 chars, attempt 3)
+[2026-03-17T18:33:18.350Z]   SEO Score: 65/110 (FAIL)
+[2026-03-17T18:33:18.351Z]   Failing checks: keywordFirst100, keywordInH2, keywordDensity, wordCount, statsCitations, blockquote, imageAltComment, semanticVariations, modularChunking
+[2026-03-17T18:33:18.352Z]   Max retries exceeded. Will publish as draft.
+[2026-03-17T18:33:49.258Z] 
+SEO Score: 68/110 (FAIL — threshold: 88)
+
+  ~ bluf: 5/10 — BLUF block: 77 words (outside 40-60 ideal)
+  ✓ questionH2s: 10/10 — 8 question-based H2s
+  ✓ keywordFirst100: 8/8 — Keyword in first 100 words
+  ✗ keywordInH2: 0/5 — Keyword not in any H2
+  ✗ keywordDensity: 0/8 — Keyword appears 1x (too few)
+  ✗ wordCount: 0/10 — 1194 words (too short, need 1800+)
+  ✓ faqSection: 8/8 — FAQ section with 5 Q&As
+  ✓ statsCitations: 8/8 — 3 stats, 3 source citations
+  ✗ blockquote: 0/5 — No blockquote found
+  ~ internalLinks: 7/10 — Missing: existing blog post
+  ✓ phoenixCTA: 5/5 — Phoenix Forum CTA present
+  ✓ metaTitleLen: 3/3 — Title: 55 chars
+  ✓ metaDescLen: 3/3 — Description: 155 chars
+  ✓ lastUpdated: 2/2 — Last updated date present
+  ✓ imageAltComment: 2/2 — Image alt comment present
+  ✓ shortParagraphs: 3/3 — All paragraphs 5 sentences or fewer
+  ✓ noForbiddenOpeners: 2/2 — No forbidden openers
+  ✗ semanticVariations: 0/5 — No semantic variations found
+  ~ modularChunking: 2/3 — Has list(s)
+
+[2026-03-17T18:33:49.258Z] Meta title: Why Entrepreneurs Struggle with Addiction: Key Insights (55 chars)
+[2026-03-17T18:33:49.258Z] Meta desc: Explore how stress and isolation increase addiction risks for entrepreneurs. Gain insights from research to better understand and address these challenges. (155 chars)
+[2026-03-17T18:33:49.258Z] Slug: why-entrepreneurs-struggle-with-addiction
+[2026-03-17T18:33:49.974Z] SEO validation failed after retries — publishing as DRAFT for manual review
+[2026-03-17T18:33:49.974Z] Publishing to WordPress as draft...
+[2026-03-17T18:33:50.592Z] Published: ID 4407 | https://soberfounders.org/?p=4407
+[2026-03-17T18:33:50.592Z] Setting Yoast SEO fields...
+[2026-03-17T18:33:51.244Z] SEO fields set: title, description, primary_focus_keyword
+[2026-03-17T18:33:51.245Z] Calendar updated.
+[2026-03-17T18:33:51.245Z] 
+Done. Post drafted at: https://soberfounders.org/?p=4407
