@@ -50,33 +50,59 @@ const PAGE_CONTENT = `<!-- wp:html -->
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap');
 
-  /* Force dark background on this page */
-  body.page-template-default { background: #0a0a0a !important; }
-  .ast-container, .site-content { background: transparent !important; }
-  .entry-content { padding: 0 !important; max-width: 100% !important; }
-  #primary { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
-  .ast-separate-container .ast-article-single { padding: 0 !important; margin: 0 !important; background: transparent !important; }
-  .ast-separate-container #primary { padding: 0 !important; }
-  header.site-header { position: relative; z-index: 100; }
+  /* ── Hide WordPress header & force full-bleed dark canvas ── */
+  header.site-header,
+  #ast-desktop-header,
+  .ast-desktop-header-content,
+  .ast-main-header-wrap,
+  .ast-above-header-wrap,
+  .ast-below-header-wrap { display: none !important; }
 
-  /* ── Fixed video background ── */
-  .sf-ev-bg-video {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100vw; height: 100vh;
-    object-fit: cover;
-    z-index: 0;
-    opacity: 0.35;
-    pointer-events: none;
+  body.page-template-default {
+    background: #0a0a0a !important;
+    margin: 0; padding: 0;
+    overflow-x: hidden;
   }
-  .sf-ev-bg-overlay {
+  .ast-container, .site-content,
+  .site-content .ast-container { background: transparent !important; max-width: 100% !important; padding: 0 !important; }
+  .entry-content { padding: 0 !important; max-width: 100% !important; width: 100% !important; }
+  #primary { padding: 0 !important; margin: 0 !important; max-width: 100% !important; width: 100% !important; }
+  .ast-separate-container .ast-article-single { padding: 0 !important; margin: 0 !important; background: transparent !important; max-width: 100% !important; box-shadow: none !important; }
+  .ast-separate-container #primary { padding: 0 !important; }
+  #content, .ast-row { max-width: 100% !important; }
+  .ast-page-builder-template .entry-header { display: none; }
+  .ast-separate-container .ast-article-single:nth-child(n) { margin: 0 !important; }
+
+  /* ── Canvas scroll animation background ── */
+  #sf-scroll-canvas {
     position: fixed;
     top: 0; left: 0;
     width: 100vw; height: 100vh;
-    background: linear-gradient(180deg, rgba(10,10,10,0.3) 0%, rgba(10,10,10,0.7) 50%, rgba(10,10,10,0.95) 100%);
+    z-index: 0;
+  }
+  #sf-scroll-video { display: none !important; }
+  #sf-scroll-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    background-color: rgba(10,10,10,0.15);
     z-index: 1;
     pointer-events: none;
+    transition: background-color 0.1s;
   }
+  .sf-ev-mobile-bg {
+    display: none;
+    position: fixed; top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    object-fit: cover; z-index: 0;
+  }
+  @media (max-width: 767px) {
+    #sf-scroll-canvas { display: none; }
+    .sf-ev-mobile-bg { display: block; }
+  }
+
+  /* ── Scroll spacer — animation plays through here ── */
+  .sf-ev-scroll-spacer { height: 250vh; position: relative; z-index: 2; }
 
   .sf-ev { font-family: 'Outfit', 'Inter', sans-serif; color: #fff; line-height: 1.7; -webkit-font-smoothing: antialiased; position: relative; z-index: 2; }
   .sf-ev * { box-sizing: border-box; }
@@ -526,11 +552,19 @@ const PAGE_CONTENT = `<!-- wp:html -->
   .sf-ev-sep { margin: 0 6px; color: rgba(255,255,255,0.15); }
 </style>
 
-<!-- Fixed video background -->
-<video class="sf-ev-bg-video" autoplay muted loop playsinline poster="https://soberfounders.org/wp-content/uploads/2026/03/phoenix-static.jpg">
-  <source src="https://soberfounders.org/wp-content/uploads/2026/03/hero-video.mp4" type="video/mp4" />
-</video>
-<div class="sf-ev-bg-overlay"></div>
+<!-- Hidden video source for canvas scrubbing -->
+<video id="sf-scroll-video" muted playsinline preload="auto"
+  src="https://soberfounders.org/wp-content/uploads/2026/03/hero-video.mp4"></video>
+
+<!-- Canvas renders scroll-synced frames -->
+<canvas id="sf-scroll-canvas"></canvas>
+<div id="sf-scroll-overlay"></div>
+
+<!-- Mobile fallback: static image -->
+<img class="sf-ev-mobile-bg" src="https://soberfounders.org/wp-content/uploads/2026/03/phoenix-static.jpg" alt="" />
+
+<!-- Scroll spacer — animation plays as user scrolls through this -->
+<div class="sf-ev-scroll-spacer"></div>
 
 <div class="sf-ev">
 
@@ -744,6 +778,94 @@ const PAGE_CONTENT = `<!-- wp:html -->
     "location": { "@type": "VirtualLocation", "url": "https://www.soberfounders.org/events/" }
   }
 ]
+</script>
+
+<!-- Scroll-synced canvas animation (vanilla JS port of HeroScroll) -->
+<script>
+(function() {
+  var video = document.getElementById('sf-scroll-video');
+  var canvas = document.getElementById('sf-scroll-canvas');
+  var overlay = document.getElementById('sf-scroll-overlay');
+  if (!video || !canvas || !overlay) return;
+  if (window.innerWidth < 768) return; /* mobile uses static image */
+
+  var ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  var ready = false;
+  var ticking = false;
+  var lastTime = -1;
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    if (ready) drawFrame();
+  }
+
+  function drawFrame() {
+    var vw = video.videoWidth, vh = video.videoHeight;
+    if (!vw || !vh) return;
+    var cw = canvas.width, ch = canvas.height;
+    var videoRatio = vw / vh, canvasRatio = cw / ch;
+    var sx, sy, sw, sh;
+    if (canvasRatio > videoRatio) {
+      sw = vw; sh = vw / canvasRatio; sx = 0; sy = (vh - sh) / 2;
+    } else {
+      sh = vh; sw = vh * canvasRatio; sx = (vw - sw) / 2; sy = 0;
+    }
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, cw, ch);
+  }
+
+  function onScroll() {
+    if (!ready || ticking) return;
+    ticking = true;
+    requestAnimationFrame(function() {
+      var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      var maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      if (maxScroll <= 0) { ticking = false; return; }
+      var progress = Math.min(1, scrollTop / maxScroll);
+
+      /* Video completes in first 35% of scroll (before content) */
+      var accelerated = Math.min(1, progress / 0.35);
+      var eased = Math.pow(accelerated, 1.5);
+      var targetTime = eased * video.duration;
+
+      /* Only seek if time changed enough (avoid redundant seeks) */
+      if (Math.abs(targetTime - lastTime) > 0.03) {
+        lastTime = targetTime;
+        video.currentTime = targetTime;
+      }
+
+      /* Dynamic overlay dimming — match homepage feel */
+      var darkness;
+      if (progress < 0.03) {
+        darkness = 0.1;
+      } else if (progress < 0.15) {
+        darkness = 0.1 + ((progress - 0.03) / 0.12) * 0.4;
+      } else if (progress < 0.3) {
+        darkness = 0.5 - ((progress - 0.15) / 0.15) * 0.15;
+      } else {
+        darkness = 0.35;
+      }
+      overlay.style.backgroundColor = 'rgba(10,10,10,' + darkness + ')';
+      ticking = false;
+    });
+  }
+
+  video.addEventListener('seeked', drawFrame);
+
+  function init() {
+    if (!video.duration || !isFinite(video.duration)) return;
+    ready = true;
+    resize();
+    video.currentTime = 0;
+    drawFrame();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', resize);
+  }
+
+  if (video.readyState >= 1) init();
+  else video.addEventListener('loadedmetadata', init, { once: true });
+})();
 </script>
 <!-- /wp:html -->`;
 
