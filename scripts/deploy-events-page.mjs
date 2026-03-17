@@ -43,17 +43,59 @@ const headers = {
 };
 
 // ---------------------------------------------------------------------------
-// Page content — Full events page redesign
+// Page content — Full events page redesign (dark cinematic theme)
 // ---------------------------------------------------------------------------
 const PAGE_CONTENT = `<!-- wp:html -->
 <!-- SF Events Page — deployed by deploy-events-page.mjs -->
 <style>
-  .sf-ev { font-family: inherit; color: #2e3443; }
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap');
+
+  /* Force dark background on this page */
+  body.page-template-default { background: #0a0a0a !important; }
+  .ast-container, .site-content { background: transparent !important; }
+  .entry-content { padding: 0 !important; max-width: 100% !important; }
+  #primary { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
+  .ast-separate-container .ast-article-single { padding: 0 !important; margin: 0 !important; background: transparent !important; }
+  .ast-separate-container #primary { padding: 0 !important; }
+  header.site-header { position: relative; z-index: 100; }
+
+  .sf-ev { font-family: 'Outfit', 'Inter', sans-serif; color: #fff; line-height: 1.7; -webkit-font-smoothing: antialiased; }
   .sf-ev * { box-sizing: border-box; }
   .sf-ev img { max-width: 100%; display: block; }
   .sf-ev a { text-decoration: none; }
 
-  /* ── Hero removed ── */
+  /* ── Glassmorphism utility ── */
+  .sf-glass {
+    background: rgba(10, 10, 10, 0.45);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  /* ── Section wrapper ── */
+  .sf-ev-section {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 80px 24px;
+  }
+  .sf-ev-section-sm { padding: 60px 24px; }
+  .sf-ev-pad { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+  /* ── Heading ── */
+  .sf-ev-heading { text-align: center; margin-bottom: 48px; }
+  .sf-ev-heading h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+    font-weight: 400;
+    color: #ffffff;
+    margin: 0 0 12px;
+  }
+  .sf-ev-heading p {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 1.05rem;
+    max-width: 560px;
+    margin: 0 auto;
+  }
 
   /* ── Buttons ── */
   .sf-ev-btn {
@@ -67,14 +109,9 @@ const PAGE_CONTENT = `<!-- wp:html -->
     transition: all 0.25s;
     cursor: pointer;
   }
-  .sf-ev-btn-primary {
-    background: #00b286;
-    color: #fff !important;
-    text-decoration: none !important;
-  }
+  .sf-ev-btn-primary { background: #00b286; color: #fff !important; text-decoration: none !important; }
   .sf-ev-btn-primary:hover {
     background: #00c090;
-    color: #fff !important;
     transform: translateY(-2px);
     box-shadow: 0 8px 24px rgba(0,178,134,0.3);
   }
@@ -86,202 +123,155 @@ const PAGE_CONTENT = `<!-- wp:html -->
   }
   .sf-ev-btn-outline:hover {
     border-color: rgba(255,255,255,0.6);
-    background: rgba(255,255,255,0.05);
-    color: #fff !important;
+    background: rgba(255,255,255,0.08);
     transform: translateY(-2px);
-  }
-  .sf-ev-btn-wa {
-    background: #25D366;
-    color: #fff !important;
-    text-decoration: none !important;
-  }
-  .sf-ev-btn-wa:hover {
-    background: #20bd5a;
-    color: #fff !important;
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(37,211,102,0.3);
   }
 
-  /* ── Sections ── */
-  .sf-ev-section {
+  /* ── Three tiers — glassmorphism cards ── */
+  .sf-ev-tiers {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
     max-width: 1100px;
     margin: 0 auto;
-    padding: 80px 24px;
   }
-  .sf-ev-section-heading {
-    text-align: center;
-    margin-bottom: 48px;
-  }
-  .sf-ev-section-heading h2 {
-    font-family: "DM Serif Display", serif;
-    font-size: clamp(1.6rem, 3.5vw, 2.2rem);
-    font-weight: 400;
-    color: #101828;
-    margin: 0 0 12px;
-  }
-  .sf-ev-section-heading p {
-    color: #667085;
-    font-size: 1.05rem;
-    max-width: 560px;
-    margin: 0 auto;
-    line-height: 1.7;
-  }
-
-  /* ── Three tiers — stacked horizontal cards ── */
-  .sf-ev-tiers {
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
+  @media (max-width: 768px) {
+    .sf-ev-tiers { grid-template-columns: 1fr; }
   }
   .sf-ev-tier {
-    display: grid;
-    grid-template-columns: 64px 1fr auto;
-    align-items: center;
-    gap: 28px;
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 20px;
-    padding: 32px 36px;
-    position: relative;
-    overflow: hidden;
-    transition: transform 0.3s, box-shadow 0.3s;
-  }
-  .sf-ev-tier::before {
-    content: "";
-    position: absolute;
-    left: 0; top: 0; bottom: 0;
-    width: 5px;
-    border-radius: 20px 0 0 20px;
+    background: rgba(10, 10, 10, 0.45);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 32px 28px;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.25s, box-shadow 0.25s, border-color 0.25s;
   }
   .sf-ev-tier:hover {
     transform: translateY(-4px);
-    box-shadow: 0 16px 48px rgba(0,0,0,0.08);
-  }
-  @media (max-width: 768px) {
-    .sf-ev-tier {
-      grid-template-columns: 1fr;
-      text-align: center;
-      padding: 32px 24px;
-    }
+    box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+    border-color: rgba(255, 255, 255, 0.15);
   }
 
-  /* Color accents per tier */
-  .sf-ev-tier-green::before { background: linear-gradient(180deg, #00b286, #00c090); }
-  .sf-ev-tier-blue::before { background: linear-gradient(180deg, #3b82f6, #60a5fa); }
-  .sf-ev-tier-gold::before { background: linear-gradient(180deg, #f59e0b, #fbbf24); }
-
-  /* Icon circle */
-  .sf-ev-tier-icon {
-    width: 64px; height: 64px;
-    border-radius: 50%;
-    display: flex;
+  .sf-ev-tier-num {
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    flex-shrink: 0;
+    width: 38px; height: 38px;
+    background: rgba(0,178,134,0.2);
+    color: #5eecc0;
+    font-weight: 700;
+    font-size: 0.85rem;
+    border-radius: 10px;
+    margin-bottom: 16px;
   }
-  .sf-ev-tier-icon svg { width: 28px; height: 28px; fill: #fff; }
-  .sf-ev-tier-icon-green { background: linear-gradient(135deg, #00b286, #00c090); box-shadow: 0 6px 20px rgba(0,178,134,0.3); }
-  .sf-ev-tier-icon-blue { background: linear-gradient(135deg, #3b82f6, #60a5fa); box-shadow: 0 6px 20px rgba(59,130,246,0.3); }
-  .sf-ev-tier-icon-gold { background: linear-gradient(135deg, #f59e0b, #fbbf24); box-shadow: 0 6px 20px rgba(245,158,11,0.3); }
-  @media (max-width: 768px) {
-    .sf-ev-tier-icon { margin: 0 auto; }
-  }
-
-  /* Middle content */
-  .sf-ev-tier-body h3 {
-    font-family: "DM Serif Display", serif;
-    font-size: 1.4rem;
+  .sf-ev-tier h3 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.35rem;
     font-weight: 400;
-    color: #101828;
-    margin: 0 0 4px;
+    color: #ffffff;
+    margin: 0 0 6px;
   }
   .sf-ev-tier-schedule {
     font-size: 0.85rem;
     font-weight: 600;
-    margin-bottom: 8px;
+    color: #5eecc0;
+    margin-bottom: 12px;
   }
-  .sf-ev-tier-green .sf-ev-tier-schedule { color: #00b286; }
-  .sf-ev-tier-blue .sf-ev-tier-schedule { color: #3b82f6; }
-  .sf-ev-tier-gold .sf-ev-tier-schedule { color: #d97706; }
-  .sf-ev-tier-body p {
-    font-size: 0.93rem;
-    line-height: 1.65;
-    color: #475467;
-    margin: 0 0 10px;
+  .sf-ev-tier p {
+    font-size: 0.97rem;
+    line-height: 1.7;
+    color: rgba(255, 255, 255, 0.7);
+    flex: 1;
+    margin: 0 0 16px;
   }
-  .sf-ev-tier-reqs {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    font-size: 0.85rem;
-    color: #667085;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 16px;
+  .sf-ev-tag {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    width: fit-content;
   }
-  .sf-ev-tier-reqs li {
-    padding-left: 18px;
-    position: relative;
-    line-height: 1.6;
-  }
-  .sf-ev-tier-reqs li::before {
-    content: "\\2713";
-    position: absolute;
-    left: 0;
-    font-weight: 700;
-  }
-  .sf-ev-tier-green .sf-ev-tier-reqs li::before { color: #00b286; }
-  .sf-ev-tier-blue .sf-ev-tier-reqs li::before { color: #3b82f6; }
-  .sf-ev-tier-gold .sf-ev-tier-reqs li::before { color: #d97706; }
-
-  /* Right-side CTA */
-  .sf-ev-tier-action {
-    flex-shrink: 0;
-  }
-  @media (max-width: 768px) {
-    .sf-ev-tier-action { margin: 0 auto; }
-  }
+  .sf-ev-tag-free { background: rgba(94,236,192,0.12); color: #5eecc0; }
+  .sf-ev-tag-paid { background: rgba(241,151,44,0.15); color: #f1972c; }
   .sf-ev-tier-link {
     display: inline-block;
-    font-size: 0.88rem;
+    margin-top: 20px;
+    font-size: 0.95rem;
     font-weight: 600;
-    padding: 12px 28px;
-    border-radius: 30px;
+    color: #5eecc0 !important;
     text-decoration: none !important;
-    transition: all 0.25s;
-    white-space: nowrap;
+    transition: color 0.2s;
   }
-  .sf-ev-tier-link:hover {
-    transform: translateY(-2px);
+  .sf-ev-tier-link:hover { color: #8ff4d8 !important; }
+  .sf-ev-tier-link::after { content: " \\2192"; }
+
+  /* Featured tier (Phoenix — full width) */
+  .sf-ev-tier-featured {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    padding: 0;
+    background: rgba(10, 10, 10, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+    overflow: hidden;
   }
-  .sf-ev-link-green {
+  .sf-ev-tier-featured::before {
+    content: "";
+    position: absolute; inset: 0;
+    background: radial-gradient(circle at 70% 30%, rgba(0,178,134,0.08) 0%, transparent 50%);
+    pointer-events: none;
+  }
+  @media (max-width: 768px) {
+    .sf-ev-tier-featured { grid-template-columns: 1fr; }
+  }
+  .sf-ev-tier-featured-img {
+    width: 100%; height: 100%; min-height: 320px; object-fit: cover;
+  }
+  .sf-ev-tier-featured .sf-ev-tier-body {
+    padding: 48px 36px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    position: relative;
+  }
+  .sf-ev-tier-featured .sf-ev-tier-num { background: rgba(0,178,134,0.2); }
+  .sf-ev-tier-featured h3 { color: #ffffff; font-size: 1.6rem; }
+  .sf-ev-tier-featured p { color: rgba(255,255,255,0.75); }
+  .sf-ev-tier-featured .sf-ev-tag { background: rgba(241,151,44,0.15); color: #f1972c; }
+  .sf-ev-tier-featured .sf-ev-tier-cta {
+    display: inline-block;
     background: #00b286;
     color: #fff !important;
+    padding: 12px 28px;
+    border-radius: 30px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: background 0.2s, transform 0.2s;
+    text-decoration: none !important;
+    margin-top: 24px;
+    width: fit-content;
   }
-  .sf-ev-link-green:hover {
+  .sf-ev-tier-featured .sf-ev-tier-cta:hover {
     background: #00c090;
-    box-shadow: 0 8px 24px rgba(0,178,134,0.3);
-  }
-  .sf-ev-link-blue {
-    background: #3b82f6;
-    color: #fff !important;
-  }
-  .sf-ev-link-blue:hover {
-    background: #2563eb;
-    box-shadow: 0 8px 24px rgba(59,130,246,0.3);
-  }
-  .sf-ev-link-gold {
-    background: linear-gradient(135deg, #f59e0b, #d97706);
-    color: #fff !important;
-  }
-  .sf-ev-link-gold:hover {
-    background: linear-gradient(135deg, #fbbf24, #f59e0b);
-    box-shadow: 0 8px 24px rgba(245,158,11,0.3);
+    transform: translateY(-2px);
   }
 
   /* ── How it works ── */
   .sf-ev-how {
-    background: #f6f7f9;
+    background: rgba(10, 10, 10, 0.45);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 24px;
     padding: 60px 24px;
     max-width: 1100px;
@@ -300,11 +290,12 @@ const PAGE_CONTENT = `<!-- wp:html -->
   @media (max-width: 480px) {
     .sf-ev-steps { grid-template-columns: 1fr; }
   }
-  .sf-ev-step { text-align: center; position: relative; }
+  .sf-ev-step { text-align: center; }
   .sf-ev-step-num {
     width: 48px; height: 48px;
-    background: linear-gradient(135deg, #00b286, #00c090);
-    color: #fff;
+    background: rgba(0,178,134,0.15);
+    border: 1px solid rgba(94,236,192,0.2);
+    color: #5eecc0;
     font-weight: 700;
     font-size: 1.1rem;
     border-radius: 50%;
@@ -312,26 +303,27 @@ const PAGE_CONTENT = `<!-- wp:html -->
     align-items: center;
     justify-content: center;
     margin: 0 auto 16px;
-    position: relative;
-    z-index: 1;
   }
   .sf-ev-step h4 {
-    font-family: "DM Serif Display", serif;
+    font-family: 'DM Serif Display', serif;
     font-size: 1.08rem;
     font-weight: 400;
-    color: #101828;
+    color: #fff;
     margin: 0 0 8px;
   }
   .sf-ev-step p {
     font-size: 0.88rem;
-    color: #667085;
+    color: rgba(255,255,255,0.6);
     line-height: 1.6;
     margin: 0;
   }
 
-  /* ── Calendar section ── */
-  .sf-ev-calendar-section {
-    background: linear-gradient(135deg, #101828 0%, #1a2940 50%, #0d3b2e 100%);
+  /* ── Calendar ── */
+  .sf-ev-calendar {
+    background: rgba(10, 10, 10, 0.5);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 24px;
     padding: 60px 24px;
     max-width: 1100px;
@@ -339,30 +331,13 @@ const PAGE_CONTENT = `<!-- wp:html -->
     position: relative;
     overflow: hidden;
   }
-  .sf-ev-calendar-section::before {
+  .sf-ev-calendar::before {
     content: "";
     position: absolute; inset: 0;
     background:
-      radial-gradient(circle at 25% 50%, rgba(0,178,134,0.1) 0%, transparent 50%),
-      radial-gradient(circle at 75% 50%, rgba(0,178,134,0.08) 0%, transparent 50%);
+      radial-gradient(circle at 25% 50%, rgba(0,178,134,0.08) 0%, transparent 50%),
+      radial-gradient(circle at 75% 50%, rgba(0,178,134,0.06) 0%, transparent 50%);
     pointer-events: none;
-  }
-  .sf-ev-calendar-heading {
-    text-align: center;
-    margin-bottom: 36px;
-    position: relative;
-  }
-  .sf-ev-calendar-heading h2 {
-    font-family: "DM Serif Display", serif;
-    font-size: clamp(1.6rem, 3.5vw, 2.2rem);
-    font-weight: 400;
-    color: #ffffff;
-    margin: 0 0 8px;
-  }
-  .sf-ev-calendar-heading p {
-    color: rgba(255,255,255,0.6);
-    font-size: 1rem;
-    margin: 0;
   }
   .sf-ev-calendar-wrap {
     max-width: 650px;
@@ -372,7 +347,6 @@ const PAGE_CONTENT = `<!-- wp:html -->
     border-radius: 16px;
     padding: 20px;
     position: relative;
-    backdrop-filter: blur(4px);
   }
   .sf-ev-calendar-wrap iframe {
     width: 100%;
@@ -380,62 +354,81 @@ const PAGE_CONTENT = `<!-- wp:html -->
     border: none;
   }
 
-  /* ── Community CTA ── */
+  /* ── WhatsApp community ── */
   .sf-ev-community {
     display: flex;
     align-items: center;
-    gap: 40px;
+    gap: 32px;
     max-width: 900px;
     margin: 0 auto;
-    background: #fff;
-    border: 1px solid #e5e7eb;
+    background: rgba(10, 10, 10, 0.45);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 20px;
-    padding: 48px 40px;
-    transition: transform 0.3s, box-shadow 0.3s;
+    padding: 40px 36px;
+    transition: transform 0.25s, border-color 0.25s;
   }
   .sf-ev-community:hover {
     transform: translateY(-4px);
-    box-shadow: 0 16px 48px rgba(0,0,0,0.06);
+    border-color: rgba(255, 255, 255, 0.15);
   }
   @media (max-width: 768px) {
     .sf-ev-community {
       flex-direction: column;
       text-align: center;
-      padding: 36px 28px;
+      padding: 32px 24px;
       gap: 24px;
     }
   }
   .sf-ev-community-icon {
-    width: 80px; height: 80px;
-    background: linear-gradient(135deg, #25D366, #128C7E);
-    border-radius: 20px;
+    width: 72px; height: 72px;
+    background: rgba(37,211,102,0.15);
+    border: 1px solid rgba(37,211,102,0.25);
+    border-radius: 18px;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
   }
-  .sf-ev-community-icon svg { width: 40px; height: 40px; fill: #fff; }
+  .sf-ev-community-icon svg { width: 36px; height: 36px; fill: #25D366; }
   .sf-ev-community-text { flex: 1; }
   .sf-ev-community-text h3 {
-    font-family: "DM Serif Display", serif;
-    font-size: 1.4rem;
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.3rem;
     font-weight: 400;
-    color: #101828;
+    color: #fff;
     margin: 0 0 8px;
   }
   .sf-ev-community-text p {
-    font-size: 0.95rem;
-    color: #667085;
+    font-size: 0.93rem;
+    color: rgba(255,255,255,0.65);
     line-height: 1.7;
-    margin: 0 0 20px;
+    margin: 0 0 16px;
+  }
+  .sf-ev-btn-wa {
+    display: inline-block;
+    background: #25D366;
+    color: #fff !important;
+    text-decoration: none !important;
+    font-size: 0.88rem;
+    font-weight: 600;
+    padding: 12px 28px;
+    border-radius: 30px;
+    transition: all 0.25s;
+  }
+  .sf-ev-btn-wa:hover {
+    background: #20bd5a;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(37,211,102,0.25);
   }
   .sf-ev-community-note {
-    font-size: 0.82rem;
-    color: #98a2b3;
+    font-size: 0.8rem;
+    color: rgba(255,255,255,0.4);
     font-style: italic;
-    margin: 0 !important;
+    margin: 12px 0 0 !important;
     padding-top: 12px;
-    border-top: 1px solid #f2f4f7;
+    border-top: 1px solid rgba(255,255,255,0.06);
   }
 
   /* ── Divider ── */
@@ -453,103 +446,75 @@ const PAGE_CONTENT = `<!-- wp:html -->
     content: "";
     flex: 1;
     height: 1px;
-    background: #e5e7eb;
+    background: rgba(255, 255, 255, 0.12);
   }
   .sf-ev-divider svg {
     width: 20px; height: 20px;
-    fill: #00b286;
+    fill: #5eecc0;
     flex-shrink: 0;
   }
 
-  /* ── Internal links (SEO) ── */
+  /* ── Internal links ── */
   .sf-ev-internal {
     text-align: center;
     max-width: 800px;
     margin: 0 auto;
-    padding: 20px 24px 0;
+    padding: 20px 24px 60px;
     font-size: 0.9rem;
-    color: #667085;
+    color: rgba(255,255,255,0.4);
     line-height: 2;
   }
   .sf-ev-internal a {
-    color: #00b286 !important;
+    color: #5eecc0 !important;
     text-decoration: none !important;
     font-weight: 500;
     transition: color 0.2s;
   }
-  .sf-ev-internal a:hover { color: #008e65 !important; }
-  .sf-ev-sep { margin: 0 6px; color: #d1d5db; }
+  .sf-ev-internal a:hover { color: #8ff4d8 !important; }
+  .sf-ev-sep { margin: 0 6px; color: rgba(255,255,255,0.15); }
 </style>
 
 <div class="sf-ev">
 
   <!-- ═══ Three Ways to Get Involved ═══ -->
   <div class="sf-ev-section">
-    <div class="sf-ev-section-heading">
+    <div class="sf-ev-heading">
       <h2>Three Ways to Get Involved</h2>
       <p>Whether you're just getting started or leading an eight-figure company, there's a seat at the table for you.</p>
     </div>
 
     <div class="sf-ev-tiers">
 
-      <!-- Thursday -->
-      <div class="sf-ev-tier sf-ev-tier-green">
-        <div class="sf-ev-tier-icon sf-ev-tier-icon-green">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><path d="M144 0a80 80 0 1 1 0 160A80 80 0 1 1 144 0zM512 0a80 80 0 1 1 0 160A80 80 0 1 1 512 0zM0 298.7C0 239.8 47.8 192 106.7 192h42.7c15.9 0 31 3.5 44.6 9.7c-1.3 7.2-1.9 14.7-1.9 22.3c0 38.2 16.8 72.5 43.3 96H21.3C9.6 320 0 310.4 0 298.7zM405.3 320H235.4c26.5-23.5 43.3-57.8 43.3-96c0-7.6-.7-15-1.9-22.3c13.6-6.3 28.7-9.7 44.6-9.7h42.7C423.2 192 471 239.8 471 298.7c0 11.8-9.6 21.3-21.3 21.3h-44.3zM320 256a96 96 0 1 0 0-192 96 96 0 1 0 0 192zm-94.8 32c-47 0-87.9 26.2-108.8 64.8C100.2 378.7 92.9 400.8 86.5 432H553.5c-6.4-31.2-13.7-53.3-29.9-79.2C502.7 314.2 461.8 288 414.8 288H225.2z"/></svg>
-        </div>
-        <div class="sf-ev-tier-body">
-          <h3>Thursday Mastermind</h3>
-          <div class="sf-ev-tier-schedule">Every Thursday &bull; 11:00 AM ET</div>
-          <p>Free and open to every sober entrepreneur. No revenue minimum, no interview, no gatekeeping.</p>
-          <ul class="sf-ev-tier-reqs">
-            <li>Sober &amp; own a business</li>
-            <li>No application required</li>
-            <li>10&ndash;25 founders per session</li>
-          </ul>
-        </div>
-        <div class="sf-ev-tier-action">
-          <a href="#sf-calendar" class="sf-ev-tier-link sf-ev-link-green">Sign Up Free</a>
-        </div>
+      <!-- 01 — Thursday -->
+      <div class="sf-ev-tier">
+        <div class="sf-ev-tier-num">01</div>
+        <h3>Thursday Open Mastermind</h3>
+        <div class="sf-ev-tier-schedule">Every Thursday &bull; 11:00 AM ET</div>
+        <p>Open to any sober entrepreneur. Show up, share what's real, and get honest feedback from peers who understand the intersection of business pressure and recovery. No application required&mdash;just be sober and own a business.</p>
+        <span class="sf-ev-tag sf-ev-tag-free">Free &bull; Open to All</span>
+        <a href="#sf-calendar" class="sf-ev-tier-link">View Upcoming Events</a>
       </div>
 
-      <!-- Tuesday -->
-      <div class="sf-ev-tier sf-ev-tier-blue">
-        <div class="sf-ev-tier-icon sf-ev-tier-icon-blue">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M256 0c36.8 0 68.8 20.7 84.9 51.1C373.8 41 411 49 437 75s34 63.3 23.9 96.1C491.3 187.2 512 219.2 512 256s-20.7 68.8-51.1 84.9C471 373.8 463 411 437 437s-63.3 34-96.1 23.9C324.8 491.3 292.8 512 256 512s-68.8-20.7-84.9-51.1C138.2 471 101 463 75 437s-34-63.3-23.9-96.1C20.7 324.8 0 292.8 0 256s20.7-68.8 51.1-84.9C41 138.2 49 101 75 75s63.3-34 96.1-23.9C187.2 20.7 219.2 0 256 0zM369 209c9.4-9.4 9.4-24.6 0-33.9s-24.6-9.4-33.9 0l-111 111-47-47c-9.4-9.4-24.6-9.4-33.9 0s-9.4 24.6 0 33.9l64 64c9.4 9.4 24.6 9.4 33.9 0L369 209z"/></svg>
-        </div>
-        <div class="sf-ev-tier-body">
-          <h3>Tuesday &ldquo;All Our Affairs&rdquo;</h3>
-          <div class="sf-ev-tier-schedule">Every Tuesday &bull; 12:00 PM ET</div>
-          <p>For verified founders ready for deeper accountability. Smaller groups, higher trust.</p>
-          <ul class="sf-ev-tier-reqs">
-            <li>$250K+ revenue</li>
-            <li>2+ employees</li>
-            <li>1+ year sober</li>
-            <li>Interview required</li>
-          </ul>
-        </div>
-        <div class="sf-ev-tier-action">
-          <a href="/apply/" class="sf-ev-tier-link sf-ev-link-blue">Apply Now</a>
-        </div>
+      <!-- 02 — Tuesday -->
+      <div class="sf-ev-tier">
+        <div class="sf-ev-tier-num">02</div>
+        <h3>Tuesday &ldquo;All Our Affairs&rdquo;</h3>
+        <div class="sf-ev-tier-schedule">Every Tuesday &bull; 12:00 PM ET</div>
+        <p>For verified sober founders with $250K+ revenue, 2+ employees, and 1+ year sober working the 12 steps. Deeper conversations, higher trust, real accountability.</p>
+        <span class="sf-ev-tag sf-ev-tag-free">Free &bull; Verified Members</span>
+        <a href="/apply/" class="sf-ev-tier-link">Apply to Join</a>
       </div>
 
-      <!-- Phoenix Forum -->
-      <div class="sf-ev-tier sf-ev-tier-gold">
-        <div class="sf-ev-tier-icon sf-ev-tier-icon-gold">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><path d="M309 106c11.4-7 19-19.7 19-34c0-22.1-17.9-40-40-40s-40 17.9-40 40c0 14.4 7.6 27 19 34L209.7 220.6c-9.1 18.2-32.7 23.4-48.6 10.7L72 160c5-6.7 8-15 8-24c0-22.1-17.9-40-40-40S0 113.9 0 136s17.9 40 40 40c.2 0 .5 0 .7 0L86.4 427.4c5.5 30.4 32 52.6 63 52.6H426.6c30.9 0 57.5-22.1 63-52.6L535.3 176c.2 0 .5 0 .7 0c22.1 0 40-17.9 40-40s-17.9-40-40-40s-40 17.9-40 40c0 9 3 17.3 8 24l-89.1 71.3c-15.9 12.7-39.5 7.5-48.6-10.7L309 106z"/></svg>
-        </div>
+      <!-- 03 — Phoenix Forum (featured) -->
+      <div class="sf-ev-tier sf-ev-tier-featured">
+        <img class="sf-ev-tier-featured-img" src="https://soberfounders.org/wp-content/uploads/2025/01/pexels-rdne-5756743-1024x683.jpg" alt="Intimate peer advisory group discussion" />
         <div class="sf-ev-tier-body">
+          <div class="sf-ev-tier-num">03</div>
           <h3>Phoenix Forum</h3>
           <div class="sf-ev-tier-schedule">Monthly &bull; Curated Schedule</div>
-          <p>Exclusive peer advisory board for $1M+ revenue founders. Intimate groups of up to 10.</p>
-          <ul class="sf-ev-tier-reqs">
-            <li>$1M+ revenue</li>
-            <li>1+ year sober</li>
-            <li>Legacy &amp; leadership focused</li>
-          </ul>
-        </div>
-        <div class="sf-ev-tier-action">
-          <a href="/phoenix-forum-2nd-group/" class="sf-ev-tier-link sf-ev-link-gold">Learn More</a>
+          <p>An exclusive peer advisory board for sober entrepreneurs generating $1M+ in revenue with multiple years of sobriety. Intimate groups of up to 10 members for curated, high-trust discussions around growth, sobriety, and life.</p>
+          <span class="sf-ev-tag sf-ev-tag-paid">Curated &bull; Application Only</span>
+          <a href="/phoenix-forum-2nd-group/" class="sf-ev-tier-cta">Learn More</a>
         </div>
       </div>
 
@@ -557,9 +522,9 @@ const PAGE_CONTENT = `<!-- wp:html -->
   </div>
 
   <!-- ═══ How It Works ═══ -->
-  <div style="max-width:1100px;margin:0 auto;padding:0 24px 80px;">
+  <div class="sf-ev-section-sm sf-ev-pad" style="padding-bottom: 80px;">
     <div class="sf-ev-how">
-      <div class="sf-ev-section-heading" style="margin-bottom: 40px;">
+      <div class="sf-ev-heading" style="margin-bottom: 40px;">
         <h2>How a Mastermind Works</h2>
         <p>Each session follows a simple, powerful format designed to give you real answers from people who've been there.</p>
       </div>
@@ -589,9 +554,9 @@ const PAGE_CONTENT = `<!-- wp:html -->
   </div>
 
   <!-- ═══ Calendar ═══ -->
-  <div style="max-width:1100px;margin:0 auto;padding:0 24px 80px;" id="sf-calendar">
-    <div class="sf-ev-calendar-section">
-      <div class="sf-ev-calendar-heading">
+  <div class="sf-ev-pad" style="padding-bottom: 80px;" id="sf-calendar">
+    <div class="sf-ev-calendar">
+      <div class="sf-ev-heading" style="margin-bottom: 36px; position: relative;">
         <h2>Upcoming Events</h2>
         <p>Pick a session and register &mdash; it takes 30 seconds.</p>
       </div>
@@ -626,8 +591,8 @@ const PAGE_CONTENT = `<!-- wp:html -->
       <div class="sf-ev-community-text">
         <h3>Connect Between Meetings</h3>
         <p>Our private WhatsApp group keeps the conversation going between sessions. Share wins, ask for advice, and stay connected with founders who get it.</p>
-        <a href="https://chat.whatsapp.com/HfxeP3enQtN3oGFnwVOH8D" class="sf-ev-btn sf-ev-btn-wa" target="_blank" rel="noopener">Join the WhatsApp Group</a>
-        <p class="sf-ev-community-note">Zero solicitation policy. If you join and start spamming, you will be removed immediately. This is about community and connection, not selling.</p>
+        <a href="https://chat.whatsapp.com/HfxeP3enQtN3oGFnwVOH8D" class="sf-ev-btn-wa" target="_blank" rel="noopener">Join the WhatsApp Group</a>
+        <p class="sf-ev-community-note">Zero solicitation policy. If you join and start spamming, you will be removed immediately.</p>
       </div>
     </div>
   </div>
