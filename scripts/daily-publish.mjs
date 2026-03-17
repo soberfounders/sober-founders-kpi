@@ -218,7 +218,20 @@ async function generateWithValidation(topic, keyword) {
     if (attempt > 0) log(`  Retry ${attempt}/${MAX_RETRIES}...`);
 
     // Generate article
-    const userPrompt = `Write an article about: "${topic}"\n\nPrimary focus keyword: "${keyword}"\n\nTarget audience: sober entrepreneurs and founders in recovery.${feedback}`;
+    const userPrompt = `Write an article about: "${topic}"
+
+Primary focus keyword: "${keyword}"
+
+Target audience: sober entrepreneurs and founders in recovery.
+
+CRITICAL REQUIREMENTS — your article will be automatically scored and rejected if these are missing:
+1. MINIMUM 2,000 words (this is non-negotiable — count your output, expand sections if short)
+2. Use the exact focus keyword "${keyword}" at least 3 times naturally in the text AND in at least one H2
+3. Include at least 1 <blockquote> with a Phoenix Forum member quote (first name, industry, revenue range)
+4. Include at least 1 <table> comparing options or data
+5. Use semantic variations of the keyword (synonyms, related phrases)
+6. Include <!-- Alt: description --> for at least 1 suggested image${feedback}`;
+
     const article = await callOpenAI(ARTICLE_SYSTEM_PROMPT, userPrompt, { temperature: 0.7, maxTokens: 8000 });
     log(`  Article generated (${article.length} chars, attempt ${attempt + 1})`);
 
@@ -253,7 +266,7 @@ async function generateWithValidation(topic, keyword) {
   // Final attempt — return whatever we have
   log('  Max retries exceeded. Will publish as draft.');
   const article = await callOpenAI(ARTICLE_SYSTEM_PROMPT,
-    `Write an article about: "${topic}"\n\nPrimary focus keyword: "${keyword}"\n\nTarget audience: sober entrepreneurs and founders in recovery.${feedback}`,
+    `Write an article about: "${topic}"\n\nPrimary focus keyword: "${keyword}"\n\nTarget audience: sober entrepreneurs and founders in recovery.\n\nCRITICAL: Article MUST be at least 2,000 words. Use the keyword "${keyword}" at least 3 times. Include a <blockquote>, a <table>, and <!-- Alt: --> comment.${feedback}`,
     { temperature: 0.7, maxTokens: 8000 });
   const metaRaw = await callOpenAI(META_SYSTEM_PROMPT,
     `Article topic: "${topic}"\nFocus keyword: "${keyword}"\n\nArticle excerpt:\n${article.substring(0, 500)}`,
