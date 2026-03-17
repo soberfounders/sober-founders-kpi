@@ -574,19 +574,53 @@ const PAGE_CONTENT = `<!-- wp:html -->
     font-size: 0.9rem; color: rgba(255,255,255,0.55);
     text-align: center; margin: 0 0 24px;
   }
-  /* Style HubSpot form inside modal */
-  .sf-modal .hs-form input,
+  /* Force ALL HubSpot form text to light on dark */
+  .sf-modal, .sf-modal * { color: #fff !important; }
+  .sf-modal .hs-form,
+  .sf-modal .hs-form *,
+  .sf-modal .hs-form fieldset,
+  .sf-modal .hs-form .hs-field-desc,
+  .sf-modal .hs-form .hs-form-field > label,
+  .sf-modal .hs-form .hs-richtext,
+  .sf-modal .hs-form .hs-richtext *,
+  .sf-modal .hs-form span,
+  .sf-modal .hs-form p,
+  .sf-modal .hs-form legend {
+    color: rgba(255,255,255,0.85) !important;
+    font-family: 'Outfit', 'Inter', sans-serif !important;
+  }
+  .sf-modal .hs-form label,
+  .sf-modal .hs-form .hs-form-field > label span {
+    color: rgba(255,255,255,0.75) !important;
+    font-size: 0.85rem !important;
+    font-weight: 500 !important;
+  }
+  .sf-modal .hs-form input[type="text"],
+  .sf-modal .hs-form input[type="email"],
+  .sf-modal .hs-form input[type="tel"],
+  .sf-modal .hs-form input[type="number"],
+  .sf-modal .hs-form input[type="url"],
   .sf-modal .hs-form textarea,
-  .sf-modal .hs-form select {
+  .sf-modal .hs-form select,
+  .sf-modal .hs-form .hs-input {
     background: rgba(255,255,255,0.08) !important;
-    border: 1px solid rgba(255,255,255,0.15) !important;
+    border: 1px solid rgba(255,255,255,0.2) !important;
     border-radius: 10px !important;
     color: #fff !important;
     padding: 12px 14px !important;
     font-size: 0.9rem !important;
+    width: 100% !important;
   }
-  .sf-modal .hs-form label { color: rgba(255,255,255,0.7) !important; font-size: 0.85rem !important; }
-  .sf-modal .hs-form .hs-button {
+  .sf-modal .hs-form input::placeholder,
+  .sf-modal .hs-form textarea::placeholder {
+    color: rgba(255,255,255,0.35) !important;
+  }
+  .sf-modal .hs-form select option {
+    background: #1a1a2e !important;
+    color: #fff !important;
+  }
+  .sf-modal .hs-form .hs-button,
+  .sf-modal .hs-form input[type="submit"] {
     background: #60a5fa !important;
     color: #fff !important;
     border: none !important;
@@ -597,9 +631,16 @@ const PAGE_CONTENT = `<!-- wp:html -->
     cursor: pointer !important;
     width: 100% !important;
     transition: background 0.2s !important;
+    margin-top: 8px !important;
   }
-  .sf-modal .hs-form .hs-button:hover { background: #3b82f6 !important; }
-  .sf-modal .hs-form .hs-error-msgs label { color: #f87171 !important; }
+  .sf-modal .hs-form .hs-button:hover,
+  .sf-modal .hs-form input[type="submit"]:hover { background: #3b82f6 !important; }
+  .sf-modal .hs-form .hs-error-msgs label,
+  .sf-modal .hs-form .hs-error-msgs span { color: #f87171 !important; }
+  .sf-modal .hs-form .hs-form-required { color: #f87171 !important; }
+  .sf-modal .hs-form .legal-consent-container,
+  .sf-modal .hs-form .legal-consent-container * { color: rgba(255,255,255,0.55) !important; font-size: 0.8rem !important; }
+  .sf-modal .hs-form a { color: #5eecc0 !important; }
 </style>
 
 <!-- Hidden video source for canvas scrubbing -->
