@@ -13,9 +13,16 @@
     "integrity:check": "node scripts/verify_kpi_data_integrity.mjs",
     "integrity:check:strict": "node scripts/verify_kpi_data_integrity.mjs --strict-hubspot-parity",
     "integrity:check:json": "node scripts/verify_kpi_data_integrity.mjs --json=docs/audits/kpi-data-integrity-latest.json",
-    "integrity:audit:repo-db": "node scripts/audit_repo_db_simplification.mjs"
+    "integrity:audit:repo-db": "node scripts/audit_repo_db_simplification.mjs",
+    "blog:publish": "node scripts/daily-publish.mjs",
+    "blog:publish:dry": "node scripts/daily-publish.mjs --dry-run",
+    "blog:publish:draft": "node scripts/daily-publish.mjs --draft",
+    "blog:expand": "node scripts/expand-calendar.mjs"
   },
   "dependencies": {
     "pg": "^8.18.0"
+  },
+  "devDependencies": {
+    "dotenv": "^17.3.1"
   }
 }

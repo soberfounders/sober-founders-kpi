@@ -1,37 +1,45 @@
 #!/usr/bin/env node
 /**
- * Autonomous Article Publishing Pipeline
+ * Daily Blog Publisher — Sober Founders
  *
- * Generates an SEO-optimized article aligned to the Sober Founders ICP,
- * publishes it to WordPress, and sets Yoast SEO fields.
+ * Automated pipeline: picks next topic from content calendar,
+ * generates an SEO-optimized article via OpenAI, validates against
+ * 19-check SEO scorecard, publishes to WordPress, and updates the calendar.
  *
  * Usage:
- *   node scripts/publish-article.mjs --topic "How to network without alcohol" --keyword "sober networking"
- *   node scripts/publish-article.mjs --topic "..." --keyword "..." --dry-run     # preview only
- *   node scripts/publish-article.mjs --topic "..." --keyword "..." --draft       # publish as draft
+ *   node scripts/daily-publish.mjs              # full publish
+ *   node scripts/daily-publish.mjs --dry-run    # generate + validate only
+ *   node scripts/daily-publish.mjs --draft      # publish as draft
+ *   node scripts/daily-publish.mjs --id 5       # publish specific calendar entry
  */
 
 import 'dotenv/config';
+import fs from 'node:fs';
+import path from 'node:path';
 import https from 'node:https';
+import { fileURLToPath } from 'node:url';
+import { validateArticle, formatReport, buildFeedbackPrompt } from './lib/seo-validator.mjs';
 
-// ── Config ──────────────────────────────────────────────────────────────────
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// ── Config (from environment — never hardcoded) ─────────────────────────────
 const WP_USER = process.env.WP_USERNAME || 'andrew';
 const WP_APP_PASS = process.env.WP_APP_PASSWORD;
 const WP_BASE = (process.env.WP_SITE_URL || 'https://soberfounders.org') + '/wp-json';
 const WP_AUTH = 'Basic ' + Buffer.from(`${WP_USER}:${WP_APP_PASS}`).toString('base64');
 
-if (!WP_APP_PASS) {
-  console.error('Missing WP_APP_PASSWORD in .env');
-  process.exit(1);
-}
-
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 
-if (!OPENAI_API_KEY) {
-  console.error('Missing OPENAI_API_KEY in .env');
-  process.exit(1);
-}
+const CALENDAR_PATH = path.join(__dirname, 'content-calendar.json');
+const LOGS_DIR = path.join(__dirname, 'logs');
+
+const MAX_RETRIES = 2;
+const QUEUE_LOW_THRESHOLD = 7;
+
+// ── Validate environment ────────────────────────────────────────────────────
+if (!OPENAI_API_KEY) { console.error('Missing OPENAI_API_KEY in .env'); process.exit(1); }
+if (!WP_APP_PASS) { console.error('Missing WP_APP_PASSWORD in .env'); process.exit(1); }
 
 // ── CLI args ────────────────────────────────────────────────────────────────
 function getArg(flag) {
@@ -39,17 +47,9 @@ function getArg(flag) {
   return idx !== -1 ? process.argv[idx + 1] : null;
 }
 
-const TOPIC = getArg('--topic');
-const KEYWORD = getArg('--keyword');
 const DRY_RUN = process.argv.includes('--dry-run');
 const AS_DRAFT = process.argv.includes('--draft');
-const SLUG = getArg('--slug');
-const CATEGORY = getArg('--category');
-
-if (!TOPIC || !KEYWORD) {
-  console.error('Usage: node scripts/publish-article.mjs --topic "..." --keyword "..." [--dry-run] [--draft] [--slug short-slug] [--category name]');
-  process.exit(1);
-}
+const SPECIFIC_ID = getArg('--id') ? parseInt(getArg('--id'), 10) : null;
 
 // ── HTTP helper ─────────────────────────────────────────────────────────────
 function httpJson(url, opts = {}) {
@@ -91,7 +91,7 @@ async function callOpenAI(systemPrompt, userPrompt, { temperature = 0.6, maxToke
   return text;
 }
 
-// ── System prompt (ICP + voice + SEO structure) ─────────────────────────────
+// ── System prompts (from publish-article.mjs) ───────────────────────────────
 const ARTICLE_SYSTEM_PROMPT = `You are a content writer for Sober Founders Inc. (soberfounders.org), a nonprofit that runs free masterminds and mentorship for sober entrepreneurs.
 
 ## ICP — Write for This Person
@@ -182,118 +182,227 @@ const META_SYSTEM_PROMPT = `You generate SEO metadata for soberfounders.org arti
 
 Return ONLY the JSON object, no explanation.`;
 
-// ── Main pipeline ───────────────────────────────────────────────────────────
-async function main() {
-  console.log(`Topic: ${TOPIC}`);
-  console.log(`Keyword: ${KEYWORD}`);
-  console.log(`Mode: ${DRY_RUN ? 'DRY-RUN' : AS_DRAFT ? 'DRAFT' : 'PUBLISH'}\n`);
+// ── Calendar helpers ────────────────────────────────────────────────────────
+function loadCalendar() {
+  return JSON.parse(fs.readFileSync(CALENDAR_PATH, 'utf-8'));
+}
 
-  // Step 1: Generate article
-  console.log('Generating article...');
-  const article = await callOpenAI(
-    ARTICLE_SYSTEM_PROMPT,
-    `Write an article about: "${TOPIC}"\n\nPrimary focus keyword: "${KEYWORD}"\n\nTarget audience: sober entrepreneurs and founders in recovery.`,
-    { temperature: 0.7, maxTokens: 6000 },
-  );
-  console.log(`  Article generated (${article.length} chars)\n`);
+function saveCalendar(calendar) {
+  fs.writeFileSync(CALENDAR_PATH, JSON.stringify(calendar, null, 2) + '\n');
+}
 
-  // Step 2: Generate SEO metadata
-  console.log('Generating SEO metadata...');
-  const metaRaw = await callOpenAI(
-    META_SYSTEM_PROMPT,
-    `Article topic: "${TOPIC}"\nFocus keyword: "${KEYWORD}"\n\nArticle excerpt (first 500 chars):\n${article.substring(0, 500)}`,
-    { temperature: 0.3, maxTokens: 200 },
-  );
+function pickNextEntry(entries) {
+  const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+  const queued = entries
+    .filter((e) => e.status === 'queued')
+    .sort((a, b) => (priorityOrder[a.priority] ?? 99) - (priorityOrder[b.priority] ?? 99));
+  return queued[0] || null;
+}
 
+// ── Logging ─────────────────────────────────────────────────────────────────
+function log(message) {
+  const timestamp = new Date().toISOString();
+  const line = `[${timestamp}] ${message}`;
+  console.log(line);
+
+  if (!fs.existsSync(LOGS_DIR)) fs.mkdirSync(LOGS_DIR, { recursive: true });
+  const logFile = path.join(LOGS_DIR, `daily-publish-${new Date().toISOString().slice(0, 10)}.log`);
+  fs.appendFileSync(logFile, line + '\n');
+}
+
+// ── Generate with validation + retry ────────────────────────────────────────
+async function generateWithValidation(topic, keyword) {
+  let feedback = '';
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (attempt > 0) log(`  Retry ${attempt}/${MAX_RETRIES}...`);
+
+    // Generate article
+    const userPrompt = `Write an article about: "${topic}"\n\nPrimary focus keyword: "${keyword}"\n\nTarget audience: sober entrepreneurs and founders in recovery.${feedback}`;
+    const article = await callOpenAI(ARTICLE_SYSTEM_PROMPT, userPrompt, { temperature: 0.7, maxTokens: 6000 });
+    log(`  Article generated (${article.length} chars, attempt ${attempt + 1})`);
+
+    // Generate metadata
+    const metaRaw = await callOpenAI(
+      META_SYSTEM_PROMPT,
+      `Article topic: "${topic}"\nFocus keyword: "${keyword}"\n\nArticle excerpt (first 500 chars):\n${article.substring(0, 500)}`,
+      { temperature: 0.3, maxTokens: 200 },
+    );
+
+    let meta;
+    try {
+      meta = JSON.parse(metaRaw.replace(/```json\n?/g, '').replace(/```\n?/g, ''));
+    } catch {
+      log(`  Failed to parse metadata: ${metaRaw.substring(0, 200)}`);
+      continue;
+    }
+
+    // Validate
+    const result = validateArticle(article, keyword, meta);
+    log(`  SEO Score: ${result.score}/${result.maxScore} (${result.passed ? 'PASS' : 'FAIL'})`);
+
+    if (result.passed) {
+      return { article, meta, result };
+    }
+
+    // Build feedback for retry
+    feedback = buildFeedbackPrompt(result);
+    log(`  Failing checks: ${result.checks.filter((c) => c.earned < c.points).map((c) => c.name).join(', ')}`);
+  }
+
+  // Final attempt — return whatever we have
+  log('  Max retries exceeded. Will publish as draft.');
+  const article = await callOpenAI(ARTICLE_SYSTEM_PROMPT,
+    `Write an article about: "${topic}"\n\nPrimary focus keyword: "${keyword}"\n\nTarget audience: sober entrepreneurs and founders in recovery.${feedback}`,
+    { temperature: 0.7, maxTokens: 6000 });
+  const metaRaw = await callOpenAI(META_SYSTEM_PROMPT,
+    `Article topic: "${topic}"\nFocus keyword: "${keyword}"\n\nArticle excerpt:\n${article.substring(0, 500)}`,
+    { temperature: 0.3, maxTokens: 200 });
   let meta;
   try {
     meta = JSON.parse(metaRaw.replace(/```json\n?/g, '').replace(/```\n?/g, ''));
   } catch {
-    console.error('Failed to parse SEO metadata:', metaRaw);
-    process.exit(1);
+    meta = { seo_title: topic.substring(0, 60), meta_description: topic.substring(0, 155), slug: keyword.toLowerCase().replace(/\s+/g, '-').substring(0, 60) };
   }
+  const result = validateArticle(article, keyword, meta);
+  return { article, meta, result, forceDraft: true };
+}
 
-  // CLI overrides
-  if (SLUG) meta.slug = SLUG;
+// ── WordPress publish ───────────────────────────────────────────────────────
+async function checkSlugExists(slug) {
+  const { body } = await httpJson(
+    `${WP_BASE}/wp/v2/posts?slug=${encodeURIComponent(slug)}&per_page=1`,
+    { headers: { Authorization: WP_AUTH } },
+  );
+  return Array.isArray(body) && body.length > 0;
+}
 
-  console.log(`  Title: ${meta.seo_title} (${meta.seo_title.length} chars)`);
-  console.log(`  Description: ${meta.meta_description} (${meta.meta_description.length} chars)`);
-  console.log(`  Slug: ${meta.slug}\n`);
-
-  if (DRY_RUN) {
-    console.log('=== DRY RUN — Article Preview ===\n');
-    console.log(article);
-    console.log('\n=== End Preview ===');
-    return;
-  }
-
-  // Step 3: Publish to WordPress
-  console.log('Publishing to WordPress...');
+async function publishToWordPress(article, meta, status) {
   const wpPayload = {
-    title: meta.seo_title.replace(/\s*\|.*$/, ''), // strip "| Sober Founders" from WP title
+    title: meta.seo_title.replace(/\s*\|.*$/, ''),
     content: article,
-    status: AS_DRAFT ? 'draft' : 'publish',
+    status,
     slug: meta.slug,
   };
 
-  // Resolve category ID if provided
-  if (CATEGORY) {
-    const { body: cats } = await httpJson(
-      `${WP_BASE}/wp/v2/categories?search=${encodeURIComponent(CATEGORY)}&per_page=5`,
-      { headers: { Authorization: WP_AUTH } },
-    );
-    if (Array.isArray(cats) && cats.length > 0) {
-      wpPayload.categories = [cats[0].id];
-      console.log(`  Category: ${cats[0].name} (ID: ${cats[0].id})`);
-    }
-  }
-
-  const { status, body } = await httpJson(`${WP_BASE}/wp/v2/posts`, {
+  const { status: httpStatus, body } = await httpJson(`${WP_BASE}/wp/v2/posts`, {
     method: 'POST',
     headers: { Authorization: WP_AUTH },
     body: wpPayload,
   });
 
-  if (status >= 400) {
-    console.error(`  WordPress error (${status}):`, JSON.stringify(body));
-    process.exit(1);
+  if (httpStatus >= 400) {
+    throw new Error(`WordPress error (${httpStatus}): ${JSON.stringify(body).substring(0, 300)}`);
   }
 
-  const postId = body.id;
-  const postLink = body.link;
-  console.log(`  Published: ID ${postId}`);
-  console.log(`  URL: ${postLink}\n`);
+  return { postId: body.id, postLink: body.link, slug: body.slug };
+}
 
-  // Step 4: Set Yoast SEO fields
-  console.log('Setting Yoast SEO fields...');
-  const { body: seoResult } = await httpJson(`${WP_BASE}/sober/v1/seo`, {
+async function setYoastSEO(postId, meta, keyword) {
+  const { body } = await httpJson(`${WP_BASE}/sober/v1/seo`, {
     method: 'POST',
     headers: { Authorization: WP_AUTH },
     body: {
       post_id: postId,
       title: meta.seo_title,
       description: meta.meta_description,
-      focus_keyword: KEYWORD,
+      focus_keyword: keyword,
     },
   });
-
-  if (seoResult?.success) {
-    console.log(`  SEO fields set: ${seoResult.updated.join(', ')}\n`);
-  } else {
-    console.error('  SEO write failed:', JSON.stringify(seoResult));
-  }
-
-  // Step 5: Verify
-  console.log('Verifying...');
-  const { body: verify } = await httpJson(
-    `${WP_BASE}/sober/v1/seo/${postId}`,
-    { headers: { Authorization: WP_AUTH } },
-  );
-  console.log(`  Title: ${verify.title}`);
-  console.log(`  Description: ${verify.description}`);
-  console.log(`  Focus keyword: ${verify.focus_keyword}`);
-
-  console.log(`\nDone. Post live at: ${postLink}`);
+  return body;
 }
 
-main().catch((err) => { console.error(err); process.exit(1); });
+// ── Main pipeline ───────────────────────────────────────────────────────────
+async function main() {
+  log('=== Daily Blog Publisher ===');
+  log(`Mode: ${DRY_RUN ? 'DRY-RUN' : AS_DRAFT ? 'DRAFT' : 'PUBLISH'}`);
+
+  // Load calendar
+  const calendar = loadCalendar();
+  const queuedCount = calendar.entries.filter((e) => e.status === 'queued').length;
+  log(`Calendar: ${calendar.entries.length} total, ${queuedCount} queued`);
+
+  // Pick entry
+  let entry;
+  if (SPECIFIC_ID) {
+    entry = calendar.entries.find((e) => e.id === SPECIFIC_ID);
+    if (!entry) { log(`Entry ID ${SPECIFIC_ID} not found`); process.exit(1); }
+    if (entry.status === 'published') { log(`Entry ID ${SPECIFIC_ID} already published`); process.exit(1); }
+  } else {
+    entry = pickNextEntry(calendar.entries);
+  }
+
+  if (!entry) {
+    log('No queued entries. Run expand-calendar.mjs to add more topics.');
+    process.exit(0);
+  }
+
+  log(`Selected: [${entry.id}] "${entry.topic}"`);
+  log(`Keyword: "${entry.keyword}" | Priority: ${entry.priority} | Category: ${entry.category}`);
+
+  // Generate + validate
+  log('Generating article with SEO validation...');
+  const { article, meta, result, forceDraft } = await generateWithValidation(entry.topic, entry.keyword);
+
+  log('\n' + formatReport(result) + '\n');
+  log(`Meta title: ${meta.seo_title} (${meta.seo_title.length} chars)`);
+  log(`Meta desc: ${meta.meta_description} (${meta.meta_description.length} chars)`);
+  log(`Slug: ${meta.slug}`);
+
+  if (DRY_RUN) {
+    log('\n=== DRY RUN — Article Preview ===');
+    console.log(article);
+    log('=== End Preview ===');
+    return;
+  }
+
+  // Check slug collision
+  const slugExists = await checkSlugExists(meta.slug);
+  if (slugExists) {
+    meta.slug = meta.slug + '-' + Date.now().toString(36).slice(-4);
+    log(`Slug collision — using: ${meta.slug}`);
+  }
+
+  // Publish
+  const publishStatus = (AS_DRAFT || forceDraft) ? 'draft' : 'publish';
+  if (forceDraft && !AS_DRAFT) {
+    log('SEO validation failed after retries — publishing as DRAFT for manual review');
+  }
+
+  log(`Publishing to WordPress as ${publishStatus}...`);
+  const { postId, postLink, slug } = await publishToWordPress(article, meta, publishStatus);
+  log(`Published: ID ${postId} | ${postLink}`);
+
+  // Set Yoast SEO
+  log('Setting Yoast SEO fields...');
+  const seoResult = await setYoastSEO(postId, meta, entry.keyword);
+  if (seoResult?.success) {
+    log(`SEO fields set: ${seoResult.updated.join(', ')}`);
+  } else {
+    log(`SEO write warning: ${JSON.stringify(seoResult).substring(0, 200)}`);
+  }
+
+  // Update calendar
+  entry.status = 'published';
+  entry.publishedDate = new Date().toISOString().slice(0, 10);
+  entry.wpPostId = postId;
+  entry.wpSlug = slug;
+  entry.seoScore = `${result.score}/${result.maxScore}`;
+  calendar.meta.totalPublished += 1;
+  saveCalendar(calendar);
+  log('Calendar updated.');
+
+  // Check queue level
+  const remainingQueued = calendar.entries.filter((e) => e.status === 'queued').length;
+  if (remainingQueued < QUEUE_LOW_THRESHOLD) {
+    log(`Queue low (${remainingQueued} remaining). Run: node scripts/expand-calendar.mjs`);
+  }
+
+  log(`\nDone. Post ${publishStatus === 'publish' ? 'live' : 'drafted'} at: ${postLink}`);
+}
+
+main().catch((err) => {
+  log(`FATAL: ${err.message}`);
+  console.error(err);
+  process.exit(1);
+});
