@@ -55,6 +55,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
     background: #0a0a0a !important;
     margin: 0; padding: 0;
     overflow-x: hidden;
+    scroll-behavior: smooth;
   }
 
   /* ── Canvas scroll animation background ── */
@@ -669,7 +670,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
         <div class="sf-ev-tier-icon sf-ev-tier-icon-green">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><path d="M144 0a80 80 0 1 1 0 160A80 80 0 1 1 144 0zM512 0a80 80 0 1 1 0 160A80 80 0 1 1 512 0zM0 298.7C0 239.8 47.8 192 106.7 192h42.7c15.9 0 31 3.5 44.6 9.7c-1.3 7.2-1.9 14.7-1.9 22.3c0 38.2 16.8 72.5 43.3 96H21.3C9.6 320 0 310.4 0 298.7zM405.3 320H235.4c26.5-23.5 43.3-57.8 43.3-96c0-7.6-.7-15-1.9-22.3c13.6-6.3 28.7-9.7 44.6-9.7h42.7C423.2 192 471 239.8 471 298.7c0 11.8-9.6 21.3-21.3 21.3h-44.3zM320 256a96 96 0 1 0 0-192 96 96 0 1 0 0 192zm-94.8 32c-47 0-87.9 26.2-108.8 64.8C100.2 378.7 92.9 400.8 86.5 432H553.5c-6.4-31.2-13.7-53.3-29.9-79.2C502.7 314.2 461.8 288 414.8 288H225.2z"/></svg>
         </div>
-        <h3>Thursday Mastermind</h3>
+        <h3>Thursday Business Mastermind</h3>
         <div class="sf-ev-tier-schedule">Every Thursday &bull; 11:00 AM ET</div>
         <div class="sf-ev-tier-price">Free</div>
         <div class="sf-ev-tier-price-note">Open to all sober entrepreneurs</div>
@@ -728,7 +729,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
   <div class="sf-ev-section-sm sf-ev-pad" style="padding-bottom: 80px;">
     <div class="sf-ev-how">
       <div class="sf-ev-heading" style="margin-bottom: 40px;">
-        <h2>How a Mastermind Works</h2>
+        <h2>How a Business Mastermind Works</h2>
         <p>Each session follows a simple, powerful format designed to give you real answers from people who've been there.</p>
       </div>
       <div class="sf-ev-steps">
@@ -806,7 +807,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
     <span class="sf-ev-sep">|</span>
     <a href="/our-story/">Our Story</a>
     <span class="sf-ev-sep">|</span>
-    <a href="/weekly-mastermind-group/">Weekly Mastermind</a>
+    <a href="/weekly-mastermind-group/">Weekly Business Mastermind</a>
     <span class="sf-ev-sep">|</span>
     <a href="/phoenix-forum-registration/">Phoenix Forum</a>
     <span class="sf-ev-sep">|</span>
@@ -824,8 +825,8 @@ const PAGE_CONTENT = `<!-- wp:html -->
     "@context": "https://schema.org",
     "@type": "EventSeries",
     "@id": "https://www.soberfounders.org/events/#event-series",
-    "name": "Sober Founders Weekly Mastermind Sessions",
-    "description": "Free recurring online mastermind sessions for entrepreneurs in recovery. Held every Tuesday and Thursday at 12 PM ET.",
+    "name": "Sober Founders Weekly Business Mastermind Sessions",
+    "description": "Free recurring online business mastermind sessions for entrepreneurs in recovery. Held every Tuesday and Thursday at 12 PM ET.",
     "url": "https://www.soberfounders.org/events/",
     "eventAttendanceMode": "https://schema.org/OnlineEventAttendanceMode",
     "eventStatus": "https://schema.org/EventScheduled",
@@ -837,8 +838,8 @@ const PAGE_CONTENT = `<!-- wp:html -->
   {
     "@context": "https://schema.org",
     "@type": "Event",
-    "name": "Sober Founders Thursday Mastermind",
-    "description": "Free weekly online mastermind for sober entrepreneurs. Open to all — no application required.",
+    "name": "Sober Founders Thursday Business Mastermind",
+    "description": "Free weekly online business mastermind for sober entrepreneurs. Open to all — no application required.",
     "eventAttendanceMode": "https://schema.org/OnlineEventAttendanceMode",
     "eventStatus": "https://schema.org/EventScheduled",
     "isAccessibleForFree": true,
@@ -852,8 +853,8 @@ const PAGE_CONTENT = `<!-- wp:html -->
   {
     "@context": "https://schema.org",
     "@type": "Event",
-    "name": "Sober Founders Tuesday Mastermind — All Our Affairs",
-    "description": "Free weekly mastermind for verified sober founders with $250K+ revenue, 2+ employees, and 1+ year sober.",
+    "name": "Sober Founders Tuesday Business Mastermind — All Our Affairs",
+    "description": "Free weekly business mastermind for verified sober founders with $250K+ revenue, 2+ employees, and 1+ year sober.",
     "eventAttendanceMode": "https://schema.org/OnlineEventAttendanceMode",
     "eventStatus": "https://schema.org/EventScheduled",
     "isAccessibleForFree": true,
@@ -867,7 +868,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
 ]
 </script>
 
-<!-- Scroll-synced canvas animation (vanilla JS port of HeroScroll) -->
+<!-- Scroll-synced canvas animation (smooth lerp-based rAF loop) -->
 <script>
 (function() {
   var video = document.getElementById('sf-scroll-video');
@@ -879,13 +880,15 @@ const PAGE_CONTENT = `<!-- wp:html -->
   var ctx = canvas.getContext('2d');
   if (!ctx) return;
   var ready = false;
-  var ticking = false;
-  var lastTime = -1;
+  var currentTime = 0;   /* smoothed time (lerped toward target) */
+  var targetTime = 0;    /* where scroll says we should be */
+  var currentDark = 0.25;
+  var targetDark = 0.25;
+  var LERP = 0.08;       /* smoothing factor — lower = silkier */
 
   function resize() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
-    if (ready) drawFrame();
   }
 
   function drawFrame() {
@@ -902,37 +905,45 @@ const PAGE_CONTENT = `<!-- wp:html -->
     ctx.drawImage(video, sx, sy, sw, sh, 0, 0, cw, ch);
   }
 
+  /* Continuous rAF loop — lerps toward scroll target every frame */
+  function tick() {
+    if (!ready) { requestAnimationFrame(tick); return; }
+
+    /* Lerp the video time smoothly toward the scroll target */
+    var diff = targetTime - currentTime;
+    if (Math.abs(diff) > 0.001) {
+      currentTime += diff * LERP;
+      video.currentTime = currentTime;
+    }
+
+    /* Lerp the overlay darkness */
+    var darkDiff = targetDark - currentDark;
+    if (Math.abs(darkDiff) > 0.001) {
+      currentDark += darkDiff * LERP;
+      overlay.style.backgroundColor = 'rgba(10,10,10,' + currentDark.toFixed(3) + ')';
+    }
+
+    requestAnimationFrame(tick);
+  }
+
   function onScroll() {
-    if (!ready || ticking) return;
-    ticking = true;
-    requestAnimationFrame(function() {
-      var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-      var maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-      if (maxScroll <= 0) { ticking = false; return; }
-      var progress = Math.min(1, scrollTop / maxScroll);
+    var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    var maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+    if (maxScroll <= 0) return;
+    var progress = Math.min(1, scrollTop / maxScroll);
 
-      /* Video plays through full page scroll — bottle at top, phoenix at bottom */
-      var eased = Math.pow(progress, 1.4);
-      var targetTime = eased * video.duration;
+    /* Video plays through full page scroll — bottle at top, phoenix at bottom */
+    var eased = Math.pow(progress, 1.4);
+    targetTime = eased * video.duration;
 
-      /* Only seek if time changed enough (avoid redundant seeks) */
-      if (Math.abs(targetTime - lastTime) > 0.03) {
-        lastTime = targetTime;
-        video.currentTime = targetTime;
-      }
-
-      /* Overlay: light at top (see bottle), darker mid-scroll, settles for content */
-      var darkness;
-      if (progress < 0.1) {
-        darkness = 0.25;
-      } else if (progress < 0.4) {
-        darkness = 0.25 + ((progress - 0.1) / 0.3) * 0.25;
-      } else {
-        darkness = 0.5;
-      }
-      overlay.style.backgroundColor = 'rgba(10,10,10,' + darkness + ')';
-      ticking = false;
-    });
+    /* Overlay: light at top (see bottle), darker mid-scroll, settles for content */
+    if (progress < 0.1) {
+      targetDark = 0.25;
+    } else if (progress < 0.4) {
+      targetDark = 0.25 + ((progress - 0.1) / 0.3) * 0.25;
+    } else {
+      targetDark = 0.5;
+    }
   }
 
   video.addEventListener('seeked', drawFrame);
@@ -942,9 +953,12 @@ const PAGE_CONTENT = `<!-- wp:html -->
     ready = true;
     resize();
     video.currentTime = 0;
+    currentTime = 0;
+    targetTime = 0;
     drawFrame();
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', resize);
+    requestAnimationFrame(tick);
   }
 
   if (video.readyState >= 1) init();
@@ -956,7 +970,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
 <div id="sf-apply-modal" class="sf-modal-backdrop" onclick="if(event.target===this)this.classList.remove('sf-modal-open')">
   <div class="sf-modal">
     <button class="sf-modal-close" onclick="document.getElementById('sf-apply-modal').classList.remove('sf-modal-open')">&times;</button>
-    <h3>Apply for Tuesday Mastermind</h3>
+    <h3>Apply for Tuesday Business Mastermind</h3>
     <p>Fill out a quick application and we&rsquo;ll reach out to schedule a verification call.</p>
     <div id="sf-hs-form"></div>
   </div>
