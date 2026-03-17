@@ -1,7 +1,6 @@
 import React from 'react';
 import { Bell, Menu, Search, Settings, User } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient';
-import { DEMO_MODE } from '../lib/env';
+import { supabase, isDemoMode as DEMO_MODE } from '../lib/supabaseClient';
 
 const Header = ({ activeTab, onMenuClick, isMobile = false }) => {
   const triggerRefresh = async () => {
