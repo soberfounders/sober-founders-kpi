@@ -8,7 +8,11 @@
       "Glob(*)",
       "Grep(*)",
       "WebFetch(domain:soberfounders.org)",
-      "WebFetch(domain:www.soberfounders.org)"
+      "WebFetch(domain:www.soberfounders.org)",
+      "WebFetch(domain:legacy.ypo.org)",
+      "WebFetch(domain:eonetwork.org)",
+      "WebFetch(domain:www.vistage.com)",
+      "WebSearch"
     ]
   }
 }
