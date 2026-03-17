@@ -635,7 +635,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
   <div class="sf-section">
     <div class="sf-definition">
       <h2>What is Sober Founders?</h2>
-      <p>Sober Founders is a 501(c)(3) nonprofit community for entrepreneurs in recovery from addiction. We provide free weekly mastermind sessions, peer support, and the Phoenix Forum&mdash;an exclusive peer advisory board for founders with $1M+ in annual revenue and 1+ year of sobriety. Our members represent over $1 billion in combined revenue across industries including technology, real estate, healthcare, and professional services.</p>
+      <p>Sober Founders is a 501(c)(3) nonprofit community for entrepreneurs in recovery from addiction. We provide free weekly mastermind sessions, peer support, and the Phoenix Forum&mdash;an exclusive peer advisory board for founders with $1M+ in annual revenue and 1+ year of sobriety. Our members represent over $500 million in combined revenue across industries including technology, real estate, healthcare, and professional services.</p>
       <p>Founded in 2020, Sober Founders is the largest peer community at the intersection of entrepreneurship and recovery. We believe sobriety is a competitive advantage, not a limitation&mdash;and our members prove it every day.</p>
     </div>
   </div>
@@ -655,7 +655,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
           <div class="sf-stat-icon">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><path d="M64 64C28.7 64 0 92.7 0 128V384c0 35.3 28.7 64 64 64H512c35.3 0 64-28.7 64-64V128c0-35.3-28.7-64-64-64H64zm64 160c-8.8 0-16-7.2-16-16s7.2-16 16-16h16c44.2 0 80 35.8 80 80v16c0 8.8-7.2 16-16 16s-16-7.2-16-16V272c0-26.5-21.5-48-48-48H128zm224-16c0-8.8 7.2-16 16-16h16c26.5 0 48 21.5 48 48v16c0 8.8-7.2 16-16 16s-16-7.2-16-16V256c0-8.8-7.2-16-16-16H368c-8.8 0-16-7.2-16-16zm-160 32a64 64 0 1 1 128 0 64 64 0 1 1-128 0zM288 160a80 80 0 1 1 0 160 80 80 0 1 1 0-160z"/></svg>
           </div>
-          <div class="sf-stat-num">$1B+</div>
+          <div class="sf-stat-num">$500M+</div>
           <div class="sf-stat-label">Combined Member Revenue</div>
         </div>
         <div class="sf-stat">
