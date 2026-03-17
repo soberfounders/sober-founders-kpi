@@ -484,43 +484,6 @@ const PAGE_CONTENT = `<!-- wp:html -->
     border-top: 1px solid #f2f4f7;
   }
 
-  /* ── Final CTA ── */
-  .sf-ev-cta {
-    background: linear-gradient(135deg, #101828 0%, #1a2940 50%, #0d3b2e 100%);
-    border-radius: 20px;
-    padding: 80px 24px;
-    text-align: center;
-    max-width: 1100px;
-    margin: 0 auto;
-    position: relative;
-    overflow: hidden;
-  }
-  .sf-ev-cta::before {
-    content: "";
-    position: absolute; inset: 0;
-    background:
-      radial-gradient(circle at 30% 40%, rgba(0,178,134,0.15) 0%, transparent 50%),
-      radial-gradient(circle at 70% 60%, rgba(0,178,134,0.1) 0%, transparent 50%);
-    pointer-events: none;
-  }
-  .sf-ev-cta h2 {
-    font-family: "DM Serif Display", serif;
-    font-size: clamp(1.6rem, 3.5vw, 2.4rem);
-    font-weight: 400;
-    color: #ffffff;
-    margin: 0 0 16px;
-    position: relative;
-  }
-  .sf-ev-cta p {
-    color: rgba(255,255,255,0.7);
-    font-size: 1.1rem;
-    max-width: 540px;
-    margin: 0 auto 32px;
-    line-height: 1.7;
-    position: relative;
-  }
-  .sf-ev-cta .sf-ev-hero-actions { position: relative; }
-
   /* ── Divider ── */
   .sf-ev-divider {
     display: flex;
@@ -604,7 +567,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><path d="M144 0a80 80 0 1 1 0 160A80 80 0 1 1 144 0zM512 0a80 80 0 1 1 0 160A80 80 0 1 1 512 0zM0 298.7C0 239.8 47.8 192 106.7 192h42.7c15.9 0 31 3.5 44.6 9.7c-1.3 7.2-1.9 14.7-1.9 22.3c0 38.2 16.8 72.5 43.3 96H21.3C9.6 320 0 310.4 0 298.7zM405.3 320H235.4c26.5-23.5 43.3-57.8 43.3-96c0-7.6-.7-15-1.9-22.3c13.6-6.3 28.7-9.7 44.6-9.7h42.7C423.2 192 471 239.8 471 298.7c0 11.8-9.6 21.3-21.3 21.3h-44.3zM320 256a96 96 0 1 0 0-192 96 96 0 1 0 0 192zm-94.8 32c-47 0-87.9 26.2-108.8 64.8C100.2 378.7 92.9 400.8 86.5 432H553.5c-6.4-31.2-13.7-53.3-29.9-79.2C502.7 314.2 461.8 288 414.8 288H225.2z"/></svg>
         </div>
         <h3>Thursday Mastermind</h3>
-        <div class="sf-ev-tier-schedule">Every Thursday &bull; 12:00 PM ET</div>
+        <div class="sf-ev-tier-schedule">Every Thursday &bull; 11:00 AM ET</div>
         <p>Free and open to every sober entrepreneur. No revenue minimum, no interview, no gatekeeping.</p>
         <ul class="sf-ev-tier-reqs">
           <li>Sober &amp; own a business</li>
@@ -639,7 +602,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><path d="M309 106c11.4-7 19-19.7 19-34c0-22.1-17.9-40-40-40s-40 17.9-40 40c0 14.4 7.6 27 19 34L209.7 220.6c-9.1 18.2-32.7 23.4-48.6 10.7L72 160c5-6.7 8-15 8-24c0-22.1-17.9-40-40-40S0 113.9 0 136s17.9 40 40 40c.2 0 .5 0 .7 0L86.4 427.4c5.5 30.4 32 52.6 63 52.6H426.6c30.9 0 57.5-22.1 63-52.6L535.3 176c.2 0 .5 0 .7 0c22.1 0 40-17.9 40-40s-17.9-40-40-40s-40 17.9-40 40c0 9 3 17.3 8 24l-89.1 71.3c-15.9 12.7-39.5 7.5-48.6-10.7L309 106z"/></svg>
         </div>
         <h3>Phoenix Forum</h3>
-        <div class="sf-ev-tier-schedule">Weekly &bull; Curated Schedule</div>
+        <div class="sf-ev-tier-schedule">Monthly &bull; Curated Schedule</div>
         <p>An exclusive peer advisory board for high-revenue founders. Intimate groups of up to 10.</p>
         <ul class="sf-ev-tier-reqs">
           <li>$1M+ annual revenue</li>
@@ -724,18 +687,6 @@ const PAGE_CONTENT = `<!-- wp:html -->
         <p>Our private WhatsApp group keeps the conversation going between sessions. Share wins, ask for advice, and stay connected with founders who get it.</p>
         <a href="https://chat.whatsapp.com/HfxeP3enQtN3oGFnwVOH8D" class="sf-ev-btn sf-ev-btn-wa" target="_blank" rel="noopener">Join the WhatsApp Group</a>
         <p class="sf-ev-community-note">Zero solicitation policy. If you join and start spamming, you will be removed immediately. This is about community and connection, not selling.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══ Final CTA ═══ -->
-  <div style="max-width:1100px;margin:0 auto;padding:0 24px 60px;">
-    <div class="sf-ev-cta">
-      <h2>Ready to Stop Building Alone?</h2>
-      <p>Your next breakthrough might come from someone who's walked the same path. Show up, be real, and watch what happens.</p>
-      <div class="sf-ev-hero-actions">
-        <a href="#sf-calendar" class="sf-ev-btn sf-ev-btn-primary">Register for a Free Event</a>
-        <a href="/phoenix-forum-2nd-group/" class="sf-ev-btn sf-ev-btn-outline">Explore Phoenix Forum</a>
       </div>
     </div>
   </div>

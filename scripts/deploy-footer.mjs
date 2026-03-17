@@ -77,8 +77,8 @@ const FOOTER_HTML = `
     pointer-events: none;
   }
   .sf-footer-trust img {
-    width: 52px;
-    height: 52px;
+    width: 72px;
+    height: 72px;
     flex-shrink: 0;
     position: relative;
   }
@@ -186,7 +186,7 @@ const FOOTER_HTML = `
   <!-- Trust bar -->
   <div class="sf-footer-trust">
     <img src="https://soberfounders.org/wp-content/uploads/2025/09/candid-seal-silver-2025.png" alt="Candid Silver Transparency Seal 2025" />
-    <p><strong>501(c)(3) Nonprofit</strong> &middot; Candid Silver Seal &mdash; the highest transparency rating a first-year nonprofit can earn. Every dollar is accounted for.</p>
+    <p><strong>501(c)(3) Nonprofit</strong> &middot; Candid Silver Seal &mdash; the highest transparency rating a first-year nonprofit can earn. Every dollar is spent on the mission.</p>
   </div>
 
   <!-- Footer columns -->
