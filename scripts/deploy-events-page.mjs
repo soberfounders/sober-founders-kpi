@@ -56,6 +56,9 @@ const PAGE_CONTENT = `<!-- wp:html -->
     margin: 0; padding: 0;
     overflow-x: hidden;
   }
+  /* Kill Astra theme's native smooth scroll — it fights with Lenis */
+  html { scroll-behavior: auto !important; }
+  #ast-scroll-top { display: none !important; }
 
   /* ── Canvas scroll animation background ── */
   #sf-scroll-canvas {
@@ -990,23 +993,26 @@ const PAGE_CONTENT = `<!-- wp:html -->
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/ScrollTrigger.min.js"></script>
 <script>
 (function() {
-  /* ── Lenis smooth scroll (mirrors homepage SmoothScroll.tsx) ── */
+  /* ── Kill Astra theme scroll handlers that fight with Lenis ── */
+  document.documentElement.style.scrollBehavior = 'auto';
+  if (window.astra) { window.astra.is_scroll_to_id = ''; window.astra.is_scroll_to_top = ''; }
+
+  /* ── Lenis smooth scroll (synced to GSAP ticker for frame-perfect timing) ── */
+  gsap.registerPlugin(ScrollTrigger);
   var lenis = new Lenis({
     duration: 1.0,
     easing: function(t) { return Math.min(1, 1.001 - Math.pow(2, -10 * t)); },
     touchMultiplier: 1.5
   });
   lenis.on('scroll', ScrollTrigger.update);
-  function raf(time) { lenis.raf(time); requestAnimationFrame(raf); }
-  requestAnimationFrame(raf);
+  gsap.ticker.add(function(time) { lenis.raf(time * 1000); });
+  gsap.ticker.lagSmoothing(0);
 
   /* ── Pre-loaded image frame animation (mirrors homepage HeroScroll.tsx) ── */
   var canvas = document.getElementById('sf-scroll-canvas');
   var overlay = document.getElementById('sf-scroll-overlay');
   if (!canvas || !overlay) return;
   if (window.innerWidth < 768) return;
-
-  gsap.registerPlugin(ScrollTrigger);
 
   var ctx = canvas.getContext('2d');
   if (!ctx) return;
