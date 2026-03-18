@@ -46,7 +46,7 @@ const headers = {
 // Page content — Full events page redesign (dark cinematic theme)
 // ---------------------------------------------------------------------------
 const PAGE_CONTENT = `<!-- wp:html -->
-<!-- SF Events Page — deployed by deploy-events-page.mjs -->
+<!-- SF Events Page — CSS (do not edit in Elementor, edit via deploy script) -->
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap');
 
@@ -711,16 +711,15 @@ const PAGE_CONTENT = `<!-- wp:html -->
   .sf-modal .hs-form a { color: #00b286 !important; }
 </style>
 
-<!-- Canvas renders scroll-synced frames -->
+<!-- Canvas + overlay (infrastructure — do not edit) -->
 <canvas id="sf-scroll-canvas"></canvas>
 <div id="sf-scroll-overlay"></div>
-
-<!-- Mobile fallback: static image -->
 <img class="sf-ev-mobile-bg" src="https://soberfounders.org/wp-content/uploads/2026/03/phoenix-static.jpg" alt="" />
+<!-- /wp:html -->
 
+<!-- wp:html -->
+<!-- ═══ HERO INTRO — edit heading & body copy below ═══ -->
 <div class="sf-ev">
-
-  <!-- ═══ Hero Intro ═══ -->
   <div class="sf-ev-hero">
     <h1>Business Masterminds for<br><span class="sf-accent">Entrepreneurs in Recovery</span></h1>
     <p class="sf-ev-hero-sub">Running a business in recovery means facing challenges most people don&rsquo;t understand &mdash; the stress that used to end in a drink, the loneliness of leading sober in a drinking culture, the days when staying clean and staying profitable feel like competing goals. You don&rsquo;t have to figure it out alone.</p>
@@ -730,8 +729,12 @@ const PAGE_CONTENT = `<!-- wp:html -->
       <a href="#sf-how-it-works" class="sf-ev-btn sf-ev-btn-outline">See How It Works</a>
     </div>
   </div>
+</div>
+<!-- /wp:html -->
 
-  <!-- ═══ Founder Quote ═══ -->
+<!-- wp:html -->
+<!-- ═══ FOUNDER QUOTE — edit quote text below ═══ -->
+<div class="sf-ev">
   <div class="sf-ev-section" style="padding-top: 20px; padding-bottom: 60px;">
     <div class="sf-ev-quote">
       <img src="http://soberfounders.org/wp-content/uploads/2026/03/andrew-lassise-headshot.jpg" alt="Andrew Lassise, Founder" />
@@ -741,8 +744,12 @@ const PAGE_CONTENT = `<!-- wp:html -->
       </div>
     </div>
   </div>
+</div>
+<!-- /wp:html -->
 
-  <!-- ═══ Three Ways to Get Involved ═══ -->
+<!-- wp:html -->
+<!-- ═══ THREE TIERS — edit tier names, schedules, requirements below ═══ -->
+<div class="sf-ev">
   <div class="sf-ev-section" style="padding-top: 0;">
     <div class="sf-ev-heading">
       <h2>Three Ways to Get Involved</h2>
@@ -810,8 +817,12 @@ const PAGE_CONTENT = `<!-- wp:html -->
 
     </div>
   </div>
+</div>
+<!-- /wp:html -->
 
-  <!-- ═══ How It Works ═══ -->
+<!-- wp:html -->
+<!-- ═══ WHAT HAPPENS IN A SESSION — edit steps & descriptions below ═══ -->
+<div class="sf-ev">
   <div class="sf-ev-section-sm sf-ev-pad" style="padding-bottom: 80px;" id="sf-how-it-works">
     <div class="sf-ev-how">
       <div class="sf-ev-heading" style="margin-bottom: 40px;">
@@ -842,8 +853,12 @@ const PAGE_CONTENT = `<!-- wp:html -->
       </div>
     </div>
   </div>
+</div>
+<!-- /wp:html -->
 
-  <!-- ═══ Calendar ═══ -->
+<!-- wp:html -->
+<!-- ═══ CALENDAR — Luma embed ═══ -->
+<div class="sf-ev">
   <div class="sf-ev-pad" style="padding-bottom: 80px;" id="sf-calendar">
     <div class="sf-ev-calendar">
       <div class="sf-ev-heading" style="margin-bottom: 36px; position: relative;">
@@ -864,8 +879,12 @@ const PAGE_CONTENT = `<!-- wp:html -->
       </div>
     </div>
   </div>
+</div>
+<!-- /wp:html -->
 
-  <!-- ═══ Divider ═══ -->
+<!-- wp:html -->
+<!-- ═══ WHATSAPP COMMUNITY — edit copy below ═══ -->
+<div class="sf-ev">
   <div style="padding: 0 0 60px;">
     <div class="sf-ev-divider">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M256 48a208 208 0 1 1 0 416 208 208 0 1 1 0-416zm0 464A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209c9.4-9.4 9.4-24.6 0-33.9s-24.6-9.4-33.9 0l-111 111-47-47c-9.4-9.4-24.6-9.4-33.9 0s-9.4 24.6 0 33.9l64 64c9.4 9.4 24.6 9.4 33.9 0L369 209z"/></svg>
@@ -901,10 +920,11 @@ const PAGE_CONTENT = `<!-- wp:html -->
     <span class="sf-ev-sep">|</span>
     <a href="/blog/">Blog</a>
   </div>
-
 </div>
+<!-- /wp:html -->
 
-<!-- Event Schema (Weekly Sessions) -->
+<!-- wp:html -->
+<!-- Schema + Animation Scripts (infrastructure — do not edit in Elementor) -->
 <script type="application/ld+json">
 [
   {
