@@ -6,7 +6,7 @@ import "../app/test/homepage.css";
 export default function HomepageContent() {
   return (
     <div className="sf-page">
-      {/* â”€â”€â”€ WHAT IS SOBER FOUNDERS? â”€â”€â”€ */}
+      {/* --- WHAT IS SOBER FOUNDERS? --- */}
       <div className="sf-section">
         <div className="sf-definition">
           <h2>What is Sober Founders?</h2>
@@ -14,21 +14,21 @@ export default function HomepageContent() {
             Sober Founders is a 501(c)(3) nonprofit community for
             entrepreneurs in recovery from addiction. Founded in 2024 after a
             successful exit, our creator knew there had to be a way to bridge
-            the gap between sobriety and business&mdash;and set out to dedicate
+            the gap between sobriety and business -and set out to dedicate
             his next chapter to bringing together like-minded, successful sober
             entrepreneurs.
           </p>
           <p>
             Our members represent over $500 million in combined revenue across
             all industries. We provide free weekly mastermind sessions, peer
-            support, and the Phoenix Forum&mdash;an exclusive peer advisory
+            support, and the Phoenix Forum -an exclusive peer advisory
             board for founders with $1M+ in annual revenue and 1+ year of
             sobriety.
           </p>
         </div>
       </div>
 
-      {/* â”€â”€â”€ STATS â”€â”€â”€ */}
+      {/* --- STATS --- */}
       <div className="sf-section-sm sf-pad-wrap">
         <div className="sf-stats-section">
           <div className="sf-stats-grid">
@@ -94,7 +94,7 @@ export default function HomepageContent() {
         </div>
       </div>
 
-      {/* â”€â”€â”€ DIVIDER â”€â”€â”€ */}
+      {/* --- DIVIDER --- */}
       <div style={{ padding: "40px 0" }}>
         <div className="sf-divider">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
@@ -103,13 +103,13 @@ export default function HomepageContent() {
         </div>
       </div>
 
-      {/* â”€â”€â”€ HOW WE SUPPORT FOUNDERS â”€â”€â”€ */}
+      {/* --- HOW WE SUPPORT FOUNDERS --- */}
       <div className="sf-section">
         <div className="sf-services-heading">
           <h2>How We Support Founders</h2>
           <p>
-            Four tiers of community&mdash;from open masterminds to an exclusive
-            peer advisory board&mdash;so you can find your fit.
+            Four tiers of community -from open masterminds to an exclusive
+            peer advisory board -so you can find your fit.
           </p>
         </div>
 
@@ -122,7 +122,7 @@ export default function HomepageContent() {
                 Open to any sober entrepreneur. Show up, share what&apos;s real,
                 and get honest feedback from peers who understand the
                 intersection of business pressure and recovery. No application
-                required&mdash;just be sober and own a business.
+                required -just be sober and own a business.
               </p>
               <span className="sf-tag sf-tag-free">Free &bull; Open to All</span>
               <a href="/events/" className="sf-svc-card-link">
@@ -138,7 +138,7 @@ export default function HomepageContent() {
               <p>
                 For sober entrepreneurs with 2+ full-time employees and over a
                 year of sobriety working the 12 steps. A structured mastermind
-                where business growth and step work go hand in hand&mdash;because
+                where business growth and step work go hand in hand -because
                 scaling a company and maintaining recovery require the same
                 rigorous honesty.
               </p>
@@ -156,7 +156,7 @@ export default function HomepageContent() {
               <div className="sf-svc-card-num">03</div>
               <h3>Private WhatsApp Community</h3>
               <p>
-                Get instant access to our private WhatsApp group&mdash;a 24/7
+                Get instant access to our private WhatsApp group -a 24/7
                 lifeline of sober entrepreneurs who get it. Share wins, ask for
                 advice, and stay connected between meetings. Real-time support
                 from people who understand both the grind and the recovery.
@@ -179,7 +179,7 @@ export default function HomepageContent() {
                 An exclusive peer advisory board for sober entrepreneurs
                 generating $1M+ in revenue with multiple years of sobriety.
                 Intimate groups of up to 10 members meet weekly for curated,
-                high-trust discussions around growth, sobriety, and life&mdash;because
+                high-trust discussions around growth, sobriety, and life -because
                 at this level, the stakes are higher and the isolation is real.
               </p>
               <span className="sf-tag sf-tag-paid">
@@ -193,7 +193,7 @@ export default function HomepageContent() {
         </div>
       </div>
 
-      {/* â”€â”€â”€ TESTIMONIALS â”€â”€â”€ */}
+      {/* --- TESTIMONIALS --- */}
       <div className="sf-section">
         <div className="sf-testimonials-bg">
           <div className="sf-testimonials-heading">
@@ -258,7 +258,7 @@ export default function HomepageContent() {
         </div>
       </div>
 
-      {/* â”€â”€â”€ BENEFITS â”€â”€â”€ */}
+      {/* --- BENEFITS --- */}
       <div className="sf-section">
         <div className="sf-services-heading">
           <h2>Why Founders Choose Us</h2>
@@ -298,7 +298,7 @@ export default function HomepageContent() {
         </div>
       </div>
 
-      {/* â”€â”€â”€ TRUST â”€â”€â”€ */}
+      {/* --- TRUST --- */}
       <div className="sf-section-sm sf-pad-wrap">
         <div className="sf-trust">
           <img
@@ -315,7 +315,7 @@ export default function HomepageContent() {
         </div>
       </div>
 
-      {/* â”€â”€â”€ FINAL CTA â”€â”€â”€ */}
+      {/* --- FINAL CTA --- */}
       <div className="sf-section sf-pad-wrap">
         <div className="sf-cta-section">
           <h2>Your Next Chapter Starts Here</h2>
@@ -334,7 +334,7 @@ export default function HomepageContent() {
         </div>
       </div>
 
-      {/* â”€â”€â”€ CLOSING TAGLINE â”€â”€â”€ */}
+      {/* --- CLOSING TAGLINE --- */}
       <div className="sf-section" style={{ paddingBottom: 120 }}>
         <div className="text-center">
           <h2

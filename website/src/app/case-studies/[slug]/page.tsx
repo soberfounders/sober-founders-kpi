@@ -39,6 +39,14 @@ export async function generateMetadata({
       url: `${SITE_URL}/case-studies/${study.slug}/`,
       siteName: "Sober Founders",
       type: "article",
+      images: [
+        {
+          url: "/assets/phoenix-static.jpg",
+          width: 1920,
+          height: 1280,
+          alt: `${study.name} Case Study - Sober Founders`,
+        },
+      ],
     },
     twitter: {
       card: "summary_large_image",
@@ -64,6 +72,9 @@ export default async function CaseStudyDetailPage({
     headline: study.title,
     description: study.summary,
     mainEntityOfPage: `${SITE_URL}/case-studies/${study.slug}/`,
+    datePublished: "2025-03-17",
+    dateModified: "2025-03-18",
+    image: `${SITE_URL}/assets/phoenix-static.jpg`,
     author: {
       "@type": "Organization",
       name: "Sober Founders",
@@ -72,6 +83,10 @@ export default async function CaseStudyDetailPage({
       "@type": "Organization",
       name: "Sober Founders",
       url: SITE_URL,
+      logo: {
+        "@type": "ImageObject",
+        url: `${SITE_URL}/assets/phoenix-static.jpg`,
+      },
     },
     about: [
       "entrepreneurs in recovery",

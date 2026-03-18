@@ -102,7 +102,7 @@ const jsonLd = {
       },
       description:
         "501(c)(3) nonprofit community for entrepreneurs in recovery. We offer three tiers: a free Thursday Business Mastermind for all sober entrepreneurs, a free Tuesday 'All Our Affairs' Mastermind for founders with 2+ employees and $250k+ revenue (>1 year sober), and the Phoenix Forum, an exclusive $499/mo advisory board for founders with $1M+ revenue (>1 year sober).",
-      foundingDate: "2024",
+      foundingDate: "2024-01-01",
       nonprofitStatus: "501(c)(3)",
       taxID: "33-4098435",
       sameAs: [

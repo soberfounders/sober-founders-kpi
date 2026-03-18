@@ -27,10 +27,12 @@ function FooterAnchor({
   href: string;
   label: string;
 }) {
+  const isExternal = href.startsWith("http");
   return (
     <a
       href={href}
       className="text-sm leading-7 text-white/68 transition hover:text-white"
+      {...(isExternal && { target: "_blank", rel: "noopener noreferrer" })}
     >
       {label}
     </a>
