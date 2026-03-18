@@ -89,6 +89,76 @@ const PAGE_CONTENT = `<!-- wp:html -->
   .sf-ev img { max-width: 100%; display: block; }
   .sf-ev a { text-decoration: none; }
 
+  /* ── Hero intro ── */
+  .sf-ev-hero {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 100px 24px 40px;
+    text-align: center;
+  }
+  .sf-ev-hero h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(2rem, 4.5vw, 2.8rem);
+    font-weight: 400;
+    color: #ffffff;
+    line-height: 1.25;
+    margin: 0 0 20px;
+  }
+  .sf-ev-hero h1 .sf-accent { color: #5eecc0; }
+  .sf-ev-hero-sub {
+    font-size: 1.1rem;
+    color: rgba(255,255,255,0.7);
+    line-height: 1.8;
+    max-width: 620px;
+    margin: 0 auto 32px;
+  }
+  .sf-ev-hero-cta {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  /* ── Founder quote ── */
+  .sf-ev-quote {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 32px 28px;
+    background: rgba(10,10,10,0.45);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-left: 3px solid #5eecc0;
+    border-radius: 16px;
+  }
+  .sf-ev-quote img {
+    width: 72px; height: 72px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+  .sf-ev-quote blockquote {
+    margin: 0;
+    font-size: 1.02rem;
+    color: rgba(255,255,255,0.8);
+    line-height: 1.75;
+    font-style: italic;
+  }
+  .sf-ev-quote cite {
+    display: block;
+    font-style: normal;
+    font-weight: 600;
+    color: #5eecc0;
+    font-size: 0.88rem;
+    margin-top: 10px;
+  }
+  @media (max-width: 600px) {
+    .sf-ev-quote { flex-direction: column; align-items: center; text-align: center; }
+  }
+
   /* ── Glassmorphism utility ── */
   .sf-glass {
     background: rgba(10, 10, 10, 0.45);
@@ -650,11 +720,33 @@ const PAGE_CONTENT = `<!-- wp:html -->
 
 <div class="sf-ev">
 
+  <!-- ═══ Hero Intro ═══ -->
+  <div class="sf-ev-hero">
+    <h1>Business Masterminds for<br><span class="sf-accent">Entrepreneurs in Recovery</span></h1>
+    <p class="sf-ev-hero-sub">Running a business in recovery means facing challenges most people don&rsquo;t understand &mdash; the stress that used to end in a drink, the loneliness of leading sober in a drinking culture, the days when staying clean and staying profitable feel like competing goals. You don&rsquo;t have to figure it out alone.</p>
+    <p class="sf-ev-hero-sub" style="margin-bottom: 36px;">Sober Founders is a free weekly mastermind where entrepreneurs in recovery bring real struggles &mdash; a partnership falling apart, a cash&ndash;flow crisis, a relapse scare &mdash; and get honest feedback from a room full of people who actually get it.</p>
+    <div class="sf-ev-hero-cta">
+      <a href="#sf-calendar" class="sf-ev-btn sf-ev-btn-primary">Join a Free Session</a>
+      <a href="#sf-how-it-works" class="sf-ev-btn sf-ev-btn-outline">See How It Works</a>
+    </div>
+  </div>
+
+  <!-- ═══ Founder Quote ═══ -->
+  <div class="sf-ev-section" style="padding-top: 20px; padding-bottom: 60px;">
+    <div class="sf-ev-quote">
+      <img src="https://soberfounders.org/wp-content/uploads/2026/03/andrew-lassise-headshot.jpg" alt="Andrew Lassise, Founder" />
+      <div>
+        <blockquote>&ldquo;I started Sober Founders because business masterminds didn&rsquo;t understand my recovery, and 12&ndash;step meetings didn&rsquo;t understand my P&amp;L. If you&rsquo;re tired of balancing those two worlds alone, join us this Thursday. No solicitation &mdash; just experience, strength, and hope.&rdquo;</blockquote>
+        <cite>&mdash; Andrew Lassise, Founder</cite>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══ Three Ways to Get Involved ═══ -->
-  <div class="sf-ev-section">
+  <div class="sf-ev-section" style="padding-top: 0;">
     <div class="sf-ev-heading">
       <h2>Three Ways to Get Involved</h2>
-      <p>Whether you're just getting started or leading an eight-figure company, there's a seat at the table for you.</p>
+      <p>Whether you&rsquo;re just getting started or leading an eight-figure company, there&rsquo;s a seat at the table for you.</p>
     </div>
 
     <div class="sf-ev-tiers">
@@ -673,7 +765,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
           <li>Sober &amp; own a business</li>
           <li>No application required</li>
           <li>10&ndash;25 founders per session</li>
-          <li>Real talk, not small talk</li>
+          <li>Bring any challenge &mdash; business or recovery</li>
         </ul>
         <a href="#sf-calendar" class="sf-ev-tier-cta sf-ev-cta-primary">Sign Up Free</a>
       </div>
@@ -720,32 +812,32 @@ const PAGE_CONTENT = `<!-- wp:html -->
   </div>
 
   <!-- ═══ How It Works ═══ -->
-  <div class="sf-ev-section-sm sf-ev-pad" style="padding-bottom: 80px;">
+  <div class="sf-ev-section-sm sf-ev-pad" style="padding-bottom: 80px;" id="sf-how-it-works">
     <div class="sf-ev-how">
       <div class="sf-ev-heading" style="margin-bottom: 40px;">
-        <h2>How a Business Mastermind Works</h2>
-        <p>Each session follows a simple, powerful format designed to give you real answers from people who've been there.</p>
+        <h2>What Happens in a Session</h2>
+        <p>No lectures. No networking pitches. Just sober entrepreneurs helping each other solve the problems that keep them up at night.</p>
       </div>
       <div class="sf-ev-steps">
         <div class="sf-ev-step">
           <div class="sf-ev-step-num">1</div>
-          <h4>Show Up</h4>
-          <p>Join the Zoom call. Intros are quick &mdash; name, business, sobriety date.</p>
+          <h4>Quick Intros</h4>
+          <p>Name, business, sobriety date. Five minutes. No egos, no pitches &mdash; just people who get it.</p>
         </div>
         <div class="sf-ev-step">
           <div class="sf-ev-step-num">2</div>
-          <h4>Bring a Challenge</h4>
-          <p>Share something real &mdash; a toxic partner, cash flow crisis, or sobriety struggle.</p>
+          <h4>The Hot Seat</h4>
+          <p>One founder brings a real challenge &mdash; a toxic partner, a cash&ndash;flow crisis, a relapse scare. Nothing is off limits.</p>
         </div>
         <div class="sf-ev-step">
           <div class="sf-ev-step-num">3</div>
-          <h4>Get Peer Insights</h4>
-          <p>The group spends 10&ndash;15 minutes helping you solve with experience, strength, and hope.</p>
+          <h4>Experience, Strength &amp; Hope</h4>
+          <p>The group shares what worked for them. Not advice &mdash; real experience from founders who&rsquo;ve been exactly where you are.</p>
         </div>
         <div class="sf-ev-step">
           <div class="sf-ev-step-num">4</div>
           <h4>Pay It Forward</h4>
-          <p>Help someone else with what you've learned. That's the real magic.</p>
+          <p>Next week, you help someone else. That&rsquo;s how a room full of strangers becomes a room full of people who have your back.</p>
         </div>
       </div>
     </div>
