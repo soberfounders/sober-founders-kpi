@@ -464,12 +464,15 @@ const PAGE_CONTENT = `<!-- wp:html -->
   }
   .sf-ev-steps {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 32px;
-    max-width: 760px;
+    max-width: 960px;
     margin: 0 auto;
   }
-  @media (max-width: 580px) {
+  @media (max-width: 768px) {
+    .sf-ev-steps { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 480px) {
     .sf-ev-steps { grid-template-columns: 1fr; }
   }
   .sf-ev-step { text-align: center; }
@@ -872,12 +875,22 @@ const PAGE_CONTENT = `<!-- wp:html -->
         <div class="sf-ev-step">
           <div class="sf-ev-step-num">1</div>
           <h4>Quick Intros</h4>
-          <p>Let us know who you are and what you do, and a recent win.</p>
+          <p>Everyone goes through and shares their name, business, sobriety date, and a recent win.</p>
         </div>
         <div class="sf-ev-step">
           <div class="sf-ev-step-num">2</div>
-          <h4>Challenges / Opportunities</h4>
-          <p>We pick several topics and struggles members share and discuss in an open conversation with other sober entrepreneurs.</p>
+          <h4>COPI&rsquo;s</h4>
+          <p>We collect members&rsquo; Challenges, Opportunities, Problems, and Issues.</p>
+        </div>
+        <div class="sf-ev-step">
+          <div class="sf-ev-step-num">3</div>
+          <h4>Experience, Strength &amp; Hope</h4>
+          <p>The group shares what worked for them. Not advice &mdash; real experience from founders who&rsquo;ve been exactly where you are.</p>
+        </div>
+        <div class="sf-ev-step">
+          <div class="sf-ev-step-num">4</div>
+          <h4>Pay It Forward</h4>
+          <p>Next week, you help someone else. That&rsquo;s how a room full of strangers becomes a room full of people who have your back.</p>
         </div>
       </div>
     </div>
@@ -912,28 +925,13 @@ const PAGE_CONTENT = `<!-- wp:html -->
 <!-- /wp:html -->
 
 <!-- wp:html -->
-<!-- ═══ FOUNDER QUOTE — edit quote text below ═══ -->
-<div class="sf-ev">
-  <div class="sf-ev-section" style="padding-top: 20px; padding-bottom: 40px;">
-    <div class="sf-ev-quote">
-      <img src="http://soberfounders.org/wp-content/uploads/2026/03/andrew-lassise-headshot.jpg" alt="Andrew Lassise, Founder" />
-      <div>
-        <blockquote>&ldquo;I started Sober Founders because business masterminds didn&rsquo;t understand my recovery, and 12&ndash;step meetings didn&rsquo;t understand my P&amp;L. If you&rsquo;re tired of balancing those two worlds alone, join us this Thursday. No solicitation &mdash; just experience, strength, and hope.&rdquo;</blockquote>
-        <cite>&mdash; Andrew Lassise, Founder</cite>
-      </div>
-    </div>
-  </div>
-</div>
-<!-- /wp:html -->
-
-<!-- wp:html -->
 <!-- ═══ TESTIMONIAL + RATING — edit testimonials below ═══ -->
 <div class="sf-ev">
-  <div class="sf-ev-section" style="padding-top: 0; padding-bottom: 60px;">
+  <div class="sf-ev-section" style="padding-top: 20px; padding-bottom: 60px;">
     <div class="sf-ev-testimonials">
       <div class="sf-ev-rating">
         <div class="sf-ev-rating-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
-        <p class="sf-ev-rating-text">Avg Rating <span class="sf-ev-rating-num">4.86</span> from sober entrepreneurs</p>
+        <p class="sf-ev-rating-text">Average Member Rating: <span class="sf-ev-rating-num">4.78</span></p>
       </div>
       <div class="sf-ev-testimonial">
         <blockquote>&ldquo;I&rsquo;ve been in other masterminds, but none where I could talk about my sobriety and my business in the same sentence. The first session I attended, someone shared a challenge I was literally going through that week. I knew I&rsquo;d found my people.&rdquo;</blockquote>
@@ -942,6 +940,21 @@ const PAGE_CONTENT = `<!-- wp:html -->
       <div class="sf-ev-testimonial">
         <blockquote>&ldquo;Every Thursday I show up and get more value in one hour than most paid programs give in a month. The hot seat format cuts straight to the real issues &mdash; no fluff, just founders who get it helping each other win.&rdquo;</blockquote>
         <cite>&mdash; Member, Thursday Business Mastermind</cite>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- /wp:html -->
+
+<!-- wp:html -->
+<!-- ═══ FOUNDER QUOTE — edit quote text below ═══ -->
+<div class="sf-ev">
+  <div class="sf-ev-section" style="padding-top: 0; padding-bottom: 40px;">
+    <div class="sf-ev-quote">
+      <img src="http://soberfounders.org/wp-content/uploads/2026/03/andrew-lassise-headshot.jpg" alt="Andrew Lassise, Founder" />
+      <div>
+        <blockquote>&ldquo;I started Sober Founders because business masterminds didn&rsquo;t understand my recovery, and 12&ndash;step meetings didn&rsquo;t understand my P&amp;L. If you&rsquo;re tired of balancing those two worlds alone, join us this Thursday. No solicitation &mdash; just experience, strength, and hope.&rdquo;</blockquote>
+        <cite>&mdash; Andrew Lassise, Founder</cite>
       </div>
     </div>
   </div>
