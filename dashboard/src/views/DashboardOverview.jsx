@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Bot, CheckCircle2, Loader2, RefreshCw, Sparkles } from 'lucide-react';
+import { AlertTriangle, Beaker, Bot, CheckCircle2, Loader2, RefreshCw, Sparkles } from 'lucide-react';
 import KPICard from '../components/KPICard';
 import SectionInsightBar from '../components/SectionInsightBar';
 import SendToNotionModal from '../components/SendToNotionModal';
@@ -1962,6 +1962,80 @@ function DashboardOverview() {
           ))}
         </div>
         <SectionInsightBar {...sectionInsights.operations} onAddToNotion={openNotionModal} />
+      </section>
+
+      <section className="glass-panel" style={{ padding: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Beaker size={17} />
+          <h4 style={{ fontSize: '18px' }}>Section 6 - Active Tests</h4>
+        </div>
+        <p style={{ marginTop: '4px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+          Track conversion experiments and A/B tests across the funnel.
+        </p>
+
+        {/* ── Test 1: /events page animation conversion rate ── */}
+        <div style={{ marginTop: '14px', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '14px', backgroundColor: 'var(--color-surface-elevated)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#0a0f18', backgroundColor: 'var(--color-kpi-amber)', borderRadius: '4px', padding: '2px 8px' }}>
+              Running
+            </span>
+            <h5 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-text-primary)' }}>/events Page Animation — Paid Traffic Conversion</h5>
+          </div>
+          <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+            Comparing conversion rate (paid visit → Luma Thursday Mastermind registration) before and after adding the hero animation to the /events page.
+          </p>
+
+          <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+            {/* Control period */}
+            <div style={{ border: '1px solid var(--color-border)', borderRadius: '8px', padding: '12px', backgroundColor: 'rgba(10, 15, 24, 0.4)' }}>
+              <p style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)' }}>Control (Pre-Animation)</p>
+              <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>90-day window before launch</p>
+              <div style={{ marginTop: '10px' }}>
+                <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Paid visits to /events</p>
+                <p style={{ fontSize: '24px', fontWeight: 800, color: 'var(--color-text-primary)' }}>—</p>
+              </div>
+              <div style={{ marginTop: '8px' }}>
+                <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Luma Thursday signups</p>
+                <p style={{ fontSize: '24px', fontWeight: 800, color: 'var(--color-text-primary)' }}>—</p>
+              </div>
+              <div style={{ marginTop: '8px', borderTop: '1px solid var(--color-border)', paddingTop: '8px' }}>
+                <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Conversion Rate</p>
+                <p style={{ fontSize: '28px', fontWeight: 800, color: 'var(--color-text-primary)' }}>—</p>
+              </div>
+            </div>
+
+            {/* Test period */}
+            <div style={{ border: '1px solid var(--color-border)', borderRadius: '8px', padding: '12px', backgroundColor: 'rgba(10, 15, 24, 0.4)' }}>
+              <p style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-kpi-teal)' }}>Test (With Animation)</p>
+              <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>90-day window after launch</p>
+              <div style={{ marginTop: '10px' }}>
+                <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Paid visits to /events</p>
+                <p style={{ fontSize: '24px', fontWeight: 800, color: 'var(--color-text-primary)' }}>—</p>
+              </div>
+              <div style={{ marginTop: '8px' }}>
+                <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Luma Thursday signups</p>
+                <p style={{ fontSize: '24px', fontWeight: 800, color: 'var(--color-text-primary)' }}>—</p>
+              </div>
+              <div style={{ marginTop: '8px', borderTop: '1px solid var(--color-border)', paddingTop: '8px' }}>
+                <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Conversion Rate</p>
+                <p style={{ fontSize: '28px', fontWeight: 800, color: 'var(--color-text-primary)' }}>—</p>
+              </div>
+            </div>
+
+            {/* Lift */}
+            <div style={{ border: '1px solid var(--color-border)', borderRadius: '8px', padding: '12px', backgroundColor: 'rgba(10, 15, 24, 0.4)', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+              <p style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)' }}>Lift</p>
+              <p style={{ fontSize: '36px', fontWeight: 800, color: 'var(--color-text-primary)', marginTop: '8px' }}>—</p>
+              <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>change in conversion rate</p>
+            </div>
+          </div>
+
+          <p style={{ marginTop: '10px', fontSize: '11px', color: 'var(--color-text-muted)' }}>
+            Replace the dashes above with real data. Paid visits = Meta/Google paid clicks to /events. Signups = Luma registrations for Thursday Mastermind.
+          </p>
+        </div>
+
+        {/* ── Add more tests below ── */}
       </section>
 
       <section className="glass-panel" style={{ padding: '14px' }}>
