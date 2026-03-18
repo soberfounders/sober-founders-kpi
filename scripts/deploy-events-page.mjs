@@ -87,14 +87,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
     .sf-ev-mobile-bg { display: block; }
   }
 
-  .sf-ev { font-family: 'Outfit', 'Inter', sans-serif; color: #fff; line-height: 1.7; -webkit-font-smoothing: antialiased; position: relative; z-index: 2; background: rgba(10,10,10,0.35); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
-  @media (max-width: 767px) {
-    .sf-ev {
-      background: rgba(10,10,10,0.65);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-    }
-  }
+  .sf-ev { font-family: 'Outfit', 'Inter', sans-serif; color: #fff; line-height: 1.7; -webkit-font-smoothing: antialiased; position: relative; z-index: 2; }
   .sf-ev * { box-sizing: border-box; }
   .sf-ev img { max-width: 100%; display: block; }
   .sf-ev a { text-decoration: none; }
@@ -113,6 +106,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
     color: #ffffff;
     line-height: 1.25;
     margin: 0 0 20px;
+    text-shadow: 0 2px 16px rgba(0,0,0,0.7);
   }
   .sf-ev-hero h1 .sf-accent { color: #5eecc0; }
   .sf-ev-hero-sub {
@@ -121,6 +115,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
     line-height: 1.8;
     max-width: 620px;
     margin: 0 auto 32px;
+    text-shadow: 0 1px 12px rgba(0,0,0,0.6);
   }
   .sf-ev-hero-cta {
     display: flex;
@@ -187,6 +182,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
   .sf-ev-rating-text {
     font-size: 0.95rem;
     color: rgba(255,255,255,0.6);
+    text-shadow: 0 1px 10px rgba(0,0,0,0.5);
   }
   .sf-ev-rating-num {
     font-weight: 700;
@@ -241,12 +237,14 @@ const PAGE_CONTENT = `<!-- wp:html -->
     font-weight: 400;
     color: #ffffff;
     margin: 0 0 12px;
+    text-shadow: 0 2px 16px rgba(0,0,0,0.7);
   }
   .sf-ev-heading p {
     color: rgba(255, 255, 255, 0.6);
     font-size: 1.05rem;
     max-width: 560px;
     margin: 0 auto;
+    text-shadow: 0 1px 10px rgba(0,0,0,0.5);
   }
 
   /* ── Buttons ── */
