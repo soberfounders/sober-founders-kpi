@@ -68,52 +68,6 @@ const FOOTER_HTML = `
     font-family: 'Outfit', 'Inter', -apple-system, sans-serif;
   }
 
-  /* ── Trust bar ── */
-  .sf-footer-trust {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-    padding: 24px 32px;
-    background: rgba(10, 10, 10, 0.45);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 14px;
-    margin-bottom: 40px;
-    position: relative;
-    overflow: hidden;
-  }
-  .sf-footer-trust::before {
-    content: "";
-    position: absolute; inset: 0;
-    background: radial-gradient(circle at 20% 50%, rgba(255,255,255,0.04) 0%, transparent 50%);
-    pointer-events: none;
-  }
-  .sf-footer-trust img {
-    width: 72px;
-    height: 72px;
-    flex-shrink: 0;
-    position: relative;
-  }
-  .sf-footer-trust p {
-    font-size: 0.88rem;
-    color: rgba(255,255,255,0.75);
-    line-height: 1.55;
-    margin: 0;
-    position: relative;
-  }
-  .sf-footer-trust strong {
-    color: #00b286;
-    font-weight: 600;
-  }
-  @media (max-width: 480px) {
-    .sf-footer-trust {
-      flex-direction: column;
-      text-align: center;
-      padding: 20px;
-    }
-  }
 
   /* ── Donate button ── */
   .sf-footer-donate {
@@ -221,12 +175,6 @@ const FOOTER_HTML = `
 
 <div class="sf-site-footer">
 
-  <!-- Trust bar -->
-  <div class="sf-footer-trust">
-    <img src="https://soberfounders.org/wp-content/uploads/2025/09/candid-seal-silver-2025.png" alt="Candid Silver Transparency Seal 2025" />
-    <p><strong>501(c)(3) Nonprofit</strong> &middot; Candid Silver Seal &mdash; the highest transparency rating a first-year nonprofit can earn. Every dollar is spent on the mission.</p>
-  </div>
-
   <!-- Donate button -->
   <div class="sf-footer-donate">
     <a href="/donate/">Donate to Support Entrepreneurs in Recovery</a>
@@ -302,9 +250,6 @@ async function main() {
   if (DRY_RUN) {
     console.log("  [DRY RUN] Would deploy footer HTML via /sober/v1/footer.");
     console.log(`  Content length: ${FOOTER_HTML.length} chars`);
-    console.log("\n  Preview of trust bar text:");
-    console.log('  "501(c)(3) Nonprofit · Candid Silver Seal — the highest');
-    console.log('   transparency rating a first-year nonprofit can earn."');
     return;
   }
 
