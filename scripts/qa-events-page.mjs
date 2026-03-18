@@ -106,7 +106,7 @@ async function main() {
   } else {
     const wpHtmlOpens = (html.match(/<!-- wp:html -->/g) || []).length;
     const wpHtmlCloses = (html.match(/<!-- \/wp:html -->/g) || []).length;
-    check(wpHtmlOpens >= 7, `Has ${wpHtmlOpens} <!-- wp:html --> blocks (expect 7-8)`, `Found ${wpHtmlOpens}`);
+    check(wpHtmlOpens >= 12, `Has ${wpHtmlOpens} <!-- wp:html --> blocks (expect 12-13)`, `Found ${wpHtmlOpens}`);
     check(wpHtmlOpens === wpHtmlCloses, `Open/close block count matches (${wpHtmlOpens}/${wpHtmlCloses})`, `Mismatch: ${wpHtmlOpens} opens vs ${wpHtmlCloses} closes`);
   }
 

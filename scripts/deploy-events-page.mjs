@@ -883,15 +883,19 @@ const PAGE_CONTENT = `<!-- wp:html -->
 <!-- /wp:html -->
 
 <!-- wp:html -->
-<!-- ═══ WHATSAPP COMMUNITY — edit copy below ═══ -->
+<!-- ═══ DIVIDER — decorative section break ═══ -->
 <div class="sf-ev">
   <div style="padding: 0 0 60px;">
     <div class="sf-ev-divider">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M256 48a208 208 0 1 1 0 416 208 208 0 1 1 0-416zm0 464A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209c9.4-9.4 9.4-24.6 0-33.9s-24.6-9.4-33.9 0l-111 111-47-47c-9.4-9.4-24.6-9.4-33.9 0s-9.4 24.6 0 33.9l64 64c9.4 9.4 24.6 9.4 33.9 0L369 209z"/></svg>
     </div>
   </div>
+</div>
+<!-- /wp:html -->
 
-  <!-- ═══ WhatsApp Community ═══ -->
+<!-- wp:html -->
+<!-- ═══ WHATSAPP COMMUNITY — edit copy below ═══ -->
+<div class="sf-ev">
   <div class="sf-ev-section" style="padding-top: 0;">
     <div class="sf-ev-community">
       <div class="sf-ev-community-icon">
@@ -905,8 +909,12 @@ const PAGE_CONTENT = `<!-- wp:html -->
       </div>
     </div>
   </div>
+</div>
+<!-- /wp:html -->
 
-  <!-- Internal links (SEO) -->
+<!-- wp:html -->
+<!-- ═══ INTERNAL LINKS — edit links below ═══ -->
+<div class="sf-ev">
   <div class="sf-ev-internal">
     <a href="/">Home</a>
     <span class="sf-ev-sep">|</span>
@@ -924,7 +932,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
 <!-- /wp:html -->
 
 <!-- wp:html -->
-<!-- Schema + Animation Scripts (infrastructure — do not edit in Elementor) -->
+<!-- Schema JSON-LD (infrastructure — do not edit in Elementor) -->
 <script type="application/ld+json">
 [
   {
@@ -973,9 +981,10 @@ const PAGE_CONTENT = `<!-- wp:html -->
   }
 ]
 </script>
+<!-- /wp:html -->
 
-<!-- Lenis smooth scroll + GSAP ScrollTrigger + pre-loaded image frames
-     (exact same stack as homepage HeroScroll.tsx — no video seeking) -->
+<!-- wp:html -->
+<!-- Animation Scripts (infrastructure — do not edit in Elementor) -->
 <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.18/dist/lenis.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/gsap.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/ScrollTrigger.min.js"></script>
@@ -1086,8 +1095,10 @@ const PAGE_CONTENT = `<!-- wp:html -->
   }
 })();
 </script>
+<!-- /wp:html -->
 
-<!-- Application modal -->
+<!-- wp:html -->
+<!-- Application Modal + HubSpot Form (infrastructure — do not edit in Elementor) -->
 <div id="sf-apply-modal" class="sf-modal-backdrop" onclick="if(event.target===this)this.classList.remove('sf-modal-open')">
   <div class="sf-modal">
     <button class="sf-modal-close" onclick="document.getElementById('sf-apply-modal').classList.remove('sf-modal-open')">&times;</button>
