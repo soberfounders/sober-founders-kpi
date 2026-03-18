@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import SiteFooter from "@/components/SiteFooter";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -21,7 +22,7 @@ export const metadata: Metadata = {
     template: "%s | Sober Founders",
   },
   description:
-    "Sober Founders is a 501(c)(3) nonprofit community for entrepreneurs in recovery. Free weekly masterminds, peer support, and the Phoenix Forum — an exclusive peer advisory board for founders with $1M+ revenue.",
+    "Sober Founders is a 501(c)(3) nonprofit community for entrepreneurs in recovery. Join our free Thursday mastermind (open to all), our free Tuesday mastermind ($250k+ revenue & >1 yr sober), or the exclusive Phoenix Forum ($1M+ revenue).",
   keywords: [
     "sober entrepreneurs",
     "entrepreneurs in recovery",
@@ -100,7 +101,7 @@ const jsonLd = {
         url: `${SITE_URL}/assets/phoenix-static.jpg`,
       },
       description:
-        "501(c)(3) nonprofit community for entrepreneurs in recovery. Free weekly masterminds and the Phoenix Forum peer advisory board.",
+        "501(c)(3) nonprofit community for entrepreneurs in recovery. We offer three tiers: a free Thursday Business Mastermind for all sober entrepreneurs, a free Tuesday 'All Our Affairs' Mastermind for founders with 2+ employees and $250k+ revenue (>1 year sober), and the Phoenix Forum, an exclusive $499/mo advisory board for founders with $1M+ revenue (>1 year sober).",
       foundingDate: "2024",
       nonprofitStatus: "501(c)(3)",
       taxID: "33-4098435",
@@ -113,6 +114,39 @@ const jsonLd = {
         contactType: "General Inquiry",
         url: `${SITE_URL}/contact/`,
       },
+      makesOffer: [
+        {
+          "@type": "Offer",
+          "name": "Weekly Thursday Business Mastermind",
+          "description": "Free and open to all entrepreneurs in recovery.",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        {
+          "@type": "Offer",
+          "name": "Weekly Tuesday All Our Affairs Business Mastermind",
+          "description": "Free and open to entrepreneurs in recovery who own businesses with at least 2 full-time employees, $250k in revenue, are more than one year sober, and actively work the 12 steps.",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        {
+          "@type": "Offer",
+          "name": "Monthly Phoenix Forum",
+          "description": "Curated peer advisory group ($499/mo) like YPO or Vistage for entrepreneurs in recovery with $1m+ in revenue and over a year of sobriety. Maximum 10 members per group, featuring a monthly 'hot seat' (essentially a 4th and 5th step on business and life).",
+          "price": "499",
+          "priceCurrency": "USD",
+          "priceComponent": {
+            "@type": "UnitPriceSpecification",
+            "price": "499",
+            "priceCurrency": "USD",
+            "referenceQuantity": {
+              "@type": "QuantitativeValue",
+              "value": "1",
+              "unitCode": "MON"
+            }
+          }
+        }
+      ],
     },
     {
       "@type": "WebPage",
@@ -122,7 +156,7 @@ const jsonLd = {
       isPartOf: { "@id": `${SITE_URL}/#website` },
       about: { "@id": `${SITE_URL}/#organization` },
       description:
-        "Sober Founders is a 501(c)(3) nonprofit community for entrepreneurs in recovery. Free weekly masterminds, peer support, and the Phoenix Forum.",
+        "Sober Founders is a 501(c)(3) nonprofit community for entrepreneurs in recovery. Join our free Thursday mastermind (open to all), our free Tuesday mastermind ($250k+ revenue & >1 yr sober), or the exclusive Phoenix Forum ($1M+ revenue).",
     },
   ],
 };
@@ -143,7 +177,10 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[#0a0a0a] text-white`}
       >
-        {children}
+        <div className="flex min-h-screen flex-col">
+          <div className="flex-1">{children}</div>
+          <SiteFooter />
+        </div>
       </body>
     </html>
   );

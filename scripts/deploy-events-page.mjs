@@ -92,6 +92,18 @@ const PAGE_CONTENT = `<!-- wp:html -->
   .sf-ev img { max-width: 100%; display: block; }
   .sf-ev a { text-decoration: none; }
 
+  /* ── Frosted glass section backdrop ── */
+  .sf-frost {
+    background: rgba(10, 10, 10, 0.45);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 24px;
+    padding: 60px 24px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
   /* ── Hero intro ── */
   .sf-ev-hero {
     max-width: 780px;
@@ -775,13 +787,17 @@ const PAGE_CONTENT = `<!-- wp:html -->
 <!-- wp:html -->
 <!-- ═══ HERO INTRO — edit heading & body copy below ═══ -->
 <div class="sf-ev">
-  <div class="sf-ev-hero">
-    <h1>Business Masterminds for<br><span class="sf-accent">Entrepreneurs in Recovery</span></h1>
-    <p class="sf-ev-hero-sub">Running a business in recovery means facing challenges most people don&rsquo;t understand &mdash; the stress that used to end in a drink, the loneliness of leading sober in a drinking culture, the days when staying clean and staying profitable feel like competing goals. You don&rsquo;t have to figure it out alone.</p>
-    <p class="sf-ev-hero-sub" style="margin-bottom: 36px;">Sober Founders is a free weekly mastermind where entrepreneurs in recovery bring real struggles &mdash; a partnership falling apart, a cash&ndash;flow crisis, a relapse scare &mdash; and get honest feedback from a room full of people who actually get it.</p>
-    <div class="sf-ev-hero-cta">
-      <a href="#sf-calendar" class="sf-ev-btn sf-ev-btn-primary">Join a Free Session</a>
-      <a href="#sf-how-it-works" class="sf-ev-btn sf-ev-btn-outline">See How It Works</a>
+  <div style="max-width:1100px;margin:0 auto;padding:100px 24px 40px;">
+    <div class="sf-frost">
+      <div class="sf-ev-hero" style="padding-top:0;">
+        <h1>Business Masterminds for<br><span class="sf-accent">Entrepreneurs in Recovery</span></h1>
+        <p class="sf-ev-hero-sub">Running a business in recovery means facing challenges most people don&rsquo;t understand &mdash; the stress that used to end in a drink, the loneliness of leading sober in a drinking culture, the days when staying clean and staying profitable feel like competing goals. You don&rsquo;t have to figure it out alone.</p>
+        <p class="sf-ev-hero-sub" style="margin-bottom: 36px;">Sober Founders is a free weekly mastermind where entrepreneurs in recovery bring real struggles &mdash; a partnership falling apart, a cash&ndash;flow crisis, a relapse scare &mdash; and get honest feedback from a room full of people who actually get it.</p>
+        <div class="sf-ev-hero-cta">
+          <a href="#sf-calendar" class="sf-ev-btn sf-ev-btn-primary">Join a Free Session</a>
+          <a href="#sf-how-it-works" class="sf-ev-btn sf-ev-btn-outline">See How It Works</a>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -791,12 +807,14 @@ const PAGE_CONTENT = `<!-- wp:html -->
 <!-- ═══ THREE TIERS — edit tier names, schedules, requirements below ═══ -->
 <div class="sf-ev">
   <div class="sf-ev-section" style="padding-top: 0;">
-    <div class="sf-ev-heading">
-      <h2>Three Ways to Get Involved</h2>
-      <p>Whether you&rsquo;re just getting started or leading an eight-figure company, there&rsquo;s a seat at the table for you.</p>
+    <div class="sf-frost" style="padding: 60px 24px 48px;">
+      <div class="sf-ev-heading">
+        <h2>Three Ways to Get Involved</h2>
+        <p>Whether you&rsquo;re just getting started or leading an eight-figure company, there&rsquo;s a seat at the table for you.</p>
+      </div>
     </div>
 
-    <div class="sf-ev-tiers">
+    <div class="sf-ev-tiers" style="margin-top: 32px;">
 
       <!-- Tuesday -->
       <div class="sf-ev-tier">
@@ -927,9 +945,11 @@ const PAGE_CONTENT = `<!-- wp:html -->
 <div class="sf-ev">
   <div class="sf-ev-section" style="padding-top: 20px; padding-bottom: 60px;">
     <div class="sf-ev-testimonials">
-      <div class="sf-ev-rating">
-        <div class="sf-ev-rating-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
-        <p class="sf-ev-rating-text">Average Member Rating: <span class="sf-ev-rating-num">4.78</span></p>
+      <div class="sf-frost" style="padding: 36px 24px 28px; margin-bottom: 24px;">
+        <div class="sf-ev-rating" style="margin-bottom: 0;">
+          <div class="sf-ev-rating-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+          <p class="sf-ev-rating-text">Average Member Rating: <span class="sf-ev-rating-num">4.78</span></p>
+        </div>
       </div>
       <div class="sf-ev-testimonial">
         <blockquote>&ldquo;I&rsquo;ve been in other masterminds, but none where I could talk about my sobriety and my business in the same sentence. The first session I attended, someone shared a challenge I was literally going through that week. I knew I&rsquo;d found my people.&rdquo;</blockquote>

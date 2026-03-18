@@ -125,7 +125,7 @@ export const demoSupabase = {
       });
     },
   },
-  rpc(fnName) {
+  rpc() {
     return Promise.resolve({ data: [], error: null });
   },
   auth: {

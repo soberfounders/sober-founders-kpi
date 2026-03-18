@@ -622,17 +622,17 @@ descriptions when generating content, outreach, or marketing materials.
 - **Format:** Business mastermind for entrepreneurs and business owners in
   recovery from addiction
 - **Requirements:**
-  - Revenue over $250k/yr
-  - Over 1 year of sobriety through 12-step fellowship
+  - Revenue ≥ $250k/yr
+  - Sobriety strictly > 1 year
   - At least two full-time employees
+  - Actively working the 12 steps
 - **Cost:** Free
 
 ### Free Group: Thursday — "Business Mastermind"
 
 - **Schedule:** Every Thursday
 - **Format:** Business mastermind open to all sober entrepreneurs
-- **Requirements:** Own a business and be sober (no revenue or employee
-  minimums)
+- **Requirements:** Own a business and be sober (no revenue or employee minimums, open to all entrepreneurs in recovery)
 - **Cost:** Free
 
 ### Phoenix Forum (Premium Membership)
@@ -642,7 +642,8 @@ descriptions when generating content, outreach, or marketing materials.
 - **Requirements:**
   - Revenue ≥ $1,000,000/yr
   - Sobriety strictly > 1 year
-- **Cost:** Not published publicly — contact via application page
+- **Cost:** $499/mo
+- **Format:** Curated peer group (max 10 members) with monthly "hot seat" (essentially a 4th and 5th step on businesses and lives)
 - **Positioning:** Exclusive peer mastermind group modeled after YPO/EO/Vistage
   but built specifically for founders in recovery. Sobriety is a membership
   prerequisite and competitive advantage, not a personal detail.

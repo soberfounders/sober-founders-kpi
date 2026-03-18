@@ -35,19 +35,22 @@ const AUTH = Buffer.from(`${WP_USERNAME}:${WP_APP_PASSWORD}`).toString("base64")
 const HEADERS = { Authorization: `Basic ${AUTH}` };
 
 const MAPPING = [
-  { slug: "best-mastermind-group-for-founders-in-recovery", image: "best_mastermind_founders_recovery" },
-  { slug: "ypo-vs-eo-vs-vistage-peer-group-comparison", image: "peer_group_comparison_guide" },
-  { slug: "peer-advisory-groups-for-entrepreneurs", image: "peer_group_comparison_guide" },
-  { slug: "sober-founders-atlanta", image: "sober_founders_atlanta" },
-  { slug: "sober-founders-dallas", image: "sober_founders_dallas" },
-  { slug: "sober-founders-san-francisco", image: "sober_founders_san_francisco" },
-  { slug: "sober-founders-chicago", image: "sober_founders_chicago" },
-  { slug: "sober-founders-denver", image: "sober_founders_denver" },
-  { slug: "sober-founders-nashville", image: "sober_founders_nashville" },
-  { slug: "sober-founders-austin", image: "sober_founders_austin" },
-  { slug: "sober-founders-miami", image: "sober_founders_miami" },
-  { slug: "sober-founders-los-angeles", image: "sober_founders_los_angeles" },
+  // BATCH 3 - FINAL AUDIT FIXES
+  { slug: "sober-entrepreneur-2026-meaning", image: "sober_entrepreneur_2026_guide" },
+  { slug: "overachievers-anonymous-5-steps-how-to-scale-your-company-and-stay-grounded-easy-guide-for-sober-founders", image: "overachievers_anonymous_scale_grounded_guide" },
+  { slug: "master-business-triggers-the-sober-founders-guide", image: "master_business_triggers_guide" },
+  { slug: "mentorship-model-for-sober-founders-aligning-your-business-strategy-with-your-recovery-journey", image: "mentorship_model_business_recovery_align" },
+  { slug: "ypo-for-sober-entrepreneurs", image: "ypo_for_sober_entrepreneurs_phoenix_forum_compare_guide" },
+  { slug: "peer-advisory-sober-entrepreneurs", image: "peer_advisory_sober_entrepreneurs_critical_guide" },
   { slug: "sober-founders-new-york", image: "sober_founders_new_york" },
+
+  // PREVIOUS BATCHES (idempotent)
+  { slug: "why-entrepreneurs-struggle-with-addiction-2", image: "understanding_struggle_entrepreneur" },
+  { slug: "life-after-quitting-alcohol-entrepreneur", image: "life_after_alcohol_success" },
+  { slug: "networking-without-alcohol-business-owner", image: "networking_without_alcohol_guide" },
+  { slug: "sober-ceo-running-company-in-recovery", image: "sober_ceo_running_recovery" },
+  { slug: "high-functioning-alcoholic-entrepreneur", image: "high_functioning_alcoholic_struggle" },
+  { slug: "best-mastermind-group-founders-recovery", image: "best_mastermind_founders_recovery" },
 ];
 
 // Helper to find image file in the artifact directory

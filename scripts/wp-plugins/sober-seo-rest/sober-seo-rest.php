@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Sober SEO REST
  * Description: REST endpoints for Yoast SEO meta writes, 301 redirect management, and site-wide footer injection.
- * Version: 1.4.0
+ * Version: 1.5.0
  * Author: Sober Founders Dev
  */
 
@@ -28,13 +28,22 @@ add_action( 'template_redirect', function () {
     }
 } );
 
-// ── Site-wide footer: inject custom HTML before Astra footer ────────────────
-add_action( 'astra_footer_before', function () {
+// ── Site-wide footer: inject custom HTML once across Astra + Canvas templates
+function sober_render_custom_footer_once() {
+    static $rendered = false;
+    if ( $rendered ) {
+        return;
+    }
+
     $footer_html = get_option( 'sober_footer_html', '' );
     if ( ! empty( $footer_html ) ) {
         echo $footer_html; // Already sanitized on write via wp_kses_post.
+        $rendered = true;
     }
-} );
+}
+
+add_action( 'astra_footer_before', 'sober_render_custom_footer_once' );
+add_action( 'wp_footer', 'sober_render_custom_footer_once', 5 );
 
 add_action( 'rest_api_init', function () {
 
@@ -109,6 +118,23 @@ add_action( 'rest_api_init', function () {
                 'required'          => true,
                 'type'              => 'string',
                 'sanitize_callback' => 'sober_kses_footer',
+            ],
+        ],
+    ] );
+
+    // ── Clear Elementor data (forces WP to render post_content) ─────────────
+    register_rest_route( 'sober/v1', '/clear-elementor/(?P<post_id>\d+)', [
+        'methods'             => 'POST',
+        'callback'            => 'sober_clear_elementor',
+        'permission_callback' => function () {
+            return current_user_can( 'edit_posts' );
+        },
+        'args' => [
+            'post_id' => [
+                'required'          => true,
+                'type'              => 'integer',
+                'minimum'           => 1,
+                'sanitize_callback' => 'absint',
             ],
         ],
     ] );
@@ -289,6 +315,45 @@ function sober_footer_update( WP_REST_Request $request ) {
     return [
         'success' => true,
         'length'  => strlen( $html ),
+    ];
+}
+
+// ── Clear Elementor callback ─────────────────────────────────────────────────
+
+function sober_clear_elementor( WP_REST_Request $request ) {
+    $post_id = absint( $request['post_id'] );
+
+    if ( ! get_post( $post_id ) ) {
+        return new WP_Error( 'invalid_post', 'Post not found.', [ 'status' => 404 ] );
+    }
+
+    $deleted = [];
+    $keys = [
+        '_elementor_data',
+        '_elementor_edit_mode',
+        '_elementor_css',
+        '_elementor_page_assets',
+    ];
+
+    foreach ( $keys as $key ) {
+        if ( metadata_exists( 'post', $post_id, $key ) ) {
+            delete_post_meta( $post_id, $key );
+            $deleted[] = $key;
+        }
+    }
+
+    // Also clear Elementor's CSS cache file if it exists
+    $upload_dir = wp_upload_dir();
+    $css_path   = $upload_dir['basedir'] . '/elementor/css/post-' . $post_id . '.css';
+    if ( file_exists( $css_path ) ) {
+        wp_delete_file( $css_path );
+        $deleted[] = 'css_file';
+    }
+
+    return [
+        'success' => true,
+        'post_id' => $post_id,
+        'cleared' => $deleted,
     ];
 }
 

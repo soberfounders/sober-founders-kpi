@@ -9,6 +9,11 @@
 **Product type:** Internal SaaS tool (React + Supabase)
 **Business model:** Internal tool for Sober Founders organization — not commercially sold
 
+## Membership Tiers
+1. **Weekly Thursday – Business Mastermind**: Free and open to all entrepreneurs in recovery. Anyone who is sober and owns a business can join.
+2. **Weekly Tuesday – All Our Affairs Business Mastermind**: Free and open to entrepreneurs in recovery who own businesses that have at least 2 full-time employees, $250k in revenue, are more than one year sober, and actively work the 12 steps.
+3. **Monthly – Phoenix Forum**: The paid $499/mo curated group for entrepreneurs in recovery with $1m+ in revenue and over a year of sobriety. These are closer to peer groups like YPO, Vistage, and Entrepreneurs Organization. Maximum of 10 members per group with a monthly "hot seat." Participants essentially do a 4th and 5th step on their businesses and lives.
+
 ## Target Audience
 **Target companies:** Sober Founders (nonprofit supporting entrepreneurs in recovery)
 **Decision-makers:** Executive team, program managers, board of directors

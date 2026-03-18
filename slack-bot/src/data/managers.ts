@@ -65,13 +65,40 @@ export const getManagerReport = async (section: string, dateRange: DateRangeInpu
     };
   }
 
-  const { data: trends } = await supabase
-    .from("vw_kpi_trend")
-    .select("kpi_name,value,wow_pct,goal_status,funnel_key")
-    .eq("funnel_key", normalized === "executive" ? "unknown" : normalized)
-    .limit(5);
+  let funnelKey = normalized;
+  if (normalized === "executive" || normalized === "attendance" || normalized === "donations" || normalized === "email" || normalized === "seo") {
+    funnelKey = "unknown";
+  }
 
-  const bullets = (trends || []).map((row: Record<string, unknown>) => {
+  const { data: trends, error: trendErr } = await supabase
+    .from("vw_kpi_trend")
+    .select("kpi_key,kpi_name,value,wow_pct,goal_status,funnel_key")
+    .eq("funnel_key", funnelKey)
+    .limit(25);
+
+  if (trendErr) throw new Error(`vw_kpi_trend query failed: ${trendErr.message}`);
+
+  const filteredTrends = (trends || []).filter((row: Record<string, unknown>) => {
+    const key = String(row.kpi_key || "").toLowerCase();
+    if (normalized === "attendance") {
+      return key.includes("showup") || key.includes("new_tue") || key.includes("new_thu") || key.includes("attendance");
+    }
+    if (normalized === "donations") {
+      return key.includes("donations") || key.includes("revenue_donations") || key.includes("donor");
+    }
+    if (normalized === "email") {
+      return key.includes("email") || key.includes("mailchimp");
+    }
+    if (normalized === "seo") {
+      return key.includes("seo") || key.includes("organic");
+    }
+    if (normalized === "leads") {
+      return key.includes("lead") || key.includes("hs_contacts") || key.includes("interview") || key.includes("calls_booked");
+    }
+    return true; // Use all for executive or other
+  }).slice(0, 8);
+
+  const bullets = filteredTrends.map((row: Record<string, unknown>) => {
     const wow = Number(row.wow_pct);
     const wowLabel = Number.isFinite(wow) ? `${wow >= 0 ? "+" : ""}${wow.toFixed(1)}% WoW` : "WoW n/a";
     return `${String(row.kpi_name || "KPI")}: ${formatNumber(Number(row.value ?? NaN))} (${wowLabel}, ${String(row.goal_status || "no_goal")})`;
@@ -86,6 +113,7 @@ export const getManagerReport = async (section: string, dateRange: DateRangeInpu
     confidence: bullets.length ? 0.7 : 0.4,
   };
 };
+
 
 export const listOpenTasks = async (owner?: string, team?: string, priority?: string) => {
   let query = supabase

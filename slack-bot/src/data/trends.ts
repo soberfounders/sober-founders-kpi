@@ -108,7 +108,7 @@ const aggregateAttendance = async (from: string, to: string): Promise<AggregateR
     .select("hubspot_activity_id")
     .gte("hs_timestamp", `${from}T00:00:00.000Z`)
     .lte("hs_timestamp", `${to}T23:59:59.999Z`)
-    .eq("activity_type", "MEETING")
+    .in("activity_type", ["meeting", "MEETING", "call", "CALL"])
     .or(buildGroupSessionTitleFilter());
 
   if (sessErr) throw new Error(`raw_hubspot_meeting_activities query failed: ${sessErr.message}`);
@@ -253,7 +253,7 @@ export const computeRepeatAttendanceRates = async (range: DateRangeInput | undef
     .select("hubspot_activity_id, hs_timestamp, title")
     .gte("hs_timestamp", `${normalizedRange.from}T00:00:00.000Z`)
     .lte("hs_timestamp", `${normalizedRange.to}T23:59:59.999Z`)
-    .eq("activity_type", "MEETING")
+    .in("activity_type", ["meeting", "MEETING", "call", "CALL"])
     .or(buildGroupSessionTitleFilter());
 
   if (sessErr) throw new Error(`Repeat attendance session query failed: ${sessErr.message}`);

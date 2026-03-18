@@ -230,14 +230,20 @@ const PAGE_CONTENT = `<!-- wp:html -->
   .sf-stat { text-align: center; padding: 8px; }
   .sf-stat-icon {
     width: 52px; height: 52px;
-    background: rgba(0,178,134,0.15);
+    background:
+      radial-gradient(circle at 30% 28%, rgba(94,236,192,0.16), transparent 36%),
+      linear-gradient(145deg, rgba(7,61,48,0.98) 0%, rgba(3,34,27,0.98) 100%);
+    border: 1px solid rgba(94,236,192,0.16);
     border-radius: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
     margin: 0 auto 16px;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.05),
+      0 16px 28px rgba(0,0,0,0.18);
+    overflow: hidden;
   }
-  .sf-stat-icon svg { width: 24px; height: 24px; fill: #00b286; }
   .sf-stat-num {
     font-family: "DM Serif Display", serif;
     font-size: 2.2rem;
@@ -249,6 +255,27 @@ const PAGE_CONTENT = `<!-- wp:html -->
     color: rgba(255,255,255,0.65);
     line-height: 1.4;
   }
+  .sf-icon-glyph {
+    display: block;
+    width: 24px;
+    height: 24px;
+    background: #5eecc0;
+    -webkit-mask-image: var(--sf-icon-mask);
+    mask-image: var(--sf-icon-mask);
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    filter: drop-shadow(0 0 10px rgba(94,236,192,0.08));
+  }
+  .sf-icon-glyph--people { --sf-icon-mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20640%20512%27%3E%3Cpath%20d%3D%27M144%200a80%2080%200%201%201%200%20160A80%2080%200%201%201%20144%200zM512%200a80%2080%200%201%201%200%20160A80%2080%200%201%201%20512%200zM0%20298.7C0%20239.8%2047.8%20192%20106.7%20192h42.7c15.9%200%2031%203.5%2044.6%209.7c-1.3%207.2-1.9%2014.7-1.9%2022.3c0%2038.2%2016.8%2072.5%2043.3%2096H21.3C9.6%20320%200%20310.4%200%20298.7zM405.3%20320H235.4c26.5-23.5%2043.3-57.8%2043.3-96c0-7.6-.7-15-1.9-22.3c13.6-6.3%2028.7-9.7%2044.6-9.7h42.7C423.2%20192%20471%20239.8%20471%20298.7c0%2011.8-9.6%2021.3-21.3%2021.3h-44.3zM320%20256a96%2096%200%201%200%200-192%2096%2096%200%201%200%200%20192zm-94.8%2032c-47%200-87.9%2026.2-108.8%2064.8C100.2%20378.7%2092.9%20400.8%2086.5%20432H553.5c-6.4-31.2-13.7-53.3-29.9-79.2C502.7%20314.2%20461.8%20288%20414.8%20288H225.2z%27%2F%3E%3C%2Fsvg%3E"); }
+  .sf-icon-glyph--money { --sf-icon-mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20576%20512%27%3E%3Cpath%20d%3D%27M64%2064C28.7%2064%200%2092.7%200%20128V384c0%2035.3%2028.7%2064%2064%2064H512c35.3%200%2064-28.7%2064-64V128c0-35.3-28.7-64-64-64H64zm64%20160c-8.8%200-16-7.2-16-16s7.2-16%2016-16h16c44.2%200%2080%2035.8%2080%2080v16c0%208.8-7.2%2016-16%2016s-16-7.2-16-16V272c0-26.5-21.5-48-48-48H128zm224-16c0-8.8%207.2-16%2016-16h16c26.5%200%2048%2021.5%2048%2048v16c0%208.8-7.2%2016-16%2016s-16-7.2-16-16V256c0-8.8-7.2-16-16-16H368c-8.8%200-16-7.2-16-16zm-160%2032a64%2064%200%201%201%20128%200%2064%2064%200%201%201-128%200zM288%20160a80%2080%200%201%201%200%20160%2080%2080%200%201%201%200-160z%27%2F%3E%3C%2Fsvg%3E"); }
+  .sf-icon-glyph--growth { --sf-icon-mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20512%20512%27%3E%3Cpath%20d%3D%27M470.7%209.4c3%203.1%205.3%206.6%206.9%2010.3s2.4%207.8%202.4%2012.2V128c0%2017.7-14.3%2032-32%2032s-32-14.3-32-32V109.3L310.6%20214.6c-12.5%2012.5-32.8%2012.5-45.3%200L192%20141.3%2054.6%20278.6c-12.5%2012.5-32.8%2012.5-45.3%200s-12.5-32.8%200-45.3l160-160c12.5-12.5%2032.8-12.5%2045.3%200L288%20146.7%20383.4%2051.3H352c-17.7%200-32-14.3-32-32s14.3-32%2032-32h96c8.8%200%2016.8%203.6%2022.6%209.3l.1%20.1z%27%2F%3E%3C%2Fsvg%3E"); }
+  .sf-icon-glyph--heart { --sf-icon-mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20512%20512%27%3E%3Cpath%20d%3D%27M47.6%20300.4L228.3%20469.1c7.5%207%2017.4%2010.9%2027.7%2010.9s20.2-3.9%2027.7-10.9L464.4%20300.4c30.4-28.3%2047.6-68%2047.6-109.5v-5.8c0-69.9-50.5-129.5-119.4-141C347%2036.5%20300.6%2051.4%20268%2084L256%2096%20244%2084c-32.6-32.6-79-47.5-124.6-39.9C50.5%2055.6%200%20115.2%200%20185.1v5.8c0%2041.5%2017.2%2081.2%2047.6%20109.5z%27%2F%3E%3C%2Fsvg%3E"); }
+  .sf-icon-glyph--calendar { --sf-icon-mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20448%20512%27%3E%3Cpath%20d%3D%27M152%2024c0-13.3-10.7-24-24-24s-24%2010.7-24%2024V64H64C28.7%2064%200%2092.7%200%20128v16%2048V448c0%2035.3%2028.7%2064%2064%2064H384c35.3%200%2064-28.7%2064-64V192%20144%20128c0-35.3-28.7-64-64-64H344V24c0-13.3-10.7-24-24-24s-24%2010.7-24%2024V64H152V24zM48%20192H400V448c0%208.8-7.2%2016-16%2016H64c-8.8%200-16-7.2-16-16V192z%27%2F%3E%3C%2Fsvg%3E"); }
+  .sf-icon-glyph--check { --sf-icon-mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20512%20512%27%3E%3Cpath%20d%3D%27M256%2048a208%20208%200%201%201%200%20416%20208%20208%200%201%201%200-416zm0%20464A256%20256%200%201%200%20256%200a256%20256%200%201%200%200%20512zM369%20209c9.4-9.4%209.4-24.6%200-33.9s-24.6-9.4-33.9%200l-111%20111-47-47c-9.4-9.4-24.6-9.4-33.9%200s-9.4%2024.6%200%2033.9l64%2064c9.4%209.4%2024.6%209.4%2033.9%200L369%20209z%27%2F%3E%3C%2Fsvg%3E"); }
 
   /* ── Services cards ── */
   .sf-services-heading {
@@ -509,14 +536,23 @@ const PAGE_CONTENT = `<!-- wp:html -->
   }
   .sf-benefit-icon {
     width: 56px; height: 56px;
-    background: linear-gradient(135deg, #00b286, #00c090);
+    background:
+      radial-gradient(circle at 30% 28%, rgba(94,236,192,0.18), transparent 38%),
+      linear-gradient(145deg, rgba(6,69,54,0.98) 0%, rgba(2,41,33,0.98) 100%);
     border-radius: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
     margin: 0 auto 18px;
+    border: 1px solid rgba(94,236,192,0.2);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.06),
+      0 18px 32px rgba(0,0,0,0.22);
   }
-  .sf-benefit-icon svg { width: 26px; height: 26px; fill: #fff; }
+  .sf-benefit-icon .sf-icon-glyph {
+    width: 26px;
+    height: 26px;
+  }
   .sf-benefit-card h3 {
     font-family: "DM Serif Display", serif;
     font-size: 1.15rem;
@@ -640,37 +676,46 @@ const PAGE_CONTENT = `<!-- wp:html -->
     </div>
   </div>
 
-  <!-- Stats -->
+  <!-- Stats — Year 1 Achievements -->
   <div style="max-width:1100px;margin:0 auto;padding:0 24px 60px;">
+    <div class="sf-services-heading" style="margin-bottom:40px;">
+      <h2>Year 1 Achievements</h2>
+    </div>
     <div class="sf-stats-section">
       <div class="sf-stats-grid">
         <div class="sf-stat">
-          <div class="sf-stat-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><path d="M144 0a80 80 0 1 1 0 160A80 80 0 1 1 144 0zM512 0a80 80 0 1 1 0 160A80 80 0 1 1 512 0zM0 298.7C0 239.8 47.8 192 106.7 192h42.7c15.9 0 31 3.5 44.6 9.7c-1.3 7.2-1.9 14.7-1.9 22.3c0 38.2 16.8 72.5 43.3 96H21.3C9.6 320 0 310.4 0 298.7zM405.3 320H235.4c26.5-23.5 43.3-57.8 43.3-96c0-7.6-.7-15-1.9-22.3c13.6-6.3 28.7-9.7 44.6-9.7h42.7C423.2 192 471 239.8 471 298.7c0 11.8-9.6 21.3-21.3 21.3h-44.3zM320 256a96 96 0 1 0 0-192 96 96 0 1 0 0 192zm-94.8 32c-47 0-87.9 26.2-108.8 64.8C100.2 378.7 92.9 400.8 86.5 432H553.5c-6.4-31.2-13.7-53.3-29.9-79.2C502.7 314.2 461.8 288 414.8 288H225.2z"/></svg>
-          </div>
+          <div class="sf-stat-icon"><span class="sf-icon-glyph sf-icon-glyph--people" aria-hidden="true"></span></div>
           <div class="sf-stat-num">500+</div>
-          <div class="sf-stat-label">Active Members</div>
+          <div class="sf-stat-label">Entrepreneurs Helped</div>
         </div>
         <div class="sf-stat">
-          <div class="sf-stat-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><path d="M64 64C28.7 64 0 92.7 0 128V384c0 35.3 28.7 64 64 64H512c35.3 0 64-28.7 64-64V128c0-35.3-28.7-64-64-64H64zm64 160c-8.8 0-16-7.2-16-16s7.2-16 16-16h16c44.2 0 80 35.8 80 80v16c0 8.8-7.2 16-16 16s-16-7.2-16-16V272c0-26.5-21.5-48-48-48H128zm224-16c0-8.8 7.2-16 16-16h16c26.5 0 48 21.5 48 48v16c0 8.8-7.2 16-16 16s-16-7.2-16-16V256c0-8.8-7.2-16-16-16H368c-8.8 0-16-7.2-16-16zm-160 32a64 64 0 1 1 128 0 64 64 0 1 1-128 0zM288 160a80 80 0 1 1 0 160 80 80 0 1 1 0-160z"/></svg>
-          </div>
+          <div class="sf-stat-icon"><span class="sf-icon-glyph sf-icon-glyph--money" aria-hidden="true"></span></div>
           <div class="sf-stat-num">$500M+</div>
           <div class="sf-stat-label">Combined Member Revenue</div>
         </div>
         <div class="sf-stat">
-          <div class="sf-stat-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M152 24c0-13.3-10.7-24-24-24s-24 10.7-24 24V64H64C28.7 64 0 92.7 0 128v16 48V448c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V192 144 128c0-35.3-28.7-64-64-64H344V24c0-13.3-10.7-24-24-24s-24 10.7-24 24V64H152V24zM48 192H400V448c0 8.8-7.2 16-16 16H64c-8.8 0-16-7.2-16-16V192z"/></svg>
-          </div>
-          <div class="sf-stat-num">2x Weekly</div>
-          <div class="sf-stat-label">Tuesday &amp; Thursday Sessions</div>
+          <div class="sf-stat-icon"><span class="sf-icon-glyph sf-icon-glyph--growth" aria-hidden="true"></span></div>
+          <div class="sf-stat-num">$1M+</div>
+          <div class="sf-stat-label">Additional Revenue Generated for Members</div>
         </div>
         <div class="sf-stat">
-          <div class="sf-stat-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M256 48a208 208 0 1 1 0 416 208 208 0 1 1 0-416zm0 464A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209c9.4-9.4 9.4-24.6 0-33.9s-24.6-9.4-33.9 0l-111 111-47-47c-9.4-9.4-24.6-9.4-33.9 0s-9.4 24.6 0 33.9l64 64c9.4 9.4 24.6 9.4 33.9 0L369 209z"/></svg>
-          </div>
-          <div class="sf-stat-num">501(c)(3)</div>
-          <div class="sf-stat-label">Free to Join, Funded by Donations</div>
+          <div class="sf-stat-icon"><span class="sf-icon-glyph sf-icon-glyph--heart" aria-hidden="true"></span></div>
+          <div class="sf-stat-num">98%</div>
+          <div class="sf-stat-label">Say We Helped Them Stay Sober Longer</div>
+        </div>
+        <div class="sf-stat">
+          <a href="/events/">
+            <div class="sf-stat-icon"><span class="sf-icon-glyph sf-icon-glyph--calendar" aria-hidden="true"></span></div>
+            <div class="sf-stat-num">2x Weekly</div>
+            <div class="sf-stat-label">Tuesday &amp; Thursday Sessions</div>
+          </a>
+        </div>
+        <div class="sf-stat">
+          <a href="/donate/">
+            <div class="sf-stat-icon"><span class="sf-icon-glyph sf-icon-glyph--check" aria-hidden="true"></span></div>
+            <div class="sf-stat-num">501(c)(3)</div>
+            <div class="sf-stat-label">Free to Join, Funded by Donations</div>
+          </a>
         </div>
       </div>
     </div>
@@ -761,23 +806,17 @@ const PAGE_CONTENT = `<!-- wp:html -->
     </div>
     <div class="sf-benefits-grid">
       <div class="sf-benefit-card">
-        <div class="sf-benefit-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><path d="M144 0a80 80 0 1 1 0 160A80 80 0 1 1 144 0zM512 0a80 80 0 1 1 0 160A80 80 0 1 1 512 0zM0 298.7C0 239.8 47.8 192 106.7 192h42.7c15.9 0 31 3.5 44.6 9.7c-1.3 7.2-1.9 14.7-1.9 22.3c0 38.2 16.8 72.5 43.3 96H21.3C9.6 320 0 310.4 0 298.7zM405.3 320H235.4c26.5-23.5 43.3-57.8 43.3-96c0-7.6-.7-15-1.9-22.3c13.6-6.3 28.7-9.7 44.6-9.7h42.7C423.2 192 471 239.8 471 298.7c0 11.8-9.6 21.3-21.3 21.3h-44.3zM320 256a96 96 0 1 0 0-192 96 96 0 1 0 0 192zm-94.8 32c-47 0-87.9 26.2-108.8 64.8C100.2 378.7 92.9 400.8 86.5 432H553.5c-6.4-31.2-13.7-53.3-29.9-79.2C502.7 314.2 461.8 288 414.8 288H225.2z"/></svg>
-        </div>
+        <div class="sf-benefit-icon"><span class="sf-icon-glyph sf-icon-glyph--people" aria-hidden="true"></span></div>
         <h3>Peer Support</h3>
         <p>Connect with others who truly understand how recovery shapes your business decisions. Real talk, real support.</p>
       </div>
       <div class="sf-benefit-card">
-        <div class="sf-benefit-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M256 48a208 208 0 1 1 0 416 208 208 0 1 1 0-416zm0 464A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209c9.4-9.4 9.4-24.6 0-33.9s-24.6-9.4-33.9 0l-111 111-47-47c-9.4-9.4-24.6-9.4-33.9 0s-9.4 24.6 0 33.9l64 64c9.4 9.4 24.6 9.4 33.9 0L369 209z"/></svg>
-        </div>
+        <div class="sf-benefit-icon"><span class="sf-icon-glyph sf-icon-glyph--check" aria-hidden="true"></span></div>
         <h3>Accountability</h3>
         <p>Stay on track with sobriety and business goals through a community built on follow-through, not lip service.</p>
       </div>
       <div class="sf-benefit-card">
-        <div class="sf-benefit-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M0 256a256 256 0 1 1 512 0A256 256 0 1 1 0 256zm320 96c0-26.9-16.5-49.9-40-59.3V88c0-13.3-10.7-24-24-24s-24 10.7-24 24V292.7c-23.5 9.5-40 32.5-40 59.3c0 35.3 28.7 64 64 64s64-28.7 64-64z"/></svg>
-        </div>
+        <div class="sf-benefit-icon"><span class="sf-icon-glyph sf-icon-glyph--growth" aria-hidden="true"></span></div>
         <h3>Professional Growth</h3>
         <p>Access peer insights, workshops, and resources designed to sharpen your skills and scale your business.</p>
       </div>
@@ -788,7 +827,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
   <div style="max-width:1100px;margin:0 auto;padding:0 24px 60px;">
     <div class="sf-trust">
       <img src="https://soberfounders.org/wp-content/uploads/2025/09/candid-seal-silver-2025.png" alt="Candid Silver Transparency Seal 2025" />
-      <p><strong>Highest Transparency Rating for a First-Year Nonprofit</strong> &mdash; Candid (formerly GuideStar) awarded Sober Founders their Silver Transparency Seal&mdash;the highest level a nonprofit can earn in its first year. Every dollar is accounted for, every program is open to scrutiny.</p>
+      <p><strong>Transparency</strong> - Candid (formerly GuideStar) awarded Sober Founders Inc their Silver Transparency Seal - the highest level a nonprofit can earn in its first year. Every dollar is accounted for and goes directly toward the mission!</p>
     </div>
   </div>
 

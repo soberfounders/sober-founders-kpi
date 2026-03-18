@@ -75,7 +75,10 @@ const FOOTER_HTML = `
     justify-content: center;
     gap: 16px;
     padding: 24px 32px;
-    background: linear-gradient(135deg, #101828 0%, #1a2940 50%, #0d3b2e 100%);
+    background: rgba(10, 10, 10, 0.45);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 14px;
     margin-bottom: 40px;
     position: relative;
@@ -84,7 +87,7 @@ const FOOTER_HTML = `
   .sf-footer-trust::before {
     content: "";
     position: absolute; inset: 0;
-    background: radial-gradient(circle at 20% 50%, rgba(0,178,134,0.12) 0%, transparent 50%);
+    background: radial-gradient(circle at 20% 50%, rgba(255,255,255,0.04) 0%, transparent 50%);
     pointer-events: none;
   }
   .sf-footer-trust img {
