@@ -761,6 +761,25 @@ const PAGE_CONTENT = `<!-- wp:html -->
 
     <div class="sf-ev-tiers">
 
+      <!-- Tuesday -->
+      <div class="sf-ev-tier">
+        <div class="sf-ev-tier-icon sf-ev-tier-icon-blue">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M256 0c36.8 0 68.8 20.7 84.9 51.1C373.8 41 411 49 437 75s34 63.3 23.9 96.1C491.3 187.2 512 219.2 512 256s-20.7 68.8-51.1 84.9C471 373.8 463 411 437 437s-63.3 34-96.1 23.9C324.8 491.3 292.8 512 256 512s-68.8-20.7-84.9-51.1C138.2 471 101 463 75 437s-34-63.3-23.9-96.1C20.7 324.8 0 292.8 0 256s20.7-68.8 51.1-84.9C41 138.2 49 101 75 75s63.3-34 96.1-23.9C187.2 20.7 219.2 0 256 0zM369 209c9.4-9.4 9.4-24.6 0-33.9s-24.6-9.4-33.9 0l-111 111-47-47c-9.4-9.4-24.6-9.4-33.9 0s-9.4 24.6 0 33.9l64 64c9.4 9.4 24.6 9.4 33.9 0L369 209z"/></svg>
+        </div>
+        <h3>Tuesday &ldquo;All Our Affairs&rdquo; Business Mastermind</h3>
+        <div class="sf-ev-tier-schedule">Every Tuesday &bull; 12:00 PM ET</div>
+        <div class="sf-ev-tier-price">Free</div>
+        <div class="sf-ev-tier-price-note">Verified members only</div>
+        <div class="sf-ev-tier-divider"></div>
+        <ul class="sf-ev-tier-reqs">
+          <li>$250K+ annual revenue</li>
+          <li>2+ full-time employees</li>
+          <li>1+ year sober &amp; working the steps</li>
+          <li>Short verification interview</li>
+        </ul>
+        <a href="javascript:void(0)" onclick="document.getElementById('sf-apply-modal').classList.add('sf-modal-open')" class="sf-ev-tier-cta sf-ev-cta-outline">Apply Now</a>
+      </div>
+
       <!-- Thursday -->
       <div class="sf-ev-tier sf-ev-tier-pop">
         <div class="sf-ev-tier-icon sf-ev-tier-icon-green">
@@ -778,25 +797,6 @@ const PAGE_CONTENT = `<!-- wp:html -->
           <li>Bring any challenge &mdash; business or recovery</li>
         </ul>
         <a href="#sf-calendar" class="sf-ev-tier-cta sf-ev-cta-primary">Sign Up Free</a>
-      </div>
-
-      <!-- Tuesday -->
-      <div class="sf-ev-tier">
-        <div class="sf-ev-tier-icon sf-ev-tier-icon-blue">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M256 0c36.8 0 68.8 20.7 84.9 51.1C373.8 41 411 49 437 75s34 63.3 23.9 96.1C491.3 187.2 512 219.2 512 256s-20.7 68.8-51.1 84.9C471 373.8 463 411 437 437s-63.3 34-96.1 23.9C324.8 491.3 292.8 512 256 512s-68.8-20.7-84.9-51.1C138.2 471 101 463 75 437s-34-63.3-23.9-96.1C20.7 324.8 0 292.8 0 256s20.7-68.8 51.1-84.9C41 138.2 49 101 75 75s63.3-34 96.1-23.9C187.2 20.7 219.2 0 256 0zM369 209c9.4-9.4 9.4-24.6 0-33.9s-24.6-9.4-33.9 0l-111 111-47-47c-9.4-9.4-24.6-9.4-33.9 0s-9.4 24.6 0 33.9l64 64c9.4 9.4 24.6 9.4 33.9 0L369 209z"/></svg>
-        </div>
-        <h3>Tuesday &ldquo;All Our Affairs&rdquo;</h3>
-        <div class="sf-ev-tier-schedule">Every Tuesday &bull; 12:00 PM ET</div>
-        <div class="sf-ev-tier-price">Free</div>
-        <div class="sf-ev-tier-price-note">Verified members only</div>
-        <div class="sf-ev-tier-divider"></div>
-        <ul class="sf-ev-tier-reqs">
-          <li>$250K+ annual revenue</li>
-          <li>2+ full-time employees</li>
-          <li>1+ year sober &amp; working the steps</li>
-          <li>Short verification interview</li>
-        </ul>
-        <a href="javascript:void(0)" onclick="document.getElementById('sf-apply-modal').classList.add('sf-modal-open')" class="sf-ev-tier-cta sf-ev-cta-outline">Apply Now</a>
       </div>
 
       <!-- Phoenix Forum -->
@@ -1108,7 +1108,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
 <div id="sf-apply-modal" class="sf-modal-backdrop" onclick="if(event.target===this)this.classList.remove('sf-modal-open')">
   <div class="sf-modal">
     <button class="sf-modal-close" onclick="document.getElementById('sf-apply-modal').classList.remove('sf-modal-open')">&times;</button>
-    <h3>Apply for Tuesday Business Mastermind</h3>
+    <h3>Apply for Tuesday &ldquo;All Our Affairs&rdquo; Business Mastermind</h3>
     <p>Fill out this form and you&rsquo;ll be redirected to schedule a quick Zoom call.</p>
     <div id="sf-hs-form"></div>
   </div>
