@@ -103,6 +103,7 @@ const jsonLd = {
         "501(c)(3) nonprofit community for entrepreneurs in recovery. Free weekly masterminds and the Phoenix Forum peer advisory board.",
       foundingDate: "2024",
       nonprofitStatus: "501(c)(3)",
+      taxID: "33-4098435",
       sameAs: [
         "https://www.linkedin.com/company/sober-founders",
         "https://www.instagram.com/soberfounders",

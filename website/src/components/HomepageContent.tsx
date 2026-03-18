@@ -62,7 +62,7 @@ export default function HomepageContent() {
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M256 48a208 208 0 1 1 0 416 208 208 0 1 1 0-416zm0 464A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209c9.4-9.4 9.4-24.6 0-33.9s-24.6-9.4-33.9 0l-111 111-47-47c-9.4-9.4-24.6-9.4-33.9 0s-9.4 24.6 0 33.9l64 64c9.4 9.4 24.6 9.4 33.9 0L369 209z"/></svg>
                 </div>
                 <div className="sf-stat-num">501(c)(3)</div>
-                <div className="sf-stat-label">Free to Join, Funded by Donations</div>
+                <div className="sf-stat-label">EIN: 33-4098435</div>
               </a>
             </div>
           </div>
@@ -189,7 +189,7 @@ export default function HomepageContent() {
       <div className="sf-section-sm sf-pad-wrap">
         <div className="sf-trust">
           <img src="https://soberfounders.org/wp-content/uploads/2025/09/candid-seal-silver-2025.png" alt="Candid Silver Transparency Seal 2025" />
-          <p><strong>Highest Transparency Rating for a First-Year Nonprofit</strong> &mdash; Candid (formerly GuideStar) awarded Sober Founders their Silver Transparency Seal&mdash;the highest level a nonprofit can earn in its first year. Every dollar is accounted for, every program is open to scrutiny.</p>
+          <p><strong>Transparency</strong> - Candid (formerly GuideStar) awarded Sober Founders Inc their Silver Transparency Seal - the highest level a nonprofit can earn in its first year. Every dollar is accounted for and goes directly toward the mission! EIN: 33-4098435</p>
         </div>
       </div>
 
