@@ -88,6 +88,13 @@ const PAGE_CONTENT = `<!-- wp:html -->
   }
 
   .sf-ev { font-family: 'Outfit', 'Inter', sans-serif; color: #fff; line-height: 1.7; -webkit-font-smoothing: antialiased; position: relative; z-index: 2; }
+  @media (max-width: 767px) {
+    .sf-ev {
+      background: rgba(10,10,10,0.65);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+  }
   .sf-ev * { box-sizing: border-box; }
   .sf-ev img { max-width: 100%; display: block; }
   .sf-ev a { text-decoration: none; }
