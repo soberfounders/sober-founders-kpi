@@ -138,6 +138,14 @@ export const classifyIntent = (prompt: string): IntentType => {
     || text.includes("review my tasks")
     || text.includes("what's on my plate")
     || text.includes("action items")
+    || text.includes("to do list")
+    || text.includes("todo list")
+    || text.includes("to-do list")
+    || text.includes("notion")
+    || text.includes("what can claude")
+    || text.includes("prioritize")
+    || text.includes("what's actionable")
+    || text.includes("what needs to get done")
   ) {
     return "recommendation";
   }
@@ -239,10 +247,13 @@ export const createKpiOrchestrator = (deps: Partial<OrchestratorDependencies> = 
       content: [{ type: "input_text", text: item.messageText }],
     }));
 
+    // Recommendation intents (task analysis, todo review) need more space for thorough responses
+    const maxTokens = intentHint === "recommendation" ? 2000 : 900;
+
     let response = await resolved.responseClient.create({
       model: resolved.model,
       temperature: 0.2,
-      max_output_tokens: 900,
+      max_output_tokens: maxTokens,
       tools: openAiTools,
       tool_choice: "required",
       input: [
@@ -307,7 +318,7 @@ export const createKpiOrchestrator = (deps: Partial<OrchestratorDependencies> = 
       response = await resolved.responseClient.create({
         model: resolved.model,
         temperature: 0.2,
-        max_output_tokens: 900,
+        max_output_tokens: maxTokens,
         previous_response_id: response.id,
         tools: openAiTools,
         input: outputs,
