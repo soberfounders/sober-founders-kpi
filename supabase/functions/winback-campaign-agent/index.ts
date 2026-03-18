@@ -10,19 +10,7 @@ const corsHeaders = {
 };
 
 /* ------------------------------------------------------------------ */
-/*  Helpers                                                            */
-/* ------------------------------------------------------------------ */
-
-function stripCodeFences(text: string) {
-    return String(text || "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-}
-
-function safeJsonParse<T = any>(value: string): T | null {
-    try { return JSON.parse(value) as T; } catch { return null; }
-}
-
-/* ------------------------------------------------------------------ */
-/*  AI Winback Message Generation                                      */
+/*  Winback Message Generation (fixed template - no AI)                */
 /* ------------------------------------------------------------------ */
 
 function calendarUrl(isThursday: boolean): string {
@@ -31,74 +19,23 @@ function calendarUrl(isThursday: boolean): string {
         : "https://soberfounders.org/tuesday";
 }
 
-async function generateWinbackMessages(candidates: any[]): Promise<any[]> {
-    const geminiKey = Deno.env.get("GEMINI_API_KEY");
+function generateWinbackMessages(candidates: any[]): any[] {
+    return candidates.map(c => {
+        const firstName = c.firstname || "there";
+        const groupSlug = c.is_thursday_attendee ? "thursday" : "tuesday";
+        const calLink = `https://soberfounders.org/${groupSlug}`;
 
-    if (!geminiKey) {
-        return candidates.map(c => {
-            const calLink = calendarUrl(c.is_thursday_attendee === true);
-            return {
-                email: c.email,
-                name: `${c.firstname || ""} ${c.lastname || ""}`.trim() || "there",
-                subject: `Thinking of you`,
-                message:
-                    `Hey ${c.firstname || "there"}, it's been a while since you joined us at Sober Founders — just wanted to reach out and let you know you're always welcome back. ` +
-                    `A lot has happened since your last visit and the community keeps growing. ` +
-                    `If you'd like to reconnect, you can easily add the meeting to your calendar at ${calLink} — hope to see you soon!`,
-                reason: "fallback_template",
-            };
-        });
-    }
-
-    const prompt = [
-        "You are the 'Sober Founders' community leader writing personal winback emails.",
-        "These people attended ONE meeting and never came back.",
-        "Write a short (3-4 sentences), warm, personal email for each person.",
-        "Key guidelines:",
-        "- Don't guilt-trip. Don't say 'we noticed you stopped coming'.",
-        "- Instead, share something positive that's happened in the community recently.",
-        "- Make them feel like they'd be welcomed back warmly.",
-        "- Reference roughly how long it's been (e.g., 'a couple months', 'a few weeks').",
-        "- End with a line: 'You can easily add the meeting to your calendar at [calendar_url]'",
-        "- Use their first name. Feel like a personal note, not a system email.",
-        "",
-        "Candidates:",
-        JSON.stringify(candidates.map(c => ({
+        return {
             email: c.email,
-            name: `${c.firstname || ""} ${c.lastname || ""}`.trim(),
-            first_attended: c.first_attended,
-            days_since: c.days_since_last,
-            calendar_url: calendarUrl(c.is_thursday_attendee === true),
-        }))),
-        "",
-        "Return JSON: { winbacks: [ { email: string, name: string, subject: string, message: string } ] }",
-    ].join("\n");
-
-    const model = "gemini-2.0-flash";
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(geminiKey)}`;
-    const resp = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.5, responseMimeType: "application/json" },
-        }),
+            name: `${c.firstname || ""} ${c.lastname || ""}`.trim() || "there",
+            subject: `Hey ${firstName} - Sober Founders update`,
+            message:
+                `Hey ${firstName},\n\n` +
+                `It was great meeting you at the Sober Founders group! Wanted to reach out because a lot has happened since then and just launched ${calLink} to make it easier to find everything and get it in your calendar with just a click.\n\n` +
+                `Also, if it's not for you, any feedback is greatly appreciated!\n\n` +
+                `- Andrew`,
+        };
     });
-
-    if (resp.ok) {
-        const json = await resp.json();
-        const text = json?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        const parsed = safeJsonParse(stripCodeFences(text));
-        return parsed?.winbacks || [];
-    }
-
-    return candidates.map(c => ({
-        email: c.email,
-        name: `${c.firstname || ""} ${c.lastname || ""}`.trim() || "there",
-        subject: `Thinking of you`,
-        message: `Hey ${c.firstname || "there"}, it's been a little while since you joined us and I just wanted to say — you're always welcome back at Sober Founders. The community has been growing and the conversations keep getting better. Would love to see you at an upcoming meeting!`,
-        reason: "fallback_template",
-    }));
 }
 
 /* ------------------------------------------------------------------ */
@@ -214,7 +151,7 @@ serve(async (req: Request) => {
         const targets = realCandidates.slice(0, batchSize);
         let winbacks: any[] = [];
         if (targets.length > 0) {
-            winbacks = await generateWinbackMessages(targets);
+            winbacks = generateWinbackMessages(targets);
         }
 
         let emailsSent = 0;
@@ -239,7 +176,7 @@ serve(async (req: Request) => {
                 if (contactId) {
                     const taskResult = await createHubSpotTaskDraft(hubspotToken, {
                         contactId,
-                        subject: wb.subject || "Thinking of you",
+                        subject: wb.subject,
                         body: wb.message,
                         campaignType: "winback",
                     });
@@ -274,8 +211,8 @@ serve(async (req: Request) => {
                             contactId,
                             contactEmail: wb.email,
                             senderEmail,
-                            subject: wb.subject || "Thinking of you",
-                            htmlBody: `<p>${wb.message}</p>`,
+                            subject: wb.subject,
+                            htmlBody: wb.message.split("\n").map((l: string) => l ? `<p>${l}</p>` : "").join(""),
                             campaignType: "winback",
                         });
 
