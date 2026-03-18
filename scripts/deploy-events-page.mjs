@@ -734,7 +734,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
   <!-- ═══ Founder Quote ═══ -->
   <div class="sf-ev-section" style="padding-top: 20px; padding-bottom: 60px;">
     <div class="sf-ev-quote">
-      <img src="https://soberfounders.org/wp-content/uploads/2026/03/andrew-lassise-headshot.jpg" alt="Andrew Lassise, Founder" />
+      <img src="http://soberfounders.org/wp-content/uploads/2026/03/andrew-lassise-headshot.jpg" alt="Andrew Lassise, Founder" />
       <div>
         <blockquote>&ldquo;I started Sober Founders because business masterminds didn&rsquo;t understand my recovery, and 12&ndash;step meetings didn&rsquo;t understand my P&amp;L. If you&rsquo;re tired of balancing those two worlds alone, join us this Thursday. No solicitation &mdash; just experience, strength, and hope.&rdquo;</blockquote>
         <cite>&mdash; Andrew Lassise, Founder</cite>
