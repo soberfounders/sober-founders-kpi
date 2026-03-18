@@ -13,7 +13,8 @@
 -- 1. Rebuild vw_noshow_candidates
 --    Adds: prior_meeting_count, effective date guard
 -- ============================================================
-CREATE OR REPLACE VIEW public.vw_noshow_candidates AS
+DROP VIEW IF EXISTS public.vw_noshow_candidates;
+CREATE VIEW public.vw_noshow_candidates AS
 WITH luma_regs AS (
   SELECT
     guest_email                  AS email,
@@ -139,7 +140,8 @@ LEFT JOIN public.recovery_events ar
 -- 3. Update vw_winback_candidates to add is_thursday_attendee
 --    (based on day-of-week of last_attended, for calendar link)
 -- ============================================================
-CREATE OR REPLACE VIEW public.vw_winback_candidates AS
+DROP VIEW IF EXISTS public.vw_winback_candidates;
+CREATE VIEW public.vw_winback_candidates AS
 WITH attendance_counts AS (
   SELECT
     a.contact_email                         AS email,

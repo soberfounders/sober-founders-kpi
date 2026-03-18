@@ -17,13 +17,28 @@ CREATE INDEX IF NOT EXISTS idx_donation_attendee_overrides_email
 
 ALTER TABLE donation_attendee_overrides ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "anon_read_donation_attendee_overrides"
-  ON donation_attendee_overrides FOR SELECT TO anon, authenticated
-  USING (true);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'donation_attendee_overrides'
+      AND policyname = 'anon_read_donation_attendee_overrides'
+  ) THEN
+    CREATE POLICY "anon_read_donation_attendee_overrides"
+      ON donation_attendee_overrides FOR SELECT TO anon, authenticated
+      USING (true);
+  END IF;
 
-CREATE POLICY "service_role_all_donation_attendee_overrides"
-  ON donation_attendee_overrides FOR ALL TO service_role
-  USING (true) WITH CHECK (true);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'donation_attendee_overrides'
+      AND policyname = 'service_role_all_donation_attendee_overrides'
+  ) THEN
+    CREATE POLICY "service_role_all_donation_attendee_overrides"
+      ON donation_attendee_overrides FOR ALL TO service_role
+      USING (true) WITH CHECK (true);
+  END IF;
+END $$;
 
 -- Seed known household/spousal donation links
 INSERT INTO donation_attendee_overrides (donor_email, attendee_display_name, note) VALUES

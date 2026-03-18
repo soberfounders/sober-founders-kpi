@@ -1,7 +1,8 @@
 -- HubSpot sync observability view
 -- Purpose: fast run-health inspection by run type/object type with stale/error signals.
 
-CREATE OR REPLACE VIEW public.vw_hubspot_sync_health_observability AS
+DROP VIEW IF EXISTS public.vw_hubspot_sync_health_observability;
+CREATE VIEW public.vw_hubspot_sync_health_observability AS
 WITH incremental_objects AS (
   SELECT object_type
   FROM public.hubspot_sync_state
