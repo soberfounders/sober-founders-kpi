@@ -1,7 +1,7 @@
 {
   "meta": {
     "lastExpanded": "2026-03-17",
-    "totalPublished": 4
+    "totalPublished": 5
   },
   "entries": [
     {
@@ -58,11 +58,11 @@
       "topic": "Sober CEO: How Running a Company Changes When You Put Down the Bottle",
       "category": "recovery-business",
       "priority": "high",
-      "status": "queued",
-      "publishedDate": null,
-      "wpPostId": null,
-      "wpSlug": null,
-      "seoScore": null
+      "status": "published",
+      "publishedDate": "2026-03-18",
+      "wpPostId": 4757,
+      "wpSlug": "sober-ceo-transforming-leadership-without-alcohol",
+      "seoScore": "93/113"
     },
     {
       "id": 6,
