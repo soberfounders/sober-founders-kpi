@@ -410,15 +410,12 @@ const PAGE_CONTENT = `<!-- wp:html -->
   }
   .sf-ev-steps {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(2, 1fr);
     gap: 32px;
-    max-width: 960px;
+    max-width: 760px;
     margin: 0 auto;
   }
-  @media (max-width: 768px) {
-    .sf-ev-steps { grid-template-columns: repeat(2, 1fr); }
-  }
-  @media (max-width: 480px) {
+  @media (max-width: 580px) {
     .sf-ev-steps { grid-template-columns: 1fr; }
   }
   .sf-ev-step { text-align: center; }
@@ -829,29 +826,19 @@ const PAGE_CONTENT = `<!-- wp:html -->
   <div class="sf-ev-section-sm sf-ev-pad" style="padding-bottom: 80px;" id="sf-how-it-works">
     <div class="sf-ev-how">
       <div class="sf-ev-heading" style="margin-bottom: 40px;">
-        <h2>What Happens in a Session</h2>
+        <h2>What Happens in a Business Mastermind</h2>
         <p>No lectures. No networking pitches. Just sober entrepreneurs helping each other solve the problems that keep them up at night.</p>
       </div>
       <div class="sf-ev-steps">
         <div class="sf-ev-step">
           <div class="sf-ev-step-num">1</div>
           <h4>Quick Intros</h4>
-          <p>Name, business, sobriety date. Five minutes. No egos, no pitches &mdash; just people who get it.</p>
+          <p>Let us know who you are and what you do, and a recent win.</p>
         </div>
         <div class="sf-ev-step">
           <div class="sf-ev-step-num">2</div>
-          <h4>The Hot Seat</h4>
-          <p>One founder brings a real challenge &mdash; a toxic partner, a cash&ndash;flow crisis, a relapse scare. Nothing is off limits.</p>
-        </div>
-        <div class="sf-ev-step">
-          <div class="sf-ev-step-num">3</div>
-          <h4>Experience, Strength &amp; Hope</h4>
-          <p>The group shares what worked for them. Not advice &mdash; real experience from founders who&rsquo;ve been exactly where you are.</p>
-        </div>
-        <div class="sf-ev-step">
-          <div class="sf-ev-step-num">4</div>
-          <h4>Pay It Forward</h4>
-          <p>Next week, you help someone else. That&rsquo;s how a room full of strangers becomes a room full of people who have your back.</p>
+          <h4>Challenges / Opportunities</h4>
+          <p>We pick several topics and struggles members share and discuss in an open conversation with other sober entrepreneurs.</p>
         </div>
       </div>
     </div>
