@@ -64,7 +64,6 @@ const PAGE_CONTENT = `<!-- wp:html -->
     width: 100vw; height: 100vh;
     z-index: 0;
   }
-  #sf-scroll-video { display: none !important; }
   #sf-scroll-overlay {
     position: fixed;
     top: 0; left: 0;
@@ -642,10 +641,6 @@ const PAGE_CONTENT = `<!-- wp:html -->
   .sf-modal .hs-form a { color: #00b286 !important; }
 </style>
 
-<!-- Hidden video source for canvas scrubbing -->
-<video id="sf-scroll-video" muted playsinline preload="auto"
-  src="https://soberfounders.org/wp-content/uploads/2026/03/hero-video.mp4"></video>
-
 <!-- Canvas renders scroll-synced frames -->
 <canvas id="sf-scroll-canvas"></canvas>
 <div id="sf-scroll-overlay"></div>
@@ -867,7 +862,8 @@ const PAGE_CONTENT = `<!-- wp:html -->
 ]
 </script>
 
-<!-- Lenis smooth scroll + GSAP ScrollTrigger (same stack as homepage) -->
+<!-- Lenis smooth scroll + GSAP ScrollTrigger + pre-loaded image frames
+     (exact same stack as homepage HeroScroll.tsx — no video seeking) -->
 <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.18/dist/lenis.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/gsap.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/ScrollTrigger.min.js"></script>
@@ -883,68 +879,71 @@ const PAGE_CONTENT = `<!-- wp:html -->
   function raf(time) { lenis.raf(time); requestAnimationFrame(raf); }
   requestAnimationFrame(raf);
 
-  /* ── Canvas scroll-scrub animation ── */
-  var video = document.getElementById('sf-scroll-video');
+  /* ── Pre-loaded image frame animation (mirrors homepage HeroScroll.tsx) ── */
   var canvas = document.getElementById('sf-scroll-canvas');
   var overlay = document.getElementById('sf-scroll-overlay');
-  if (!video || !canvas || !overlay) return;
+  if (!canvas || !overlay) return;
   if (window.innerWidth < 768) return;
 
   gsap.registerPlugin(ScrollTrigger);
 
   var ctx = canvas.getContext('2d');
   if (!ctx) return;
-  var animId;
 
-  function drawFrame() {
-    var vw = video.videoWidth, vh = video.videoHeight;
-    if (!vw || !vh) return;
-    var cw = canvas.width, ch = canvas.height;
-    var videoRatio = vw / vh, canvasRatio = cw / ch;
-    var sx, sy, sw, sh;
-    if (canvasRatio > videoRatio) {
-      sw = vw; sh = vw / canvasRatio; sx = 0; sy = (vh - sh) / 2;
-    } else {
-      sh = vh; sw = vh * canvasRatio; sx = (vw - sw) / 2; sy = 0;
-    }
-    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, cw, ch);
+  var FRAME_COUNT = 122;
+  var FRAME_BASE = 'https://soberfounders.org/wp-content/uploads/2026/03/frame_';
+  var images = [];
+  var loadedCount = 0;
+
+  function getFrameSrc(index) {
+    var padded = String(index).padStart(3, '0');
+    return FRAME_BASE + padded + '-1.jpg';
   }
 
-  function renderLoop() { drawFrame(); animId = requestAnimationFrame(renderLoop); }
+  function drawFrame(index) {
+    var img = images[index];
+    if (!img) return;
+    var cw = canvas.width, ch = canvas.height;
+    var iw = img.naturalWidth, ih = img.naturalHeight;
+    if (!iw || !ih) return;
+    var canvasRatio = cw / ch, imgRatio = iw / ih;
+    var sx, sy, sw, sh;
+    if (canvasRatio > imgRatio) {
+      sw = iw; sh = iw / canvasRatio; sx = 0; sy = (ih - sh) / 2;
+    } else {
+      sh = ih; sw = ih * canvasRatio; sx = (iw - sw) / 2; sy = 0;
+    }
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, cw, ch);
+  }
 
   function resize() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
   }
 
-  function init() {
-    var duration = video.duration;
-    if (!duration || !isFinite(duration)) return;
+  function onAllLoaded() {
+    drawFrame(0);
+    var frameObj = { current: 0 };
 
-    resize();
-    window.addEventListener('resize', resize);
-    video.currentTime = 0;
-    video.addEventListener('seeked', drawFrame, { once: true });
-    renderLoop();
-
-    /* GSAP ScrollTrigger scrub — video plays across full page scroll.
-       scrub: 0.5 = smooth half-second interpolation between frames.
-       No acceleration — 1:1 mapping so user sees the entire
-       bottle → explosion → phoenix transition as they scroll. */
     ScrollTrigger.create({
       trigger: document.documentElement,
       start: 'top top',
       end: 'bottom bottom',
       scrub: 0.5,
       onUpdate: function(self) {
-        video.currentTime = self.progress * duration;
+        var frameIndex = Math.min(FRAME_COUNT - 1, Math.floor(self.progress * (FRAME_COUNT - 1)));
 
-        /* Motion blur based on scroll velocity */
+        if (frameIndex !== frameObj.current) {
+          frameObj.current = frameIndex;
+          drawFrame(frameIndex);
+        }
+
+        /* Motion blur based on scroll velocity (matches homepage) */
         var velocity = Math.abs(self.getVelocity());
         var blur = Math.min(velocity / 2000, 4);
         canvas.style.filter = blur > 0.2 ? 'blur(' + blur + 'px)' : 'none';
 
-        /* Overlay dimming */
+        /* Overlay dimming (matches homepage HeroScroll.tsx) */
         var p = self.progress;
         var darkness;
         if (p < 0.05) {
@@ -961,8 +960,18 @@ const PAGE_CONTENT = `<!-- wp:html -->
     });
   }
 
-  if (video.readyState >= 1) init();
-  else video.addEventListener('loadedmetadata', init, { once: true });
+  /* Pre-load all 122 frames (same pattern as homepage) */
+  resize();
+  window.addEventListener('resize', resize);
+  for (var i = 0; i < FRAME_COUNT; i++) {
+    var img = new Image();
+    img.src = getFrameSrc(i + 1);
+    img.onload = function() {
+      loadedCount++;
+      if (loadedCount === FRAME_COUNT) onAllLoaded();
+    };
+    images.push(img);
+  }
 })();
 </script>
 
@@ -971,7 +980,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
   <div class="sf-modal">
     <button class="sf-modal-close" onclick="document.getElementById('sf-apply-modal').classList.remove('sf-modal-open')">&times;</button>
     <h3>Apply for Tuesday Business Mastermind</h3>
-    <p>Fill out a quick application and we&rsquo;ll reach out to schedule a verification call.</p>
+    <p>Fill out this form and you&rsquo;ll be redirected to schedule a quick Zoom call.</p>
     <div id="sf-hs-form"></div>
   </div>
 </div>
