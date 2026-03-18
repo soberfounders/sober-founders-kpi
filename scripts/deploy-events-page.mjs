@@ -87,7 +87,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
     .sf-ev-mobile-bg { display: block; }
   }
 
-  .sf-ev { font-family: 'Outfit', 'Inter', sans-serif; color: #fff; line-height: 1.7; -webkit-font-smoothing: antialiased; position: relative; z-index: 2; }
+  .sf-ev { font-family: 'Outfit', 'Inter', sans-serif; color: #fff; line-height: 1.7; -webkit-font-smoothing: antialiased; position: relative; z-index: 2; background: rgba(10,10,10,0.35); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
   @media (max-width: 767px) {
     .sf-ev {
       background: rgba(10,10,10,0.65);
@@ -167,6 +167,53 @@ const PAGE_CONTENT = `<!-- wp:html -->
   }
   @media (max-width: 600px) {
     .sf-ev-quote { flex-direction: column; align-items: center; text-align: center; }
+  }
+
+  /* ── Testimonial + rating ── */
+  .sf-ev-testimonials {
+    max-width: 800px;
+    margin: 0 auto;
+  }
+  .sf-ev-rating {
+    text-align: center;
+    margin-bottom: 36px;
+  }
+  .sf-ev-rating-stars {
+    font-size: 1.6rem;
+    color: #fbbf24;
+    letter-spacing: 4px;
+    margin-bottom: 6px;
+  }
+  .sf-ev-rating-text {
+    font-size: 0.95rem;
+    color: rgba(255,255,255,0.6);
+  }
+  .sf-ev-rating-num {
+    font-weight: 700;
+    color: #fbbf24;
+  }
+  .sf-ev-testimonial {
+    background: rgba(10,10,10,0.45);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 28px 28px 24px;
+    margin-bottom: 20px;
+  }
+  .sf-ev-testimonial blockquote {
+    margin: 0 0 12px;
+    font-size: 0.95rem;
+    color: rgba(255,255,255,0.8);
+    line-height: 1.7;
+    font-style: italic;
+  }
+  .sf-ev-testimonial cite {
+    display: block;
+    font-style: normal;
+    font-weight: 600;
+    color: #5eecc0;
+    font-size: 0.85rem;
   }
 
   /* ── Glassmorphism utility ── */
@@ -740,21 +787,6 @@ const PAGE_CONTENT = `<!-- wp:html -->
 <!-- /wp:html -->
 
 <!-- wp:html -->
-<!-- ═══ FOUNDER QUOTE — edit quote text below ═══ -->
-<div class="sf-ev">
-  <div class="sf-ev-section" style="padding-top: 20px; padding-bottom: 60px;">
-    <div class="sf-ev-quote">
-      <img src="http://soberfounders.org/wp-content/uploads/2026/03/andrew-lassise-headshot.jpg" alt="Andrew Lassise, Founder" />
-      <div>
-        <blockquote>&ldquo;I started Sober Founders because business masterminds didn&rsquo;t understand my recovery, and 12&ndash;step meetings didn&rsquo;t understand my P&amp;L. If you&rsquo;re tired of balancing those two worlds alone, join us this Thursday. No solicitation &mdash; just experience, strength, and hope.&rdquo;</blockquote>
-        <cite>&mdash; Andrew Lassise, Founder</cite>
-      </div>
-    </div>
-  </div>
-</div>
-<!-- /wp:html -->
-
-<!-- wp:html -->
 <!-- ═══ THREE TIERS — edit tier names, schedules, requirements below ═══ -->
 <div class="sf-ev">
   <div class="sf-ev-section" style="padding-top: 0;">
@@ -873,6 +905,43 @@ const PAGE_CONTENT = `<!-- wp:html -->
           tabindex="0"
           style="border-radius: 12px;"
         ></iframe>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- /wp:html -->
+
+<!-- wp:html -->
+<!-- ═══ FOUNDER QUOTE — edit quote text below ═══ -->
+<div class="sf-ev">
+  <div class="sf-ev-section" style="padding-top: 20px; padding-bottom: 40px;">
+    <div class="sf-ev-quote">
+      <img src="http://soberfounders.org/wp-content/uploads/2026/03/andrew-lassise-headshot.jpg" alt="Andrew Lassise, Founder" />
+      <div>
+        <blockquote>&ldquo;I started Sober Founders because business masterminds didn&rsquo;t understand my recovery, and 12&ndash;step meetings didn&rsquo;t understand my P&amp;L. If you&rsquo;re tired of balancing those two worlds alone, join us this Thursday. No solicitation &mdash; just experience, strength, and hope.&rdquo;</blockquote>
+        <cite>&mdash; Andrew Lassise, Founder</cite>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- /wp:html -->
+
+<!-- wp:html -->
+<!-- ═══ TESTIMONIAL + RATING — edit testimonials below ═══ -->
+<div class="sf-ev">
+  <div class="sf-ev-section" style="padding-top: 0; padding-bottom: 60px;">
+    <div class="sf-ev-testimonials">
+      <div class="sf-ev-rating">
+        <div class="sf-ev-rating-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+        <p class="sf-ev-rating-text">Avg Rating <span class="sf-ev-rating-num">4.86</span> from sober entrepreneurs</p>
+      </div>
+      <div class="sf-ev-testimonial">
+        <blockquote>&ldquo;I&rsquo;ve been in other masterminds, but none where I could talk about my sobriety and my business in the same sentence. The first session I attended, someone shared a challenge I was literally going through that week. I knew I&rsquo;d found my people.&rdquo;</blockquote>
+        <cite>&mdash; Member, Thursday Business Mastermind</cite>
+      </div>
+      <div class="sf-ev-testimonial">
+        <blockquote>&ldquo;Every Thursday I show up and get more value in one hour than most paid programs give in a month. The hot seat format cuts straight to the real issues &mdash; no fluff, just founders who get it helping each other win.&rdquo;</blockquote>
+        <cite>&mdash; Member, Thursday Business Mastermind</cite>
       </div>
     </div>
   </div>
