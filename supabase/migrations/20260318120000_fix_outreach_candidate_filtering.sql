@@ -75,12 +75,20 @@ WHERE gm.group_type IS NOT NULL
 -- ============================================================
 -- 2. Rebuild vw_at_risk_attendees
 --    - Uses group meetings only
---    - Excludes Tiger 21 members
---    - Requires sobriety_date > 6 months ago
---    - Requires annual_revenue > $100k
+--    - Excludes Tiger 21 members (always)
+--    - 3+ group meetings all-time = trusted, skip sobriety/revenue
+--    - Under 3 group meetings = require sobriety > 6mo + revenue > $100k
 -- ============================================================
 CREATE OR REPLACE VIEW public.vw_at_risk_attendees AS
-WITH recent_window AS (
+WITH all_time_group_counts AS (
+  -- Total group meetings ever per contact (for the 3+ trust threshold)
+  SELECT
+    lower(email) AS email,
+    COUNT(DISTINCT meeting_date) AS lifetime_group_meetings
+  FROM public.vw_group_meeting_attendance
+  GROUP BY lower(email)
+),
+recent_window AS (
   SELECT
     lower(gma.email)                              AS email,
     c.firstname,
@@ -90,18 +98,26 @@ WITH recent_window AS (
     MAX(gma.meeting_date) OVER (PARTITION BY lower(gma.email)) AS last_attended,
     -- Determine which group they primarily attend
     MODE() WITHIN GROUP (ORDER BY gma.group_type)
-      OVER (PARTITION BY lower(gma.email))        AS primary_group
+      OVER (PARTITION BY lower(gma.email))        AS primary_group,
+    atg.lifetime_group_meetings
   FROM public.vw_group_meeting_attendance gma
   LEFT JOIN public.raw_hubspot_contacts c
     ON lower(c.email) = lower(gma.email)
+  LEFT JOIN all_time_group_counts atg
+    ON atg.email = lower(gma.email)
   WHERE gma.hs_timestamp >= now() - INTERVAL '60 days'
-    -- Exclude Tiger 21 members
+    -- Always exclude Tiger 21 members
     AND (c.membership_s IS NULL OR c.membership_s NOT ILIKE '%Tiger 21%')
-    -- Require sobriety date > 6 months ago
-    AND c.sobriety_date IS NOT NULL
-    AND c.sobriety_date::DATE <= now()::DATE - INTERVAL '6 months'
-    -- Require annual revenue > $100k
-    AND COALESCE(c.annual_revenue_in_dollars__official_, 0) >= 100000
+    -- 3+ group meetings all-time = trusted member, skip sobriety/revenue
+    -- Under 3 = require sobriety date > 6 months AND revenue > $100k
+    AND (
+      COALESCE(atg.lifetime_group_meetings, 0) >= 3
+      OR (
+        c.sobriety_date IS NOT NULL
+        AND c.sobriety_date::DATE <= now()::DATE - INTERVAL '6 months'
+        AND COALESCE(c.annual_revenue_in_dollars__official_, 0) >= 100000
+      )
+    )
 ),
 candidates AS (
   SELECT DISTINCT ON (email)
@@ -137,7 +153,7 @@ LEFT JOIN public.recovery_events r
 --    - Uses group meetings only
 --    - Requires 3+ CONSECUTIVE weekly sessions then a miss
 --    - Excludes Tiger 21
---    - Requires sobriety + revenue qualifications
+--    - No sobriety/revenue gate: 3+ consecutive = trusted member
 -- ============================================================
 CREATE OR REPLACE VIEW public.vw_streak_break_candidates AS
 WITH group_sessions AS (
@@ -220,11 +236,7 @@ qualified AS (
     AND ls.days_since_last BETWEEN 14 AND 56
     -- Exclude Tiger 21
     AND (c.membership_s IS NULL OR c.membership_s NOT ILIKE '%Tiger 21%')
-    -- Require sobriety date > 6 months ago
-    AND c.sobriety_date IS NOT NULL
-    AND c.sobriety_date::DATE <= now()::DATE - INTERVAL '6 months'
-    -- Require annual revenue > $100k
-    AND COALESCE(c.annual_revenue_in_dollars__official_, 0) >= 100000
+    -- No sobriety/revenue gate: 3+ consecutive sessions = trusted member
 )
 SELECT
   q.email,
@@ -252,7 +264,8 @@ LEFT JOIN public.recovery_events ar
 -- 4. Rebuild vw_winback_candidates
 --    - Uses group meetings only
 --    - Excludes Tiger 21
---    - Requires sobriety + revenue qualifications
+--    - Winback = 1 meeting, so sobriety/revenue still required
+--      (they haven't proven commitment via repeat attendance)
 -- ============================================================
 DROP VIEW IF EXISTS public.vw_winback_candidates;
 CREATE VIEW public.vw_winback_candidates AS
@@ -274,10 +287,9 @@ WITH attendance_counts AS (
   WHERE
     -- Exclude Tiger 21
     (c.membership_s IS NULL OR c.membership_s NOT ILIKE '%Tiger 21%')
-    -- Require sobriety date > 6 months ago
+    -- Winback = 1-time attendees, require sobriety + revenue qualification
     AND c.sobriety_date IS NOT NULL
     AND c.sobriety_date::DATE <= now()::DATE - INTERVAL '6 months'
-    -- Require annual revenue > $100k
     AND COALESCE(c.annual_revenue_in_dollars__official_, 0) >= 100000
   GROUP BY lower(gma.email)
 )
