@@ -243,7 +243,7 @@ const FOOTER_HTML = `
         <li><a href="/events/">Thursday Mastermind</a></li>
         <li><a href="/weekly-mastermind-group/">Tuesday Mastermind</a></li>
         <li><a href="/phoenix-forum-registration/">Phoenix Forum</a></li>
-        <li><a href="/blog/">Member Stories</a></li>
+        <li><a href="/blog/">Blog</a></li>
       </ul>
     </div>
 
