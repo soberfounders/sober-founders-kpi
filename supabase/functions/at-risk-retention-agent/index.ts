@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { sendHubSpotEmail, lookupContactByEmail, createHubSpotTaskDraft } from "../_shared/hubspot_email.ts";
+import { sendHubSpotEmail, lookupContactByEmail } from "../_shared/hubspot_email.ts";
 import { createNotionFollowUp } from "../_shared/notion_task.ts";
 
 const corsHeaders = {
@@ -75,7 +75,7 @@ async function alertSlack(stats: any, dryRun: boolean): Promise<boolean> {
                     `- At-Risk Attendees Found: ${stats.totalAtRisk}`,
                     `- Queued This Run: ${stats.processed}`,
                     dryRun ? `- Emails Sent: 0 (dry run)` : `- Nudge Emails Sent: ${stats.emailsSent}`,
-                    dryRun ? `- HubSpot Draft Tasks: ${stats.taskDraftsCreated ?? 0} created` : `- Notion Follow-ups Created: ${stats.notionTasks}`,
+                    dryRun ? `- Review in KPI Dashboard → Outreach Queue` : `- Notion Follow-ups Created: ${stats.notionTasks}`,
                     stats.errors > 0 ? `- Errors: ${stats.errors}` : "",
                 ].filter(Boolean).join("\n"),
             },
@@ -98,7 +98,7 @@ async function alertSlack(stats: any, dryRun: boolean): Promise<boolean> {
             type: "section",
             text: {
                 type: "mrkdwn",
-                text: `*HubSpot draft tasks created* — go to HubSpot → Tasks (filter by type: Email) to review and click Send.\n\n*To flip live:* POST \`/at-risk-retention-agent\` with \`{"dry_run": false}\``,
+                text: `*Review these in the KPI Dashboard* → Attendance → Outreach Review Queue. Click Send on each one you approve.\n\n*To auto-send all:* POST \`/at-risk-retention-agent\` with \`{"dry_run": false}\``,
             },
         });
     }
@@ -202,31 +202,8 @@ serve(async (req: Request) => {
         let errors = 0;
         const recipients: string[] = [];
 
-        if (dryRun && hubspotToken && nudges.length > 0) {
-            // 3a. Dry run — create HubSpot task drafts for review
-            for (const nudge of nudges) {
-                const { data: contact } = await supabase
-                    .from("raw_hubspot_contacts")
-                    .select("hubspot_contact_id")
-                    .ilike("email", nudge.email)
-                    .limit(1)
-                    .single();
-
-                let contactId = contact?.hubspot_contact_id;
-                if (!contactId) contactId = await lookupContactByEmail(hubspotToken, nudge.email);
-
-                if (contactId) {
-                    const taskResult = await createHubSpotTaskDraft(hubspotToken, {
-                        contactId,
-                        subject: nudge.subject,
-                        body: nudge.message,
-                        campaignType: "at_risk_nudge",
-                    });
-                    if (taskResult.ok) taskDraftsCreated++;
-                    else console.warn(`Task draft failed for ${nudge.email}:`, taskResult.error);
-                }
-            }
-        }
+        // Dry run: no HubSpot tasks — review candidates in the KPI dashboard
+        // OutreachReviewQueue and click Send from there.
 
         if (!dryRun) {
             const meetingDay = nextMeetingDay();

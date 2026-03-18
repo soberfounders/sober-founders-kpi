@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { sendHubSpotEmail, lookupContactByEmail, createHubSpotTaskDraft } from "../_shared/hubspot_email.ts";
+import { sendHubSpotEmail, lookupContactByEmail } from "../_shared/hubspot_email.ts";
 import { createNotionFollowUp } from "../_shared/notion_task.ts";
 
 const corsHeaders = {
@@ -62,7 +62,7 @@ async function alertSlack(stats: any, dryRun: boolean): Promise<boolean> {
                     `- Total One-and-Done Candidates: ${stats.totalWinback}`,
                     `- Queued This Batch: ${stats.processed}`,
                     dryRun ? `- Emails Sent: 0 (dry run)` : `- Emails Sent: ${stats.emailsSent}`,
-                    dryRun ? `- HubSpot Draft Tasks: ${stats.taskDraftsCreated ?? 0} created` : `- Notion Tasks: ${stats.notionTasks}`,
+                    dryRun ? `- Review in KPI Dashboard → Outreach Queue` : `- Notion Tasks: ${stats.notionTasks}`,
                     `- Remaining in Pipeline: ${stats.remaining}`,
                     stats.errors > 0 ? `- Errors: ${stats.errors}` : "",
                 ].filter(Boolean).join("\n"),
@@ -86,7 +86,7 @@ async function alertSlack(stats: any, dryRun: boolean): Promise<boolean> {
             type: "section",
             text: {
                 type: "mrkdwn",
-                text: `*HubSpot draft tasks created* — go to HubSpot → Tasks (filter by type: Email) to review and click Send.\n\n*To flip live:* POST \`/winback-campaign-agent\` with \`{"dry_run": false}\``,
+                text: `*Review these in the KPI Dashboard* → Attendance → Outreach Review Queue. Click Send on each one you approve.\n\n*To auto-send all:* POST \`/winback-campaign-agent\` with \`{"dry_run": false}\``,
             },
         });
     }
@@ -160,34 +160,10 @@ serve(async (req: Request) => {
         let errors = 0;
         const recipients: string[] = [];
 
-        if (dryRun && hubspotToken && winbacks.length > 0) {
-            // 3a. Dry run — create HubSpot task drafts for review
-            for (const wb of winbacks) {
-                const { data: contact } = await supabase
-                    .from("raw_hubspot_contacts")
-                    .select("hubspot_contact_id")
-                    .ilike("email", wb.email)
-                    .limit(1)
-                    .single();
-
-                let contactId = contact?.hubspot_contact_id;
-                if (!contactId) contactId = await lookupContactByEmail(hubspotToken, wb.email);
-
-                if (contactId) {
-                    const taskResult = await createHubSpotTaskDraft(hubspotToken, {
-                        contactId,
-                        subject: wb.subject,
-                        body: wb.message,
-                        campaignType: "winback",
-                    });
-                    if (taskResult.ok) taskDraftsCreated++;
-                    else console.warn(`Task draft failed for ${wb.email}:`, taskResult.error);
-                }
-            }
-        }
+        // Dry run: no HubSpot tasks — review candidates in the KPI dashboard
+        // OutreachReviewQueue and click Send from there.
 
         if (!dryRun) {
-            // 3b. Send live — HubSpot + Notion
             for (const wb of winbacks) {
                 const targetInfo = targets.find(
                     (t: any) => t.email?.toLowerCase() === wb.email?.toLowerCase()
