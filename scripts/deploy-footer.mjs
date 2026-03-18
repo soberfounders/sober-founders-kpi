@@ -139,7 +139,7 @@ const FOOTER_HTML = `
   /* ── Footer columns ── */
   .sf-footer-grid {
     display: grid;
-    grid-template-columns: 2fr 1fr 1fr 1fr;
+    grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
     gap: 32px;
     padding-bottom: 32px;
     border-bottom: 1px solid #e5e7eb;
@@ -234,7 +234,7 @@ const FOOTER_HTML = `
 
     <div class="sf-footer-brand">
       <p>The peer community for entrepreneurs who build thriving businesses and protect their recovery&mdash;not one at the expense of the other.</p>
-      <span class="sf-footer-nonprofit">Sober Founders Inc. &middot; 501(c)(3) Tax-Deductible &middot; EIN available on request</span>
+      <span class="sf-footer-nonprofit">Sober Founders Inc. &middot; 501(c)(3) Tax-Deductible &middot; EIN: 33-4098435</span>
     </div>
 
     <div class="sf-footer-col">
@@ -253,6 +253,15 @@ const FOOTER_HTML = `
         <li><a href="/blog/">Blog</a></li>
         <li><a href="/resources/faq/">FAQ</a></li>
         <li><a href="/resources/">Guides</a></li>
+      </ul>
+    </div>
+
+    <div class="sf-footer-col">
+      <h4>Case Studies</h4>
+      <ul>
+        <li><a href="/case-studies/">All Case Studies</a></li>
+        <li><a href="/case-studies/adam-c/">Adam C.</a></li>
+        <li><a href="/case-studies/josh-c/">Josh C.</a></li>
       </ul>
     </div>
 
