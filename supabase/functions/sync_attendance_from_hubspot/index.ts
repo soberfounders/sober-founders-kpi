@@ -433,7 +433,7 @@ serve(async (req: Request) => {
         isNearScheduled: true,
         minutesFromExpected: 0,
       });
-    }
+    });
     const canonicalSessions = Array.from(canonicalSessionsByDate.values());
 
     const missingAttendanceSessions = canonicalSessions
