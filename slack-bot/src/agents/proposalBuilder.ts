@@ -113,7 +113,15 @@ ${formatContext(contexts as any)}
 ${formatHistory(history as any)}
 
 ## Instructions
-Review your context, past outcomes, and current KPIs. Propose 1-2 concrete, actionable proposals.
+Review your context, past outcomes, and current KPIs. Propose 1 concrete, actionable suggestion.
+
+## Big-Picture Goals (always orient proposals toward these)
+1. Get people into Phoenix Forum (paid membership at $250/mo)
+2. Get people to show up to mastermind groups (Thursday free/open, Tuesday free/verified)
+3. Get them to repeat and come back (retention, community, value delivery)
+
+Rules:
+- Every proposal must clearly connect to one of the 3 goals above.
 - Double down on what worked (positive outcomes in history).
 - Avoid repeating what failed (negative outcomes).
 - Each proposal must have a specific target metric and expected numerical impact.
@@ -189,7 +197,12 @@ ${formatContext(contexts as any)}
 ## Recent Proposals
 ${formatHistory(history as any)}
 
-Write this morning's priorities for Sober Founders marketing. Keep it to 3-5 bullet points, each with a clear action or decision needed. Reference specific metrics where relevant. Use Slack mrkdwn formatting. Do not use em dashes.
+## Big-Picture Goals (frame all priorities around these)
+1. Get people into Phoenix Forum (paid membership at $250/mo)
+2. Get people to show up to mastermind groups (Thursday free/open, Tuesday free/verified)
+3. Get them to repeat and come back (retention, community, value delivery)
+
+Write this morning's priorities for Sober Founders marketing. Keep it to 3-5 bullet points, each with a clear action or decision needed. Every bullet must connect to one of the 3 big-picture goals. Reference specific metrics where relevant. Use Slack mrkdwn formatting. Do not use em dashes.
 
 After the priorities, add a small section:
 
@@ -200,6 +213,58 @@ Include this token usage section exactly as provided above - do not modify the n
 
   const response = await llmText({
     taskType: "morning_summary",
+    input: [{ role: "user", content: prompt }],
+    metadata: { persona: persona.id },
+  });
+
+  return response.outputText;
+};
+
+// ---------------------------------------------------------------------------
+// Midday check-in (gpt-5.4-mini - summary)
+// ---------------------------------------------------------------------------
+
+export const generateMiddayCheckin = async (
+  persona: AgentPersona,
+): Promise<string> => {
+  const [kpiContext, contexts, history] = await Promise.all([
+    gatherKpiContext(),
+    getActiveContext(persona.id),
+    getProposalHistory(persona.id, 10),
+  ]);
+
+  const approved = (history as any[]).filter((p) => p.status === "approved" || p.status === "completed");
+  const pending = (history as any[]).filter((p) => p.status === "proposed");
+
+  const prompt = `You are ${persona.displayName}. ${persona.systemPromptAddendum}
+
+## Big-Picture Goals
+1. Get people into Phoenix Forum (paid membership at $250/mo)
+2. Get people to show up to mastermind groups (Thursday free/open, Tuesday free/verified)
+3. Get them to repeat and come back (retention, community, value delivery)
+
+## Current KPI Data
+${kpiContext}
+
+## Persistent Context
+${formatContext(contexts as any)}
+
+## Morning Progress
+Approved so far: ${approved.length}
+Still pending: ${pending.length}
+
+## Recent Proposals
+${formatHistory(history as any)}
+
+Write a midday check-in. Keep it tight - 2-3 bullets:
+1. What's been approved/acted on this morning
+2. What's the single most important thing to push forward this afternoon to move the big picture
+3. Any blockers or decisions needed
+
+Use Slack mrkdwn formatting. Be direct. Do not use em dashes.`;
+
+  const response = await llmText({
+    taskType: "midday_checkin",
     input: [{ role: "user", content: prompt }],
     metadata: { persona: persona.id },
   });
@@ -240,11 +305,16 @@ Still pending: ${pending.length}
 ## Recent Proposals
 ${formatHistory(history as any)}
 
+## Big-Picture Goals
+1. Get people into Phoenix Forum (paid membership at $250/mo)
+2. Get people to show up to mastermind groups (Thursday free/open, Tuesday free/verified)
+3. Get them to repeat and come back (retention, community, value delivery)
+
 Write the end-of-day recap. Include:
 1. What got done today (approved proposals and their status)
 2. What's still pending
-3. A brief scorecard of KPI movement
-4. One key priority for tomorrow
+3. A brief scorecard of KPI movement against the 3 big-picture goals
+4. One key priority for tomorrow that moves the big picture forward
 
 Use Slack mrkdwn formatting. Be direct and concise. Do not use em dashes.`;
 

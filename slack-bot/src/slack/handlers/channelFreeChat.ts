@@ -13,7 +13,10 @@ export const registerChannelFreeChatHandler = (app: App): void => {
     if (!["channel", "group"].includes(channelType)) return;
 
     const channelId = String(payload.channel || "");
-    if (!channelId || !env.freeChatChannelIds.includes(channelId)) return;
+    // Allow free chat in designated channels AND the agent queue channel
+    const isFreeChatChannel = env.freeChatChannelIds.includes(channelId);
+    const isAgentQueueChannel = env.agentQueueChannelId && channelId === env.agentQueueChannelId;
+    if (!channelId || (!isFreeChatChannel && !isAgentQueueChannel)) return;
 
     const rawText = String(payload.text || "").trim();
     if (!rawText) return;

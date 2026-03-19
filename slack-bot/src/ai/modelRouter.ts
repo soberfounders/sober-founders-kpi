@@ -8,6 +8,7 @@ import { env } from "../config/env.js";
 export type TaskType =
   | "proposal_json"
   | "morning_summary"
+  | "midday_checkin"
   | "evening_recap"
   | "proposal_expand"
   | "conversation_reply"
@@ -17,6 +18,7 @@ export type TaskType =
 // Tasks that fall back to CHEAP model when OPENAI_USE_CHEAP_MODE=true
 const CHEAP_ELIGIBLE: ReadonlySet<TaskType> = new Set([
   "morning_summary",
+  "midday_checkin",
   "evening_recap",
   "conversation_reply",
 ]);
@@ -25,6 +27,7 @@ const CHEAP_ELIGIBLE: ReadonlySet<TaskType> = new Set([
 const TASK_TIER: Record<TaskType, "primary" | "fast"> = {
   proposal_json: "primary",
   morning_summary: "fast",
+  midday_checkin: "fast",
   evening_recap: "fast",
   proposal_expand: "primary",
   conversation_reply: "fast",
