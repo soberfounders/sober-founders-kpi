@@ -129,7 +129,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
     display: flex;
     align-items: center;
     pointer-events: none;
-    z-index: 10;
+    z-index: 25;
     height: 100vh;
   }
   #sf-hero-text-inner {
@@ -193,10 +193,9 @@ const PAGE_CONTENT = `<!-- wp:html -->
   #sf-scroll-content {
     position: relative;
     z-index: 20;
-    pointer-events: none;
   }
   .sf-spacer { height: 100vh; }
-  .sf-content-body { background: transparent; pointer-events: auto; }
+  .sf-content-body { background: transparent; }
 
   /* ── MOBILE FALLBACK ── */
   #sf-mobile-hero {
@@ -829,7 +828,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
       <div class="sf-hero-card">
         <div class="sf-hero-label">501(c)(3) Nonprofit Community</div>
         <h1>Sober Founders - A Community For <span class="sf-accent">Entrepreneurs In Recovery</span></h1>
-        <p class="sf-hero-sub">The peer community for entrepreneurs who build thriving businesses and protect their recovery&mdash;not one at the expense of the other.</p>
+        <p class="sf-hero-sub">The peer community for entrepreneurs who build thriving businesses and protect their recovery - not one at the expense of the other.</p>
         <div class="sf-hero-actions">
           <a href="https://soberfounders.org/events" class="sf-btn sf-btn-primary">Attend a Free Meeting</a>
           <a href="/our-story/" class="sf-btn sf-btn-outline">Learn Our Story</a>
@@ -846,7 +845,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
       <div class="sf-hero-card">
         <div class="sf-hero-label">501(c)(3) Nonprofit Community</div>
         <h1>Sober Founders - A Community For <span class="sf-accent">Entrepreneurs In Recovery</span></h1>
-        <p class="sf-hero-sub">The peer community for entrepreneurs who build thriving businesses and protect their recovery&mdash;not one at the expense of the other.</p>
+        <p class="sf-hero-sub">The peer community for entrepreneurs who build thriving businesses and protect their recovery - not one at the expense of the other.</p>
         <div class="sf-hero-actions">
           <a href="https://soberfounders.org/events" class="sf-btn sf-btn-primary">Attend a Free Meeting</a>
           <a href="/our-story/" class="sf-btn sf-btn-outline">Learn Our Story</a>
@@ -1125,10 +1124,16 @@ const PAGE_CONTENT = `<!-- wp:html -->
   function onAllLoaded() {
     drawFrame(0);
 
-    // Hero text fade-out
+    // Hero text fade-out — also toggle pointer-events so invisible hero doesn't block content clicks
+    var heroActions = heroText.querySelector('.sf-hero-actions');
     gsap.to(heroText, {
       opacity: 0, y: -60, ease: 'power2.in',
-      scrollTrigger: { trigger: document.body, start: 'top top', end: '8% top', scrub: 0.3 }
+      scrollTrigger: {
+        trigger: document.body, start: 'top top', end: '8% top', scrub: 0.3,
+        onUpdate: function(self) {
+          heroActions.style.pointerEvents = self.progress > 0.8 ? 'none' : 'auto';
+        }
+      }
     });
 
     // Main scroll-scrub
