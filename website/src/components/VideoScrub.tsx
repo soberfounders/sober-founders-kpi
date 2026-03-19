@@ -107,7 +107,7 @@ export default function VideoScrub() {
 
   return (
     <div ref={containerRef} className="relative" style={{ height: "500vh" }}>
-      <div className="sticky top-0 h-screen w-full overflow-hidden bg-[#0a0a0a]">
+      <a href="/events/" className="sticky top-0 block h-screen w-full overflow-hidden bg-[#0a0a0a] cursor-pointer">
         <video
           ref={videoRef}
           src="/assets/hero-video-scrub.mp4"
@@ -120,7 +120,7 @@ export default function VideoScrub() {
           ref={canvasRef}
           className="absolute inset-0 h-full w-full"
         />
-      </div>
+      </a>
     </div>
   );
 }
