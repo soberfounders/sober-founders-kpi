@@ -36,8 +36,9 @@ function generateStreakBreakMessages(candidates: any[]): any[] {
             message:
                 `Hey ${firstName},\n\n` +
                 `Haven't seen you in a few weeks - just wanted to check in and make sure everything's good.\n\n` +
-                `No pressure at all. The group misses having you around. If you want to pop back in, we're still running and if you need any links you can go to https://soberfounders.org/${groupLabel}\n\n` +
-                `Hope you're doing well.\n\n` +
+                `No pressure at all, if you want to pop back in we're still running and if you need any links you can go to https://soberfounders.org/${groupLabel}\n\n` +
+                `If it's not for you, any feedback is really appreciated, good or bad.\n\n` +
+                `Hope to see you!\n\n` +
                 `- Andrew`,
         };
     });

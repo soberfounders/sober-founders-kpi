@@ -4483,7 +4483,7 @@ const AttendanceDashboard = () => {
               bg: 'rgba(168,85,247,0.08)',
               trigger: '3+ meetings, gone quiet 2-8 weeks',
               subject: 'Hey {name}, checking in',
-              body: 'Hey {name},\n\nHaven\'t seen you in a few weeks - just wanted to check in and make sure everything\'s good.\n\nNo pressure at all. The group misses having you around. If you want to pop back in, we\'re still running and if you need any links you can go to soberfounders.org/{group}\n\nHope you\'re doing well.\n\n- Andrew',
+              body: 'Hey {name},\n\nHaven\'t seen you in a few weeks - just wanted to check in and make sure everything\'s good.\n\nNo pressure at all, if you want to pop back in we\'re still running and if you need any links you can go to soberfounders.org/{group}\n\nIf it\'s not for you, any feedback is really appreciated, good or bad.\n\nHope to see you!\n\n- Andrew',
             },
             {
               label: 'Winback',
