@@ -3,11 +3,11 @@
 *Last updated: 2026-03-16*
 
 ## Product Overview
-**One-liner:** A real-time KPI dashboard and AI copilot for Sober Founders — tracking leads, attendance, donations, email, and outreach.
+**One-liner:** A real-time KPI dashboard and AI copilot for Sober Founders - tracking leads, attendance, donations, email, and outreach.
 **What it does:** Aggregates data from HubSpot, Supabase, Meta Ads, Mailchimp, Google Analytics, Luma, and Zeffy into a unified dashboard with 11 views. Includes a Slack bot copilot and AI-powered outreach agents for member retention and recovery.
 **Product category:** Business Intelligence / Nonprofit Operations Dashboard
 **Product type:** Internal SaaS tool (React + Supabase)
-**Business model:** Internal tool for Sober Founders organization — not commercially sold
+**Business model:** Internal tool for Sober Founders organization - not commercially sold
 
 ## Membership Tiers
 1. **Weekly Thursday – Business Mastermind**: Free and open to all entrepreneurs in recovery. Anyone who is sober and owns a business can join.
@@ -43,7 +43,7 @@
 - Two-tier lead qualification system ($250k and $1M+ revenue thresholds)
 - Slack bot copilot for instant KPI access
 **How we do it differently:** Deep integration with the organization's specific data sources and qualification rules
-**Why that's better:** Zero configuration for end users — all business logic is embedded
+**Why that's better:** Zero configuration for end users - all business logic is embedded
 
 ## Brand Voice
 **Tone:** Professional, data-driven, supportive
@@ -52,7 +52,7 @@
 
 ## Ideal Customer Persona (ICP)
 
-Every skill that reads this file (content-strategy, ai-seo, copywriting, email-sequence, social-content, cold-email, lead-magnets, etc.) **must** use this persona to tailor tone, examples, pain points, and calls to action. Do not write generic content — write for this person.
+Every skill that reads this file (content-strategy, ai-seo, copywriting, email-sequence, social-content, cold-email, lead-magnets, etc.) **must** use this persona to tailor tone, examples, pain points, and calls to action. Do not write generic content - write for this person.
 
 ### Quick-Reference Summary
 
@@ -70,10 +70,10 @@ A U.S.-based entrepreneur in recovery, typically 30–60 years old, who owns or 
 
 ### Psychographics
 
-- **Identity statement:** "I'm a founder who happens to be in recovery" — recovery is part of who they are but not their entire identity
+- **Identity statement:** "I'm a founder who happens to be in recovery" - recovery is part of who they are but not their entire identity
 - **Core values:** Integrity, transparency, service, accountability, growth
 - **Biggest fear:** That business pressure could threaten their recovery, or being "found out" in professional settings
-- **Aspirations:** Build a meaningful, profitable business that makes sobriety worth protecting — and give back through mentoring, employing people in recovery, or doing impact-driven work
+- **Aspirations:** Build a meaningful, profitable business that makes sobriety worth protecting - and give back through mentoring, employing people in recovery, or doing impact-driven work
 - **Personality traits:** Ambitious, values-driven, impact-oriented, introspective, used to self-examination
 - **Appreciates:** Frameworks, rituals, and principles that align with recovery practices
 - **Vulnerabilities:** Perfectionism, all-or-nothing thinking, substituting work for old compulsions
@@ -83,13 +83,13 @@ A U.S.-based entrepreneur in recovery, typically 30–60 years old, who owns or 
 ### Pain Points & Triggers
 
 **Core pain points (use these in all content):**
-1. **Loneliness** — No peer group that understands both entrepreneurship and recovery. Being the only sober person in the room at conferences, dinners, and networking events.
-2. **Cash flow volatility and financial uncertainty** — Past chaos, shame about financial wreckage, and the stress of building/rebuilding without the old coping mechanisms.
-3. **Chronic stress** — Fear that business pressure could threaten recovery. The weight of being the one who signs payroll.
-4. **Boundary issues** — Overwork, difficulty saying no, underpricing, over-delivering, people-pleasing that drains profit margins.
-5. **Guilt and shame** — About past chaos, broken promises, and failed attempts. Shows up in pricing, negotiations, and self-worth.
-6. **Ambivalence about being "out"** — Wrestling with how visible to be about recovery in professional settings.
-7. **Work as the new substance** — When the business becomes the compulsion that replaces the old one.
+1. **Loneliness** - No peer group that understands both entrepreneurship and recovery. Being the only sober person in the room at conferences, dinners, and networking events.
+2. **Cash flow volatility and financial uncertainty** - Past chaos, shame about financial wreckage, and the stress of building/rebuilding without the old coping mechanisms.
+3. **Chronic stress** - Fear that business pressure could threaten recovery. The weight of being the one who signs payroll.
+4. **Boundary issues** - Overwork, difficulty saying no, underpricing, over-delivering, people-pleasing that drains profit margins.
+5. **Guilt and shame** - About past chaos, broken promises, and failed attempts. Shows up in pricing, negotiations, and self-worth.
+6. **Ambivalence about being "out"** - Wrestling with how visible to be about recovery in professional settings.
+7. **Work as the new substance** - When the business becomes the compulsion that replaces the old one.
 
 **Practical needs:**
 - Hiring, pricing, delegation without feeling "selfish" or losing control
@@ -111,18 +111,18 @@ A U.S.-based entrepreneur in recovery, typically 30–60 years old, who owns or 
 - **Formats that resonate:** Long-form guides with checklists and templates (cash flow planners, boundary scripts, hiring scorecards), story-driven case studies of founders in recovery, behind-the-scenes looks at what a confidential sober mastermind feels like
 - **Tone they respond to:** Peer-to-peer (not guru-to-follower), practical, specific, tactical, hopeful but not cheesy
 - **Language rules:**
-  - Use "in recovery," "sober entrepreneur," "founder in recovery" — not "addict" as an identity label
-  - Use non-stigmatizing recovery language throughout
-  - Normalize ambivalence and struggle, not just success stories
-  - Emphasize safety, confidentiality, and "you don't have to perform here"
-  - Lead with lived experience: "Here's what actually happened. Here's how we handled it."
+ - Use "in recovery," "sober entrepreneur," "founder in recovery" - not "addict" as an identity label
+ - Use non-stigmatizing recovery language throughout
+ - Normalize ambivalence and struggle, not just success stories
+ - Emphasize safety, confidentiality, and "you don't have to perform here"
+ - Lead with lived experience: "Here's what actually happened. Here's how we handled it."
 
 ### Objections & Barriers
 
-- **"Is this just another networking group?"** — Emphasize that this is a confidential peer community built specifically for founders in recovery, not a generic mastermind
-- **"Will this 'out' me?"** — Lead with confidentiality as non-negotiable. Stress that privacy is foundational, not an afterthought
-- **"I don't have time for another commitment"** — Show the ROI in both currencies (revenue AND quality of life). Frame it as time invested in sustainability, not another obligation
-- **"I'm not sure I'm 'bad enough' to need this"** — Normalize the spectrum. You don't need to have hit rock bottom to benefit from peer support
+- **"Is this just another networking group?"** - Emphasize that this is a confidential peer community built specifically for founders in recovery, not a generic mastermind
+- **"Will this 'out' me?"** - Lead with confidentiality as non-negotiable. Stress that privacy is foundational, not an afterthought
+- **"I don't have time for another commitment"** - Show the ROI in both currencies (revenue AND quality of life). Frame it as time invested in sustainability, not another obligation
+- **"I'm not sure I'm 'bad enough' to need this"** - Normalize the spectrum. You don't need to have hit rock bottom to benefit from peer support
 
 ### Search Behavior
 
@@ -155,7 +155,7 @@ These call-to-action patterns outperform generic "Join Now" for this audience:
 These are the primary content themes for Sober Founders. All content skills (content-strategy, copywriting, social-content, email-sequence, blog publishing) should draw topics from this bank and align with these pillars.
 
 ### Pillar 1: Business Performance in Recovery
-Pricing, cash flow, hiring, systems, delegation — the tactical business content, always viewed through a recovery lens.
+Pricing, cash flow, hiring, systems, delegation - the tactical business content, always viewed through a recovery lens.
 
 **Topic seeds:**
 - Pricing for sober founders: how to stop undercharging without feeling "selfish"
@@ -166,7 +166,7 @@ Pricing, cash flow, hiring, systems, delegation — the tactical business conten
 - Recovery-safe lead generation: systems that don't require saying yes to every opportunity
 
 ### Pillar 2: Recovery-Safe Entrepreneurship
-Navigating the business world without alcohol — conferences, networking, travel, boundaries, relapse prevention in business context.
+Navigating the business world without alcohol - conferences, networking, travel, boundaries, relapse prevention in business context.
 
 **Topic seeds:**
 - How to navigate conferences and industry events without alcohol
@@ -177,7 +177,7 @@ Navigating the business world without alcohol — conferences, networking, trave
 - Boundary scripts for saying no to misaligned clients without shame
 
 ### Pillar 3: Emotional Honesty & Inner Life
-Shame, guilt, loneliness, control, fear, family tension — the inner work that makes the outer work sustainable.
+Shame, guilt, loneliness, control, fear, family tension - the inner work that makes the outer work sustainable.
 
 **Topic seeds:**
 - The quiet loneliness of being the only sober person in the room at a conference
@@ -189,7 +189,7 @@ Shame, guilt, loneliness, control, fear, family tension — the inner work that 
 - How to design a weekly calendar that protects meetings, family, and recovery time
 
 ### Pillar 4: Service & Impact
-Using the business as a vehicle for service — mentoring, employing people in recovery, impact-focused work.
+Using the business as a vehicle for service - mentoring, employing people in recovery, impact-focused work.
 
 **Topic seeds:**
 - How founders in recovery are turning their businesses into vehicles for impact
@@ -197,7 +197,7 @@ Using the business as a vehicle for service — mentoring, employing people in r
 - The connection between service work and sustainable business growth
 
 ### Pillar 5: Community & Peer Support
-What confidential sober masterminds feel like — structure, rituals, norms, and why they work.
+What confidential sober masterminds feel like - structure, rituals, norms, and why they work.
 
 **Topic seeds:**
 - What actually happens inside a confidential sober founders mastermind
@@ -213,14 +213,14 @@ What confidential sober masterminds feel like — structure, rituals, norms, and
 
 **All content for Sober Founders must follow these rules:**
 
-1. **Peer-to-peer, not guru-to-follower** — Write as an equal who's been there, not an authority dispensing wisdom
-2. **Practical, specific, and tactical** — Not inspirational fluff. Give templates, scripts, checklists, specific numbers
-3. **Hopeful but not cheesy** — Acknowledge the difficulty honestly. Don't paper over struggle with positivity
-4. **Non-stigmatizing recovery language** — Use "in recovery," "sober entrepreneur," "founder in recovery." Never use "addict" as an identity label in marketing
-5. **Lead with lived experience** — "Here's what actually happened. Here's how we handled it." Real situations, real outcomes
-6. **Normalize ambivalence and struggle** — Not just success stories. It's okay to be unsure, afraid, or still figuring it out
-7. **Emphasize safety and confidentiality** — "You don't have to perform here" should be the subtext of everything
-8. **Wiki-voice for SEO/GEO content** — Factual, objective, evidence-based writing for search-optimized content (see ai-seo skill for details)
+1. **Peer-to-peer, not guru-to-follower** - Write as an equal who's been there, not an authority dispensing wisdom
+2. **Practical, specific, and tactical** - Not inspirational fluff. Give templates, scripts, checklists, specific numbers
+3. **Hopeful but not cheesy** - Acknowledge the difficulty honestly. Don't paper over struggle with positivity
+4. **Non-stigmatizing recovery language** - Use "in recovery," "sober entrepreneur," "founder in recovery." Never use "addict" as an identity label in marketing
+5. **Lead with lived experience** - "Here's what actually happened. Here's how we handled it." Real situations, real outcomes
+6. **Normalize ambivalence and struggle** - Not just success stories. It's okay to be unsure, afraid, or still figuring it out
+7. **Emphasize safety and confidentiality** - "You don't have to perform here" should be the subtext of everything
+8. **Wiki-voice for SEO/GEO content** - Factual, objective, evidence-based writing for search-optimized content (see ai-seo skill for details)
 
 ---
 

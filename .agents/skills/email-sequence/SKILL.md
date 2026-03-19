@@ -68,7 +68,7 @@ Before creating a sequence, understand:
 ### The "High-Placement" Mandate
 *Majority agreement (>90% of authorities including Allegrow, Litmus, and Snov.io).*
 
-- **The "Value Drop" Rule:** Kill the "Just bumping this" follow-up. Every touchpoint must provide a "Value Drop" — a new insight, a loom video, or a proprietary code snippet. Low-value "pings" now trigger aggressive AI spam filters.
+- **The "Value Drop" Rule:** Kill the "Just bumping this" follow-up. Every touchpoint must provide a "Value Drop" - a new insight, a loom video, or a proprietary code snippet. Low-value "pings" now trigger aggressive AI spam filters.
 - **Reply Rate as the North Star:** Open rates are now "vanity metrics" due to Apple/Google privacy pre-loading. Optimize for **Reply Rate** and **Sentiment Analysis** to gauge sequence health.
 - **Syntax Variation (Spintax):** Do not send the same 100-word block to 1,000 people. Use AI to rotate phrases (e.g., "I noticed you're hiring" vs. "I saw your team is growing"). This prevents "fingerprinting" by mailbox providers.
 - **The 30/30/50 Rule:** Allocate 30% of effort to audience research, 30% to content crafting, and 50% to persistent, value-added follow-ups (typically 4–7 touches).
@@ -188,7 +188,7 @@ Key emails:
 ### Onboarding Sequence (Product Users)
 **Length**: 5-7 emails over 14 days
 **Goal**: Activate, drive to aha moment, upgrade
-**Note**: Coordinate with in-app onboarding—email supports, doesn't duplicate
+**Note**: Coordinate with in-app onboarding - email supports, doesn't duplicate
 
 Key emails:
 1. Welcome + first step (immediate)
@@ -266,7 +266,7 @@ Key emails:
 - Conversational, not formal
 - First-person (I/we) and second-person (you)
 - Active voice
-- Read it out loud—does it sound human?
+- Read it out loud - does it sound human?
 
 ### Length
 - 50-125 words for transactional
