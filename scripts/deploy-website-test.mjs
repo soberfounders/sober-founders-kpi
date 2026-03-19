@@ -122,15 +122,12 @@ const PAGE_CONTENT = `<!-- wp:html -->
     transition: background-color 0.05s linear;
   }
 
-  /* ── FIXED HERO TEXT (z-10) ── */
+  /* ── HERO TEXT (normal flow — same as every other section) ── */
   #sf-hero-text {
-    position: fixed;
-    inset: 0;
+    position: relative;
     display: flex;
     align-items: center;
-    pointer-events: none;
-    z-index: 25;
-    height: 100vh;
+    min-height: 100vh;
   }
   #sf-hero-text-inner {
     width: 100%;
@@ -186,7 +183,6 @@ const PAGE_CONTENT = `<!-- wp:html -->
     display: flex;
     gap: 16px;
     flex-wrap: wrap;
-    pointer-events: auto;
   }
 
   /* ── SCROLLABLE CONTENT (z-20) ── */
@@ -194,7 +190,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
     position: relative;
     z-index: 20;
   }
-  .sf-spacer { height: 100vh; }
+  .sf-spacer { display: none; }
   .sf-content-body { background: transparent; }
 
   /* ── MOBILE FALLBACK ── */
@@ -822,21 +818,6 @@ const PAGE_CONTENT = `<!-- wp:html -->
     <div id="sf-dim-overlay"></div>
   </div>
 
-  <!-- FIXED: Hero text with glassmorphism card (z-10) -->
-  <div id="sf-hero-text">
-    <div id="sf-hero-text-inner">
-      <div class="sf-hero-card">
-        <div class="sf-hero-label">501(c)(3) Nonprofit Community</div>
-        <h1>Sober Founders - A Community For <span class="sf-accent">Entrepreneurs In Recovery</span></h1>
-        <p class="sf-hero-sub">The peer community for entrepreneurs who build thriving businesses and protect their recovery - not one at the expense of the other.</p>
-        <div class="sf-hero-actions">
-          <a href="https://soberfounders.org/events" class="sf-btn sf-btn-primary">Attend a Free Meeting</a>
-          <a href="/our-story/" class="sf-btn sf-btn-outline">Learn Our Story</a>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- MOBILE FALLBACK: static image hero -->
   <div id="sf-mobile-hero">
     <img src="https://soberfounders.org/wp-content/uploads/2026/03/phoenix-static.jpg" alt="Phoenix rising from ashes" />
@@ -854,8 +835,22 @@ const PAGE_CONTENT = `<!-- wp:html -->
     </div>
   </div>
 
-  <!-- SCROLLABLE CONTENT (z-20) -->
+  <!-- SCROLLABLE CONTENT -->
   <div id="sf-scroll-content">
+    <!-- Hero — normal flow, same as every other section -->
+    <div id="sf-hero-text">
+      <div id="sf-hero-text-inner">
+        <div class="sf-hero-card">
+          <div class="sf-hero-label">501(c)(3) Nonprofit Community</div>
+          <h1>Sober Founders - A Community For <span class="sf-accent">Entrepreneurs In Recovery</span></h1>
+          <p class="sf-hero-sub">The peer community for entrepreneurs who build thriving businesses and protect their recovery - not one at the expense of the other.</p>
+          <div class="sf-hero-actions">
+            <a href="https://soberfounders.org/events" class="sf-btn sf-btn-primary">Attend a Free Meeting</a>
+            <a href="/our-story/" class="sf-btn sf-btn-outline">Learn Our Story</a>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="sf-spacer"></div>
     <div class="sf-content-body">
 
@@ -1089,7 +1084,6 @@ const PAGE_CONTENT = `<!-- wp:html -->
   var canvas = document.getElementById('sf-canvas');
   var ctx = canvas.getContext('2d');
   var overlay = document.getElementById('sf-dim-overlay');
-  var heroText = document.getElementById('sf-hero-text');
   var images = [];
   var loadedCount = 0;
   var currentFrame = -1;
@@ -1123,18 +1117,6 @@ const PAGE_CONTENT = `<!-- wp:html -->
 
   function onAllLoaded() {
     drawFrame(0);
-
-    // Hero text fade-out — also toggle pointer-events so invisible hero doesn't block content clicks
-    var heroActions = heroText.querySelector('.sf-hero-actions');
-    gsap.to(heroText, {
-      opacity: 0, y: -60, ease: 'power2.in',
-      scrollTrigger: {
-        trigger: document.body, start: 'top top', end: '8% top', scrub: 0.3,
-        onUpdate: function(self) {
-          heroActions.style.pointerEvents = self.progress > 0.8 ? 'none' : 'auto';
-        }
-      }
-    });
 
     // Main scroll-scrub
     ScrollTrigger.create({
