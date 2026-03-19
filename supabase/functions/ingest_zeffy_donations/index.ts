@@ -89,8 +89,8 @@ function donorNameFromPayload(payload: any): string | null {
     "customer.full_name",
   ]));
   if (direct) return direct;
-  const first = compactWhitespace(firstPresent(payload, ["first_name", "supporter.first_name", "customer.first_name"]));
-  const last = compactWhitespace(firstPresent(payload, ["last_name", "supporter.last_name", "customer.last_name"]));
+  const first = compactWhitespace(firstPresent(payload, ["donor_first_name", "first_name", "supporter.first_name", "customer.first_name"]));
+  const last = compactWhitespace(firstPresent(payload, ["donor_last_name", "last_name", "supporter.last_name", "customer.last_name"]));
   return compactWhitespace(`${first || ""} ${last || ""}`);
 }
 
@@ -139,8 +139,8 @@ function mapPayloadToRow(payload: any) {
     "customer.email",
     "payer.email",
   ]));
-  const donorFirstName = compactWhitespace(firstPresent(payload, ["first_name", "supporter.first_name", "customer.first_name"]));
-  const donorLastName = compactWhitespace(firstPresent(payload, ["last_name", "supporter.last_name", "customer.last_name"]));
+  const donorFirstName = compactWhitespace(firstPresent(payload, ["donor_first_name", "first_name", "supporter.first_name", "customer.first_name"]));
+  const donorLastName = compactWhitespace(firstPresent(payload, ["donor_last_name", "last_name", "supporter.last_name", "customer.last_name"]));
   const donorName = donorNameFromPayload(payload);
   const sourceEventId = deriveSourceEventId(payload, donatedAt, grossAmount);
   const zeffyDonationId = compactWhitespace(firstPresent(payload, ["donation_id", "data.donation_id", "zeffy_donation_id"]));
@@ -165,7 +165,7 @@ function mapPayloadToRow(payload: any) {
   const donorRegion = compactWhitespace(firstPresent(payload, ["region", "state", "province", "supporter.region", "customer.region", "address.region", "address.state"]));
   const donorPostalCode = compactWhitespace(firstPresent(payload, ["postal_code", "zip", "supporter.postal_code", "customer.postal_code", "address.postal_code", "address.zip"]));
   const donorCountry = compactWhitespace(firstPresent(payload, ["country", "supporter.country", "customer.country", "address.country"]));
-  const donorCompanyName = compactWhitespace(firstPresent(payload, ["company_name", "supporter.company_name", "customer.company_name"]));
+  const donorCompanyName = compactWhitespace(firstPresent(payload, ["donor_company_name", "company_name", "supporter.company_name", "customer.company_name"]));
   const donorLanguage = compactWhitespace(firstPresent(payload, ["language", "supporter.language", "customer.language"]));
   const receiptUrl = compactWhitespace(firstPresent(payload, ["receipt", "receipt_url", "receipt_link", "data.receipt"]));
   const sourceFile = compactWhitespace(firstPresent(payload, ["source_file", "import_file"]));
