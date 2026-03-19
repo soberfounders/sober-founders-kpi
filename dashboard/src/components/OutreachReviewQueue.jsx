@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import {
   Mail, Send, Loader2, RefreshCw, CheckCircle2, XCircle,
-  ChevronDown, ChevronUp, TrendingUp,
+  ChevronDown, ChevronUp, TrendingUp, Tag,
 } from 'lucide-react';
 
 /* ── Style constants ── */
@@ -43,6 +43,27 @@ const labelStyle = {
   letterSpacing: '0.05em',
   color: 'var(--color-text-secondary)',
   fontWeight: 600,
+};
+
+/* ── Lead qualification constants ── */
+
+const QUAL_META = {
+  phoenix_qualified: {
+    bg: 'rgba(250, 204, 21, 0.15)', text: '#facc15', border: 'rgba(250, 204, 21, 0.3)',
+    label: 'Phoenix ($1M+)', short: 'Phoenix',
+  },
+  qualified: {
+    bg: 'rgba(52, 211, 153, 0.15)', text: '#34d399', border: 'rgba(52, 211, 153, 0.3)',
+    label: 'Qualified ($250k+)', short: 'Qualified',
+  },
+  not_qualified: {
+    bg: 'rgba(239, 68, 68, 0.12)', text: '#f87171', border: 'rgba(239, 68, 68, 0.25)',
+    label: 'Not Qualified', short: 'Not Qual',
+  },
+  unknown: {
+    bg: 'rgba(148, 163, 184, 0.12)', text: '#94a3b8', border: 'rgba(148, 163, 184, 0.25)',
+    label: 'Unknown', short: 'Unknown',
+  },
 };
 
 /* ── Email template builders ── */
@@ -143,7 +164,7 @@ function getGroupTag(candidate) {
   return null;
 }
 
-function CandidateCard({ candidate, onSend, sendState }) {
+function CandidateCard({ candidate, onSend, sendState, onTagQual, qualState }) {
   const [expanded, setExpanded] = useState(false);
   const meta = CAMPAIGN_META[candidate._campaign] || CAMPAIGN_META.at_risk_nudge;
   const { subject, body } = useMemo(() => buildEmailForCandidate(candidate), [candidate]);
@@ -188,6 +209,20 @@ function CandidateCard({ candidate, onSend, sendState }) {
               {groupTag}
             </span>
           )}
+          {/* Lead qualification badge */}
+          {candidate.lead_qualification && (() => {
+            const currentQual = qualState || candidate.lead_qualification;
+            const qm = QUAL_META[currentQual] || QUAL_META.unknown;
+            return (
+              <span style={{
+                padding: '2px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: 700,
+                background: qm.bg, color: qm.text, border: `1px solid ${qm.border}`,
+                whiteSpace: 'nowrap',
+              }}>
+                {qm.short}
+              </span>
+            );
+          })()}
           <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {candidate.email}
           </span>
@@ -233,6 +268,45 @@ function CandidateCard({ candidate, onSend, sendState }) {
         <strong style={{ color: 'var(--color-text-muted)', fontWeight: 700 }}>Why this person:</strong>{' '}
         {reason}
       </div>
+
+      {/* Lead qualification tag buttons */}
+      {candidate.lead_qualification && onTagQual && (
+        <div style={{
+          marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap',
+        }}>
+          <Tag size={12} color="var(--color-text-muted)" />
+          <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontWeight: 600 }}>Tag:</span>
+          {Object.entries(QUAL_META).filter(([k]) => k !== 'unknown').map(([key, qm]) => {
+            const currentQual = qualState || candidate.lead_qualification;
+            const isActive = currentQual === key;
+            const isSaving = qualState === `saving:${key}`;
+            return (
+              <button
+                key={key}
+                onClick={() => onTagQual(candidate, key)}
+                disabled={isSaving}
+                style={{
+                  padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
+                  background: isActive ? qm.bg : 'rgba(255,255,255,0.04)',
+                  color: isActive ? qm.text : 'var(--color-text-muted)',
+                  border: `1px solid ${isActive ? qm.border : 'var(--color-border)'}`,
+                  cursor: isSaving ? 'not-allowed' : 'pointer',
+                  opacity: isSaving ? 0.6 : 1,
+                  transition: 'all 0.15s',
+                }}
+              >
+                {qm.label}
+              </button>
+            );
+          })}
+          {candidate.annual_revenue > 0 && (
+            <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginLeft: '4px' }}>
+              Rev: ${(candidate.annual_revenue / 1000).toFixed(0)}k
+              {candidate.sobriety_date ? ` | Sober: ${candidate.sobriety_date.slice(0, 10)}` : ' | Sobriety: N/A'}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Error message */}
       {isError && (
@@ -338,6 +412,7 @@ export default function OutreachReviewQueue() {
   const [candidates, setCandidates] = useState([]);
   const [conversions, setConversions] = useState([]);
   const [sendStates, setSendStates] = useState({});
+  const [qualStates, setQualStates] = useState({});
   const [collapsed, setCollapsed] = useState(false);
 
   const fetchCandidates = useCallback(async () => {
@@ -436,6 +511,30 @@ export default function OutreachReviewQueue() {
     }
   }, []);
 
+  const handleTagQualification = useCallback(async (candidate, qualification) => {
+    const key = candidate._key;
+    setQualStates(prev => ({ ...prev, [key]: `saving:${qualification}` }));
+
+    try {
+      const { error } = await supabase
+        .from('lead_qualification_overrides')
+        .upsert(
+          { email: candidate.email.toLowerCase(), qualification, tagged_by: 'dashboard', updated_at: new Date().toISOString() },
+          { onConflict: 'email' },
+        );
+
+      if (error) {
+        console.error('Tag qualification error:', error);
+        setQualStates(prev => ({ ...prev, [key]: candidate.lead_qualification }));
+      } else {
+        setQualStates(prev => ({ ...prev, [key]: qualification }));
+      }
+    } catch (err) {
+      console.error('Tag qualification error:', err);
+      setQualStates(prev => ({ ...prev, [key]: candidate.lead_qualification }));
+    }
+  }, []);
+
   const pendingCount = candidates.filter(c => sendStates[c._key] !== 'sent').length;
   const sentCount = candidates.filter(c => sendStates[c._key] === 'sent').length;
 
@@ -531,6 +630,8 @@ export default function OutreachReviewQueue() {
                           candidate={c}
                           onSend={handleSend}
                           sendState={sendStates[c._key]}
+                          onTagQual={handleTagQualification}
+                          qualState={qualStates[c._key]}
                         />
                       ))}
                     </div>
