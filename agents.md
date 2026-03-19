@@ -22,9 +22,7 @@ Structure:
 7. [Historical Bugs](#historical-bugs) — real failures from this codebase,
    ordered by frequency
 8. [Open Issues](#open-issues) — known problems not yet fixed
-9. [Resolved Issues](#resolved-issues) — problems fixed, kept as a record
-10. [Agent Workflow](#agent-workflow) — multi-agent decomposition and output
-    format
+9. [Git Hygiene](#git-hygiene) — commit and push conventions
 
 ---
 
@@ -611,64 +609,12 @@ if (enrichmentInvocationRef.current !== myInvocation) return;
 
 ---
 
-## Program Structure & Messaging
+## Program Structure & Website
 
-Sober Founders runs three distinct programs. All agents must use these exact
-descriptions when generating content, outreach, or marketing materials.
-
-### Free Group: Tuesday — "All Our Affairs"
-
-- **Schedule:** Every Tuesday
-- **Format:** Business mastermind for entrepreneurs and business owners in
-  recovery from addiction
-- **Requirements:**
-  - Revenue ≥ $250k/yr
-  - Sobriety strictly > 1 year
-  - At least two full-time employees
-  - Actively working the 12 steps
-- **Cost:** Free
-
-### Free Group: Thursday — "Business Mastermind"
-
-- **Schedule:** Every Thursday
-- **Format:** Business mastermind open to all sober entrepreneurs
-- **Requirements:** Own a business and be sober (no revenue or employee minimums, open to all entrepreneurs in recovery)
-- **Cost:** Free
-
-### Phoenix Forum (Premium Membership)
-
-- **Schedule:** Weekly (details on application)
-- **Details page:** https://soberfounders.org/phoenix-forum-2nd-group/
-- **Requirements:**
-  - Revenue ≥ $1,000,000/yr
-  - Sobriety strictly > 1 year
-- **Cost:** $499/mo
-- **Format:** Curated peer group (max 10 members) with monthly "hot seat" (essentially a 4th and 5th step on businesses and lives)
-- **Positioning:** Exclusive peer mastermind group modeled after YPO/EO/Vistage
-  but built specifically for founders in recovery. Sobriety is a membership
-  prerequisite and competitive advantage, not a personal detail.
-
-### WordPress Site Architecture
-
-| Page | URL | Purpose |
-|------|-----|---------|
-| Homepage | `/` | Main landing, Elementor-designed |
-| Thursday Mastermind | `/thursday/` | Combined free mastermind landing (Thursday meeting details + format + benefits + Luma calendar) |
-| Phoenix Forum | `/phoenix-forum-2nd-group/` | Phoenix Forum details (canonical) |
-| Phoenix Forum redirect | `/phoenix-forum/` → 301 to above | SEO redirect |
-| Weekly Mastermind redirect | `/weekly-mastermind-group/` → meta-refresh to `/thursday/` | Needs server-level 301 via Yoast/Redirection plugin |
-| FAQ | `/resources/faq/` | 15-question FAQ with FAQPage schema |
-| Apply | `/apply/` | Membership application |
-| Donate | `/donate/` | 501(c)(3) donations |
-
-### SEO / Schema Infrastructure (via Code Snippets plugin)
-
-| Snippet | Scope | What it does |
-|---------|-------|-------------|
-| SF Custom Robots.txt | Global | Allows AI bots (GPTBot, ClaudeBot, etc.), blocks CCBot |
-| SF Homepage Schemas | Homepage only | NGO Organization + EventSeries JSON-LD in `<head>` |
-| SF Phoenix Forum Schemas | Phoenix Forum page only | Article + FAQPage + BreadcrumbList JSON-LD in `<head>` |
-| FAQ page | Inline on page | FAQPage JSON-LD embedded in page content |
+See `docs/program-and-site-reference.md` for group descriptions (Tuesday,
+Thursday, Phoenix Forum), WordPress page architecture, and SEO/schema
+infrastructure. Read that file before doing any content, outreach, or website
+work.
 
 ---
 
@@ -838,13 +784,8 @@ gradient header has color: 'white'.
 
 After self-QA passes:
 
-1. **Commit and push to main — this is mandatory, not optional.** After self-QA
-   passes (lint, tests, build all green), the agent MUST `git add`, `git commit`,
-   and `git push origin main` before moving on to the QA verification prompt.
-   Do not stop at "committed locally" — the push to `main` must happen. Use
-   conventional commit format (`fix(dashboard):`, `feat(dashboard):`,
-   `chore:`). One logical change per commit where practical; batching related
-   fixes into a single commit is acceptable if they share a theme.
+1. **Commit and push to main** — see [Git Hygiene](#git-hygiene) below. Push is
+   mandatory before moving on to the QA verification prompt.
 
 2. **Produce a QA verification prompt** for an independent agent to mechanically
    verify the changes. The prompt must be self-contained — the receiving agent
@@ -939,77 +880,6 @@ No open issues.
 
 ---
 
-## Resolved Issues (as of 2026-03-14)
-
-These are kept as a record. Do not re-open unless a regression is detected.
-
-- [x] `buildMustDoToday` Leads 2× weight asymmetry — reduced to 1.5× with
-      documenting comment explaining revenue-impact rationale (2026-03-14)
-- [x] E2E assertion brittle `'Leads (3 Suggestions)'` — switched to regex
-      `/Leads\s*\(\d+ Suggestions?\)/` (2026-03-14)
-- [x] Legacy Zoom code cleanup — removed `buildZoomNetNew`, `buildShowupIndex`,
-      `matchLeadToShowup`, `dayTypeFromZoomMetric`, `zoomRows` parameter from
-      `buildLeadAnalytics`/`buildGroupedLeadsSnapshot`/`getSnapshot`/`buildTrendRows`/`buildRecommendations`/`buildWindowDrilldown`
-      (2026-03-14)
-- [x] `normalizeZoomSessions` dead function — already removed in prior cleanup
-      (confirmed 2026-03-14)
-- [x] `zoomRows: zoomResponse.data` in `DashboardOverview.loadData` — already
-      removed in prior cleanup (confirmed 2026-03-14)
-- [x] `invokeMasterSync` auth fallback — removed `supabaseServiceRoleKey` from
-      fallback chain; now throws if neither `masterSyncEdgeInvokeKey` nor
-      `supabaseAnonKey` is set (2026-03-14)
-- [x] `WebsiteTrafficDashboard.jsx` local `formatInt` — migrated to shared
-      `formatInt` from `dashboardKpiHelpers.js` (2026-03-14)
-- [x] Unit tests for `leadsQualificationRules.js` and `leadsConfidenceModel.js`
-      — 60 tests covering leap year, negative revenue, suffix parsing, all
-      blocker codes, integrity levels; `buildCardModel` skipped
-      (component-internal, not exported) (2026-03-14)
-- [x] `leadsManagerInsights.js` effect multipliers — replaced arbitrary
-      multipliers with neutral 1.0 baseline and `evidence_note` field citing
-      industry benchmarks (Meta, HubSpot, Salesforce studies) (2026-03-14)
-- [x] Hardcoded hex colors in `DashboardOverview.jsx` — replaced with CSS
-      variables (`--color-kpi-*` family) in KPI card definitions and
-      error/warning states (2026-03-14)
-- [x] localStorage recommendation feedback TTL — added 30-day TTL eviction with
-      `_savedAt` timestamp; stale entries pruned on load (2026-03-14)
-- [x] `matchedZoom`/`matchedZoomNetNew` renamed to
-      `matchedAttendance`/`matchedAttendanceNetNew` across `leadAnalytics.js`,
-      `leadsGroupAnalytics.js`, `LeadsDashboard.jsx`, `leadsManagerInsights.js`;
-      `unmatchedZoomRows` preserved (different concept: Zoom→HubSpot attendee
-      matching) (2026-03-14)
-- [x] `buildCardModel` trend arrow always neutral — was using
-      `lastWeekComparison.delta`; fixed to use period-over-period `rawDelta`
-      (commit 4c6f34a)
-- [x] Cost-metric trend arrow inverted — `invertColor` was hardcoded `false`;
-      fixed to use `definition.direction === KPI_DIRECTION.LOWER_IS_BETTER`
-      (commit 8482d6c)
-- [x] KPICard three inconsistent color sets — unified into `TONE` constant
-      (commit 8482d6c)
-- [x] `formatInt`/`formatDecimal` returning `'0'` for non-finite — fixed to
-      return `'N/A'` (commit 8b0a64c)
-- [x] Race condition in Leads/Attendance enrichment — added `useRef` invocation
-      guards (commit 4c6f34a)
-- [x] Enrichment gate too strict — removed `hsAssocsLoadError` from condition
-      (commit 4c6f34a)
-- [x] Free group interview single matcher — added dual name+URL matching (commit
-      4c6f34a)
-- [x] Phoenix interview single matcher — added dual name+URL matching (commit
-      fa0cffe)
-- [x] Section order wrong — Phoenix now Section 1 (commit fa0cffe)
-- [x] "Free Meetings" label — renamed to "Free Meeting Leads" (commit fa0cffe)
-- [x] Attendance using Zoom instead of HubSpot activities — switched to
-      `normalizeHubspotAttendanceSessions` (commit fa0cffe)
-- [x] Invisible text on AttendanceDashboard cards — added `color: '#0f172a'` to
-      `cardStyle` (commit fa0cffe)
-- [x] `var(--color-text-secondary)` in AttendanceDashboard — replaced with
-      `#64748b` (commit fa0cffe)
-- [x] Leads bundle ~671 kB — split heavy panels to lazy-loaded chunks, reduced
-      to ~326 kB
-- [x] KPI cards blocked by slow enrichment — refactored to KPI-first load with
-      background enrichment
-
----
-
 ## Performance Constraints
 
 - Leads bundle target: ~326 kB (down from 671 kB via lazy-loading)
@@ -1034,56 +904,6 @@ These are kept as a record. Do not re-open unless a regression is detected.
 - Use regex patterns in E2E text assertions (e.g.,
   `/Leads \(\d+ Suggestions?\)/`) — never exact string match for dynamic-count
   UI
-
----
-
-## Agent Workflow
-
-### Pre-Flight (before starting any work)
-
-1. Read this file (`agents.md`)
-2. `git status --short` — confirm clean working tree
-3. `npm --prefix dashboard install` if `node_modules/` missing
-4. Run core gates (lint, test, build) — establish passing baseline and record
-   test count
-
-### Roles
-
-| Role           | Scope                                                                     |
-| -------------- | ------------------------------------------------------------------------- |
-| Data Integrity | Qualification rules, `npm run integrity:check`, HubSpot parity, schema    |
-| UI Consistency | CSS variables, KPICard theme, dark/light rendering                        |
-| Business Logic | leadsQualificationRules, leadsGroupAnalytics, leadsConfidenceModel        |
-| Slack Bot      | RBAC, tool orchestration, OpenAI prompt safety, audit logs, auth fallback |
-| Schema         | Migration idempotency, RLS policies, index coverage                       |
-| Performance    | Lazy-load boundaries, Supabase query selectivity, bundle size             |
-
-### Task Workflow
-
-For every non-trivial task:
-
-1. Task Understanding → 2. Decomposition → 3. Agent Assignment → 4. Independent
-   Analysis → 5. Cross-Check → 6. Solution → 7. QA Protocol (above) → 8.
-   Verification Spec → 9. Final Synthesis → **10. Commit & Push to `main`**
-
-**Step 10 is mandatory.** After self-QA passes (and the Sonnet QA agent confirms),
-commit the changes and `git push origin master:main`. Work is not done until it is
-live on Vercel. Do not ask for permission — just push.
-
-### Output Sections
-
-Return these in order: TASK UNDERSTANDING · TASK DECOMPOSITION · AGENT REPORTS ·
-CROSS-CHECK · PROPOSED SOLUTION · VERIFICATION · FINAL SYNTHESIS · NEXT ACTIONS
-· RISKS / UNCERTAINTIES
-
-### Behavior Rules
-
-- Do not stop at the first plausible answer — look for second-order issues and
-  edge cases
-- Do not invent missing facts — say explicitly what's missing
-- Prefer concise, information-dense writing
-- If verification is incomplete, label result as partial or provisional
-- If task has 2+ separable parts, use parallel agents by default
 
 ---
 
