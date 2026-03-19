@@ -79,7 +79,8 @@ WHERE gm.group_type IS NOT NULL
 --    - 3+ group meetings all-time = trusted, skip sobriety/revenue
 --    - Under 3 group meetings = require sobriety > 6mo + revenue > $100k
 -- ============================================================
-CREATE OR REPLACE VIEW public.vw_at_risk_attendees AS
+DROP VIEW IF EXISTS public.vw_at_risk_attendees;
+CREATE VIEW public.vw_at_risk_attendees AS
 WITH all_time_group_counts AS (
   -- Total group meetings ever per contact (for the 3+ trust threshold)
   SELECT
@@ -87,6 +88,17 @@ WITH all_time_group_counts AS (
     COUNT(DISTINCT meeting_date) AS lifetime_group_meetings
   FROM public.vw_group_meeting_attendance
   GROUP BY lower(email)
+),
+-- Primary group per contact (most frequent group type in last 60d)
+primary_groups AS (
+  SELECT
+    lower(gma.email) AS email,
+    gma.group_type,
+    COUNT(*) AS cnt,
+    ROW_NUMBER() OVER (PARTITION BY lower(gma.email) ORDER BY COUNT(*) DESC) AS rn
+  FROM public.vw_group_meeting_attendance gma
+  WHERE gma.hs_timestamp >= now() - INTERVAL '60 days'
+  GROUP BY lower(gma.email), gma.group_type
 ),
 recent_window AS (
   SELECT
@@ -96,9 +108,6 @@ recent_window AS (
     gma.meeting_date,
     COUNT(*) OVER (PARTITION BY lower(gma.email)) AS meetings_60d,
     MAX(gma.meeting_date) OVER (PARTITION BY lower(gma.email)) AS last_attended,
-    -- Determine which group they primarily attend
-    MODE() WITHIN GROUP (ORDER BY gma.group_type)
-      OVER (PARTITION BY lower(gma.email))        AS primary_group,
     atg.lifetime_group_meetings
   FROM public.vw_group_meeting_attendance gma
   LEFT JOIN public.raw_hubspot_contacts c
@@ -120,18 +129,19 @@ recent_window AS (
     )
 ),
 candidates AS (
-  SELECT DISTINCT ON (email)
-    email,
-    firstname,
-    lastname,
-    meetings_60d,
-    last_attended,
-    primary_group,
-    (now()::DATE - last_attended) AS days_since_last
-  FROM recent_window
-  WHERE meetings_60d >= 2
-    AND last_attended < now()::DATE - INTERVAL '7 days'
-  ORDER BY email, last_attended DESC
+  SELECT DISTINCT ON (rw.email)
+    rw.email,
+    rw.firstname,
+    rw.lastname,
+    rw.meetings_60d,
+    rw.last_attended,
+    pg.group_type AS primary_group,
+    (now()::DATE - rw.last_attended) AS days_since_last
+  FROM recent_window rw
+  LEFT JOIN primary_groups pg ON pg.email = rw.email AND pg.rn = 1
+  WHERE rw.meetings_60d >= 2
+    AND rw.last_attended < now()::DATE - INTERVAL '7 days'
+  ORDER BY rw.email, rw.last_attended DESC
 )
 SELECT
   c.email,
@@ -155,7 +165,8 @@ LEFT JOIN public.recovery_events r
 --    - Excludes Tiger 21
 --    - No sobriety/revenue gate: 3+ consecutive = trusted member
 -- ============================================================
-CREATE OR REPLACE VIEW public.vw_streak_break_candidates AS
+DROP VIEW IF EXISTS public.vw_streak_break_candidates;
+CREATE VIEW public.vw_streak_break_candidates AS
 WITH group_sessions AS (
   -- All unique group meeting dates, numbered per group type
   SELECT DISTINCT
