@@ -123,6 +123,16 @@ function buildReason(c) {
 
 /* ── Candidate card ── */
 
+function getGroupTag(candidate) {
+  // Derive which group(s) this person attends
+  const pg = candidate.primary_group; // at-risk + winback views
+  const isThurs = candidate.is_thursday; // no-show view
+  const lastThurs = candidate.last_was_thursday; // streak-break view
+  if (pg === 'Tuesday' || isThurs === false || lastThurs === false) return 'Tuesday';
+  if (pg === 'Thursday' || isThurs === true || lastThurs === true) return 'Thursday';
+  return null;
+}
+
 function CandidateCard({ candidate, onSend, sendState }) {
   const [expanded, setExpanded] = useState(false);
   const meta = CAMPAIGN_META[candidate._campaign] || CAMPAIGN_META.at_risk_nudge;
@@ -130,6 +140,7 @@ function CandidateCard({ candidate, onSend, sendState }) {
   const reason = useMemo(() => buildReason(candidate), [candidate]);
   const displayName = [candidate.firstname, candidate.lastname].filter(Boolean).join(' ')
     || candidate.name || candidate.email?.split('@')[0] || 'Unknown';
+  const groupTag = getGroupTag(candidate);
 
   const isSending = sendState === 'sending';
   const isSent = sendState === 'sent';
@@ -156,6 +167,17 @@ function CandidateCard({ candidate, onSend, sendState }) {
           <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
             {displayName}
           </span>
+          {groupTag && (
+            <span style={{
+              padding: '2px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: 700,
+              background: groupTag === 'Thursday' ? 'rgba(168, 85, 247, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+              color: groupTag === 'Thursday' ? '#c084fc' : '#93c5fd',
+              border: `1px solid ${groupTag === 'Thursday' ? 'rgba(168, 85, 247, 0.3)' : 'rgba(59, 130, 246, 0.3)'}`,
+              whiteSpace: 'nowrap',
+            }}>
+              {groupTag}
+            </span>
+          )}
           <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {candidate.email}
           </span>
