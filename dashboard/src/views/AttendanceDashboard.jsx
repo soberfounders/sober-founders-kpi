@@ -36,6 +36,7 @@ import {
   Loader2,
   RefreshCcw,
   Sparkles,
+  Mail,
 } from 'lucide-react';
 
 const RECENT_WINDOW = 8;
@@ -1000,8 +1001,8 @@ function buildPlan(analytics) {
     {
       id: 'human-followup-script',
       owner: 'Human',
-      title: 'Approve no-show follow-up script',
-      detail: 'Create a 2-message sequence for people absent 2+ sessions.',
+      title: 'Review outreach agent templates',
+      detail: 'Fixed templates are deployed across all 4 outreach agents (no-show, at-risk, streak-break, winback).',
       proceed: true,
     },
     {
@@ -2163,14 +2164,14 @@ const AttendanceDashboard = () => {
         }
 
         const failures = (recentEvents || []).filter(
-          (e) => e.metadata?.mandrill_error || e.metadata?.delivery_failed
+          (e) => e.metadata?.resend_error || e.metadata?.delivery_failed
         );
 
         if (failures.length > 0) {
-          const latestError = failures[0].metadata?.mandrill_error || failures[0].metadata?.delivery_failed || 'Unknown delivery failure';
+          const latestError = failures[0].metadata?.resend_error || failures[0].metadata?.delivery_failed || 'Unknown delivery failure';
           setOutreachHealth({
             status: 'error',
-            message: `Outreach email delivery is broken — ${failures.length} failed in the last 7 days. Latest error: ${latestError}. Check MANDRILL_API_KEY in Supabase secrets and domain verification in Mandrill.`,
+            message: `Outreach email delivery is broken - ${failures.length} failed in the last 7 days. Latest error: ${latestError}. Check RESEND_API_KEY in Supabase secrets and domain verification in Resend.`,
           });
           return;
         }
@@ -4329,7 +4330,7 @@ const AttendanceDashboard = () => {
                 Rule A: attended once and missed the next session. Rule B: attended 2+ times and missed 2 in a row (within their primary Tuesday/Thursday group).
               </p>
               <p style={{ fontSize: '11px', color: '#b45309', marginTop: '4px' }}>
-                Open the HubSpot contact and send a missed-session check-in template asking for feedback and whether it was scheduling or they are not planning to return.
+                Automated outreach agents handle these emails. This queue shows contacts for manual review or HubSpot lookup when needed.
               </p>
             </div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -4436,6 +4437,78 @@ const AttendanceDashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* ─── Outreach Email Templates ─── */}
+      <div style={{ ...cardStyle, borderLeft: '5px solid #6366f1' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+          <Mail size={18} color="#6366f1" />
+          <h3 style={{ fontSize: '18px' }}>Outreach Email Templates</h3>
+        </div>
+        <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '16px' }}>
+          Fixed templates deployed across all 4 outreach agents. All emails are sent from Andrew via Resend and logged to HubSpot.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px' }}>
+          {[
+            {
+              label: 'No-Show Recovery (first-timer)',
+              color: '#ef4444',
+              bg: 'rgba(239,68,68,0.08)',
+              trigger: 'Attended once, missed next session',
+              subject: 'See you at the mastermind tomorrow?',
+              body: 'Hey {name}, hope you enjoyed the meeting last week and we\'ll see you again this week. If you need any links go to soberfounders.org/{group}\n\nAlso, if it\'s not for you, any feedback is really appreciated good or bad.\n\nHope to see you again!\n\n- Andrew',
+            },
+            {
+              label: 'No-Show Recovery (repeat)',
+              color: '#ef4444',
+              bg: 'rgba(239,68,68,0.08)',
+              trigger: 'Attended 2+ times, missed this session',
+              subject: 'Hey {name}, missed you today',
+              body: 'Hey {name},\n\n{personalized opener based on count}\n\nIf you need any links or an easy way to get it in your calendar soberfounders.org/{group}\n\nAlso, if it\'s not for you, any feedback on how we can make it better would be super appreciated.\n\n- Andrew',
+            },
+            {
+              label: 'At-Risk Retention',
+              color: '#f59e0b',
+              bg: 'rgba(245,158,11,0.08)',
+              trigger: '2+ meetings in 60d, missed last 7d',
+              subject: 'Hope to see you tomorrow',
+              body: 'Hey {name}, I noticed we haven\'t seen you in a bit and just wanted to invite you back to the Sober Founders mastermind.\n\nIf you need any links or an easy way to get it in your calendar soberfounders.org/{group}\n\nAlso, if you have any feedback on how we can make it better, that would be super appreciated as well.\n\nHope to see you\n\n- Andrew',
+            },
+            {
+              label: 'Streak Break',
+              color: '#a855f7',
+              bg: 'rgba(168,85,247,0.08)',
+              trigger: '3+ meetings, gone quiet 2-8 weeks',
+              subject: 'Hey {name}, checking in',
+              body: 'Hey {name},\n\nHaven\'t seen you in a few weeks - just wanted to check in and make sure everything\'s good.\n\nNo pressure at all. The group misses having you around. If you want to pop back in, we\'re still running and if you need any links you can go to soberfounders.org/{group}\n\nHope you\'re doing well.\n\n- Andrew',
+            },
+            {
+              label: 'Winback',
+              color: '#3b82f6',
+              bg: 'rgba(59,130,246,0.08)',
+              trigger: 'Attended once, 30-180 days ago, never returned',
+              subject: 'Hey {name} - Sober Founders update',
+              body: 'Hey {name},\n\nIt was great meeting you at the Sober Founders group! Wanted to reach out because a lot has happened since then and just launched soberfounders.org/{group} to make it easier to find everything and get it in your calendar with just a click.\n\nAlso, if it\'s not for you, any feedback is greatly appreciated!\n\n- Andrew',
+            },
+          ].map((tpl, i) => (
+            <div key={i} style={{ backgroundColor: tpl.bg, border: `1px solid ${tpl.color}33`, borderRadius: '10px', padding: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: tpl.color, flexShrink: 0 }} />
+                <span style={{ fontWeight: 700, fontSize: '13px', color: tpl.color }}>{tpl.label}</span>
+              </div>
+              <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '8px' }}>
+                Trigger: {tpl.trigger}
+              </div>
+              <div style={{ fontSize: '12px', color: '#e2e8f0', marginBottom: '4px' }}>
+                <strong>Subject:</strong> {tpl.subject}
+              </div>
+              <pre style={{ fontSize: '11px', color: '#cbd5e1', whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0, lineHeight: 1.5 }}>
+                {tpl.body}
+              </pre>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {ATTENDANCE_ENABLE_BAD_NAMES_QA && (
       <div style={{ ...cardStyle, borderLeft: '5px solid #ef4444' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>

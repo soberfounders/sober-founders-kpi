@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { sendHubSpotEmail, lookupContactByEmail, createHubSpotTaskDraft } from "../_shared/hubspot_email.ts";
+import { sendHubSpotEmail, lookupContactByEmail } from "../_shared/hubspot_email.ts";
 import { createNotionFollowUp } from "../_shared/notion_task.ts";
 
 const corsHeaders = {
@@ -13,14 +13,6 @@ const corsHeaders = {
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-function stripCodeFences(text: string) {
-    return String(text || "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-}
-
-function safeJsonParse<T = any>(value: string): T | null {
-    try { return JSON.parse(value) as T; } catch { return null; }
-}
-
 function calendarUrl(isThursday: boolean): string {
     return isThursday
         ? "https://soberfounders.org/thursday"
@@ -28,86 +20,25 @@ function calendarUrl(isThursday: boolean): string {
 }
 
 /* ------------------------------------------------------------------ */
-/*  AI Message Generation                                              */
+/*  Streak Break Message Generation (fixed template - no AI)           */
 /* ------------------------------------------------------------------ */
 
-async function generateStreakBreakMessages(candidates: any[]): Promise<any[]> {
-    const geminiKey = Deno.env.get("GEMINI_API_KEY");
-
-    if (!geminiKey) {
-        return candidates.map(c => {
-            const firstName = c.firstname || "there";
-            const calLink = calendarUrl(c.last_was_thursday === true);
-            return {
-                email: c.email,
-                name: `${c.firstname || ""} ${c.lastname || ""}`.trim() || "there",
-                subject: `Hey ${firstName}, haven't seen you in a bit`,
-                message:
-                    `Hey ${firstName}, you were coming pretty regularly and we haven't seen you in a little while — just wanted to check in and make sure everything's okay! ` +
-                    `If life just got busy, no worries at all — here's the link to add us back to your calendar: ${calLink}. ` +
-                    `If something about the meetings wasn't working for you, we'd really love to hear your feedback on how to make it better.`,
-                reason: "fallback_template",
-            };
-        });
-    }
-
-    const prompt = [
-        "You are the 'Sober Founders' community leader writing a personal check-in to people who used to come regularly but have gone quiet.",
-        "",
-        "These people attended 3 or more meetings in a row, but haven't been back in 2–8 weeks.",
-        "",
-        "Guidelines:",
-        "- 2–3 sentences, warm and personal.",
-        "- Acknowledge they were a regular (don't make it feel like a form letter).",
-        "- Don't guilt-trip or make them feel bad for not coming.",
-        "- Ask if everything is okay — genuine concern.",
-        "- If life just got busy, give them the calendar link to add it back.",
-        "- End with: 'If something about the meetings wasn't working for you, we'd really love to hear your feedback.'",
-        "- Use their first name.",
-        "",
-        "Candidates:",
-        JSON.stringify(candidates.map(c => ({
-            email: c.email,
-            name: `${c.firstname || ""} ${c.lastname || ""}`.trim(),
-            total_meetings: c.total_meetings,
-            days_since_last: c.days_since_last,
-            calendar_url: calendarUrl(c.last_was_thursday === true),
-        }))),
-        "",
-        "Return JSON: { messages: [ { email: string, name: string, subject: string, message: string } ] }",
-    ].join("\n");
-
-    const model = "gemini-2.0-flash";
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(geminiKey)}`;
-    const resp = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.4, responseMimeType: "application/json" },
-        }),
-    });
-
-    if (resp.ok) {
-        const json = await resp.json();
-        const text = json?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        const parsed = safeJsonParse(stripCodeFences(text));
-        if (parsed?.messages?.length) return parsed.messages;
-    }
-
-    // Fallback templates
+function generateStreakBreakMessages(candidates: any[]): any[] {
     return candidates.map(c => {
         const firstName = c.firstname || "there";
         const calLink = calendarUrl(c.last_was_thursday === true);
+        const groupLabel = c.last_was_thursday ? "thursday" : "tuesday";
+
         return {
             email: c.email,
             name: `${c.firstname || ""} ${c.lastname || ""}`.trim() || "there",
-            subject: `Hey ${firstName}, haven't seen you in a bit`,
+            subject: `Hey ${firstName}, checking in`,
             message:
-                `Hey ${firstName}, you were coming pretty regularly and we haven't seen you in a little while — just wanted to check in and make sure everything's okay! ` +
-                `If life just got busy, no worries at all — here's the link to add us back to your calendar: ${calLink}. ` +
-                `If something about the meetings wasn't working for you, we'd really love to hear your feedback on how to make it better.`,
-            reason: "fallback_template",
+                `Hey ${firstName},\n\n` +
+                `Haven't seen you in a few weeks - just wanted to check in and make sure everything's good.\n\n` +
+                `No pressure at all. The group misses having you around. If you want to pop back in, we're still running and if you need any links you can go to https://soberfounders.org/${groupLabel}\n\n` +
+                `Hope you're doing well.\n\n` +
+                `- Andrew`,
         };
     });
 }
@@ -136,7 +67,7 @@ async function alertSlack(stats: any, dryRun: boolean): Promise<boolean> {
                     `- Regulars Who Went Quiet: ${stats.totalCandidates}`,
                     `- Queued This Run: ${stats.processed}`,
                     dryRun ? `- Emails Sent: 0 (dry run)` : `- Emails Sent: ${stats.emailsSent}`,
-                    dryRun ? `- HubSpot Draft Tasks: ${stats.taskDraftsCreated ?? 0} created` : `- Notion Tasks: ${stats.notionTasks}`,
+                    dryRun ? `- Review in KPI Dashboard → Outreach Queue` : `- Notion Tasks: ${stats.notionTasks}`,
                     stats.errors > 0 ? `- Errors: ${stats.errors}` : "",
                 ].filter(Boolean).join("\n"),
             },
@@ -159,7 +90,7 @@ async function alertSlack(stats: any, dryRun: boolean): Promise<boolean> {
             type: "section",
             text: {
                 type: "mrkdwn",
-                text: `*HubSpot draft tasks created* — go to HubSpot → Tasks (filter by type: Email) to review and click Send.\n\n*To flip live:* POST \`/streak-break-agent\` with \`{"dry_run": false}\``,
+                text: `*Review these in the KPI Dashboard* → Attendance → Outreach Review Queue. Click Send on each one you approve.\n\n*To auto-send all:* POST \`/streak-break-agent\` with \`{"dry_run": false}\``,
             },
         });
     }
@@ -223,40 +154,16 @@ serve(async (req: Request) => {
         const targets = realCandidates.slice(0, 5);
         let messages: any[] = [];
         if (targets.length > 0) {
-            messages = await generateStreakBreakMessages(targets);
+            messages = generateStreakBreakMessages(targets);
         }
 
         let emailsSent = 0;
         let notionTasks = 0;
-        let taskDraftsCreated = 0;
         let errors = 0;
         const recipients: string[] = [];
 
-        if (dryRun && hubspotToken && messages.length > 0) {
-            // 3a. Dry run — create HubSpot task drafts for review
-            for (const msg of messages) {
-                const { data: contact } = await supabase
-                    .from("raw_hubspot_contacts")
-                    .select("hubspot_contact_id")
-                    .ilike("email", msg.email)
-                    .limit(1)
-                    .single();
-
-                let contactId = contact?.hubspot_contact_id;
-                if (!contactId) contactId = await lookupContactByEmail(hubspotToken, msg.email);
-
-                if (contactId) {
-                    const taskResult = await createHubSpotTaskDraft(hubspotToken, {
-                        contactId,
-                        subject: msg.subject,
-                        body: msg.message,
-                        campaignType: "streak_break",
-                    });
-                    if (taskResult.ok) taskDraftsCreated++;
-                    else console.warn(`Task draft failed for ${msg.email}:`, taskResult.error);
-                }
-            }
-        }
+        // Dry run: no HubSpot tasks — review candidates in the KPI dashboard
+        // OutreachReviewQueue and click Send from there.
 
         if (!dryRun) {
             for (const msg of messages) {
@@ -283,7 +190,7 @@ serve(async (req: Request) => {
                             contactEmail: msg.email,
                             senderEmail,
                             subject: msg.subject,
-                            htmlBody: `<p>${msg.message}</p>`,
+                            htmlBody: msg.message.split("\n").map((l: string) => l ? `<p>${l}</p>` : "").join(""),
                             campaignType: "streak_break",
                         });
 
@@ -341,7 +248,6 @@ serve(async (req: Request) => {
             processed: messages.length,
             emailsSent,
             notionTasks,
-            taskDraftsCreated,
             errors,
             recipients,
             previews: dryRun ? messages : [],

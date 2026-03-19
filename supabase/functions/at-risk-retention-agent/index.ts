@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { sendHubSpotEmail, lookupContactByEmail, createHubSpotTaskDraft } from "../_shared/hubspot_email.ts";
+import { sendHubSpotEmail, lookupContactByEmail } from "../_shared/hubspot_email.ts";
 import { createNotionFollowUp } from "../_shared/notion_task.ts";
 
 const corsHeaders = {
@@ -12,14 +12,6 @@ const corsHeaders = {
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
-
-function stripCodeFences(text: string) {
-    return String(text || "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-}
-
-function safeJsonParse<T = any>(value: string): T | null {
-    try { return JSON.parse(value) as T; } catch { return null; }
-}
 
 // Cron runs Monday (for Tuesday) or Wednesday (for Thursday)
 function nextMeetingDay(): "Tuesday" | "Thursday" {
@@ -34,74 +26,29 @@ function calendarUrl(meetingDay: "Tuesday" | "Thursday"): string {
 }
 
 /* ------------------------------------------------------------------ */
-/*  AI Nudge Generation                                                */
+/*  Nudge Message Generation (fixed template - no AI)                  */
 /* ------------------------------------------------------------------ */
 
-async function generateNudgeMessages(candidates: any[]): Promise<any[]> {
-    const geminiKey = Deno.env.get("GEMINI_API_KEY");
-    const meetingDay = nextMeetingDay();
-    const calLink = calendarUrl(meetingDay);
+function generateNudgeMessages(candidates: any[]): any[] {
+    return candidates.map(c => {
+        const firstName = c.firstname || "there";
+        // Use primary_group from the updated view, fallback to nextMeetingDay()
+        const group = c.primary_group || (nextMeetingDay() === "Thursday" ? "Thursday" : "Tuesday");
+        const groupSlug = group === "Thursday" ? "thursday" : "tuesday";
+        const calLink = `https://soberfounders.org/${groupSlug}`;
 
-    if (!geminiKey) {
-        return candidates.map(c => ({
+        return {
             email: c.email,
             name: `${c.firstname || ""} ${c.lastname || ""}`.trim() || "there",
-            subject: `Hope to see you tomorrow`,
+            subject: "Hope to see you tomorrow",
             message:
-                `Hey ${c.firstname || "there"}, just wanted to reach out — we'd love to see you at tomorrow's ${meetingDay} meeting! ` +
-                `You can easily add it to your calendar at ${calLink}. Hope to see you there!`,
-            reason: "fallback_template",
-        }));
-    }
-
-    const prompt = [
-        "You are the 'Sober Founders' community manager writing a personal check-in email.",
-        `Tomorrow is ${meetingDay} — our regular group meeting.`,
-        "These people have been regulars (attended 2+ times recently) but missed the last meeting.",
-        "Write a short (2–3 sentences), warm, personal email for each person.",
-        "Make it feel like a friend reaching out, not a system notification.",
-        "Don't mention 'attendance tracking' or 'data' — just a genuine 'hope to see you tomorrow'.",
-        `End with a line letting them know they can add it to their calendar at ${calLink}.`,
-        "Use their first name.",
-        "",
-        "Candidates:",
-        JSON.stringify(candidates.map(c => ({
-            email: c.email,
-            name: `${c.firstname || ""} ${c.lastname || ""}`.trim(),
-            meetings_last_60d: c.meetings_60d,
-            days_since_last: c.days_since_last,
-        }))),
-        "",
-        "Return JSON: { nudges: [ { email: string, name: string, subject: string, message: string } ] }",
-    ].join("\n");
-
-    const model = "gemini-2.0-flash";
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(geminiKey)}`;
-    const resp = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.4, responseMimeType: "application/json" },
-        }),
+                `Hey ${firstName}, I noticed we haven't seen you in a bit and just wanted to invite you back to the Sober Founders mastermind.\n\n` +
+                `If you need any links or an easy way to get it in your calendar ${calLink}.\n\n` +
+                `Also, if you have any feedback on how we can make it better, that would be super appreciated as well.\n\n` +
+                `Hope to see you\n\n` +
+                `- Andrew`,
+        };
     });
-
-    if (resp.ok) {
-        const json = await resp.json();
-        const text = json?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        const parsed = safeJsonParse(stripCodeFences(text));
-        if (parsed?.nudges?.length) return parsed.nudges;
-    }
-
-    return candidates.map(c => ({
-        email: c.email,
-        name: `${c.firstname || ""} ${c.lastname || ""}`.trim() || "there",
-        subject: `Hope to see you tomorrow`,
-        message:
-            `Hey ${c.firstname || "there"}, just wanted to reach out — we'd love to see you at tomorrow's ${meetingDay} meeting! ` +
-            `You can easily add it to your calendar at ${calLink}. Hope to see you there!`,
-        reason: "fallback_template",
-    }));
 }
 
 /* ------------------------------------------------------------------ */
@@ -128,7 +75,7 @@ async function alertSlack(stats: any, dryRun: boolean): Promise<boolean> {
                     `- At-Risk Attendees Found: ${stats.totalAtRisk}`,
                     `- Queued This Run: ${stats.processed}`,
                     dryRun ? `- Emails Sent: 0 (dry run)` : `- Nudge Emails Sent: ${stats.emailsSent}`,
-                    dryRun ? `- HubSpot Draft Tasks: ${stats.taskDraftsCreated ?? 0} created` : `- Notion Follow-ups Created: ${stats.notionTasks}`,
+                    dryRun ? `- Review in KPI Dashboard → Outreach Queue` : `- Notion Follow-ups Created: ${stats.notionTasks}`,
                     stats.errors > 0 ? `- Errors: ${stats.errors}` : "",
                 ].filter(Boolean).join("\n"),
             },
@@ -151,7 +98,7 @@ async function alertSlack(stats: any, dryRun: boolean): Promise<boolean> {
             type: "section",
             text: {
                 type: "mrkdwn",
-                text: `*HubSpot draft tasks created* — go to HubSpot → Tasks (filter by type: Email) to review and click Send.\n\n*To flip live:* POST \`/at-risk-retention-agent\` with \`{"dry_run": false}\``,
+                text: `*Review these in the KPI Dashboard* → Attendance → Outreach Review Queue. Click Send on each one you approve.\n\n*To auto-send all:* POST \`/at-risk-retention-agent\` with \`{"dry_run": false}\``,
             },
         });
     }
@@ -246,40 +193,16 @@ serve(async (req: Request) => {
         const targets = realCandidates.slice(0, 10);
         let nudges: any[] = [];
         if (targets.length > 0) {
-            nudges = await generateNudgeMessages(targets);
+            nudges = generateNudgeMessages(targets);
         }
 
         let emailsSent = 0;
         let notionTasks = 0;
-        let taskDraftsCreated = 0;
         let errors = 0;
         const recipients: string[] = [];
 
-        if (dryRun && hubspotToken && nudges.length > 0) {
-            // 3a. Dry run — create HubSpot task drafts for review
-            for (const nudge of nudges) {
-                const { data: contact } = await supabase
-                    .from("raw_hubspot_contacts")
-                    .select("hubspot_contact_id")
-                    .ilike("email", nudge.email)
-                    .limit(1)
-                    .single();
-
-                let contactId = contact?.hubspot_contact_id;
-                if (!contactId) contactId = await lookupContactByEmail(hubspotToken, nudge.email);
-
-                if (contactId) {
-                    const taskResult = await createHubSpotTaskDraft(hubspotToken, {
-                        contactId,
-                        subject: nudge.subject,
-                        body: nudge.message,
-                        campaignType: "at_risk_nudge",
-                    });
-                    if (taskResult.ok) taskDraftsCreated++;
-                    else console.warn(`Task draft failed for ${nudge.email}:`, taskResult.error);
-                }
-            }
-        }
+        // Dry run: no HubSpot tasks — review candidates in the KPI dashboard
+        // OutreachReviewQueue and click Send from there.
 
         if (!dryRun) {
             const meetingDay = nextMeetingDay();
@@ -308,7 +231,7 @@ serve(async (req: Request) => {
                             contactEmail: nudge.email,
                             senderEmail,
                             subject: nudge.subject || "Hope to see you tomorrow",
-                            htmlBody: `<p>${nudge.message}</p>`,
+                            htmlBody: nudge.message.split("\n").map((l: string) => l ? `<p>${l}</p>` : "").join(""),
                             campaignType: "at_risk_nudge",
                         });
 
@@ -364,7 +287,6 @@ serve(async (req: Request) => {
             processed: nudges.length,
             emailsSent,
             notionTasks,
-            taskDraftsCreated,
             errors,
             recipients,
             previews: dryRun ? nudges : [],
