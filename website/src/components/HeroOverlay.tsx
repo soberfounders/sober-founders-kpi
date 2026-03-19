@@ -46,18 +46,18 @@ export default function HeroOverlay() {
               className="text-[clamp(2.4rem,5vw,3.6rem)] font-normal text-white leading-[1.1] mb-5 drop-shadow-[0_2px_16px_rgba(0,0,0,0.7)]"
               style={{ fontFamily: "'DM Serif Display', serif" }}
             >
-              Sobriety Is a{" "}
+              Sober Founders - A Free Community For{" "}
               <span className="text-[#5eecc0] drop-shadow-[0_0_24px_rgba(94,236,192,0.35)]">
-                Competitive Advantage
+                Entrepreneurs In Recovery
               </span>
             </h1>
             <p className="text-[1.1rem] text-white/80 max-w-[480px] mb-9 leading-[1.8] drop-shadow-[0_1px_6px_rgba(0,0,0,0.5)]">
               The peer community for entrepreneurs who build thriving businesses
-              and protect their recovery&mdash;not one at the expense of the other.
+              and protect their recovery - not one at the expense of the other.
             </p>
             <div className="flex gap-4 flex-wrap pointer-events-auto">
               <a
-                href="https://soberfounders.org/events"
+                href="/events/"
                 className="inline-block text-[0.95rem] font-semibold px-8 py-3.5 rounded-full uppercase tracking-[0.5px] transition-all bg-[#00b286] text-white hover:bg-[#00c090] hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,178,134,0.4)] shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
               >
                 Attend a Free Meeting
