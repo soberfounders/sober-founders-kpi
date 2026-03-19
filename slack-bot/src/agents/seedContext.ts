@@ -65,6 +65,41 @@ const SEEDS = [
     value: { provider: "luma", status: "already_handled" },
     summary: "Luma already sends welcome/confirmation emails for events. Don't rebuild this - it's handled.",
   },
+  {
+    persona: "growth_agent",
+    type: "observation",
+    key: "registered_not_attended",
+    value: { status: "approved_for_action", insight: "qualified leads who register but do not attend are a high-value recovery target" },
+    summary: "Qualified leads who registered for events but did not attend represent a high-conversion follow-up opportunity. Build an automated follow-up email sequence for this segment.",
+  },
+  {
+    persona: "growth_agent",
+    type: "initiative",
+    key: "meta_ads_primary_channel",
+    value: { channel: "meta_ads", status: "active", funnel: "meta -> luma -> free_group -> phoenix" },
+    summary: "Meta Ads is the primary lead gen channel. Most leads convert in first 1-2 sessions or never. Speed to contact is critical.",
+  },
+  {
+    persona: "growth_agent",
+    type: "initiative",
+    key: "phoenix_forum_onboarding",
+    value: { price: 250, onboarding_fee: 699, funnel: "application -> interview -> payment -> nda -> verification -> meet_greet -> recurring_meetings" },
+    summary: "Phoenix Forum: $250/mo membership, $699 onboarding. Full pipeline: application, interview, payment + NDA + revenue verification, meet & greet, then recurring Zoom meetings + WhatsApp group.",
+  },
+  {
+    persona: "content_agent",
+    type: "initiative",
+    key: "wordpress_drafts_pending",
+    value: { status: "action_needed", site: "soberfounders.org" },
+    summary: "WordPress has blog drafts that need to be moved to scheduled. WP Mail SMTP is also broken.",
+  },
+  {
+    persona: "strategy_agent",
+    type: "observation",
+    key: "conversion_funnel_stages",
+    value: { stages: ["luma_signup", "first_attendance", "repeat_attendance", "phoenix_interview", "paid_member"] },
+    summary: "Key conversion stages to measure: Luma signup -> actual attendance -> repeat attendance -> Phoenix interview -> paid member. Most convert in 1-2 sessions or never.",
+  },
 ];
 
 const seed = async () => {
