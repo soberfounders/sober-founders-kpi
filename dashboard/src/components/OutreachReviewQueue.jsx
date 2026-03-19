@@ -24,6 +24,10 @@ const CAMPAIGN_META = {
     bg: 'rgba(168, 85, 247, 0.12)', text: '#c084fc', border: 'rgba(168, 85, 247, 0.25)',
     label: 'Streak Break', icon: '💔',
   },
+  first_visit_followup: {
+    bg: 'rgba(52, 211, 153, 0.12)', text: '#34d399', border: 'rgba(52, 211, 153, 0.25)',
+    label: 'First Visit Follow-up', icon: '👋',
+  },
 };
 
 const cardStyle = {
@@ -88,12 +92,23 @@ function buildStreakBreakEmail(c) {
   return { subject: `Hey ${name}, checking in`, body };
 }
 
+function buildFirstVisitEmail(c) {
+  const name = c.firstname || 'there';
+  const isThursday = c.group_type === 'Thursday' || c.is_thursday === true;
+  const slug = isThursday ? 'thursday' : 'tuesday';
+  const link = `https://soberfounders.org/${slug}`;
+
+  const body = `Hey ${name}, hope you enjoyed last week's mastermind group and we'll see you again at this week's? The links can be found here as well as an easy way to put it in your calendar ${link}.\n\nIf it's not for you, any feedback (good or bad) is really appreciated.\n\nSee you!\n\n-Andrew`;
+  return { subject: 'See you again?', body };
+}
+
 function buildEmailForCandidate(candidate) {
   switch (candidate._campaign) {
     case 'no_show_followup': return buildNoShowEmail(candidate);
     case 'at_risk_nudge': return buildAtRiskEmail(candidate);
     case 'winback': return buildWinbackEmail(candidate);
     case 'streak_break': return buildStreakBreakEmail(candidate);
+    case 'first_visit_followup': return buildFirstVisitEmail(candidate);
     default: return { subject: '', body: '' };
   }
 }
@@ -108,6 +123,8 @@ function buildReason(c) {
       return `Came once on ${c.first_attended || '?'} (${c.days_since_last ?? '?'} days ago) and never returned. ${c.is_thursday_attendee ? 'Thursday' : 'Tuesday'} attendee.`;
     case 'streak_break':
       return `Was a regular (${c.total_meetings ?? '?'} total meetings). Last attended ${c.last_attended || '?'} (${c.days_since_last ?? '?'} days ago). Silent for ${c.days_since_last ?? '?'} days.`;
+    case 'first_visit_followup':
+      return `First group meeting was ${c.meeting_date || '?'} (${c.group_type || '?'}). ${c.total_meetings ?? 1} total meeting(s) so far.`;
     default:
       return '';
   }
@@ -120,8 +137,9 @@ function getGroupTag(candidate) {
   const pg = candidate.primary_group; // at-risk + winback views
   const isThurs = candidate.is_thursday; // no-show view
   const lastThurs = candidate.last_was_thursday; // streak-break view
-  if (pg === 'Tuesday' || isThurs === false || lastThurs === false) return 'Tuesday';
-  if (pg === 'Thursday' || isThurs === true || lastThurs === true) return 'Thursday';
+  const gt = candidate.group_type; // first-visit view
+  if (pg === 'Tuesday' || isThurs === false || lastThurs === false || gt === 'Tuesday') return 'Tuesday';
+  if (pg === 'Thursday' || isThurs === true || lastThurs === true || gt === 'Thursday') return 'Thursday';
   return null;
 }
 
@@ -325,7 +343,7 @@ export default function OutreachReviewQueue() {
   const fetchCandidates = useCallback(async () => {
     setLoading(true);
     try {
-      const [noShowRes, atRiskRes, winbackRes, streakRes, convRes] = await Promise.all([
+      const [noShowRes, atRiskRes, winbackRes, streakRes, firstVisitRes, convRes] = await Promise.all([
         supabase.from('vw_noshow_candidates')
           .select('*')
           .eq('attendance_status', 'no_show')
@@ -348,12 +366,18 @@ export default function OutreachReviewQueue() {
           .is('last_at_risk_nudge_sent', null)
           .order('days_since_last', { ascending: true })
           .limit(10),
+        supabase.from('vw_first_visit_followup')
+          .select('*')
+          .is('last_followup_sent', null)
+          .order('meeting_date', { ascending: false })
+          .limit(20),
         supabase.from('vw_outreach_conversions')
           .select('*')
           .order('delivered_at', { ascending: false }),
       ]);
 
       const tagged = [
+        ...(firstVisitRes.data || []).map(c => ({ ...c, _campaign: 'first_visit_followup', _key: `fv:${c.email}:${c.meeting_date}` })),
         ...(noShowRes.data || []).map(c => ({ ...c, _campaign: 'no_show_followup', _key: `ns:${c.email}:${c.meeting_date}` })),
         ...(atRiskRes.data || []).map(c => ({ ...c, _campaign: 'at_risk_nudge', _key: `ar:${c.email}` })),
         ...(winbackRes.data || []).map(c => ({ ...c, _campaign: 'winback', _key: `wb:${c.email}` })),
@@ -483,7 +507,7 @@ export default function OutreachReviewQueue() {
               <ComebackRateCard conversions={conversions} />
 
               {/* Candidate list grouped by campaign */}
-              {['no_show_followup', 'at_risk_nudge', 'streak_break', 'winback'].map(campaignType => {
+              {['first_visit_followup', 'no_show_followup', 'at_risk_nudge', 'streak_break', 'winback'].map(campaignType => {
                 const group = candidates.filter(c => c._campaign === campaignType);
                 if (group.length === 0) return null;
                 const meta = CAMPAIGN_META[campaignType];
