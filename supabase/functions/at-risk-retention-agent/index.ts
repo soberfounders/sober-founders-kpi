@@ -46,7 +46,7 @@ function generateNudgeMessages(candidates: any[]): any[] {
                 `If you need any links or an easy way to get it in your calendar ${calLink}.\n\n` +
                 `Also, if you have any feedback on how we can make it better, that would be super appreciated as well.\n\n` +
                 `Hope to see you\n\n` +
-                `-Andrew`,
+                `- Andrew`,
         };
     });
 }
@@ -198,7 +198,6 @@ serve(async (req: Request) => {
 
         let emailsSent = 0;
         let notionTasks = 0;
-        let taskDraftsCreated = 0;
         let errors = 0;
         const recipients: string[] = [];
 
@@ -288,7 +287,6 @@ serve(async (req: Request) => {
             processed: nudges.length,
             emailsSent,
             notionTasks,
-            taskDraftsCreated,
             errors,
             recipients,
             previews: dryRun ? nudges : [],

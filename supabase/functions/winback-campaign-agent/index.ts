@@ -156,7 +156,6 @@ serve(async (req: Request) => {
 
         let emailsSent = 0;
         let notionTasks = 0;
-        let taskDraftsCreated = 0;
         let errors = 0;
         const recipients: string[] = [];
 
@@ -243,7 +242,6 @@ serve(async (req: Request) => {
             processed: winbacks.length,
             emailsSent,
             notionTasks,
-            taskDraftsCreated,
             errors,
             remaining: realCandidates.length - targets.length,
             recipients,

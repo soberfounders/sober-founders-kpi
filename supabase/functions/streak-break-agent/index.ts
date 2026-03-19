@@ -159,7 +159,6 @@ serve(async (req: Request) => {
 
         let emailsSent = 0;
         let notionTasks = 0;
-        let taskDraftsCreated = 0;
         let errors = 0;
         const recipients: string[] = [];
 
@@ -249,7 +248,6 @@ serve(async (req: Request) => {
             processed: messages.length,
             emailsSent,
             notionTasks,
-            taskDraftsCreated,
             errors,
             recipients,
             previews: dryRun ? messages : [],

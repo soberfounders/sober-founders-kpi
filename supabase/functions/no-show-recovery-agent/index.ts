@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { sendHubSpotEmail, lookupContactByEmail, createHubSpotTaskDraft } from "../_shared/hubspot_email.ts";
+import { sendHubSpotEmail, lookupContactByEmail } from "../_shared/hubspot_email.ts";
 import { createNotionFollowUp } from "../_shared/notion_task.ts";
 
 const corsHeaders = {
@@ -13,14 +13,6 @@ const corsHeaders = {
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-function stripCodeFences(text: string) {
-    return String(text || "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-}
-
-function safeJsonParse<T = any>(value: string): T | null {
-    try { return JSON.parse(value) as T; } catch { return null; }
-}
-
 function calendarUrl(isThursday: boolean): string {
     return isThursday
         ? "https://soberfounders.org/thursday"
@@ -32,113 +24,55 @@ function sessionName(isThursday: boolean): string {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Fallback message templates (no AI key)                            */
+/*  Recovery Message Generation (fixed template - no AI)               */
 /*                                                                    */
-/*  prior_meeting_count = 1 → first-timer who no-showed second visit  */
-/*  prior_meeting_count = 2 → two-timer who no-showed third visit     */
-/*  prior_meeting_count >= 3 → regular (streak-break handles these,   */
+/*  prior_meeting_count = 1 -> first-timer who no-showed second visit  */
+/*  prior_meeting_count = 2 -> two-timer who no-showed third visit     */
+/*  prior_meeting_count >= 3 -> regular (streak-break handles these,   */
 /*                              but fallback here just in case)        */
 /* ------------------------------------------------------------------ */
 
-function buildFallbackMessage(ns: any): { subject: string; message: string } {
-    const firstName = ns.name?.split(" ")[0] || "there";
-    const isThursday: boolean = ns.is_thursday === true;
-    const calLink = calendarUrl(isThursday);
-    const count: number = ns.prior_meeting_count ?? 0;
+function generateRecoveryMessages(noShows: any[]): any[] {
+    return noShows.map(ns => {
+        const firstName = ns.name?.split(" ")[0] || "there";
+        const isThursday: boolean = ns.is_thursday === true;
+        const groupSlug = isThursday ? "thursday" : "tuesday";
+        const calLink = `https://soberfounders.org/${groupSlug}`;
+        const count: number = ns.prior_meeting_count ?? 0;
 
-    let body: string;
-    if (count === 1) {
-        body =
-            `Hey ${firstName}, noticed you came to the meeting last week but weren't at this one — hope everything's alright! ` +
-            `If it was just a scheduling issue, you can easily add it to your calendar at ${calLink}. ` +
-            `If you decided it wasn't for you, any feedback on how we can make it better would be greatly appreciated!`;
-    } else if (count === 2) {
-        body =
-            `Hey ${firstName}, noticed you've been to a couple of our meetings but weren't at this one — hope everything's okay! ` +
-            `If it was just a scheduling issue, you can easily add it to your calendar at ${calLink}. ` +
-            `If you decided it wasn't for you, any feedback on how we can make it better would be greatly appreciated!`;
-    } else {
-        body =
-            `Hey ${firstName}, we noticed you weren't at today's ${sessionName(isThursday)} — hope all is well! ` +
-            `If it was just a scheduling issue, you can easily add it to your calendar at ${calLink}. ` +
-            `If you decided it wasn't for you, any feedback on how we can make it better would be greatly appreciated!`;
-    }
+        if (count === 1) {
+            // First-timer who came once - invite them back for next week
+            return {
+                email: ns.email,
+                name: ns.name || "there",
+                subject: `See you at the mastermind tomorrow?`,
+                message:
+                    `Hey ${firstName}, hope you enjoyed the meeting last week and we'll see you again this week. If you need any links go to ${calLink}\n\n` +
+                    `Also, if it's not for you, any feedback is really appreciated good or bad.\n\n` +
+                    `Hope to see you again!\n\n` +
+                    `- Andrew`,
+            };
+        }
 
-    return {
-        subject: `Hey ${firstName}, missed you today`,
-        message: body,
-    };
-}
+        let opener: string;
+        if (count === 2) {
+            opener = `noticed you've been to a couple of our meetings but weren't at this one - hope everything's alright!`;
+        } else {
+            opener = `we haven't seen you at the ${sessionName(isThursday)} in a bit - just wanted to check in.`;
+        }
 
-/* ------------------------------------------------------------------ */
-/*  AI Message Generation                                              */
-/* ------------------------------------------------------------------ */
-
-async function generateRecoveryMessages(noShows: any[]): Promise<any[]> {
-    const geminiKey = Deno.env.get("GEMINI_API_KEY");
-
-    if (!geminiKey) {
-        return noShows.map(ns => ({
+        return {
             email: ns.email,
             name: ns.name || "there",
-            ...buildFallbackMessage(ns),
-            reason: "fallback_template",
-        }));
-    }
-
-    const prompt = [
-        "You are the 'Sober Founders' community manager writing personal check-in emails to people who registered but didn't attend a meeting.",
-        "",
-        "Guidelines:",
-        "- Keep it short: 2–3 sentences, warm and non-judgmental.",
-        "- Use their first name.",
-        "- Reference how many meetings they've attended before (prior_meeting_count) to personalize the tone:",
-        "  • prior_meeting_count=1: 'noticed you came last week but weren't at this one'",
-        "  • prior_meeting_count=2: 'noticed you've been to a couple of our meetings but weren't at this one'",
-        "  • prior_meeting_count>=3: 'noticed you haven't been around in a little while'",
-        "- If it was just a scheduling issue, mention they can add it to their calendar at the provided calendar_url.",
-        "- End with: 'If you decided it wasn't for you, any feedback on how we can make it better would be greatly appreciated!'",
-        "- Do NOT mention recordings — there are no recordings.",
-        "- Keep the tone: personal friend checking in, not a marketing email.",
-        "",
-        "Candidates:",
-        JSON.stringify(noShows.slice(0, 10).map(ns => ({
-            email: ns.email,
-            name: ns.name,
-            prior_meeting_count: ns.prior_meeting_count ?? 0,
-            is_thursday: ns.is_thursday,
-            calendar_url: calendarUrl(ns.is_thursday === true),
-        }))),
-        "",
-        "Return JSON: { recoveries: [ { email: string, name: string, subject: string, message: string } ] }",
-        "Subject line should feel personal, e.g. 'Hey [Name], missed you today'.",
-    ].join("\n");
-
-    const model = "gemini-2.0-flash";
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(geminiKey)}`;
-    const resp = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.3, responseMimeType: "application/json" },
-        }),
+            subject: `Hey ${firstName}, missed you today`,
+            message:
+                `Hey ${firstName},\n\n` +
+                `${opener}\n\n` +
+                `If you need any links or an easy way to get it in your calendar ${calLink}.\n\n` +
+                `Also, if it's not for you, any feedback on how we can make it better would be super appreciated.\n\n` +
+                `- Andrew`,
+        };
     });
-
-    if (resp.ok) {
-        const json = await resp.json();
-        const text = json?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        const parsed = safeJsonParse(stripCodeFences(text));
-        if (parsed?.recoveries?.length) return parsed.recoveries;
-    }
-
-    // AI failed — use fallback templates
-    return noShows.map(ns => ({
-        email: ns.email,
-        name: ns.name || "there",
-        ...buildFallbackMessage(ns),
-        reason: "fallback_template",
-    }));
 }
 
 /* ------------------------------------------------------------------ */
@@ -165,7 +99,7 @@ async function alertSlack(stats: any, dryRun: boolean): Promise<boolean> {
                     `- No-Shows Found: ${stats.totalNoShows}`,
                     `- Queued This Run: ${stats.processed}`,
                     dryRun ? `- Emails Sent: 0 (dry run)` : `- Emails Sent: ${stats.emailsSent}`,
-                    dryRun ? `- HubSpot Draft Tasks: ${stats.taskDraftsCreated ?? 0} created` : `- Notion Tasks: ${stats.notionTasks}`,
+                    dryRun ? `- Review in KPI Dashboard → Outreach Queue` : `- Notion Tasks: ${stats.notionTasks}`,
                     stats.errors > 0 ? `- Errors: ${stats.errors}` : "",
                 ].filter(Boolean).join("\n"),
             },
@@ -188,7 +122,7 @@ async function alertSlack(stats: any, dryRun: boolean): Promise<boolean> {
             type: "section",
             text: {
                 type: "mrkdwn",
-                text: `*HubSpot draft tasks created* — go to HubSpot → Tasks (filter by type: Email) to review and click Send.\n\n*To flip live:* POST \`/no-show-recovery-agent\` with \`{"dry_run": false}\`\n*Or update the cron body* from \`"dry_run": true\` → \`"dry_run": false\``,
+                text: `*Review these in the KPI Dashboard* → Attendance → Outreach Review Queue. Click Send on each one you approve.\n\n*To auto-send all:* POST \`/no-show-recovery-agent\` with \`{"dry_run": false}\``,
             },
         });
     }
@@ -251,40 +185,16 @@ serve(async (req: Request) => {
         const targets = realCandidates.slice(0, 5);
         let recoveries: any[] = [];
         if (targets.length > 0) {
-            recoveries = await generateRecoveryMessages(targets);
+            recoveries = generateRecoveryMessages(targets);
         }
 
         let emailsSent = 0;
         let notionTasks = 0;
-        let taskDraftsCreated = 0;
         let errors = 0;
         const recipients: string[] = [];
 
-        if (dryRun && hubspotToken && recoveries.length > 0) {
-            // 3a. Dry run — create HubSpot task drafts for review
-            for (const recovery of recoveries) {
-                const { data: contact } = await supabase
-                    .from("raw_hubspot_contacts")
-                    .select("hubspot_contact_id")
-                    .ilike("email", recovery.email)
-                    .limit(1)
-                    .single();
-
-                let contactId = contact?.hubspot_contact_id;
-                if (!contactId) contactId = await lookupContactByEmail(hubspotToken, recovery.email);
-
-                if (contactId) {
-                    const taskResult = await createHubSpotTaskDraft(hubspotToken, {
-                        contactId,
-                        subject: recovery.subject,
-                        body: recovery.message,
-                        campaignType: "no_show_recovery",
-                    });
-                    if (taskResult.ok) taskDraftsCreated++;
-                    else console.warn(`Task draft failed for ${recovery.email}:`, taskResult.error);
-                }
-            }
-        }
+        // Dry run: no HubSpot tasks — review candidates in the KPI dashboard
+        // OutreachReviewQueue and click Send from there.
 
         if (!dryRun) {
             // 3b. Send live — HubSpot emails + Notion follow-ups
@@ -312,7 +222,7 @@ serve(async (req: Request) => {
                             contactEmail: recovery.email,
                             senderEmail,
                             subject: recovery.subject,
-                            htmlBody: `<p>${recovery.message}</p>`,
+                            htmlBody: recovery.message.split("\n").map((l: string) => l ? `<p>${l}</p>` : "").join(""),
                             campaignType: "no_show_recovery",
                         });
 
@@ -371,7 +281,6 @@ serve(async (req: Request) => {
             processed: recoveries.length,
             emailsSent,
             notionTasks,
-            taskDraftsCreated,
             errors,
             recipients,
             previews: dryRun ? recoveries : [],

@@ -10,6 +10,7 @@ const CAMPAIGN_COLORS = {
   no_show_followup: { bg: 'rgba(239, 68, 68, 0.15)', text: '#f87171', border: 'rgba(239, 68, 68, 0.3)', label: 'No-Show Recovery' },
   at_risk_nudge:    { bg: 'rgba(245, 158, 11, 0.15)', text: '#fbbf24', border: 'rgba(245, 158, 11, 0.3)', label: 'At-Risk Retention' },
   winback:          { bg: 'rgba(59, 130, 246, 0.15)', text: '#93c5fd', border: 'rgba(59, 130, 246, 0.3)', label: 'Winback' },
+  streak_break:     { bg: 'rgba(168, 85, 247, 0.15)', text: '#c084fc', border: 'rgba(168, 85, 247, 0.3)', label: 'Streak Break' },
 };
 
 const cardStyle = {
