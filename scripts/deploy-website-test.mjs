@@ -100,89 +100,42 @@ const PAGE_CONTENT = `<!-- wp:html -->
   .sf-test { font-family: 'Outfit', 'Inter', sans-serif; color: #fff; line-height: 1.7; -webkit-font-smoothing: antialiased; }
   .sf-test * { box-sizing: border-box; }
   .sf-test img { max-width: 100%; display: block; }
-  .sf-test a { text-decoration: none; }
-
-  /* ── FIXED CANVAS BACKGROUND (z-0) ── */
-  #sf-canvas-wrap {
+  .sf-test   /* ── STANDARD HERO BACKGROUND ── */
+  .sf-hero-background-wrapper {
     position: fixed;
     inset: 0;
     z-index: 0;
+    pointer-events: none;
   }
-  #sf-canvas-wrap canvas {
+  .sf-hero-image-bg {
     position: absolute;
     inset: 0;
-    width: 100%;
-    height: 100%;
-    will-change: filter;
+    background-image: url('https://soberfounders.org/wp-content/uploads/2026/03/phoenix-static.jpg');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
   }
-  #sf-dim-overlay {
+  .sf-hero-image-overlay {
     position: absolute;
     inset: 0;
-    background-color: rgba(10,10,10,0.15);
-    transition: background-color 0.05s linear;
+    background-color: rgba(10,10,10,0.65);
   }
 
-  /* ── HERO TEXT (normal flow — same as every other section) ── */
-  #sf-hero-text {
-    position: relative;
-    display: flex;
-    align-items: center;
-    min-height: 100vh;
-  }
-  #sf-hero-text-inner {
+  /* ── STANDARD HERO LAYOUT ── */
+  .sf-page-hero-container {
     width: 100%;
     max-width: 1200px;
     margin: 0 auto;
-    padding: 0 32px;
-  }
-  .sf-hero-card {
-    max-width: 680px;
-    background: rgba(10,10,10,0.25);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 24px;
-    padding: 40px;
-  }
-  .sf-hero-label {
-    display: inline-block;
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    color: #5eecc0;
-    background: rgba(94,236,192,0.1);
-    backdrop-filter: blur(6px);
-    border: 1px solid rgba(94,236,192,0.15);
-    padding: 6px 16px;
-    border-radius: 20px;
-    margin-bottom: 28px;
-  }
-  .sf-hero-card h1 {
-    font-family: 'DM Serif Display', serif;
-    font-size: clamp(2.4rem, 5vw, 3.6rem);
-    font-weight: 400;
-    color: #fff;
-    line-height: 1.1;
-    margin: 0 0 20px;
-    text-shadow: 0 2px 16px rgba(0,0,0,0.7);
-  }
-  .sf-hero-card h1 .sf-accent {
-    color: #5eecc0;
-    filter: drop-shadow(0 0 24px rgba(94,236,192,0.35));
-  }
-  .sf-hero-card .sf-hero-sub {
-    font-size: 1.1rem;
-    color: rgba(255,255,255,0.8);
-    max-width: 480px;
-    margin: 0 0 36px;
-    line-height: 1.8;
-    text-shadow: 0 1px 6px rgba(0,0,0,0.5);
-  }
-  .sf-hero-actions {
+    padding: 80px 32px 40px;
+    min-height: 85vh;
     display: flex;
-    gap: 16px;
-    flex-wrap: wrap;
+    align-items: center;
+  }
+  @media (max-width: 768px) {
+    .sf-page-hero-container {
+      padding: 100px 20px 40px;
+      min-height: auto;
+    }
   }
 
   /* ── SCROLLABLE CONTENT (z-20) ── */
@@ -193,32 +146,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
   .sf-spacer { display: none; }
   .sf-content-body { background: transparent; }
 
-  /* ── MOBILE FALLBACK ── */
-  #sf-mobile-hero {
-    display: none;
-    position: relative;
-    min-height: 100vh;
-    align-items: center;
-    overflow: hidden;
-    background: #0a0a0a;
-  }
-  #sf-mobile-hero img {
-    position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
-  }
-  #sf-mobile-hero .sf-mobile-dim {
-    position: absolute; inset: 0; background: rgba(10,10,10,0.5);
-  }
-  #sf-mobile-hero .sf-mobile-inner {
-    position: relative; width: 100%; max-width: 1200px; margin: 0 auto; padding: 60px 20px;
-  }
-
-  @media (max-width: 767px) {
-    /* Switch from canvas to static hero */
-    #sf-canvas-wrap, #sf-hero-text { display: none !important; }
-    #sf-mobile-hero { display: flex !important; }
-    .sf-spacer { height: 0 !important; }
-
-    /* Solid dark background — no canvas behind content on mobile */
+  /* Removed mobile fallback css blocks */hind content on mobile */
     .sf-test { background: #0a0a0a; }
     .sf-content-body { background: #0a0a0a !important; }
 
@@ -812,46 +740,34 @@ const PAGE_CONTENT = `<!-- wp:html -->
 
 <div class="sf-test">
 
-  <!-- FIXED: Canvas background with image sequence (z-0) -->
-  <div id="sf-canvas-wrap">
-    <canvas id="sf-canvas"></canvas>
-    <div id="sf-dim-overlay"></div>
-  </div>
-
-  <!-- MOBILE FALLBACK: static image hero -->
-  <div id="sf-mobile-hero">
-    <img src="https://soberfounders.org/wp-content/uploads/2026/03/phoenix-static.jpg" alt="Phoenix rising from ashes" />
-    <div class="sf-mobile-dim"></div>
-    <div class="sf-mobile-inner">
-      <div class="sf-hero-card">
-        <div class="sf-hero-label">501(c)(3) Nonprofit Community</div>
-        <h1>Sober Founders - A Community For <span class="sf-accent">Entrepreneurs In Recovery</span></h1>
-        <p class="sf-hero-sub">The peer community for entrepreneurs who build thriving businesses and protect their recovery - not one at the expense of the other.</p>
-        <div class="sf-hero-actions">
-          <a href="https://soberfounders.org/events" class="sf-btn sf-btn-primary">Attend a Free Meeting</a>
-          <a href="/our-story/" class="sf-btn sf-btn-outline">Learn Our Story</a>
-        </div>
-      </div>
-    </div>
+  <!-- STANDARD PAGE FLOW BACKGROUND -->
+  <div class="sf-hero-background-wrapper">
+    <div class="sf-hero-image-bg"></div>
+    <div class="sf-hero-image-overlay"></div>
   </div>
 
   <!-- SCROLLABLE CONTENT -->
   <div id="sf-scroll-content">
-    <!-- Hero — normal flow, same as every other section -->
-    <div id="sf-hero-text">
-      <div id="sf-hero-text-inner">
-        <div class="sf-hero-card">
+    
+    <!-- Hero — normal flow, fully selectable -->
+    <div class="sf-page-hero-container">
+      <div class="sf-svc-card">
+        <div class="sf-svc-card-body" style="padding: 40px;">
           <div class="sf-hero-label">501(c)(3) Nonprofit Community</div>
-          <h1>Sober Founders - A Community For <span class="sf-accent">Entrepreneurs In Recovery</span></h1>
-          <p class="sf-hero-sub">The peer community for entrepreneurs who build thriving businesses and protect their recovery - not one at the expense of the other.</p>
-          <div class="sf-hero-actions">
-            <a href="https://soberfounders.org/events" class="sf-btn sf-btn-primary">Attend a Free Meeting</a>
-            <a href="/our-story/" class="sf-btn sf-btn-outline">Learn Our Story</a>
+          <h1 style="font-family: 'DM Serif Display', serif; font-size: clamp(2.4rem, 5vw, 3.6rem); font-weight: 400; color: #fff; line-height: 1.1; margin: 0 0 20px; text-shadow: 0 2px 16px rgba(0,0,0,0.7);">
+            Sober Founders - A Community For <span class="sf-accent" style="color: #5eecc0; filter: drop-shadow(0 0 24px rgba(94,236,192,0.35));">Entrepreneurs In Recovery</span>
+          </h1>
+          <p style="font-size: 1.1rem; color: rgba(255,255,255,0.8); max-width: 480px; margin: 0 0 36px; line-height: 1.8; text-shadow: 0 1px 6px rgba(0,0,0,0.5);">
+            The peer community for entrepreneurs who build thriving businesses and protect their recovery - not one at the expense of the other.
+          </p>
+          <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+            <a href="https://soberfounders.org/events" class="sf-svc-card-link" style="margin-top: 0;">Attend a Free Meeting</a>
+            <a href="/our-story/" class="sf-svc-card-link" style="margin-top: 0; color: #fff!important;">Learn Our Story</a>
           </div>
         </div>
       </div>
     </div>
-    <div class="sf-spacer"></div>
+    
     <div class="sf-content-body">
 
     <!-- What is Sober Founders? -->
@@ -1068,99 +984,10 @@ const PAGE_CONTENT = `<!-- wp:html -->
   </div><!-- /sf-scroll-content -->
 </div>
 
-<!-- ═══ SCROLL ANIMATION ENGINE ═══ -->
+  <!-- ═══ SCROLL ANIMATION ENGINE (REMOVED) ═══ -->
 <script>
-(function() {
-  // Skip animation on mobile
-  if (window.innerWidth < 768) return;
-
-  gsap.registerPlugin(ScrollTrigger);
-
-  // Native scroll — no Lenis (it conflicts with WordPress themes and causes jank)
-
-  // ── Image sequence config ──
-  var FRAME_COUNT = 122;
-  var FRAME_BASE = 'https://soberfounders.org/wp-content/uploads/2026/03/frame_';
-  var canvas = document.getElementById('sf-canvas');
-  var ctx = canvas.getContext('2d');
-  var overlay = document.getElementById('sf-dim-overlay');
-  var images = [];
-  var loadedCount = 0;
-  var currentFrame = -1;
-
-  function getFrameSrc(i) {
-    var num = String(i).padStart(3, '0');
-    return FRAME_BASE + num + '.jpg';
-  }
-
-  function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    if (currentFrame >= 0) drawFrame(currentFrame);
-  }
-
-  function drawFrame(index) {
-    var img = images[index];
-    if (!img || !img.complete) return;
-    var cw = canvas.width, ch = canvas.height;
-    var iw = img.naturalWidth, ih = img.naturalHeight;
-    var canvasRatio = cw / ch, imgRatio = iw / ih;
-    var sx, sy, sw, sh;
-    if (canvasRatio > imgRatio) {
-      sw = iw; sh = iw / canvasRatio; sx = 0; sy = (ih - sh) / 2;
-    } else {
-      sh = ih; sw = ih * canvasRatio; sx = (iw - sw) / 2; sy = 0;
-    }
-    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, cw, ch);
-    currentFrame = index;
-  }
-
-  function onAllLoaded() {
-    drawFrame(0);
-
-    // Main scroll-scrub
-    ScrollTrigger.create({
-      trigger: document.documentElement,
-      start: 'top top',
-      end: 'bottom bottom',
-      scrub: 0.5,
-      onUpdate: function(self) {
-        // Accelerated mapping — animation completes in first 55% of scroll
-        var accelerated = Math.min(1, self.progress / 0.55);
-        var eased = Math.pow(accelerated, 1.3);
-        var frameIndex = Math.min(FRAME_COUNT - 1, Math.floor(eased * (FRAME_COUNT - 1)));
-        if (frameIndex !== currentFrame) drawFrame(frameIndex);
-
-        // Motion blur based on scroll velocity
-        var velocity = Math.abs(self.getVelocity());
-        var blur = Math.min(velocity / 2000, 4);
-        canvas.style.filter = blur > 0.2 ? 'blur(' + blur + 'px)' : 'none';
-
-        // Scroll-sync dimming
-        var p = self.progress, darkness;
-        if (p < 0.05) { darkness = 0.15; }
-        else if (p < 0.25) { darkness = 0.15 + ((p - 0.05) / 0.2) * 0.35; }
-        else if (p < 0.4) { darkness = 0.5 - ((p - 0.25) / 0.15) * 0.15; }
-        else { darkness = 0.35; }
-        overlay.style.backgroundColor = 'rgba(10,10,10,' + darkness + ')';
-      }
-    });
-  }
-
-  // Preload all frames
-  for (var i = 0; i < FRAME_COUNT; i++) {
-    var img = new Image();
-    img.src = getFrameSrc(i + 1);
-    img.onload = function() {
-      loadedCount++;
-      if (loadedCount === FRAME_COUNT) onAllLoaded();
-    };
-    images.push(img);
-  }
-
-  resize();
-  window.addEventListener('resize', resize);
-})();
+  // Simple fallback just in case: Ensure page starts at top
+  window.scrollTo(0,0);
 <\/script>
 <!-- /wp:html -->`;
 
