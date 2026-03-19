@@ -12,6 +12,7 @@ import {
   OPENAI_API_KEY,
 } from '../lib/env';
 import { resolveCanonicalAttendeeName } from '../lib/attendeeCanonicalization';
+import { classifyMeetingTitle } from '../lib/groupMeetingClassification';
 import {
   ResponsiveContainer,
   LineChart,
@@ -840,32 +841,10 @@ function getExpectedZeroWeekKeysByDay() {
   return byDay;
 }
 
+// Delegates to the shared single-source-of-truth module.
+// See: dashboard/src/lib/groupMeetingClassification.js
 function inferGroupTypeFromTitle(titleRaw = '', scheduledDayType = null) {
-  const title = String(titleRaw || '').toLowerCase();
-  const likelyOneToOne = (
-    title.includes('intro meeting')
-    || title.includes('meeting with')
-    || title.includes('sober founder interview')
-    || title === 'lunch'
-    || title.startsWith('canceled:')
-    || title.startsWith('not canceled:')
-  );
-
-  if (title.includes('tactic tuesday')) {
-    return { type: 'Tuesday', strongSignal: true, likelyOneToOne: false };
-  }
-  if (
-    title.includes('all are welcome')
-    || title.includes("entrepreneur's big book")
-    || title.includes('big book')
-  ) {
-    return { type: 'Thursday', strongSignal: true, likelyOneToOne: false };
-  }
-  if (title.includes('mastermind') && !title.includes('intro')) {
-    return { type: scheduledDayType || 'Thursday', strongSignal: true, likelyOneToOne: false };
-  }
-
-  return { type: null, strongSignal: false, likelyOneToOne };
+  return classifyMeetingTitle(titleRaw, scheduledDayType);
 }
 
 function sessionCandidateStrength(session = {}) {

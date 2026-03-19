@@ -16,6 +16,11 @@
       title match (91 activities were only caught by fallback)
    3. Fix vw_first_visit_followup duplicate rows from contacts
       table having duplicate email rows
+
+   IMPORTANT — Title patterns here MUST match the JS single source
+   of truth: dashboard/src/lib/groupMeetingClassification.js
+   (GROUP_TITLE_SIGNALS + ONE_ON_ONE_TITLE_SIGNALS).
+   If you change patterns in one place, update the other.
    ============================================================ */
 
 -- ============================================================
