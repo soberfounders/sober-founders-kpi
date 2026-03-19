@@ -67,7 +67,7 @@ export default function SiteFooter() {
               Read Case Studies
             </Link>
             <a
-              href="/events/"
+              href="https://soberfounders.org/events"
               className="inline-flex min-h-12 items-center justify-center rounded-full border border-white/18 px-6 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-white/88 transition hover:border-white/40 hover:bg-white/[0.06]"
             >
               Attend A Free Meeting

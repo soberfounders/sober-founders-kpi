@@ -57,7 +57,7 @@ export default function HeroOverlay() {
             </p>
             <div className="flex gap-4 flex-wrap pointer-events-auto">
               <a
-                href="/events/"
+                href="https://soberfounders.org/events"
                 className="inline-block text-[0.95rem] font-semibold px-8 py-3.5 rounded-full uppercase tracking-[0.5px] transition-all bg-[#00b286] text-white hover:bg-[#00c090] hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,178,134,0.4)] shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
               >
                 Attend a Free Meeting

@@ -36,11 +36,37 @@ const env = loadEnv();
 const SITE = env.WP_SITE_URL || "https://soberfounders.org";
 const AUTH = Buffer.from(`${env.WP_USERNAME}:${env.WP_APP_PASSWORD}`).toString("base64");
 const DRY_RUN = process.argv.includes("--dry-run");
+const CF_API_TOKEN = env.CF_API_TOKEN;
+const CF_ZONE_ID = env.CF_ZONE_ID;
 
 const headers = {
   "Content-Type": "application/json",
   Authorization: `Basic ${AUTH}`,
 };
+
+async function purgeCloudflareCache() {
+  if (!CF_API_TOKEN || !CF_ZONE_ID) {
+    console.log("  ⚠  No CF_API_TOKEN/CF_ZONE_ID — skipping cache purge.");
+    return;
+  }
+  const res = await fetch(
+    `https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/purge_cache`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${CF_API_TOKEN}`,
+      },
+      body: JSON.stringify({ purge_everything: true }),
+    }
+  );
+  const data = await res.json();
+  if (data.success) {
+    console.log("  ✓ Cloudflare cache purged successfully.");
+  } else {
+    console.warn("  ⚠  Cloudflare purge failed:", JSON.stringify(data.errors));
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Page content — Glassmorphism dark-theme homepage (from Next.js /test)
@@ -167,9 +193,10 @@ const PAGE_CONTENT = `<!-- wp:html -->
   #sf-scroll-content {
     position: relative;
     z-index: 20;
+    pointer-events: none;
   }
   .sf-spacer { height: 100vh; }
-  .sf-content-body { background: transparent; }
+  .sf-content-body { background: transparent; pointer-events: auto; }
 
   /* ── MOBILE FALLBACK ── */
   #sf-mobile-hero {
@@ -801,10 +828,10 @@ const PAGE_CONTENT = `<!-- wp:html -->
     <div id="sf-hero-text-inner">
       <div class="sf-hero-card">
         <div class="sf-hero-label">501(c)(3) Nonprofit Community</div>
-        <h1>Sober Founders &mdash; A Community For <span class="sf-accent">Entrepreneurs In Recovery</span></h1>
+        <h1>Sober Founders - A Community For <span class="sf-accent">Entrepreneurs In Recovery</span></h1>
         <p class="sf-hero-sub">The peer community for entrepreneurs who build thriving businesses and protect their recovery&mdash;not one at the expense of the other.</p>
         <div class="sf-hero-actions">
-          <a href="/events/" class="sf-btn sf-btn-primary">Attend a Free Meeting</a>
+          <a href="https://soberfounders.org/events" class="sf-btn sf-btn-primary">Attend a Free Meeting</a>
           <a href="/our-story/" class="sf-btn sf-btn-outline">Learn Our Story</a>
         </div>
       </div>
@@ -818,10 +845,10 @@ const PAGE_CONTENT = `<!-- wp:html -->
     <div class="sf-mobile-inner">
       <div class="sf-hero-card">
         <div class="sf-hero-label">501(c)(3) Nonprofit Community</div>
-        <h1>Sober Founders &mdash; A Community For <span class="sf-accent">Entrepreneurs In Recovery</span></h1>
+        <h1>Sober Founders - A Community For <span class="sf-accent">Entrepreneurs In Recovery</span></h1>
         <p class="sf-hero-sub">The peer community for entrepreneurs who build thriving businesses and protect their recovery&mdash;not one at the expense of the other.</p>
         <div class="sf-hero-actions">
-          <a href="/events/" class="sf-btn sf-btn-primary">Attend a Free Meeting</a>
+          <a href="https://soberfounders.org/events" class="sf-btn sf-btn-primary">Attend a Free Meeting</a>
           <a href="/our-story/" class="sf-btn sf-btn-outline">Learn Our Story</a>
         </div>
       </div>
@@ -1212,7 +1239,10 @@ async function main() {
 
   const result = await res.json();
   console.log(`  ✓ Page ${existing ? "updated" : "created"} successfully (ID ${result.id})`);
-  console.log(`  ✓ Live: ${result.link}\n`);
+  console.log(`  ✓ Live: ${result.link}`);
+
+  await purgeCloudflareCache();
+  console.log();
 }
 
 main().catch((err) => {

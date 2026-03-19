@@ -324,7 +324,7 @@ export default function HomepageContent() {
             what this community is all about.
           </p>
           <div className="sf-cta-actions">
-            <a href="/events/" className="sf-btn sf-btn-primary">
+            <a href="https://soberfounders.org/events" className="sf-btn sf-btn-primary">
               Attend a Free Meeting
             </a>
             <a href="/phoenix-forum-registration/" className="sf-btn sf-btn-outline">

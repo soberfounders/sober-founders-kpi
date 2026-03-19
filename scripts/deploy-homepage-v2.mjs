@@ -36,11 +36,37 @@ const env = loadEnv();
 const SITE = env.WP_SITE_URL || "https://soberfounders.org";
 const AUTH = Buffer.from(`${env.WP_USERNAME}:${env.WP_APP_PASSWORD}`).toString("base64");
 const DRY_RUN = process.argv.includes("--dry-run");
+const CF_API_TOKEN = env.CF_API_TOKEN;
+const CF_ZONE_ID = env.CF_ZONE_ID;
 
 const headers = {
   "Content-Type": "application/json",
   Authorization: `Basic ${AUTH}`,
 };
+
+async function purgeCloudflareCache() {
+  if (!CF_API_TOKEN || !CF_ZONE_ID) {
+    console.log("  ⚠  No CF_API_TOKEN/CF_ZONE_ID — skipping cache purge.");
+    return;
+  }
+  const res = await fetch(
+    `https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/purge_cache`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${CF_API_TOKEN}`,
+      },
+      body: JSON.stringify({ purge_everything: true }),
+    }
+  );
+  const data = await res.json();
+  if (data.success) {
+    console.log("  ✓ Cloudflare cache purged successfully.");
+  } else {
+    console.warn("  ⚠  Cloudflare purge failed:", JSON.stringify(data.errors));
+  }
+}
 
 // Extract PAGE_CONTENT from deploy-website-test.mjs
 const testScript = readFileSync(resolve(__dirname, "deploy-website-test.mjs"), "utf8");
@@ -91,7 +117,10 @@ async function main() {
 
   const result = await res.json();
   console.log(`  ✓ Homepage updated successfully (ID ${result.id})`);
-  console.log(`  ✓ Live: ${result.link}\n`);
+  console.log(`  ✓ Live: ${result.link}`);
+
+  await purgeCloudflareCache();
+  console.log();
 }
 
 main().catch((err) => {
