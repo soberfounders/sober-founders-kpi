@@ -62,37 +62,29 @@ function buildNoShowEmail(c) {
 
 function buildAtRiskEmail(c) {
   const name = c.firstname || 'there';
-  // Determine which meeting is next based on current day
-  const now = new Date();
-  const day = now.getDay(); // 0=Sun ... 6=Sat
-  let nextMeeting, link;
-  if (day <= 1 || day === 6) {
-    nextMeeting = 'Tuesday'; link = 'https://soberfounders.org/tuesday';
-  } else if (day <= 3) {
-    nextMeeting = 'Thursday'; link = 'https://soberfounders.org/thursday';
-  } else {
-    nextMeeting = 'Tuesday'; link = 'https://soberfounders.org/tuesday';
-  }
+  const group = c.primary_group || 'Tuesday';
+  const groupSlug = group === 'Thursday' ? 'thursday' : 'tuesday';
+  const link = `https://soberfounders.org/${groupSlug}`;
 
-  const body = `Hey ${name},\n\nJust a heads up \u2014 we've got the ${nextMeeting} mastermind coming up. It's been a little while since we've seen you and the group has been asking about you.\n\nGrab the link here: ${link}\n\nHope to see you there!\n\n\u2014 Andrew`;
-  return { subject: `Hey ${name} \u2014 hope to see you this week`, body };
+  const body = `Hey ${name}, I noticed we haven't seen you in a bit and just wanted to invite you back to the Sober Founders mastermind.\n\nIf you need any links or an easy way to get it in your calendar ${link}.\n\nAlso, if you have any feedback on how we can make it better, that would be super appreciated as well.\n\nHope to see you\n\n- Andrew`;
+  return { subject: 'Hope to see you tomorrow', body };
 }
 
 function buildWinbackEmail(c) {
   const name = c.firstname || 'there';
   const isThursday = c.is_thursday_attendee === true;
-  const link = isThursday ? 'https://soberfounders.org/thursday' : 'https://soberfounders.org/tuesday';
-  const monthName = c.first_attended
-    ? new Date(c.first_attended + 'T12:00:00').toLocaleString('en-US', { month: 'long' })
-    : 'a while back';
+  const groupSlug = isThursday ? 'thursday' : 'tuesday';
+  const link = `https://soberfounders.org/${groupSlug}`;
 
-  const body = `Hey ${name},\n\nIt was great meeting you back in ${monthName} at the Sober Founders group! Wanted to reach out because a lot has happened since then and just launched ${link} to make it easier to find everything.\n\nIf you're ever looking for a room full of founders who get it, we'd love to have you back. No commitment - just drop in whenever works.\n\nAlso, if it's not for you, any feedback is greatly appreciated!\n\n- Andrew`;
-  return { subject: `Hey ${name} \u2014 Sober Founders update`, body };
+  const body = `Hey ${name},\n\nIt was great meeting you at the Sober Founders group! Wanted to reach out because a lot has happened since then and just launched ${link} to make it easier to find everything and get it in your calendar with just a click.\n\nAlso, if it's not for you, any feedback is greatly appreciated!\n\n- Andrew`;
+  return { subject: `Hey ${name} - Sober Founders update`, body };
 }
 
 function buildStreakBreakEmail(c) {
   const name = c.firstname || 'there';
-  const body = `Hey ${name},\n\nHaven't seen you in a few weeks \u2014 just wanted to check in and make sure everything's good.\n\nNo pressure at all. The group misses having you around. If you want to pop back in, we're still running Tuesdays at noon and Thursdays at 11. Links are at https://soberfounders.org/events\n\nHope you're doing well.\n\n\u2014 Andrew`;
+  const groupSlug = c.last_was_thursday ? 'thursday' : 'tuesday';
+  const link = `https://soberfounders.org/${groupSlug}`;
+  const body = `Hey ${name},\n\nHaven't seen you in a few weeks - just wanted to check in and make sure everything's good.\n\nNo pressure at all, if you want to pop back in we're still running and if you need any links you can go to ${link}\n\nIf it's not for you, any feedback is really appreciated, good or bad.\n\nHope to see you!\n\n- Andrew`;
   return { subject: `Hey ${name}, checking in`, body };
 }
 
