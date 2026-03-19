@@ -48,15 +48,18 @@ WITH classified AS (
       ELSE NULL
     END AS title_group_type,
     -- Negative title matches: definitely NOT a group meeting
+    -- Must stay in sync with ONE_ON_ONE_TITLE_SIGNALS in
+    -- dashboard/src/lib/groupMeetingClassification.js
     CASE WHEN
          lower(act.title) LIKE '%intro meeting%'
-      OR lower(act.title) LIKE 'meeting with % - andrew lassise%'
-      OR lower(act.title) LIKE '%andrew lassise - %'
-      OR lower(act.title) LIKE 'not canceled: meeting with%'
+      OR lower(act.title) LIKE '%meeting with%'
+      OR lower(act.title) LIKE '%andrew lassise -%'
+      OR lower(act.title) LIKE 'not canceled: meeting%'
       OR lower(act.title) LIKE '%phoenix forum%'
       OR lower(act.title) LIKE '%sober founder interview%'
       OR lower(act.title) LIKE 'canceled:%'
       OR lower(act.title) LIKE '1 hr online meeting%'
+      OR lower(act.title) LIKE '%lunch%'
       THEN TRUE ELSE FALSE
     END AS is_known_1on1
   FROM public.raw_hubspot_meeting_activities act
