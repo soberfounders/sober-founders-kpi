@@ -270,6 +270,9 @@ serve(async (req: Request) => {
       runStep('luma_registrations', 'sync_luma_registrations', { method: 'POST' }),
     ]);
 
+    // Stage 3: compute unified metrics layer (reads from all synced tables).
+    await runStep('compute_metrics', 'compute-metrics', { method: 'POST' });
+
     // Keep a local Notion sync fallback if generic sync path is unavailable/misconfigured.
     // This preserves the previous behavior of master-sync while the stack transitions.
     if (!results.some((r) => r.source === 'generic_metrics' && r.status === 'success')) {
