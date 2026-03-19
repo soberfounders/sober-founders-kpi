@@ -1,6 +1,7 @@
 import { openai } from "../clients/openai.js";
 import { env } from "../config/env.js";
 import { responseEnvelopeSchema } from "./schemas/response.js";
+import { resolveModel } from "./modelRouter.js";
 import { buildSystemPrompt } from "./systemPrompt.js";
 import {
   defaultToolRuntime,
@@ -32,7 +33,7 @@ interface OrchestratorDependencies {
 }
 
 const defaultDeps: OrchestratorDependencies = {
-  model: env.openAiModel,
+  model: resolveModel("orchestrator_tool_call"),
   responseClient: openai.responses,
   toolRuntime: defaultToolRuntime,
   maxToolTurns: 6,

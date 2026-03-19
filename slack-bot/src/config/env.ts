@@ -33,7 +33,12 @@ const envSchema = z.object({
   SLACK_APP_TOKEN: z.string().min(1),
   SLACK_SIGNING_SECRET: z.string().optional(),
   OPENAI_API_KEY: z.string().min(1),
-  OPENAI_MODEL: z.string().default("gpt-4.1-mini"),
+  OPENAI_MODEL: z.string().default("gpt-5.4"),
+  OPENAI_MODEL_PRIMARY: z.string().optional(),
+  OPENAI_MODEL_FAST: z.string().optional(),
+  OPENAI_MODEL_FALLBACK: z.string().optional(),
+  OPENAI_MODEL_CHEAP: z.string().optional(),
+  OPENAI_USE_CHEAP_MODE: z.string().optional(),
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   SUPABASE_ANON_KEY: z.string().optional(),
@@ -53,6 +58,8 @@ const envSchema = z.object({
   MANAGER_TARGET_SLACK_USER_ID: z.string().optional(),
   MANAGER_BRIEFING_HOUR_ET: z.string().optional(),
   MANAGER_CHECKIN_HOURS_ET: z.string().optional(),
+  AGENT_QUEUE_ENABLED: z.string().optional(),
+  AGENT_QUEUE_CHANNEL_ID: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -74,6 +81,11 @@ export const env = {
   slackSigningSecret: data.SLACK_SIGNING_SECRET,
   openAiApiKey: data.OPENAI_API_KEY,
   openAiModel: data.OPENAI_MODEL,
+  openAiModelPrimary: data.OPENAI_MODEL_PRIMARY || data.OPENAI_MODEL,
+  openAiModelFast: data.OPENAI_MODEL_FAST || "gpt-5.4-mini",
+  openAiModelFallback: data.OPENAI_MODEL_FALLBACK || "gpt-4o",
+  openAiModelCheap: data.OPENAI_MODEL_CHEAP || "gpt-4o-mini",
+  openAiUseCheapMode: toBoolean(data.OPENAI_USE_CHEAP_MODE, false),
   supabaseUrl: data.SUPABASE_URL,
   supabaseServiceRoleKey: data.SUPABASE_SERVICE_ROLE_KEY,
   supabaseAnonKey: data.SUPABASE_ANON_KEY,
@@ -100,6 +112,8 @@ export const env = {
     .split(",")
     .map((h) => toInt(h.trim(), -1, 0, 23))
     .filter((h) => h >= 0),
+  agentQueueEnabled: toBoolean(data.AGENT_QUEUE_ENABLED, false),
+  agentQueueChannelId: data.AGENT_QUEUE_CHANNEL_ID || "",
 } as const;
 
 export type AppEnv = typeof env;

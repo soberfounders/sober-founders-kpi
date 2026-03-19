@@ -7,6 +7,7 @@ import { registerDmHandler } from "./handlers/dm.js";
 import { registerChannelFreeChatHandler } from "./handlers/channelFreeChat.js";
 import { registerHomeHandler } from "./handlers/home.js";
 import { registerInteractionHandlers } from "./handlers/interactions.js";
+import { registerAgentThreadHandler } from "./handlers/agentThread.js";
 import { registerKpiCommand } from "./commands/kpi.js";
 
 const toBoltLogLevel = (level: string): LogLevel => {
@@ -32,6 +33,7 @@ export const createSlackApp = (): App => {
   registerDmHandler(app);
   registerChannelFreeChatHandler(app);
   registerInteractionHandlers(app);
+  registerAgentThreadHandler(app);
   registerKpiCommand(app);
 
   logger.info("Slack app handlers registered");
