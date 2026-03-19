@@ -235,7 +235,7 @@ async function computeLeadsMetrics(
   const { data: contacts, error } = await sb
     .from("raw_hubspot_contacts")
     .select(
-      "hubspot_contact_id, annual_revenue_in_dollars__official_, annual_revenue_in_dollars, sobriety_date, sobriety_date__official_, sober_date, clean_date, membership_s, is_deleted, hubspot_archived, merged_into_hubspot_contact_id"
+      "hubspot_contact_id, annual_revenue_in_usd_official, annual_revenue_in_dollars__official_, annual_revenue_in_dollars, annual_revenue, revenue, sobriety_date, sobriety_date__official_, sober_date, clean_date, sobrietydate, membership_s, is_deleted, hubspot_archived, merged_into_hubspot_contact_id"
     )
     .gte("createdate", `${from}T00:00:00.000Z`)
     .lte("createdate", `${to}T23:59:59.999Z`)
