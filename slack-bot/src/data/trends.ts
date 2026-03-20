@@ -143,6 +143,8 @@ const METRIC_MAP: Record<string, MetricMapping> = {
   attendance_total_thursday:     { kpi_key: "attendance_total",         funnel_key: "thursday", agg: "sum" },
   attendance_new_tuesday:        { kpi_key: "attendance_new",           funnel_key: "tuesday",  agg: "sum" },
   attendance_new_thursday:       { kpi_key: "attendance_new",           funnel_key: "thursday", agg: "sum" },
+  attendance_repeat_tuesday:     { kpi_key: "attendance_repeat",        funnel_key: "tuesday",  agg: "sum" },
+  attendance_repeat_thursday:    { kpi_key: "attendance_repeat",        funnel_key: "thursday", agg: "sum" },
 
   // Donations count
   donations_count:               { kpi_key: "donations_count",          funnel_key: "all",     agg: "sum" },
