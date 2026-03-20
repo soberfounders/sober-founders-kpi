@@ -118,6 +118,12 @@ Primary contact record synced from HubSpot.
 | `engagements_last_meeting_booked_source`   | text        |                                                                       |
 | `num_conversion_events`                    | integer     |                                                                       |
 | `num_unique_conversion_events`             | integer     |                                                                       |
+| `hs_analytics_first_url`                   | text        | First page the contact visited on the website (auto-set by HubSpot)   |
+| `hs_analytics_last_url`                    | text        | Last page the contact visited on the website (auto-set by HubSpot)    |
+| `hs_analytics_first_referrer`              | text        | URL that first referred the contact to the website                    |
+| `hs_analytics_last_referrer`               | text        | URL that most recently referred the contact to the website            |
+| `hs_analytics_first_visit_timestamp`       | timestamptz | First time the contact visited the website                            |
+| `hs_analytics_num_page_views`              | integer     | Total page views across all sessions                                  |
 | `hs_merged_object_ids`                     | text        | Comma-separated IDs of contacts merged into this one — used for dedup |
 | `merged_into_hubspot_contact_id`           | bigint      | If this contact was merged into another, the target ID                |
 | `hubspot_updated_at`                       | timestamptz |                                                                       |
