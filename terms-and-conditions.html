@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Terms & Conditions — Sober Founders</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #FAFAF7;
+    --surface: #FFFFFF;
+    --text: #1A1A1A;
+    --text-muted: #6B6B6B;
+    --text-light: #8A8A8A;
+    --accent: #2C5F2D;
+    --accent-dark: #1E4620;
+    --accent-light: #E8F0E8;
+    --accent-subtle: #F2F7F2;
+    --border: #E5E2DB;
+    --rule: #D1CEC7;
+    --warm-gray: #F5F4F0;
+    --serif: 'DM Serif Display', Georgia, serif;
+    --sans: 'DM Sans', system-ui, sans-serif;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.05), 0 2px 4px rgba(0,0,0,0.04);
+    --radius: 8px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { font-size: 16px; scroll-behavior: smooth; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background: var(--accent-light);
+    color: var(--accent-dark);
+  }
+
+  /* ── Header ── */
+  .hero {
+    position: relative;
+    padding: 6rem 2rem 4rem;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #EEEDEA 0%, var(--bg) 100%);
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, rgba(44,95,45,0.04) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-light);
+    padding: 0.4rem 1rem;
+    border-radius: 100px;
+    margin-bottom: 1.5rem;
+  }
+
+  .hero-badge svg {
+    width: 14px;
+    height: 14px;
+    fill: var(--accent);
+  }
+
+  .hero h1 {
+    font-family: var(--serif);
+    font-size: clamp(2.25rem, 5vw, 3.5rem);
+    font-weight: 400;
+    line-height: 1.15;
+    color: var(--text);
+    margin-bottom: 1rem;
+  }
+
+  .hero .effective {
+    font-size: 0.88rem;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  /* ── Layout ── */
+  .page {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    max-width: 1060px;
+    margin: 0 auto;
+    gap: 3.5rem;
+    padding: 3rem 2rem 6rem;
+  }
+
+  @media (max-width: 860px) {
+    .page { grid-template-columns: 1fr; gap: 2rem; padding: 2rem 1.25rem 4rem; }
+    .sidebar { display: none; }
+  }
+
+  /* ── Sidebar TOC ── */
+  .sidebar {
+    position: sticky;
+    top: 2rem;
+    align-self: start;
+    max-height: calc(100vh - 4rem);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .toc-title {
+    font-weight: 700;
+    font-size: 0.68rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-light);
+    margin-bottom: 0.85rem;
+    padding-left: 0.75rem;
+  }
+
+  .toc a {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    padding: 0.35rem 0 0.35rem 0.75rem;
+    border-left: 2px solid transparent;
+    transition: all 0.2s ease;
+    line-height: 1.45;
+  }
+
+  .toc a:hover {
+    color: var(--accent);
+    border-left-color: var(--accent-light);
+    background: var(--accent-subtle);
+    border-radius: 0 4px 4px 0;
+  }
+
+  .toc a.active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* ── Content ── */
+  .content { max-width: 660px; }
+
+  .section {
+    padding-bottom: 2.5rem;
+    margin-bottom: 2.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section:last-child { border-bottom: none; margin-bottom: 0; }
+
+  .section h2 {
+    font-family: var(--serif);
+    font-size: 1.45rem;
+    font-weight: 400;
+    margin-bottom: 1.1rem;
+    color: var(--text);
+    scroll-margin-top: 2rem;
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
+  }
+
+  .section h2 .num {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--accent);
+    background: var(--accent-light);
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+    top: -1px;
+    margin-right: 0.35rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .section p {
+    margin-bottom: 1rem;
+    color: var(--text);
+    font-size: 0.94rem;
+    line-height: 1.8;
+  }
+
+  .section p:last-child { margin-bottom: 0; }
+
+  .section p strong {
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .section ul {
+    list-style: none;
+    margin: 0.75rem 0 1.25rem 0;
+  }
+
+  .section ul li {
+    position: relative;
+    padding-left: 1.5rem;
+    margin-bottom: 0.6rem;
+    font-size: 0.94rem;
+    color: var(--text);
+    line-height: 1.7;
+  }
+
+  .section ul li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.65em;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0.35;
+  }
+
+  .callout {
+    background: var(--accent-subtle);
+    border-left: 3px solid var(--accent);
+    padding: 1.15rem 1.35rem;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    margin: 1.5rem 0;
+    font-size: 0.88rem;
+    color: var(--text);
+    line-height: 1.7;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .callout strong { color: var(--accent-dark); font-weight: 700; }
+
+  /* ── Contact Card ── */
+  .contact-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem 1.75rem;
+    margin-top: 1rem;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .contact-card p {
+    margin-bottom: 0.5rem;
+    font-size: 0.92rem;
+  }
+
+  .contact-card a {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 600;
+    border-bottom: 1px solid var(--accent-light);
+    transition: border-color 0.2s;
+  }
+
+  .contact-card a:hover {
+    border-bottom-color: var(--accent);
+  }
+
+  /* ── Footer ── */
+  .footer {
+    text-align: center;
+    padding: 2.5rem 2rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.8rem;
+    color: var(--text-light);
+    background: var(--warm-gray);
+  }
+
+  .footer-inner {
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .footer-brand {
+    font-family: var(--serif);
+    font-size: 1.1rem;
+    color: var(--text);
+    margin-bottom: 0.5rem;
+  }
+
+  .footer-links {
+    display: flex;
+    justify-content: center;
+    gap: 1.5rem;
+    margin-top: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .footer-links a {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.8rem;
+    transition: color 0.2s;
+  }
+
+  .footer-links a:hover { color: var(--accent); }
+
+  /* ── Back to Top ── */
+  .back-to-top {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-md);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: translateY(12px);
+    transition: all 0.3s ease;
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  .back-to-top.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .back-to-top:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .back-to-top:hover svg { stroke: white; }
+
+  .back-to-top svg {
+    width: 18px;
+    height: 18px;
+    stroke: var(--text-muted);
+    stroke-width: 2.5;
+    fill: none;
+  }
+
+  /* ── Print ── */
+  @media print {
+    .sidebar, .back-to-top, .hero::before { display: none; }
+    .page { grid-template-columns: 1fr; }
+    .section { break-inside: avoid; opacity: 1; transform: none; animation: none; }
+    body { font-size: 11pt; }
+  }
+
+  /* ── Animations ── */
+  .section { opacity: 0; transform: translateY(14px); animation: fadeUp 0.45s ease forwards; }
+  .section:nth-child(1)  { animation-delay: 0.04s; }
+  .section:nth-child(2)  { animation-delay: 0.08s; }
+  .section:nth-child(3)  { animation-delay: 0.12s; }
+  .section:nth-child(4)  { animation-delay: 0.16s; }
+  .section:nth-child(5)  { animation-delay: 0.20s; }
+  .section:nth-child(6)  { animation-delay: 0.24s; }
+  .section:nth-child(7)  { animation-delay: 0.28s; }
+  .section:nth-child(8)  { animation-delay: 0.32s; }
+  .section:nth-child(9)  { animation-delay: 0.36s; }
+  .section:nth-child(10) { animation-delay: 0.40s; }
+  .section:nth-child(11) { animation-delay: 0.44s; }
+  .section:nth-child(12) { animation-delay: 0.48s; }
+  .section:nth-child(13) { animation-delay: 0.52s; }
+  .section:nth-child(14) { animation-delay: 0.56s; }
+
+  @keyframes fadeUp {
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-badge">
+    <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+    Sober Founders Inc.
+  </div>
+  <h1>Terms &amp; Conditions</h1>
+  <p class="effective">Effective March 20, 2026</p>
+</header>
+
+<div class="page">
+  <aside class="sidebar">
+    <div class="toc-title">On this page</div>
+    <nav class="toc">
+      <a href="#acceptance">Acceptance of Terms</a>
+      <a href="#about">About Sober Founders</a>
+      <a href="#not-advice">No Professional Advice</a>
+      <a href="#opinions">Member Opinions &amp; Content</a>
+      <a href="#sponsors">Sponsors &amp; Vendors</a>
+      <a href="#liability">Limitation of Liability</a>
+      <a href="#indemnification">Indemnification</a>
+      <a href="#confidentiality">Confidentiality</a>
+      <a href="#conduct">Code of Conduct</a>
+      <a href="#ip">Intellectual Property</a>
+      <a href="#termination">Termination</a>
+      <a href="#disputes">Dispute Resolution</a>
+      <a href="#amendments">Amendments</a>
+      <a href="#contact">Contact</a>
+    </nav>
+  </aside>
+
+  <main class="content">
+
+    <div class="section" id="acceptance">
+      <h2><span class="num">1</span> Acceptance of Terms</h2>
+      <p>By accessing the Sober Founders website, attending any Sober Founders event (including but not limited to masterminds, Tuesday Group meetings, retreats, and online sessions), joining any digital community (including WhatsApp, Circle, email lists, and any future platform), or otherwise participating in Sober Founders programming, you agree to be bound by these Terms &amp; Conditions. If you do not agree, you must discontinue participation immediately.</p>
+      <p>These Terms apply to all participants, members, guests, speakers, and visitors. Mastermind members are additionally bound by the separate Confidentiality &amp; Membership Pledge executed upon enrollment.</p>
+    </div>
+
+    <div class="section" id="about">
+      <h2><span class="num">2</span> About Sober Founders</h2>
+      <p>Sober Founders Inc. is a nonprofit community organization that provides peer-to-peer support, networking, and educational programming for entrepreneurs in recovery. Sober Founders is not a licensed counseling service, medical provider, financial advisory firm, legal practice, or treatment facility. Nothing offered through Sober Founders should be construed as professional advice of any kind.</p>
+      <p><strong>Sober Founders has no affiliation whatsoever with Alcoholics Anonymous, any Twelve Step program, or any recovery fellowship.</strong> While individual members may participate in such fellowships in their personal lives, those organizations do not endorse, sponsor, or have any connection to Sober Founders, and Sober Founders does not claim any such association. We respect the traditions of all recovery fellowships — including the Sixth Tradition of Twelve Step programs — and nothing about Sober Founders should be interpreted as implying endorsement by or affiliation with any such organization. We encourage our members to follow the guidelines of their respective recovery programs, but Sober Founders operates independently of all of them.</p>
+    </div>
+
+    <div class="section" id="not-advice">
+      <h2><span class="num">3</span> No Professional Advice</h2>
+      <p>All information, discussions, presentations, materials, and resources shared through Sober Founders — whether by staff, members, guest speakers, mentors, or any other participant — are provided for general informational and educational purposes only. They do not constitute and shall not be relied upon as medical, psychological, legal, financial, tax, investment, or any other form of professional advice.</p>
+      <p>You are solely responsible for evaluating any information you receive through Sober Founders and for making your own independent decisions. You should consult qualified professionals before acting on any information obtained through your participation.</p>
+      <div class="callout">
+        <strong>Important:</strong> Sober Founders is a peer community, not a substitute for professional treatment, therapy, or counseling. If you are experiencing a mental health crisis, please contact a licensed professional or call 988 (Suicide &amp; Crisis Lifeline).
+      </div>
+    </div>
+
+    <div class="section" id="opinions">
+      <h2><span class="num">4</span> Member Opinions &amp; Content</h2>
+      <p>Sober Founders is a community-driven organization. The views, opinions, statements, advice, strategies, and recommendations expressed by any member, guest speaker, mentor, facilitator, or participant — in meetings, digital channels, events, or any other forum — are solely those of the individual expressing them. They do not represent the views, endorsement, or official position of Sober Founders Inc., its board, officers, employees, or volunteers.</p>
+      <p>Sober Founders does not vet, verify, approve, or endorse the accuracy, completeness, or reliability of any statement made by any participant. You acknowledge that you participate in discussions and receive information at your own risk and discretion.</p>
+    </div>
+
+    <div class="section" id="sponsors">
+      <h2><span class="num">5</span> Sponsors, Advertisers &amp; Vendors</h2>
+      <p>Sober Founders may from time to time feature, reference, or accept sponsorship from third-party companies, service providers, vendors, or advertisers. Any such relationship is for informational or community-support purposes only.</p>
+      <p><strong>Sponsorship or advertising does not constitute an endorsement, recommendation, or guarantee by Sober Founders Inc.</strong> of any sponsor's products, services, qualifications, business practices, or suitability for your needs.</p>
+      <p>While Sober Founders may conduct brief, informal due diligence on potential sponsors and partners, this review is limited in scope and should not be relied upon as a substitute for your own independent research. You are solely responsible for conducting your own due diligence before engaging with, purchasing from, or entering into any agreement with any vendor, sponsor, advertiser, or service provider introduced through Sober Founders.</p>
+      <p>Sober Founders shall have no liability whatsoever for any loss, damage, dispute, or dissatisfaction arising from your interaction with any third-party sponsor, vendor, or advertiser.</p>
+    </div>
+
+    <div class="section" id="liability">
+      <h2><span class="num">6</span> Limitation of Liability</h2>
+      <p>To the fullest extent permitted by law, Sober Founders Inc., its board of directors, officers, employees, volunteers, facilitators, members, guest speakers, and agents shall not be liable for any direct, indirect, incidental, consequential, special, or exemplary damages arising out of or in connection with your participation in Sober Founders, including but not limited to:</p>
+      <ul>
+        <li>Emotional distress, psychological harm, or mental health outcomes</li>
+        <li>Financial losses, business losses, or lost opportunities</li>
+        <li>Decisions made based on information, opinions, or advice received through Sober Founders</li>
+        <li>Interactions with other members, speakers, sponsors, or vendors</li>
+        <li>Reliance on any content, materials, or resources provided</li>
+        <li>Technical issues, service interruptions, or data loss</li>
+      </ul>
+      <p>You acknowledge that participation in Sober Founders is entirely voluntary and at your own risk. Sober Founders provides its programming and community on an "as is" and "as available" basis without warranties of any kind, express or implied.</p>
+    </div>
+
+    <div class="section" id="indemnification">
+      <h2><span class="num">7</span> Indemnification</h2>
+      <p>You agree to indemnify, defend, and hold harmless Sober Founders Inc., its board, officers, employees, volunteers, and agents from and against any claims, liabilities, damages, losses, costs, or expenses (including reasonable attorneys' fees) arising out of or related to: your participation in Sober Founders; your violation of these Terms; any content or information you share; or any dispute between you and another member, sponsor, or third party.</p>
+    </div>
+
+    <div class="section" id="confidentiality">
+      <h2><span class="num">8</span> Confidentiality</h2>
+      <p>All information shared within Sober Founders meetings, events, digital channels, and one-on-one member conversations is confidential. You agree not to disclose, share, or reference any identifiable information about other participants or the substance of their contributions outside of the Sober Founders community without their explicit written consent.</p>
+      <p>No audio or video recording of any Sober Founders meeting or event is permitted without prior written authorization from Sober Founders Inc. Personal notes may only document your own ideas and takeaways, not information shared by others.</p>
+      <p>Mastermind members are subject to additional confidentiality obligations as set forth in the Confidentiality &amp; Membership Pledge.</p>
+    </div>
+
+    <div class="section" id="conduct">
+      <h2><span class="num">9</span> Code of Conduct</h2>
+      <p>Participants agree to treat all members with respect and dignity; refrain from harassment, discrimination, or abusive behavior; not pitch, sell, or solicit business from other members without explicit group approval; maintain the anonymity of fellow members outside of Sober Founders; and engage in good faith with a spirit of mutual support.</p>
+      <p>Sober Founders reserves the right to remove any participant who violates these standards, at its sole discretion, with or without notice and without refund.</p>
+    </div>
+
+    <div class="section" id="ip">
+      <h2><span class="num">10</span> Intellectual Property</h2>
+      <p>All content, branding, materials, and resources created by Sober Founders Inc. — including logos, curricula, frameworks (such as the Founders Compass), and website content — are the property of Sober Founders Inc. and may not be reproduced, distributed, or used without written permission.</p>
+      <p>Each participant retains ownership of their own intellectual property. Sharing ideas or strategies within the community does not constitute a transfer of intellectual property rights.</p>
+    </div>
+
+    <div class="section" id="termination">
+      <h2><span class="num">11</span> Termination</h2>
+      <p>Sober Founders reserves the right to suspend or terminate your access to any program, event, or community at any time, for any reason, at its sole discretion. Obligations under these Terms that by their nature should survive termination — including confidentiality, limitation of liability, indemnification, and dispute resolution — shall survive.</p>
+    </div>
+
+    <div class="section" id="disputes">
+      <h2><span class="num">12</span> Dispute Resolution</h2>
+      <p>Any dispute arising out of or relating to these Terms or your participation in Sober Founders shall first be submitted to good-faith mediation administered by the American Arbitration Association or a mutually agreed-upon mediator in Palm Beach County, Florida. If mediation does not resolve the dispute within sixty (60) days, either party may pursue binding arbitration under AAA rules in Palm Beach County, Florida. The arbitrator's decision shall be final and enforceable in any court of competent jurisdiction.</p>
+      <p>This Agreement shall be governed by the laws of the State of Florida. Each party shall bear its own costs and attorneys' fees unless the arbitrator determines otherwise.</p>
+    </div>
+
+    <div class="section" id="amendments">
+      <h2><span class="num">13</span> Amendments</h2>
+      <p>Sober Founders Inc. reserves the right to update these Terms at any time. Material changes will be communicated via email and/or posted on the Sober Founders website. Continued participation after changes take effect constitutes your acceptance of the revised Terms.</p>
+    </div>
+
+    <div class="section" id="contact">
+      <h2><span class="num">14</span> Contact</h2>
+      <p>If you have questions about these Terms &amp; Conditions, please contact us:</p>
+      <div class="contact-card">
+        <p><strong>Sober Founders Inc.</strong></p>
+        <p>Email: <a href="mailto:support@soberfounders.org">support@soberfounders.org</a></p>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-brand">Sober Founders</div>
+    <p>&copy; 2026 Sober Founders Inc. &middot; All rights reserved.</p>
+    <p>A 501(c)(3) nonprofit organization.</p>
+    <div class="footer-links">
+      <a href="https://soberfounders.org">Home</a>
+      <a href="https://soberfounders.org/privacy-policy">Privacy Policy</a>
+      <a href="mailto:support@soberfounders.org">Contact</a>
+    </div>
+  </div>
+</footer>
+
+<button class="back-to-top" aria-label="Back to top" onclick="window.scrollTo({top:0,behavior:'smooth'})">
+  <svg viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg>
+</button>
+
+<script>
+  // Highlight active TOC link on scroll
+  const sections = document.querySelectorAll('.section');
+  const tocLinks = document.querySelectorAll('.toc a');
+  const backBtn = document.querySelector('.back-to-top');
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        tocLinks.forEach(a => a.classList.remove('active'));
+        const id = entry.target.getAttribute('id');
+        const active = document.querySelector(`.toc a[href="#${id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -75% 0px' });
+
+  sections.forEach(s => observer.observe(s));
+
+  // Back-to-top visibility
+  window.addEventListener('scroll', () => {
+    backBtn.classList.toggle('visible', window.scrollY > 400);
+  }, { passive: true });
+</script>
+</body>
+</html>
