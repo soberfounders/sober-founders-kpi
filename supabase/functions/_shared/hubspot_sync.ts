@@ -235,6 +235,34 @@ function parseLeadAdSobrietyDate(value: any): string | null {
     }
   }
 
+  // Try written-out month format: "February 5, 2021", "March 23, 2013", "Jan 1, 2008"
+  const monthNames: Record<string, number> = {
+    january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
+    july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
+    jan: 0, feb: 1, mar: 2, apr: 3, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+  };
+  const writtenMatch = raw.match(/^([a-z]+)\s+(\d{1,2}),?\s+(\d{4})$/i);
+  if (writtenMatch) {
+    const monthNum = monthNames[writtenMatch[1].toLowerCase()];
+    if (monthNum !== undefined) {
+      const dd = Number(writtenMatch[2]);
+      const yyyy = Number(writtenMatch[3]);
+      const d = new Date(yyyy, monthNum, dd);
+      if (!isNaN(d.getTime()) && d.getFullYear() >= 1950 && d.getFullYear() <= 2030) {
+        return d.toISOString().split("T")[0];
+      }
+    }
+  }
+
+  // Try year-only: "2008" or "sober 2008" → January 1 of that year
+  const yearOnly = raw.match(/(\d{4})$/);
+  if (yearOnly && raw.replace(/[^0-9]/g, "").length === 4) {
+    const yyyy = Number(yearOnly[1]);
+    if (yyyy >= 1950 && yyyy <= 2030) {
+      return `${yyyy}-01-01`;
+    }
+  }
+
   // Try MMDDYYYY (8 digits, e.g., "01052009")
   const eightDigit = raw.match(/^(\d{2})(\d{2})(\d{4})$/);
   if (eightDigit) {
