@@ -956,6 +956,106 @@ async function computeCompletedItems(
 }
 
 // ---------------------------------------------------------------------------
+// Rolling 90-day average visits per person per day type
+// ---------------------------------------------------------------------------
+async function computeRollingAvgVisits(
+  sb: SupabaseClient,
+  _from: string,
+  to: string
+): Promise<MetricRow[]> {
+  // Lookback 90 days from target_date: total visits / unique people per day type
+  const targetDate = new Date(`${to}T00:00:00.000Z`);
+  const lookbackDate = new Date(targetDate);
+  lookbackDate.setUTCDate(lookbackDate.getUTCDate() - 89);
+  const lookbackFrom = lookbackDate.toISOString().slice(0, 10);
+
+  const { data: sessions, error: sessErr } = await sb
+    .from("raw_hubspot_meeting_activities")
+    .select("hubspot_activity_id, hs_timestamp, title")
+    .gte("hs_timestamp", `${lookbackFrom}T00:00:00.000Z`)
+    .lte("hs_timestamp", `${to}T23:59:59.999Z`)
+    .in("activity_type", ["meeting", "MEETING", "call", "CALL"]);
+
+  if (sessErr)
+    throw new Error(`rolling_avg_visits sessions query failed: ${sessErr.message}`);
+
+  const groupSessions = (sessions || []).filter((s: Record<string, unknown>) =>
+    isGroupSession(String(s.title || ""))
+  );
+
+  if (!groupSessions.length) {
+    return [
+      { kpi_key: "avg_visits_per_person", funnel_key: "tuesday", value: 0 },
+      { kpi_key: "avg_visits_per_person", funnel_key: "thursday", value: 0 },
+    ];
+  }
+
+  const tuesdayIds: string[] = [];
+  const thursdayIds: string[] = [];
+
+  for (const session of groupSessions) {
+    const s = session as Record<string, unknown>;
+    const id = String(s.hubspot_activity_id);
+    const day = classifyDay(
+      String(s.title || ""),
+      String(s.hs_timestamp || "")
+    );
+    if (day === "tuesday") tuesdayIds.push(id);
+    else if (day === "thursday") thursdayIds.push(id);
+  }
+
+  const allIds = [...tuesdayIds, ...thursdayIds];
+  if (!allIds.length) {
+    return [
+      { kpi_key: "avg_visits_per_person", funnel_key: "tuesday", value: 0 },
+      { kpi_key: "avg_visits_per_person", funnel_key: "thursday", value: 0 },
+    ];
+  }
+
+  const { data: associations, error: assocErr } = await sb
+    .from("hubspot_activity_contact_associations")
+    .select("hubspot_activity_id, hubspot_contact_id, contact_email")
+    .in("hubspot_activity_id", allIds);
+
+  if (assocErr)
+    throw new Error(`rolling_avg_visits associations query failed: ${assocErr.message}`);
+
+  const assocRows = (associations || []) as Array<Record<string, unknown>>;
+
+  const computeAvgVisits = (sessionIds: string[]): number | null => {
+    if (!sessionIds.length) return null;
+    const idSet = new Set(sessionIds);
+    const visitCounts = new Map<string, number>();
+    for (const row of assocRows) {
+      if (!idSet.has(String(row.hubspot_activity_id))) continue;
+      const key = row.hubspot_contact_id
+        ? `id:${row.hubspot_contact_id}`
+        : `email:${String(row.contact_email || "").toLowerCase()}`;
+      if (!key || key === "email:") continue;
+      visitCounts.set(key, (visitCounts.get(key) || 0) + 1);
+    }
+    if (!visitCounts.size) return null;
+    let totalVisits = 0;
+    for (const count of visitCounts.values()) {
+      totalVisits += count;
+    }
+    return Math.round((totalVisits / visitCounts.size) * 100) / 100;
+  };
+
+  const tuesdayAvg = computeAvgVisits(tuesdayIds);
+  const thursdayAvg = computeAvgVisits(thursdayIds);
+
+  const results: MetricRow[] = [];
+  if (tuesdayAvg !== null) {
+    results.push({ kpi_key: "avg_visits_per_person", funnel_key: "tuesday", value: tuesdayAvg });
+  }
+  if (thursdayAvg !== null) {
+    results.push({ kpi_key: "avg_visits_per_person", funnel_key: "thursday", value: thursdayAvg });
+  }
+  return results;
+}
+
+// ---------------------------------------------------------------------------
 // Composite metrics (CPL, CPQL, CPGL) — including per-funnel
 // ---------------------------------------------------------------------------
 function computeComposites(metrics: MetricRow[]): MetricRow[] {
@@ -1035,6 +1135,7 @@ async function computeAllMetrics(
     { name: "operations", fn: () => computeOperationsMetrics(sb, from, to) },
     { name: "outreach", fn: () => computeOutreachMetrics(sb, from, to) },
     { name: "completed_items", fn: () => computeCompletedItems(sb, from, to) },
+    { name: "rolling_avg_visits", fn: () => computeRollingAvgVisits(sb, from, to) },
   ];
 
   // Run all metric computers in parallel

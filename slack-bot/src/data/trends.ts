@@ -123,6 +123,12 @@ const METRIC_MAP: Record<string, MetricMapping> = {
   free_tuesday_repeat_attendance:  { kpi_key: "repeat_rate_tuesday",    funnel_key: "tuesday",   agg: "avg" },
   free_thursday_repeat_attendance: { kpi_key: "repeat_rate_thursday",   funnel_key: "thursday",  agg: "avg" },
 
+  // Avg visits per person (rolling 90-day)
+  avg_visits_tuesday:              { kpi_key: "avg_visits_per_person",  funnel_key: "tuesday",   agg: "latest" },
+  avg_visits_thursday:             { kpi_key: "avg_visits_per_person",  funnel_key: "thursday",  agg: "latest" },
+  avg_visits_per_person_tuesday:   { kpi_key: "avg_visits_per_person",  funnel_key: "tuesday",   agg: "latest" },
+  avg_visits_per_person_thursday:  { kpi_key: "avg_visits_per_person",  funnel_key: "thursday",  agg: "latest" },
+
   // Outreach domain
   outreach_sent:                 { kpi_key: "outreach_sent",            funnel_key: "all",     agg: "sum" },
   outreach_conversion_rate:      { kpi_key: "outreach_conversion_rate", funnel_key: "all",     agg: "avg" },

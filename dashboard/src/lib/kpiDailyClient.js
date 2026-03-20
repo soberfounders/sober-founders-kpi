@@ -128,11 +128,11 @@ export function buildMetricsFromDaily(rows, windowStart, windowEnd) {
   const attendanceTotalTue = s('attendance_total', 'tuesday');
   const attendanceNewTue = s('attendance_new', 'tuesday');
   const attendanceRepeatTue = s('attendance_repeat', 'tuesday');
-  const attendanceAvgVisitsTue = a('repeat_rate_tuesday', 'tuesday');
+  const attendanceAvgVisitsTue = latestMetric(rows, 'avg_visits_per_person', 'tuesday', windowStart, windowEnd);
   const attendanceTotalThu = s('attendance_total', 'thursday');
   const attendanceNewThu = s('attendance_new', 'thursday');
   const attendanceRepeatThu = s('attendance_repeat', 'thursday');
-  const attendanceAvgVisitsThu = a('repeat_rate_thursday', 'thursday');
+  const attendanceAvgVisitsThu = latestMetric(rows, 'avg_visits_per_person', 'thursday', windowStart, windowEnd);
 
   // Donations
   const donationsCount = s('donations_count', 'all');
@@ -151,7 +151,6 @@ export function buildMetricsFromDaily(rows, windowStart, windowEnd) {
     freeInterviews,
     phoenixLeads,
     phoenixQualified,
-    phoenixPhoenixQualified: phoenixQualified,
     phoenixCpql,
     phoenixInterviews,
     attendanceTotalTue,

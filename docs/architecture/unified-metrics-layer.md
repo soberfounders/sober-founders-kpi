@@ -65,6 +65,7 @@ Layer 4: Consumption (dashboard + Slack bot read from views)
 - `attendance_repeat` - Repeat attendees per day type
 - `repeat_rate_tuesday` - Tuesday repeat attendance ratio
 - `repeat_rate_thursday` - Thursday repeat attendance ratio
+- `avg_visits_per_person` - Rolling 90-day visits / unique people (tuesday/thursday)
 - `retention_14d` / `retention_30d` - Cohort return rates
 
 ### Donations Domain

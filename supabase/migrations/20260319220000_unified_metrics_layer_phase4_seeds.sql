@@ -26,7 +26,10 @@ VALUES
   ('donations_count',        'Donations Count',         'Number of donation transactions in window',                      'count', 'donations',  'daily', true,  'Number of donation transactions in window',                                     ARRAY['donation_transactions_unified'], 'edge_function'),
 
   -- Completed items
-  ('completed_items',        'Completed Items',         'Notion tasks marked Done/Completed in window',                   'count', 'operations', 'daily', true,  'Notion tasks marked Done/Completed in window',                                  ARRAY['notion_todos'], 'edge_function')
+  ('completed_items',        'Completed Items',         'Notion tasks marked Done/Completed in window',                   'count', 'operations', 'daily', true,  'Notion tasks marked Done/Completed in window',                                  ARRAY['notion_todos'], 'edge_function'),
+
+  -- Rolling 90-day avg visits per person per day type
+  ('avg_visits_per_person',  'Avg Visits/Person',       'Rolling 90-day total visits / unique people per day type',       'decimal', 'attendance', 'daily', true, 'Rolling 90-day average visits per person per day type (tuesday/thursday)',       ARRAY['raw_hubspot_meeting_activities', 'hubspot_activity_contact_associations'], 'edge_function')
 
 ON CONFLICT (kpi_key) DO UPDATE SET
   name            = EXCLUDED.name,
