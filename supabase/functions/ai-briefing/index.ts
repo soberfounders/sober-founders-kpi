@@ -49,6 +49,134 @@ function changePct(curr: number, prev: number): string {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Transaction Anomaly Detection                                     */
+/* ------------------------------------------------------------------ */
+
+interface TxnAnomaly {
+    severity: "high" | "medium";
+    label: string;
+    detail: string;
+}
+
+async function gatherTransactionAnomalies(supabase: any): Promise<TxnAnomaly[]> {
+    const now = new Date();
+    const yesterday = new Date(now);
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    const dayAfter = new Date(yesterday);
+    dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
+    const yStart = isoDate(yesterday);
+    const yEnd = isoDate(dayAfter);
+
+    // Yesterday's transactions
+    const { data: txns } = await supabase
+        .from("donation_transactions_unified")
+        .select("donor_name,donor_email,amount,donated_at,status,is_recurring,campaign_name")
+        .gte("donated_at", yStart)
+        .lt("donated_at", yEnd);
+
+    const transactions = txns || [];
+    const anomalies: TxnAnomaly[] = [];
+
+    // 90-day baseline for amount threshold
+    const ninetyDaysAgo = new Date(now);
+    ninetyDaysAgo.setUTCDate(ninetyDaysAgo.getUTCDate() - 90);
+
+    const { data: historical } = await supabase
+        .from("donation_transactions_unified")
+        .select("amount,donated_at")
+        .gte("donated_at", isoDate(ninetyDaysAgo))
+        .lt("donated_at", yStart);
+
+    const hist = historical || [];
+    const avgAmount = hist.length > 0
+        ? hist.reduce((s: number, r: any) => s + Number(r.amount || 0), 0) / hist.length
+        : 0;
+
+    // 1. Large donations (>2x 90-day average)
+    const threshold = avgAmount * 2;
+    for (const t of transactions) {
+        if (Number(t.amount) > threshold && threshold > 0) {
+            anomalies.push({
+                severity: "high",
+                label: "Large donation",
+                detail: `${t.donor_name || "Anonymous"} donated $${Number(t.amount).toFixed(2)} (90-day avg: $${avgAmount.toFixed(2)})`,
+            });
+        }
+    }
+
+    // 2. Failed/refunded transactions
+    for (const t of transactions) {
+        if (t.status && ["failed", "refunded", "cancelled", "declined"].includes(t.status.toLowerCase())) {
+            anomalies.push({
+                severity: "high",
+                label: `Transaction ${t.status}`,
+                detail: `${t.donor_name || "Anonymous"} — $${Number(t.amount).toFixed(2)}`,
+            });
+        }
+    }
+
+    // 3. Unusual daily volume (z-score vs 90-day)
+    const dailyCounts: Record<string, number> = {};
+    for (const r of hist) {
+        const day = r.donated_at?.slice(0, 10);
+        if (day) dailyCounts[day] = (dailyCounts[day] || 0) + 1;
+    }
+    const countVals = Object.values(dailyCounts);
+    const avgDaily = hist.length / 90;
+    const stddev = countVals.length > 1
+        ? Math.sqrt(countVals.reduce((s, v) => s + (v - avgDaily) ** 2, 0) / countVals.length)
+        : 0;
+    if (stddev > 0) {
+        const z = (transactions.length - avgDaily) / stddev;
+        if (Math.abs(z) >= 2) {
+            anomalies.push({
+                severity: "medium",
+                label: z > 0 ? "Transaction volume spike" : "Transaction volume drop",
+                detail: `${transactions.length} txns yesterday vs ${avgDaily.toFixed(1)} daily avg (${z > 0 ? "+" : ""}${z.toFixed(1)}σ)`,
+            });
+        }
+    }
+
+    // 4. Missing recurring donors (after 15th of month)
+    if (now.getUTCDate() >= 15) {
+        const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+        const twoMonthsAgo = new Date(monthStart);
+        twoMonthsAgo.setUTCMonth(twoMonthsAgo.getUTCMonth() - 2);
+
+        const { data: recentRecurring } = await supabase
+            .from("donation_transactions_unified")
+            .select("donor_email,donor_name,amount")
+            .eq("is_recurring", true)
+            .gte("donated_at", isoDate(twoMonthsAgo))
+            .lt("donated_at", isoDate(monthStart));
+
+        const { data: thisMonthRecurring } = await supabase
+            .from("donation_transactions_unified")
+            .select("donor_email")
+            .eq("is_recurring", true)
+            .gte("donated_at", isoDate(monthStart));
+
+        const thisMonthEmails = new Set(
+            (thisMonthRecurring || []).map((r: any) => r.donor_email?.toLowerCase()),
+        );
+
+        const seen = new Set<string>();
+        for (const r of recentRecurring || []) {
+            const email = r.donor_email?.toLowerCase();
+            if (!email || seen.has(email) || thisMonthEmails.has(email)) continue;
+            seen.add(email);
+            anomalies.push({
+                severity: "medium",
+                label: "Missing recurring donation",
+                detail: `${r.donor_name || email} usually gives $${Number(r.amount).toFixed(2)}/mo — hasn't this month`,
+            });
+        }
+    }
+
+    return anomalies;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Trend Intelligence — 8-week rolling stats + goal gap              */
 /* ------------------------------------------------------------------ */
 
@@ -521,7 +649,7 @@ async function callAI(prompt: string): Promise<{ result: any; model: string; is_
 /*  Slack Delivery                                                    */
 /* ------------------------------------------------------------------ */
 
-async function sendToSlack(briefing: any): Promise<boolean> {
+async function sendToSlack(briefing: any, txnAnomalies: TxnAnomaly[] = []): Promise<boolean> {
     const webhookUrl = Deno.env.get("SLACK_WEBHOOK_URL");
     if (!webhookUrl) {
         console.log("SLACK_WEBHOOK_URL not set — skipping Slack delivery");
@@ -565,6 +693,21 @@ async function sendToSlack(briefing: any): Promise<boolean> {
         sections.push({
             type: "section",
             text: { type: "mrkdwn", text: `*Action Items*\n${actionList}` },
+        });
+    }
+
+    // Transaction anomalies (only if flagged)
+    if (txnAnomalies.length > 0) {
+        sections.push({ type: "divider" });
+        const alerts = txnAnomalies
+            .map((a) => {
+                const icon = a.severity === "high" ? "🔴" : "🟡";
+                return `${icon} *${a.label}:* ${a.detail}`;
+            })
+            .join("\n");
+        sections.push({
+            type: "section",
+            text: { type: "mrkdwn", text: `*💰 Transaction Alerts*\n${alerts}` },
         });
     }
 
@@ -614,8 +757,11 @@ serve(async (req: Request) => {
 
         console.log(`AI Briefing: mode=${mode}, send_slack=${sendSlack}`);
 
-        // 1. Gather data
-        const snapshot = await gatherSnapshot(supabase);
+        // 1. Gather data (snapshot + transaction anomalies in parallel)
+        const [snapshot, txnAnomalies] = await Promise.all([
+            gatherSnapshot(supabase),
+            gatherTransactionAnomalies(supabase),
+        ]);
 
         // 2. Build prompt based on mode
         let prompt: string;
@@ -659,7 +805,7 @@ serve(async (req: Request) => {
         // 5. Deliver to Slack
         const deliveredTo: string[] = ["dashboard"];
         if (sendSlack) {
-            const slackOk = await sendToSlack({ ...briefing });
+            const slackOk = await sendToSlack({ ...briefing }, txnAnomalies);
             if (slackOk) deliveredTo.push("slack");
         }
 
@@ -672,6 +818,7 @@ serve(async (req: Request) => {
             action_items: briefing.action_items,
             metadata: {
                 anomalies: briefing.anomalies,
+                transaction_anomalies: txnAnomalies,
                 predicted_attendance: briefing.predicted_attendance,
                 projected_impact: briefing.projected_impact,
                 snapshot_summary: {
