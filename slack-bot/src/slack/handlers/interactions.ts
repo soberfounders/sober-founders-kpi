@@ -114,10 +114,16 @@ export const registerInteractionHandlers = (app: App): void => {
     if (channelId) {
       const persona = getPersona(proposal.agent_persona);
       const emoji = persona?.emoji || "";
+
+      // Post execution summary to the digest thread where they clicked approve
+      const summaryParts = [`${emoji} *Approved: ${proposal.title}*`, result.summary];
+      if (result.draft && proposal.channel_id && proposal.channel_id !== channelId) {
+        summaryParts.push("_Full draft posted in the #agent-queue thread for review._");
+      }
       await client.chat.postMessage({
         channel: channelId,
         thread_ts: messageTs || undefined,
-        text: `${emoji} ${result.summary}`,
+        text: summaryParts.join("\n"),
       });
     }
 
@@ -231,6 +237,51 @@ export const registerInteractionHandlers = (app: App): void => {
     });
 
     logger.info({ proposalId }, "agent_proposal_detail: detail posted");
+  });
+
+  // -------------------------------------------------------------------------
+  // Reply button - opens a thread for founder feedback on a proposal
+  // -------------------------------------------------------------------------
+
+  app.action("agent_proposal_reply", async ({ ack, action, body, respond, client }) => {
+    await ack();
+
+    const actionPayload = action as unknown as Record<string, unknown>;
+    const bodyPayload = body as Record<string, any>;
+    const proposalId = String(actionPayload.value || "").trim();
+    const channelId = String(bodyPayload.channel?.id || "").trim();
+    const messageTs = String(bodyPayload.message?.ts || "").trim();
+
+    if (!proposalId) {
+      await respond({ response_type: "ephemeral", text: "Invalid proposal payload." });
+      return;
+    }
+
+    const proposal = await getProposalById(proposalId);
+    if (!proposal) {
+      await respond({ response_type: "ephemeral", text: "Proposal not found." });
+      return;
+    }
+
+    const persona = getPersona(proposal.agent_persona);
+    const emoji = persona?.emoji || "";
+
+    // Post a thread prompt so the founder can reply with feedback
+    if (channelId) {
+      await client.chat.postMessage({
+        channel: channelId,
+        thread_ts: messageTs || undefined,
+        text: `${emoji} *${proposal.title}*\nReply here with feedback, context, or instructions. If this is a timing issue, let me know when to follow up and I'll resurface it then.`,
+      });
+    }
+
+    await respond({
+      response_type: "ephemeral",
+      replace_original: false,
+      text: "Thread opened. Reply with your feedback.",
+    });
+
+    logger.info({ proposalId }, "agent_proposal_reply: thread opened for feedback");
   });
 
   // -------------------------------------------------------------------------

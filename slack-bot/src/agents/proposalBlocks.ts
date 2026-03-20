@@ -8,64 +8,40 @@ import type { DigestData } from "./proposalBuilder.js";
 import { getPersona } from "./registry.js";
 
 // ---------------------------------------------------------------------------
-// Work log card for #agent-queue (read-only, no buttons - reply in thread)
+// Work log card for #agent-queue (compact bullet + "Tell me more" button)
 // ---------------------------------------------------------------------------
 
 export const buildWorkLogBlocks = (
   persona: AgentPersona,
   proposal: AgentProposal,
 ): Record<string, unknown>[] => {
-  const blocks: Record<string, unknown>[] = [
+  // Compact one-liner: emoji agent | title | metric delta | confidence
+  const parts: string[] = [`${persona.emoji} *${proposal.title}*`];
+
+  if (proposal.target_metric && proposal.expected_delta !== null && proposal.expected_delta !== undefined) {
+    const sign = proposal.expected_delta >= 0 ? "+" : "";
+    const suffix = proposal.delta_type === "percentage" ? "%" : "";
+    parts.push(`${proposal.target_metric} ${sign}${proposal.expected_delta}${suffix}`);
+  }
+  if (proposal.confidence !== null && proposal.confidence !== undefined) {
+    parts.push(`${Math.round(proposal.confidence * 100)}% confidence`);
+  }
+
+  return [
     {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `${persona.emoji} *${persona.displayName}* - _${proposal.proposal_type}_`,
+        text: parts.join(" | "),
       },
-    },
-    {
-      type: "section",
-      text: {
-        type: "mrkdwn",
-        text: `*${proposal.title}*\n${proposal.description}`,
+      accessory: {
+        type: "button",
+        text: { type: "plain_text", text: "Tell me more", emoji: true },
+        action_id: "agent_proposal_detail",
+        value: proposal.id,
       },
     },
   ];
-
-  const fields: Record<string, unknown>[] = [];
-  if (proposal.target_metric) {
-    fields.push({ type: "mrkdwn", text: `*Metric:* ${proposal.target_metric}` });
-  }
-  if (proposal.expected_delta !== null && proposal.expected_delta !== undefined) {
-    const sign = proposal.expected_delta >= 0 ? "+" : "";
-    const suffix = proposal.delta_type === "percentage" ? "%" : "";
-    fields.push({ type: "mrkdwn", text: `*Expected:* ${sign}${proposal.expected_delta}${suffix}` });
-  }
-  if (proposal.baseline_value !== null && proposal.baseline_value !== undefined) {
-    fields.push({ type: "mrkdwn", text: `*Baseline:* ${proposal.baseline_value}` });
-  }
-  if (proposal.confidence !== null && proposal.confidence !== undefined) {
-    fields.push({ type: "mrkdwn", text: `*Confidence:* ${Math.round(proposal.confidence * 100)}%` });
-  }
-
-  if (fields.length > 0) {
-    blocks.push({ type: "section", fields });
-  }
-
-  if (proposal.rationale) {
-    blocks.push({
-      type: "context",
-      elements: [{ type: "mrkdwn", text: `_${proposal.rationale}_` }],
-    });
-  }
-
-  // No buttons - this is a work log. Reply in thread to give feedback.
-  blocks.push({
-    type: "context",
-    elements: [{ type: "mrkdwn", text: "_Reply in thread to give feedback or request changes_" }],
-  });
-
-  return blocks;
 };
 
 // ---------------------------------------------------------------------------
@@ -162,19 +138,25 @@ export const buildOutcomeBlocks = (
 // Digest blocks for #marketing-manager (tiered format)
 // ---------------------------------------------------------------------------
 
+// Cap at 10 proposals to stay under Slack's 50-block limit
+const MAX_DIGEST_PROPOSALS = 10;
+
 const buildNeedsInputSection = (
   proposals: AgentProposal[],
 ): Record<string, unknown>[] => {
   if (proposals.length === 0) return [];
 
+  const shown = proposals.slice(0, MAX_DIGEST_PROPOSALS);
+  const overflow = proposals.length - shown.length;
+
   const blocks: Record<string, unknown>[] = [
     {
       type: "header",
-      text: { type: "plain_text", text: "Needs Your Input", emoji: true },
+      text: { type: "plain_text", text: `Needs Your Input (${proposals.length})`, emoji: true },
     },
   ];
 
-  for (const p of proposals) {
+  for (const p of shown) {
     const persona = getPersona(p.agent_persona);
     const emoji = persona?.emoji || "";
     const sign = (p.expected_delta ?? 0) >= 0 ? "+" : "";
@@ -184,7 +166,7 @@ const buildNeedsInputSection = (
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `${emoji} *${p.title}*\n${p.description}\n_${p.target_metric}: ${sign}${p.expected_delta}${suffix} expected | ${Math.round((p.confidence ?? 0) * 100)}% confidence_`,
+        text: `${emoji} *${p.title}*\n_${p.target_metric}: ${sign}${p.expected_delta}${suffix} expected | ${Math.round((p.confidence ?? 0) * 100)}% confidence_`,
       },
     });
 
@@ -211,7 +193,20 @@ const buildNeedsInputSection = (
           action_id: "agent_proposal_detail",
           value: p.id,
         },
+        {
+          type: "button",
+          text: { type: "plain_text", text: "Reply", emoji: true },
+          action_id: "agent_proposal_reply",
+          value: p.id,
+        },
       ],
+    });
+  }
+
+  if (overflow > 0) {
+    blocks.push({
+      type: "context",
+      elements: [{ type: "mrkdwn", text: `_+ ${overflow} more pending proposals. Approve or deny above to see the rest._` }],
     });
   }
 

@@ -15,7 +15,7 @@ import type { App } from "@slack/bolt";
 import { WebClient } from "@slack/web-api";
 import { env } from "../../config/env.js";
 import { llmText } from "../../ai/llmClient.js";
-import { getProposalByMessageTs, updateProposalStatus } from "../../agents/proposalStore.js";
+import { getProposalByMessageTs, updateProposalStatus, upsertContext } from "../../agents/proposalStore.js";
 import { getPersona } from "../../agents/registry.js";
 import { logger } from "../../observability/logger.js";
 
@@ -84,6 +84,25 @@ export const registerAgentThreadHandler = (app: App): void => {
         });
       }
 
+      // Persist founder feedback as agent context so it influences future proposals
+      try {
+        await upsertContext(
+          proposal.agent_persona,
+          "founder_feedback",
+          `feedback_${proposal.id.slice(0, 8)}`,
+          {
+            proposal_id: proposal.id,
+            proposal_title: proposal.title,
+            target_metric: proposal.target_metric,
+            feedback: userText,
+            received_at: new Date().toISOString(),
+          },
+          `Founder feedback on "${proposal.title}": ${userText.slice(0, 200)}`,
+        );
+      } catch (err) {
+        logger.error({ err }, "Failed to persist founder feedback as context");
+      }
+
       try {
         // In #agent-queue, treat feedback as actionable instructions
         const actionContext = isWorkLog
@@ -98,6 +117,10 @@ Description: ${proposal.description}
 Target metric: ${proposal.target_metric}
 Expected delta: ${proposal.expected_delta} (${proposal.delta_type})
 Status: ${proposal.status}${actionContext}
+
+IMPORTANT: If the founder's feedback suggests the idea is good but the timing is wrong (e.g., "we don't have X yet", "waiting on approval", "not ready for this yet", "too early"), acknowledge that, then ask: "When should I follow up on this?" Give them a concrete suggestion if you can (e.g., "Want me to revisit this in 2 weeks?" or "Should I circle back once the grant is approved?"). The goal is to not lose good ideas, just defer them.
+
+If the founder gives a follow-up date or timeframe in their reply, confirm you'll resurface it then.
 
 Respond conversationally. Be direct and specific. Do not use em dashes. Keep it concise.`;
 

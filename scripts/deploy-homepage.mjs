@@ -650,6 +650,145 @@ const PAGE_CONTENT = `<!-- wp:html -->
   }
   .sf-internal-links a:hover { color: #008e65 !important; }
   .sf-link-sep { margin: 0 6px; color: #d1d5db; }
+
+  /* ── Hero qualifier + urgency ── */
+  .sf-hero-qualifier {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #00b286;
+    margin: 0 0 28px;
+    letter-spacing: 0.3px;
+  }
+  .sf-hero-urgency {
+    margin-top: 24px;
+    font-size: 0.85rem;
+    color: rgba(255,255,255,0.55);
+    letter-spacing: 0.5px;
+  }
+
+  /* ── Scarcity tags ── */
+  .sf-scarcity {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #b45309;
+    margin-top: 10px;
+    letter-spacing: 0.3px;
+  }
+  .sf-scarcity-light {
+    color: #f1972c;
+  }
+
+  /* ── Testimonial case study links ── */
+  .sf-testimonial-link {
+    display: inline-block;
+    margin-top: 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #00b286 !important;
+    text-decoration: none !important;
+    transition: color 0.2s;
+  }
+  .sf-testimonial-link:hover { color: #008e65 !important; }
+  .sf-testimonial-link::after { content: " \\2192"; }
+
+  /* ── Founder bio ── */
+  .sf-founder {
+    display: flex;
+    align-items: center;
+    gap: 36px;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 40px 36px;
+    background: #f6f7f9;
+    border-radius: 20px;
+  }
+  @media (max-width: 640px) {
+    .sf-founder {
+      flex-direction: column;
+      text-align: center;
+    }
+  }
+  .sf-founder-photo {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 3px solid #00b286;
+  }
+  .sf-founder-text h3 {
+    font-family: "DM Serif Display", serif;
+    font-size: 1.3rem;
+    font-weight: 400;
+    color: #101828;
+    margin: 0 0 10px;
+  }
+  .sf-founder-text p {
+    font-size: 0.95rem;
+    color: #475467;
+    line-height: 1.7;
+    margin: 0 0 14px;
+  }
+  .sf-founder-link {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #00b286 !important;
+    text-decoration: none !important;
+  }
+  .sf-founder-link:hover { color: #008e65 !important; }
+  .sf-founder-link::after { content: " \\2192"; }
+
+  /* ── What to Expect ── */
+  .sf-expect-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 24px;
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+  @media (max-width: 768px) {
+    .sf-expect-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 480px) {
+    .sf-expect-grid { grid-template-columns: 1fr; }
+  }
+  .sf-expect-step {
+    text-align: center;
+    padding: 28px 20px;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    transition: transform 0.25s, box-shadow 0.25s;
+  }
+  .sf-expect-step:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.06);
+  }
+  .sf-expect-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px; height: 40px;
+    background: linear-gradient(135deg, #00b286, #00c090);
+    color: #fff;
+    font-weight: 700;
+    font-size: 1rem;
+    border-radius: 50%;
+    margin-bottom: 14px;
+  }
+  .sf-expect-step h3 {
+    font-family: "DM Serif Display", serif;
+    font-size: 1.05rem;
+    font-weight: 400;
+    color: #101828;
+    margin: 0 0 8px;
+  }
+  .sf-expect-step p {
+    font-size: 0.88rem;
+    line-height: 1.65;
+    color: #667085;
+    margin: 0;
+  }
 </style>
 
 <div class="sf-home">
@@ -659,11 +798,13 @@ const PAGE_CONTENT = `<!-- wp:html -->
     <div class="sf-hero-inner">
       <div class="sf-hero-label">501(c)(3) Nonprofit Community</div>
       <h1>Sobriety Is a <span class="sf-accent">Competitive Advantage</span></h1>
-      <p class="sf-hero-sub">The peer community for entrepreneurs who build thriving businesses and protect their recovery&mdash;not one at the expense of the other.</p>
+      <p class="sf-hero-sub">The peer community for entrepreneurs who build thriving businesses and protect their recovery. Not one at the expense of the other.</p>
+      <p class="sf-hero-qualifier">For founders who are sober and want to stay that way.</p>
       <div class="sf-hero-actions">
         <a href="/events/" class="sf-btn sf-btn-primary">Attend a Free Meeting</a>
         <a href="/our-story/" class="sf-btn sf-btn-outline">Learn Our Story</a>
       </div>
+      <div class="sf-hero-urgency">Next session: Thursday at 12 pm ET &bull; Free &bull; Online</div>
     </div>
   </div>
 
@@ -671,15 +812,15 @@ const PAGE_CONTENT = `<!-- wp:html -->
   <div class="sf-section">
     <div class="sf-definition">
       <h2>What is Sober Founders?</h2>
-      <p>Sober Founders is a 501(c)(3) nonprofit community for entrepreneurs in recovery from addiction. We provide free weekly mastermind sessions, peer support, and the Phoenix Forum&mdash;an exclusive peer advisory board for founders with $1M+ in annual revenue and 1+ year of sobriety. Our members represent over $500 million in combined revenue across industries including technology, real estate, healthcare, and professional services.</p>
-      <p>Founded in 2020, Sober Founders is the largest peer community at the intersection of entrepreneurship and recovery. We believe sobriety is a competitive advantage, not a limitation&mdash;and our members prove it every day.</p>
+      <p>Sober Founders is a 501(c)(3) nonprofit community for entrepreneurs in recovery from addiction. We provide free weekly mastermind sessions, peer support, and the Phoenix Forum, an exclusive peer advisory board for founders with $1M+ in annual revenue and 1+ year of sobriety. Our members represent over $500 million in combined revenue across industries including technology, real estate, healthcare, and professional services.</p>
+      <p>Founded in 2020, Sober Founders is the largest peer community at the intersection of entrepreneurship and recovery. We believe sobriety is a competitive advantage, not a limitation. Our members prove it every day.</p>
     </div>
   </div>
 
   <!-- Stats — Year 1 Achievements -->
   <div style="max-width:1100px;margin:0 auto;padding:0 24px 60px;">
     <div class="sf-services-heading" style="margin-bottom:40px;">
-      <h2>Year 1 Achievements</h2>
+      <h2>Our Impact</h2>
     </div>
     <div class="sf-stats-section">
       <div class="sf-stats-grid">
@@ -696,7 +837,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
         <div class="sf-stat">
           <div class="sf-stat-icon"><span class="sf-icon-glyph sf-icon-glyph--growth" aria-hidden="true"></span></div>
           <div class="sf-stat-num">$1M+</div>
-          <div class="sf-stat-label">Additional Revenue Generated for Members</div>
+          <div class="sf-stat-label">Revenue Generated Through Member Referrals</div>
         </div>
         <div class="sf-stat">
           <div class="sf-stat-icon"><span class="sf-icon-glyph sf-icon-glyph--heart" aria-hidden="true"></span></div>
@@ -732,7 +873,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
   <div class="sf-section">
     <div class="sf-services-heading">
       <h2>How We Support Founders</h2>
-      <p>Three tiers of community&mdash;from open masterminds to an exclusive peer advisory board&mdash;so you can find your fit.</p>
+      <p>Three tiers of community, from open masterminds to an exclusive peer advisory board, so you can find your fit.</p>
     </div>
 
     <div class="sf-svc-grid">
@@ -742,7 +883,7 @@ const PAGE_CONTENT = `<!-- wp:html -->
         <div class="sf-svc-card-body">
           <div class="sf-svc-card-num">01</div>
           <h3>Thursday Open Mastermind</h3>
-          <p>Open to any sober entrepreneur. Show up, share what's real, and get honest feedback from peers who understand the intersection of business pressure and recovery. No application required&mdash;just be sober and own a business.</p>
+          <p>Open to any sober entrepreneur. Show up, share what's real, and get honest feedback from peers who understand the intersection of business pressure and recovery. No application required. Just be sober and own a business.</p>
           <span class="sf-tag sf-tag-free">Free &bull; Open to All</span>
           <a href="/events/" class="sf-svc-card-link">View Upcoming Events</a>
         </div>
@@ -753,8 +894,9 @@ const PAGE_CONTENT = `<!-- wp:html -->
         <div class="sf-svc-card-body">
           <div class="sf-svc-card-num">02</div>
           <h3>Tuesday Verified Mastermind</h3>
-          <p>For verified sober business owners ready for deeper accountability. Smaller groups, more focused discussions, and the trust that comes from knowing everyone in the room has skin in the game&mdash;both in business and recovery.</p>
+          <p>For verified sober business owners ready for deeper accountability. Smaller groups, more focused discussions, and the trust that comes from knowing everyone in the room has skin in the game. Both in business and recovery.</p>
           <span class="sf-tag sf-tag-free">Free &bull; Verified Members</span>
+          <div class="sf-scarcity">Limited to 20 members per group</div>
           <a href="/weekly-mastermind-group/" class="sf-svc-card-link">Learn How to Join</a>
         </div>
       </div>
@@ -765,8 +907,9 @@ const PAGE_CONTENT = `<!-- wp:html -->
         <div class="sf-svc-card-body">
           <div class="sf-svc-card-num">03</div>
           <h3>Phoenix Forum</h3>
-          <p>An exclusive peer advisory board for sober entrepreneurs generating $1M+ in revenue with multiple years of sobriety. Intimate groups of up to 10 members meet weekly for curated, high-trust discussions around growth, sobriety, and life&mdash;because at this level, the stakes are higher and the isolation is real.</p>
+          <p>An exclusive peer advisory board for sober entrepreneurs generating $1M+ in revenue with multiple years of sobriety. Intimate groups of up to 10 members meet weekly for curated, high-trust discussions around growth, sobriety, and life. At this level, the stakes are higher and the isolation is real.</p>
           <span class="sf-tag sf-tag-paid">Curated &bull; Application Only</span>
+          <div class="sf-scarcity sf-scarcity-light">Only 3 groups running &bull; Waitlist open</div>
           <a href="/phoenix-forum-registration/" class="sf-svc-card-link">Apply to Join</a>
         </div>
       </div>
@@ -784,15 +927,17 @@ const PAGE_CONTENT = `<!-- wp:html -->
       <div class="sf-testimonials-grid">
         <div class="sf-testimonial-card">
           <blockquote>"Sober Founders helped me 6x my business in just a year and helped me get 1 year sober for the first time in my life!"</blockquote>
-          <cite>Adam C.<span>Sober Founders Member</span></cite>
+          <cite>Adam C.<span>Business Owner &bull; Member since 2024</span></cite>
+          <a href="/case-studies/adam-c/" class="sf-testimonial-link">Read Adam's story</a>
         </div>
         <div class="sf-testimonial-card">
           <blockquote>"This group has been one of the most impactful things I've ever been part of."</blockquote>
-          <cite>Josh C.<span>Sober Founders Member</span></cite>
+          <cite>Josh C.<span>Agency Founder &bull; Member since 2024</span></cite>
+          <a href="/case-studies/josh-c/" class="sf-testimonial-link">Read Josh's story</a>
         </div>
         <div class="sf-testimonial-card">
           <blockquote>"I love that it combines two of my biggest passions, business and recovery."</blockquote>
-          <cite>Matt S.<span>Sober Founders Member</span></cite>
+          <cite>Matt S.<span>Business Owner &bull; Member since 2024</span></cite>
         </div>
       </div>
     </div>
@@ -802,23 +947,35 @@ const PAGE_CONTENT = `<!-- wp:html -->
   <div class="sf-section">
     <div class="sf-services-heading">
       <h2>Why Founders Choose Us</h2>
-      <p>Every program is built around what sober entrepreneurs actually need.</p>
+      <p>Built around what sober entrepreneurs actually need. Nothing generic.</p>
     </div>
     <div class="sf-benefits-grid">
       <div class="sf-benefit-card">
         <div class="sf-benefit-icon"><span class="sf-icon-glyph sf-icon-glyph--people" aria-hidden="true"></span></div>
-        <h3>Peer Support</h3>
-        <p>Connect with others who truly understand how recovery shapes your business decisions. Real talk, real support.</p>
+        <h3>Talk to Founders Who Get It</h3>
+        <p>Hot seat format. You bring a real problem, the room helps you solve it. Everyone in the group runs a business and protects their sobriety. No explaining yourself.</p>
       </div>
       <div class="sf-benefit-card">
         <div class="sf-benefit-icon"><span class="sf-icon-glyph sf-icon-glyph--check" aria-hidden="true"></span></div>
-        <h3>Accountability</h3>
-        <p>Stay on track with sobriety and business goals through a community built on follow-through, not lip service.</p>
+        <h3>Weekly Check-Ins That Keep You Honest</h3>
+        <p>Every session starts with a sobriety and business check-in. You set goals, you report back. The group holds you to it. 98% of members say we helped them stay sober longer.</p>
       </div>
       <div class="sf-benefit-card">
         <div class="sf-benefit-icon"><span class="sf-icon-glyph sf-icon-glyph--growth" aria-hidden="true"></span></div>
-        <h3>Professional Growth</h3>
-        <p>Access peer insights, workshops, and resources designed to sharpen your skills and scale your business.</p>
+        <h3>Real Referrals, Real Deals</h3>
+        <p>Members have generated over $1M in referrals for each other. When you build trust with other sober founders, business happens naturally.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Founder -->
+  <div class="sf-section sf-section-sm">
+    <div class="sf-founder">
+      <img src="https://soberfounders.org/wp-content/uploads/2025/06/Andrew-Lassise-10-16-2019.jpg" alt="Andrew Lassise, Founder of Sober Founders" class="sf-founder-photo" />
+      <div class="sf-founder-text">
+        <h3>Founded by Andrew Lassise</h3>
+        <p>Sober since March 23, 2013. Serial entrepreneur. Started his first business at 16 on eBay, went on to build and exit multiple companies including a managed IT firm and a tech franchise. Andrew built Sober Founders because the community he needed as a founder in early recovery didn't exist.</p>
+        <a href="/our-story/" class="sf-founder-link">Read the full story</a>
       </div>
     </div>
   </div>
@@ -828,6 +985,36 @@ const PAGE_CONTENT = `<!-- wp:html -->
     <div class="sf-trust">
       <img src="https://soberfounders.org/wp-content/uploads/2025/09/candid-seal-silver-2025.png" alt="Candid Silver Transparency Seal 2025" />
       <p><strong>Transparency</strong> - Candid (formerly GuideStar) awarded Sober Founders Inc their Silver Transparency Seal - the highest level a nonprofit can earn in its first year. Every dollar is accounted for and goes directly toward the mission!</p>
+    </div>
+  </div>
+
+  <!-- What to Expect -->
+  <div class="sf-section">
+    <div class="sf-services-heading">
+      <h2>What to Expect at Your First Meeting</h2>
+      <p>No pressure. No pitch. Here's how it works.</p>
+    </div>
+    <div class="sf-expect-grid">
+      <div class="sf-expect-step">
+        <div class="sf-expect-num">1</div>
+        <h3>Show Up</h3>
+        <p>Register on Luma and click the Zoom link at the scheduled time. Camera on or off, your call.</p>
+      </div>
+      <div class="sf-expect-step">
+        <div class="sf-expect-num">2</div>
+        <h3>Quick Check-In</h3>
+        <p>Everyone shares a 60-second update: how's your sobriety, how's your business. No cross-talk, just listening.</p>
+      </div>
+      <div class="sf-expect-step">
+        <div class="sf-expect-num">3</div>
+        <h3>Open Discussion</h3>
+        <p>The group digs into what's real. Business challenges, recovery wins, hard decisions. You can share or just listen your first time.</p>
+      </div>
+      <div class="sf-expect-step">
+        <div class="sf-expect-num">4</div>
+        <h3>Walk Away with Clarity</h3>
+        <p>Sessions run 60-90 minutes. You'll leave knowing whether this room is for you. Most people know after one meeting.</p>
+      </div>
     </div>
   </div>
 
