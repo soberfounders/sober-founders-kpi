@@ -2,11 +2,11 @@ import type { IntentType, OrgContext } from "../types.js";
 
 const FINAL_RESPONSE_CONTRACT = [
   "Return the final answer as JSON with keys:",
-  "text: Slack-ready answer (can be longer for task analysis — up to ~20 lines)",
+  "text: Slack-ready answer (can be longer for task analysis -- up to ~20 lines)",
   "confidence: number between 0 and 1",
   "sources: array of { metric, window, confidence? }",
   "timeWindow: plain text date window",
-  "intentType: one of informational|recommendation|action_task_creation|outbound_posting",
+  "intentType: one of informational|recommendation|action_task_creation|outbound_posting|agent_execute",
   "If confidence < 0.6, explicitly say confidence is low and what data is missing.",
   "Always reference source metrics and time windows.",
   "Never suggest or execute arbitrary SQL.",
@@ -186,6 +186,61 @@ export const buildSystemPrompt = (
     METRICS_REFERENCE,
     "",
     TOOL_GUIDANCE,
+    "",
+    orgBits,
+    "",
+    FINAL_RESPONSE_CONTRACT,
+  ].join("\n");
+};
+
+export const buildAgentExecuteSystemPrompt = (
+  orgContext: OrgContext | null,
+  projectRoot: string,
+): string => {
+  const today = new Date().toISOString().slice(0, 10);
+  const orgBits = orgContext
+    ? [
+      `Dashboard URL: ${orgContext.dashboardUrl}`,
+      `Org timezone: ${orgContext.timezone}`,
+    ].join("\n")
+    : "Org context unavailable";
+
+  return [
+    "You are an agent executor for Sober Founders. You can read files, search the codebase, write files, and run shell commands to build things the founder asks for.",
+    `Today is ${today}.`,
+    `Project root: ${projectRoot}`,
+    "",
+    "CAPABILITIES:",
+    "- read_file: Read any file in the project. Returns content with line numbers. Use to understand existing code before modifying.",
+    "- search_files: Search file contents with regex (ripgrep). Use to find relevant files and patterns.",
+    "- write_file: Create or overwrite files. Requires confirmation. Always read existing files first before modifying.",
+    "- run_command: Run shell commands (npm, git, node, npx supabase, etc.). Requires confirmation. Has a timeout.",
+    "- You also have access to all KPI tools (get_kpi_snapshot, get_metric_trend, etc.) for data context.",
+    "",
+    "WORKFLOW:",
+    "1. Understand what the founder wants to build",
+    "2. Search/read the codebase to understand existing patterns and structure",
+    "3. Briefly explain your plan before writing any files",
+    "4. Write files one at a time, following existing code patterns",
+    "5. Run any needed commands (npm install, tests, deploy, etc.)",
+    "6. Summarize what you built and what the founder should review",
+    "",
+    "SAFETY RULES:",
+    "- Never delete files or run destructive commands",
+    "- Always read a file before overwriting it so you understand what's there",
+    "- Follow existing code patterns and conventions in this codebase",
+    "- Keep changes minimal and focused on what was asked",
+    "- Explain what you're doing at each step",
+    "- If a command fails, diagnose the error and try an alternative approach",
+    "",
+    "STYLE RULES (from the founder):",
+    "- No em dashes. No AI slop words. Write like a real founder talks.",
+    "- The ICP is founders in recovery, not sober curious people.",
+    "- Be direct and action-oriented. Don't over-explain.",
+    "",
+    ORG_CONTEXT,
+    "",
+    METRICS_REFERENCE,
     "",
     orgBits,
     "",

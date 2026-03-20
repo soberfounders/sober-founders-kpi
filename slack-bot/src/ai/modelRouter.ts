@@ -17,7 +17,8 @@ export type TaskType =
   | "proposal_expand"
   | "conversation_reply"
   | "outcome_analysis"
-  | "orchestrator_tool_call";
+  | "orchestrator_tool_call"
+  | "agent_execute";
 
 // Tasks that fall back to CHEAP model when OPENAI_USE_CHEAP_MODE=true
 const CHEAP_ELIGIBLE: ReadonlySet<TaskType> = new Set([
@@ -45,6 +46,7 @@ const TASK_TIER: Record<TaskType, "primary" | "fast"> = {
   conversation_reply: "fast",
   outcome_analysis: "primary",
   orchestrator_tool_call: "primary",
+  agent_execute: "primary",
 };
 
 export const resolveModel = (taskType: TaskType): string => {

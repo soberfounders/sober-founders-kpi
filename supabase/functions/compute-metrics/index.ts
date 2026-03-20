@@ -74,12 +74,8 @@ function extractEffectiveRevenue(row: Record<string, unknown>): number | null {
     toNumberOrNull(row.annual_revenue_in_usd_official) ??
     toNumberOrNull(row.annual_revenue_in_dollars__official_);
   if (official !== null) return official;
-  // Fallback chain (matches NUMERIC_REVENUE_FALLBACK_FIELDS)
-  return (
-    toNumberOrNull(row.annual_revenue_in_dollars) ??
-    toNumberOrNull(row.annual_revenue) ??
-    toNumberOrNull(row.revenue)
-  );
+  // Fallback chain
+  return toNumberOrNull(row.annual_revenue_in_dollars);
 }
 
 // ---------------------------------------------------------------------------
@@ -269,7 +265,7 @@ async function computeLeadsMetrics(
   const { data: contacts, error } = await sb
     .from("raw_hubspot_contacts")
     .select(
-      "hubspot_contact_id, annual_revenue_in_usd_official, annual_revenue_in_dollars__official_, annual_revenue_in_dollars, annual_revenue, revenue, sobriety_date, sobriety_date__official_, sober_date, clean_date, sobrietydate, membership_s, is_deleted, hubspot_archived, merged_into_hubspot_contact_id, hs_analytics_source, hs_latest_source, original_traffic_source, hs_analytics_source_data_2, hs_latest_source_data_2, campaign, campaign_source"
+      "hubspot_contact_id, annual_revenue_in_usd_official, annual_revenue_in_dollars__official_, annual_revenue_in_dollars, sobriety_date, sobriety_date__official_, membership_s, is_deleted, hubspot_archived, merged_into_hubspot_contact_id, hs_analytics_source, hs_latest_source, original_traffic_source, hs_analytics_source_data_2, hs_latest_source_data_2, campaign, campaign_source"
     )
     .gte("createdate", `${from}T00:00:00.000Z`)
     .lte("createdate", `${to}T23:59:59.999Z`)
@@ -396,9 +392,9 @@ async function computeAdMetrics(
 ): Promise<MetricRow[]> {
   const { data, error } = await sb
     .from("raw_fb_ads_insights_daily")
-    .select("spend,leads,date_start,campaign_name")
-    .gte("date_start", from)
-    .lte("date_start", to);
+    .select("spend,leads,date_day,campaign_name")
+    .gte("date_day", from)
+    .lte("date_day", to);
 
   if (error) throw new Error(`ad_metrics query failed: ${error.message}`);
 
@@ -753,7 +749,7 @@ async function computeEmailMetrics(
 ): Promise<MetricRow[]> {
   const { data, error } = await sb
     .from("mailchimp_campaigns")
-    .select("human_open_rate, click_rate, send_time")
+    .select("human_open_rate, ctr, send_time")
     .gte("send_time", `${from}T00:00:00.000Z`)
     .lte("send_time", `${to}T23:59:59.999Z`);
 
@@ -766,7 +762,7 @@ async function computeEmailMetrics(
     .map((r: Record<string, unknown>) => Number(r.human_open_rate))
     .filter(Number.isFinite);
   const clickRates = rows
-    .map((r: Record<string, unknown>) => Number(r.click_rate))
+    .map((r: Record<string, unknown>) => Number(r.ctr))
     .filter(Number.isFinite);
 
   const results: MetricRow[] = [];
@@ -944,8 +940,8 @@ async function computeCompletedItems(
     .from("notion_todos")
     .select("*", { count: "exact", head: true })
     .in("status", ["Done", "Completed"])
-    .gte("updated_at", `${from}T00:00:00.000Z`)
-    .lte("updated_at", `${to}T23:59:59.999Z`);
+    .gte("last_updated_at", `${from}T00:00:00.000Z`)
+    .lte("last_updated_at", `${to}T23:59:59.999Z`);
 
   if (error)
     throw new Error(`completed_items query failed: ${error.message}`);
@@ -1165,7 +1161,13 @@ async function upsertMetrics(
 ): Promise<number> {
   if (!metrics.length) return 0;
 
-  const payload = metrics.map((m) => ({
+  // Deduplicate: last-write-wins for same (kpi_key, funnel_key)
+  const deduped = new Map<string, MetricRow>();
+  for (const m of metrics) {
+    deduped.set(`${m.kpi_key}::${m.funnel_key}`, m);
+  }
+
+  const payload = [...deduped.values()].map((m) => ({
     metric_date: targetDate,
     kpi_key: m.kpi_key,
     funnel_key: m.funnel_key,

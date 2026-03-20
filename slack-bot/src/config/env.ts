@@ -61,6 +61,9 @@ const envSchema = z.object({
   AGENT_QUEUE_ENABLED: z.string().optional(),
   AGENT_QUEUE_CHANNEL_ID: z.string().optional(),
   MARKETING_MANAGER_CHANNEL_ID: z.string().optional(),
+  AGENT_EXECUTE_ENABLED: z.string().optional(),
+  AGENT_EXECUTE_PROJECT_ROOT: z.string().optional(),
+  AGENT_EXECUTE_COMMAND_TIMEOUT_MS: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -116,6 +119,9 @@ export const env = {
   agentQueueEnabled: toBoolean(data.AGENT_QUEUE_ENABLED, false),
   agentQueueChannelId: data.AGENT_QUEUE_CHANNEL_ID || "",
   marketingManagerChannelId: data.MARKETING_MANAGER_CHANNEL_ID || "",
+  agentExecuteEnabled: toBoolean(data.AGENT_EXECUTE_ENABLED, false),
+  agentExecuteProjectRoot: data.AGENT_EXECUTE_PROJECT_ROOT || "",
+  agentExecuteCommandTimeoutMs: toInt(data.AGENT_EXECUTE_COMMAND_TIMEOUT_MS, 30_000, 5_000, 120_000),
 } as const;
 
 export type AppEnv = typeof env;

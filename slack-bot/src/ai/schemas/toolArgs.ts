@@ -62,6 +62,30 @@ export const postSummaryArgsSchema = z.object({
 export const getDataQualityWarningsArgsSchema = z.object({});
 export const getOrgContextArgsSchema = z.object({});
 
+export const readFileArgsSchema = z.object({
+  path: z.string().min(1),
+  line_start: z.number().int().positive().optional(),
+  line_end: z.number().int().positive().optional(),
+});
+
+export const searchFilesArgsSchema = z.object({
+  pattern: z.string().min(1),
+  glob: z.string().optional(),
+  max_results: z.number().int().min(1).max(50).optional(),
+});
+
+export const writeFileArgsSchema = z.object({
+  path: z.string().min(1),
+  content: z.string(),
+  create_directories: z.boolean().optional(),
+});
+
+export const runCommandArgsSchema = z.object({
+  command: z.string().min(1),
+  cwd: z.string().optional(),
+  timeout_ms: z.number().int().min(1000).max(120_000).optional(),
+});
+
 export const toolArgSchemas = {
   get_kpi_snapshot: getKpiSnapshotArgsSchema,
   get_metric_trend: getMetricTrendArgsSchema,
@@ -73,6 +97,10 @@ export const toolArgSchemas = {
   post_summary: postSummaryArgsSchema,
   get_data_quality_warnings: getDataQualityWarningsArgsSchema,
   get_org_context: getOrgContextArgsSchema,
+  read_file: readFileArgsSchema,
+  search_files: searchFilesArgsSchema,
+  write_file: writeFileArgsSchema,
+  run_command: runCommandArgsSchema,
 } as const;
 
 export type ToolName = keyof typeof toolArgSchemas;

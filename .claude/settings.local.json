@@ -12,7 +12,11 @@
       "WebFetch(domain:legacy.ypo.org)",
       "WebFetch(domain:eonetwork.org)",
       "WebFetch(domain:www.vistage.com)",
-      "WebSearch"
+      "WebSearch",
+      "mcp__claude_ai_HubSpot__search_crm_objects",
+      "mcp__claude_ai_HubSpot__search_properties",
+      "mcp__claude_ai_HubSpot__get_properties",
+      "mcp__claude_ai_HubSpot__manage_crm_objects"
     ]
   }
 }

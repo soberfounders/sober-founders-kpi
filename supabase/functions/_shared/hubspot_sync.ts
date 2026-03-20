@@ -17,8 +17,16 @@ const CONTACT_PROPERTIES = [
   "lastname",
   "annual_revenue_in_dollars__official_",
   "annual_revenue_in_dollars",
+  "annual_revenue",
+  "annual_revenue_",
+  "annual_revenue_100k_minimum_to_participate",
+  "annual_revenue_250k_minimum_to_participate",
+  "what_is_your_annual_revenue_250k_minimum_to_participate",
+  "lead_ad_prop1",
   "sobriety_date",
   "sobriety_date__official_",
+  "sobriety_date_mmddyyyy",
+  "lead_ad_prop0",
   "sober_date",
   "clean_date",
   "membership_s_",
@@ -80,8 +88,16 @@ const ASSOCIATION_CONTACT_PROPERTIES = [
   "createdate",
   "annual_revenue_in_dollars__official_",
   "annual_revenue_in_dollars",
+  "annual_revenue",
+  "annual_revenue_",
+  "annual_revenue_100k_minimum_to_participate",
+  "annual_revenue_250k_minimum_to_participate",
+  "what_is_your_annual_revenue_250k_minimum_to_participate",
+  "lead_ad_prop1",
   "sobriety_date",
   "sobriety_date__official_",
+  "sobriety_date_mmddyyyy",
+  "lead_ad_prop0",
   "sober_date",
   "clean_date",
   "membership_s",
@@ -182,6 +198,100 @@ function stringOrNull(value: any): string | null {
   if (value === null || value === undefined) return null;
   const text = String(value).trim();
   return text ? text : null;
+}
+
+/**
+ * Parse messy sobriety date strings from lead ad fields.
+ * Handles: "01/01/2026", "12/04/2008", "02/24/2017", "11/11/25",
+ * "01052009" (MMDDYYYY), "043013" (MMDDYY), "3/7723" (junk), "0102" (junk),
+ * "12-25-2002", "12/2/2011", "08/07/17"
+ * Returns ISO date string (YYYY-MM-DD) or null.
+ */
+function parseLeadAdSobrietyDate(value: any): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  const raw = String(value).trim();
+  if (!raw || raw.toLowerCase() === "invalid date") return null;
+
+  // Try MM/DD/YYYY or MM-DD-YYYY (most common)
+  const slashMatch = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (slashMatch) {
+    const [, mm, dd, yyyy] = slashMatch;
+    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+    if (!isNaN(d.getTime()) && d.getFullYear() >= 1950 && d.getFullYear() <= 2030) {
+      return d.toISOString().split("T")[0];
+    }
+  }
+
+  // Try MM/DD/YY or MM-DD-YY (e.g., "08/07/17", "11/11/25")
+  const shortYearMatch = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2})$/);
+  if (shortYearMatch) {
+    const [, mm, dd, yy] = shortYearMatch;
+    // 2-digit year: 00-30 = 2000s, 31-99 = 1900s
+    const century = Number(yy) <= 30 ? 2000 : 1900;
+    const yyyy = century + Number(yy);
+    const d = new Date(yyyy, Number(mm) - 1, Number(dd));
+    if (!isNaN(d.getTime()) && d.getFullYear() >= 1950 && d.getFullYear() <= 2030) {
+      return d.toISOString().split("T")[0];
+    }
+  }
+
+  // Try MMDDYYYY (8 digits, e.g., "01052009")
+  const eightDigit = raw.match(/^(\d{2})(\d{2})(\d{4})$/);
+  if (eightDigit) {
+    const [, mm, dd, yyyy] = eightDigit;
+    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+    if (!isNaN(d.getTime()) && d.getFullYear() >= 1950 && d.getFullYear() <= 2030) {
+      return d.toISOString().split("T")[0];
+    }
+  }
+
+  // Try MMDDYY (6 digits, e.g., "043013")
+  const sixDigit = raw.match(/^(\d{2})(\d{2})(\d{2})$/);
+  if (sixDigit) {
+    const [, mm, dd, yy] = sixDigit;
+    const century = Number(yy) <= 30 ? 2000 : 1900;
+    const yyyy = century + Number(yy);
+    const d = new Date(yyyy, Number(mm) - 1, Number(dd));
+    if (!isNaN(d.getTime()) && d.getFullYear() >= 1950 && d.getFullYear() <= 2030) {
+      return d.toISOString().split("T")[0];
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Parse revenue range strings from lead ad fields.
+ * Handles: "$1m_-_$5m", "$5m_-_$25m", "<_$1m", "$250k_-_$1m",
+ * "10000000" (raw number), "250k", "25,000,000"
+ * Returns the lower bound as a number, or null.
+ */
+function parseLeadAdRevenue(value: any): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const raw = String(value).trim().toLowerCase();
+  if (!raw) return null;
+
+  // Direct number (possibly with commas)
+  const cleaned = raw.replace(/[,$]/g, "");
+  const direct = Number(cleaned);
+  if (Number.isFinite(direct) && direct > 0) return direct;
+
+  // "250k" style
+  const kMatch = raw.match(/^[\$]?(\d+(?:\.\d+)?)k$/);
+  if (kMatch) return Number(kMatch[1]) * 1000;
+
+  // Range format: "$1m_-_$5m" or "$250k_-_$1m"
+  const rangeMatch = raw.match(/[\$]?([\d.]+)(k|m)?[_\s]*-[_\s]*[\$]?([\d.]+)(k|m)?/);
+  if (rangeMatch) {
+    const lowVal = Number(rangeMatch[1]);
+    const lowMult = rangeMatch[2] === "m" ? 1_000_000 : rangeMatch[2] === "k" ? 1_000 : 1;
+    return lowVal * lowMult;
+  }
+
+  // "<_$1m" or "<_$250k" — use the value as an upper bound, return null (below threshold)
+  if (raw.startsWith("<")) return null;
+
+  return null;
 }
 
 function stableStringify(value: any): string {
@@ -560,19 +670,42 @@ export async function mapContactRow(
   const fallbackRevenueRaw = firstPresent(props, ["annual_revenue_in_dollars"]);
   const officialRevenue = toNumberOrNull(officialRevenueRaw);
   const fallbackRevenue = toNumberOrNull(fallbackRevenueRaw);
-  const annualRevenue = officialRevenue ?? fallbackRevenue;
+  // Lead ad revenue fields: try parsing range strings and raw values
+  const leadAdRevenue = officialRevenue ?? fallbackRevenue ?? (() => {
+    const leadAdFields = [
+      "lead_ad_prop1",
+      "annual_revenue_100k_minimum_to_participate",
+      "annual_revenue_250k_minimum_to_participate",
+      "what_is_your_annual_revenue_250k_minimum_to_participate",
+      "annual_revenue_",
+      "annual_revenue",
+    ];
+    for (const field of leadAdFields) {
+      const parsed = parseLeadAdRevenue(props?.[field]);
+      if (parsed !== null) return parsed;
+    }
+    return null;
+  })();
+  const annualRevenue = officialRevenue ?? fallbackRevenue ?? leadAdRevenue;
   const hsSource = firstPresent(props, ["hs_analytics_source"]);
   const campaign = firstPresent(props, [
     "hs_analytics_first_touch_converting_campaign",
     "hs_analytics_last_touch_converting_campaign",
   ]);
   const membership = firstPresent(props, ["membership_s_", "membership_s"]);
-  const sobrietyDate = firstPresent(props, [
+  // Official sobriety date fields first (already ISO format)
+  const officialSobrietyDate = firstPresent(props, [
     "sobriety_date",
     "sobriety_date__official_",
     "sober_date",
     "clean_date",
   ]);
+  // Lead ad sobriety date fields (messy MM/DD/YYYY strings)
+  const leadAdSobrietyDate = !officialSobrietyDate
+    ? (parseLeadAdSobrietyDate(props?.sobriety_date_mmddyyyy)
+      ?? parseLeadAdSobrietyDate(props?.lead_ad_prop0))
+    : null;
+  const sobrietyDate = officialSobrietyDate ?? leadAdSobrietyDate;
   const mergedIdsRaw = firstPresent(props, ["hs_merged_object_ids"]);
   const payloadHash = await sha256PayloadHash(obj);
   const archived = !!obj?.archived;

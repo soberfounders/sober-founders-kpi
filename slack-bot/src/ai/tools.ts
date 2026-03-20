@@ -1,4 +1,8 @@
 import crypto from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { getKpiSnapshot } from "../data/metrics.js";
 import { getMetricTrend } from "../data/trends.js";
 import { getDataQualityWarnings, getManagerReport, getOrgContext, listOpenTasks } from "../data/managers.js";
@@ -12,6 +16,7 @@ import { logAuditEvent as logAuditEventAction } from "../actions/logAuditEvent.j
 import {
   canCreateFollowup as canCreateFollowupPermission,
   canCreateTask as canCreateTaskPermission,
+  canExecuteAgentTools as canExecuteAgentToolsPermission,
   canPostToChannel as canPostToChannelPermission,
   isHighImpactAction,
 } from "../slack/permissions/rbac.js";
@@ -20,6 +25,7 @@ import {
   createPendingConfirmation,
   getPendingConfirmation,
 } from "../slack/permissions/confirmations.js";
+import { env } from "../config/env.js";
 import { logger } from "../observability/logger.js";
 import type {
   IntentType,
@@ -28,6 +34,42 @@ import type {
   ToolExecutionContext,
 } from "../types.js";
 import { toolArgSchemas, type ToolArgsMap, type ToolName } from "./schemas/toolArgs.js";
+
+const execFileAsync = promisify(execFile);
+
+// ---------------------------------------------------------------------------
+// Agent execute safety utilities
+// ---------------------------------------------------------------------------
+
+const BLOCKED_COMMANDS = [
+  "rm -rf /", "rm -rf ~", "rm -rf .",
+  "mkfs", "dd if=", ":(){",
+  "git push --force", "git push -f",
+  "git reset --hard",
+  "shutdown", "reboot", "halt",
+  "chmod -R 777", "chown -R",
+  "curl | sh", "wget | sh", "curl | bash", "wget | bash",
+  "> /dev/sda",
+  "drop database", "drop table", "truncate",
+];
+
+const isCommandBlocked = (command: string): boolean => {
+  const lower = command.toLowerCase();
+  return BLOCKED_COMMANDS.some((blocked) => lower.includes(blocked));
+};
+
+const resolveSafePath = (projectRoot: string, relativePath: string): string => {
+  const resolved = path.resolve(projectRoot, relativePath);
+  const normalizedRoot = path.resolve(projectRoot);
+  if (!resolved.startsWith(normalizedRoot + path.sep) && resolved !== normalizedRoot) {
+    throw new Error(`Path traversal denied: ${relativePath} resolves outside project root`);
+  }
+  return resolved;
+};
+
+// ---------------------------------------------------------------------------
+// Tool JSON schemas for OpenAI
+// ---------------------------------------------------------------------------
 
 const dateRangeJsonSchema = {
   type: "object",
@@ -152,6 +194,46 @@ const toolJsonSchemas: Record<ToolName, Record<string, unknown>> = {
     properties: {},
     additionalProperties: false,
   },
+  read_file: {
+    type: "object",
+    properties: {
+      path: { type: "string" },
+      line_start: { type: "integer" },
+      line_end: { type: "integer" },
+    },
+    required: ["path"],
+    additionalProperties: false,
+  },
+  search_files: {
+    type: "object",
+    properties: {
+      pattern: { type: "string" },
+      glob: { type: "string" },
+      max_results: { type: "integer" },
+    },
+    required: ["pattern"],
+    additionalProperties: false,
+  },
+  write_file: {
+    type: "object",
+    properties: {
+      path: { type: "string" },
+      content: { type: "string" },
+      create_directories: { type: "boolean" },
+    },
+    required: ["path", "content"],
+    additionalProperties: false,
+  },
+  run_command: {
+    type: "object",
+    properties: {
+      command: { type: "string" },
+      cwd: { type: "string" },
+      timeout_ms: { type: "integer" },
+    },
+    required: ["command"],
+    additionalProperties: false,
+  },
 };
 
 const toolDescriptions: Record<ToolName, string> = {
@@ -165,9 +247,24 @@ const toolDescriptions: Record<ToolName, string> = {
   post_summary: "Generate and post a formatted KPI summary to a Slack channel. summary_type options: weekly_executive, daily_health, attendance_focus, leads_focus, donor_health. Always requires confirmation before posting.",
   get_data_quality_warnings: "Check HubSpot sync health: staleness, error counts, and sync run status. Use when the user asks about data freshness, sync issues, or data quality.",
   get_org_context: "Fetch org-level config: dashboard URL, timezone, executive channel IDs, and active RBAC capabilities. Use when you need to know where to post or what permissions are in play.",
+  read_file: "Read a file from the project directory. Returns file contents with line numbers. Optionally specify line_start and line_end to read a range. Path is relative to project root.",
+  search_files: "Search file contents using a regex pattern (like ripgrep). Returns matching file paths and lines. Optionally filter by glob pattern (e.g. '*.ts'). Max 50 results.",
+  write_file: "Write content to a file in the project directory. Creates the file if it doesn't exist. Set create_directories to true to create parent dirs. Requires confirmation. Path is relative to project root.",
+  run_command: "Run a shell command in the project directory. Has a timeout and blocked-command safety list. Requires confirmation. Returns stdout/stderr. Use for npm, git, node, deploy commands.",
 };
 
-export const openAiTools: Array<Record<string, unknown>> = (Object.keys(toolArgSchemas) as ToolName[]).map((name) => ({
+const AGENT_EXECUTE_TOOL_NAMES = new Set<ToolName>(["read_file", "search_files", "write_file", "run_command"]);
+
+export const openAiTools: Array<Record<string, unknown>> = (Object.keys(toolArgSchemas) as ToolName[])
+  .filter((name) => !AGENT_EXECUTE_TOOL_NAMES.has(name))
+  .map((name) => ({
+    type: "function",
+    name,
+    description: toolDescriptions[name],
+    parameters: toolJsonSchemas[name],
+  }));
+
+export const agentExecuteTools: Array<Record<string, unknown>> = (Object.keys(toolArgSchemas) as ToolName[]).map((name) => ({
   type: "function",
   name,
   description: toolDescriptions[name],
@@ -185,6 +282,10 @@ const toolIntentMap: Record<ToolName, IntentType> = {
   post_summary: "outbound_posting",
   get_data_quality_warnings: "recommendation",
   get_org_context: "informational",
+  read_file: "agent_execute",
+  search_files: "agent_execute",
+  write_file: "agent_execute",
+  run_command: "agent_execute",
 };
 
 const mutatingTools = new Set<ToolName>([
@@ -192,6 +293,8 @@ const mutatingTools = new Set<ToolName>([
   "create_followup",
   "send_slack_message",
   "post_summary",
+  "write_file",
+  "run_command",
 ]);
 
 const toolNames = new Set<ToolName>(Object.keys(toolArgSchemas) as ToolName[]);
@@ -253,6 +356,7 @@ export interface ToolRuntimeDependencies {
   logAuditEvent: typeof logAuditEventAction;
   canCreateTask: typeof canCreateTaskPermission;
   canCreateFollowup: typeof canCreateFollowupPermission;
+  canExecuteAgentTools: typeof canExecuteAgentToolsPermission;
   canPostToChannel: typeof canPostToChannelPermission;
   isHighImpactAction: typeof isHighImpactAction;
   createPendingConfirmation: typeof createPendingConfirmation;
@@ -267,6 +371,7 @@ const defaultDeps: ToolRuntimeDependencies = {
   listOpenTasks,
   createTask: createTaskAction,
   createFollowup: createFollowupAction,
+  canExecuteAgentTools: canExecuteAgentToolsPermission,
   sendSlackMessage: sendSlackMessageAction,
   postSummary: postSummaryAction,
   getDataQualityWarnings,
@@ -293,6 +398,12 @@ const toolToActionSummary = (toolName: ToolName, args: Record<string, unknown>):
   }
   if (toolName === "create_followup") {
     return `Create follow-up '${String(args.topic || "")}' for ${String(args.owner || "owner")}`;
+  }
+  if (toolName === "write_file") {
+    return `Write file: ${String(args.path || "unknown")}`;
+  }
+  if (toolName === "run_command") {
+    return `Run command: ${String(args.command || "").slice(0, 80)}`;
   }
   return `${toolName}`;
 };
@@ -347,6 +458,11 @@ export const createToolRuntime = (deps: ToolRuntimeDependencies = defaultDeps) =
     const base = emptyResult(toolName);
 
     const checkMutatingPermission = async (): Promise<string | null> => {
+      if (toolName === "write_file" || toolName === "run_command") {
+        const allowed = await deps.canExecuteAgentTools(context.actor.userId);
+        return allowed ? null : "Permission denied: agent execute tools require admin role.";
+      }
+
       if (toolName === "create_task") {
         const allowed = await deps.canCreateTask(context.actor.userId, context.actor.channelId);
         return allowed ? null : "Permission denied for task creation in this channel.";
@@ -626,6 +742,167 @@ export const createToolRuntime = (deps: ToolRuntimeDependencies = defaultDeps) =
         };
       }
 
+      // -------------------------------------------------------------------
+      // Agent execute tools
+      // -------------------------------------------------------------------
+
+      if (toolName === "read_file") {
+        const typed = args as ToolArgsMap["read_file"];
+        const projectRoot = env.agentExecuteProjectRoot;
+        if (!projectRoot) throw new Error("Agent execute not configured: AGENT_EXECUTE_PROJECT_ROOT not set");
+        const fullPath = resolveSafePath(projectRoot, typed.path);
+        const content = await fs.readFile(fullPath, "utf-8");
+        const lines = content.split("\n");
+        const start = (typed.line_start || 1) - 1;
+        const end = typed.line_end || lines.length;
+        const slice = lines.slice(start, end);
+        const numbered = slice.map((line, i) => `${start + i + 1}\t${line}`).join("\n");
+        return {
+          ...base,
+          confidence: 0.95,
+          sources: toSources("file_system", typed.path, 0.95),
+          timeWindow: "current",
+          result: { path: typed.path, line_count: slice.length, content: numbered },
+        };
+      }
+
+      if (toolName === "search_files") {
+        const typed = args as ToolArgsMap["search_files"];
+        const projectRoot = env.agentExecuteProjectRoot;
+        if (!projectRoot) throw new Error("Agent execute not configured: AGENT_EXECUTE_PROJECT_ROOT not set");
+        const maxResults = typed.max_results || 20;
+        const rgArgs = ["--json", "--max-count", "5", typed.pattern];
+        if (typed.glob) rgArgs.push("--glob", typed.glob);
+        rgArgs.push(projectRoot);
+        try {
+          const { stdout } = await execFileAsync("rg", rgArgs, { timeout: 15_000, maxBuffer: 1024 * 1024 });
+          const matches = stdout.split("\n")
+            .filter(Boolean)
+            .map((line) => { try { return JSON.parse(line); } catch { return null; } })
+            .filter(Boolean)
+            .filter((item: any) => item.type === "match")
+            .slice(0, maxResults)
+            .map((item: any) => ({
+              path: path.relative(projectRoot, item.data?.path?.text || ""),
+              line_number: item.data?.line_number,
+              text: String(item.data?.lines?.text || "").trim(),
+            }));
+          return {
+            ...base,
+            confidence: 0.9,
+            sources: toSources("file_search", typed.pattern, 0.9),
+            timeWindow: "current",
+            result: { pattern: typed.pattern, match_count: matches.length, matches },
+          };
+        } catch (searchErr: any) {
+          // rg exits 1 when no matches found
+          if (searchErr?.code === 1) {
+            return { ...base, confidence: 0.9, sources: toSources("file_search", typed.pattern, 0.9), timeWindow: "current", result: { pattern: typed.pattern, match_count: 0, matches: [] } };
+          }
+          throw searchErr;
+        }
+      }
+
+      if (toolName === "write_file") {
+        const typed = args as ToolArgsMap["write_file"];
+        const projectRoot = env.agentExecuteProjectRoot;
+        if (!projectRoot) throw new Error("Agent execute not configured: AGENT_EXECUTE_PROJECT_ROOT not set");
+        const fullPath = resolveSafePath(projectRoot, typed.path);
+        if (typed.create_directories) {
+          await fs.mkdir(path.dirname(fullPath), { recursive: true });
+        }
+        await fs.writeFile(fullPath, typed.content, "utf-8");
+
+        await deps.logAuditEvent({
+          actionType: toolName,
+          actorUserId: context.actor.userId,
+          channelId: context.actor.channelId,
+          intentType: "agent_execute",
+          toolName,
+          status: "executed",
+          confirmationRequired: true,
+          confirmationStatus: options.confirmedHighImpact ? "approved" : "not_required",
+          input: { path: typed.path, content_length: typed.content.length, input_hash: actionInputHash },
+          output: { path: typed.path, bytes_written: typed.content.length },
+          traceId,
+        });
+
+        return {
+          ...base,
+          confidence: 0.95,
+          sources: toSources("file_system", typed.path, 0.95),
+          timeWindow: "immediate",
+          result: { path: typed.path, bytes_written: typed.content.length, status: "written" },
+        };
+      }
+
+      if (toolName === "run_command") {
+        const typed = args as ToolArgsMap["run_command"];
+        const projectRoot = env.agentExecuteProjectRoot;
+        if (!projectRoot) throw new Error("Agent execute not configured: AGENT_EXECUTE_PROJECT_ROOT not set");
+        if (isCommandBlocked(typed.command)) {
+          return buildDeniedResult(toolName, `Command blocked by safety policy: ${typed.command.slice(0, 80)}`);
+        }
+        const cwd = typed.cwd ? resolveSafePath(projectRoot, typed.cwd) : projectRoot;
+        const timeout = Math.min(typed.timeout_ms || env.agentExecuteCommandTimeoutMs, env.agentExecuteCommandTimeoutMs);
+
+        try {
+          const { stdout, stderr } = await execFileAsync("bash", ["-c", typed.command], {
+            cwd,
+            timeout,
+            maxBuffer: 512 * 1024,
+          });
+
+          await deps.logAuditEvent({
+            actionType: toolName,
+            actorUserId: context.actor.userId,
+            channelId: context.actor.channelId,
+            intentType: "agent_execute",
+            toolName,
+            status: "executed",
+            confirmationRequired: true,
+            confirmationStatus: options.confirmedHighImpact ? "approved" : "not_required",
+            input: { command: typed.command, cwd: typed.cwd, input_hash: actionInputHash },
+            output: { stdout_length: stdout.length, stderr_length: stderr.length },
+            traceId,
+          });
+
+          return {
+            ...base,
+            confidence: 0.9,
+            sources: toSources("shell", typed.command.slice(0, 50), 0.9),
+            timeWindow: "immediate",
+            result: { stdout: stdout.slice(0, 8000), stderr: stderr.slice(0, 2000), exit_code: 0 },
+          };
+        } catch (cmdErr: any) {
+          const stdout = String(cmdErr.stdout || "").slice(0, 8000);
+          const stderr = String(cmdErr.stderr || "").slice(0, 2000);
+          const exitCode = cmdErr.code ?? 1;
+
+          await deps.logAuditEvent({
+            actionType: toolName,
+            actorUserId: context.actor.userId,
+            channelId: context.actor.channelId,
+            intentType: "agent_execute",
+            toolName,
+            status: "executed",
+            confirmationRequired: true,
+            confirmationStatus: options.confirmedHighImpact ? "approved" : "not_required",
+            input: { command: typed.command, cwd: typed.cwd, input_hash: actionInputHash },
+            output: { stdout_length: stdout.length, stderr_length: stderr.length, exit_code: exitCode },
+            traceId,
+          });
+
+          return {
+            ...base,
+            confidence: 0.9,
+            sources: toSources("shell", typed.command.slice(0, 50), 0.9),
+            timeWindow: "immediate",
+            result: { stdout, stderr, exit_code: exitCode },
+          };
+        }
+      }
+
       if (toolName === "get_data_quality_warnings") {
         const result = await deps.getDataQualityWarnings();
         return {
@@ -810,6 +1087,25 @@ export const summarizeToolExecution = (execution: ToolExecutionResult): string =
 
   if (execution.toolName === "send_slack_message") {
     return "Slack message sent.";
+  }
+
+  if (execution.toolName === "read_file") {
+    const row = toRecord(execution.result);
+    return `File read: ${String(row.path || "unknown")} (${String(row.line_count || 0)} lines).`;
+  }
+
+  if (execution.toolName === "search_files") {
+    const row = toRecord(execution.result);
+    return `Search complete: ${String(row.match_count || 0)} matches for "${String(row.pattern || "")}".`;
+  }
+
+  if (execution.toolName === "write_file") {
+    const row = toRecord(execution.result);
+    return `File written: ${String(row.path || "unknown")} (${String(row.bytes_written || 0)} bytes).`;
+  }
+
+  if (execution.toolName === "run_command") {
+    return "Command executed.";
   }
 
   return `${execution.toolName} executed.`;

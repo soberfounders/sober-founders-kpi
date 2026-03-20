@@ -2,8 +2,9 @@ import { openai } from "../clients/openai.js";
 import { env } from "../config/env.js";
 import { responseEnvelopeSchema } from "./schemas/response.js";
 import { resolveModel } from "./modelRouter.js";
-import { buildSystemPrompt } from "./systemPrompt.js";
+import { buildSystemPrompt, buildAgentExecuteSystemPrompt } from "./systemPrompt.js";
 import {
+  agentExecuteTools,
   defaultToolRuntime,
   isToolName,
   openAiTools,
@@ -12,6 +13,7 @@ import {
 } from "./tools.js";
 import type {
   IntentType,
+  OrgContext,
   SlackResponseEnvelope,
   SourceAttribution,
   ToolExecutionContext,
@@ -108,6 +110,27 @@ const bestTimeWindow = (toolExecutions: ToolExecutionResult[]): string => {
 
 export const classifyIntent = (prompt: string): IntentType => {
   const text = prompt.toLowerCase();
+
+  if (
+    env.agentExecuteEnabled
+    && (
+      text.includes("build")
+      || text.includes("set up")
+      || text.includes("implement")
+      || text.includes("write a script")
+      || text.includes("write a function")
+      || text.includes("automate")
+      || text.includes("deploy")
+      || text.includes("make it")
+      || text.includes("make a")
+      || text.includes("create a campaign")
+      || text.includes("create an edge function")
+      || text.includes("create a cron")
+      || (text.includes("code") && (text.includes("write") || text.includes("create") || text.includes("add")))
+    )
+  ) {
+    return "agent_execute";
+  }
 
   if (
     text.includes("create task")
@@ -234,9 +257,103 @@ export const createKpiOrchestrator = (deps: Partial<OrchestratorDependencies> = 
     ...deps,
   };
 
+  const runAgentExecute = async (
+    request: OrchestratorRequest,
+    orgContext: OrgContext | null,
+  ): Promise<SlackResponseEnvelope> => {
+    const maxTurns = 18;
+    const systemPrompt = buildAgentExecuteSystemPrompt(orgContext, env.agentExecuteProjectRoot);
+
+    const { actor } = request.context;
+    const historyItems = actor.threadTs
+      ? await getThreadHistory(actor.channelId, actor.threadTs, actor.messageTs, 10).catch(() => [])
+      : [];
+
+    const historyMessages: Array<Record<string, unknown>> = historyItems.map((item) => ({
+      role: item.direction === "inbound" ? "user" : "assistant",
+      content: [{ type: "input_text", text: item.messageText }],
+    }));
+
+    let response = await resolved.responseClient.create({
+      model: resolveModel("agent_execute"),
+      temperature: 0.2,
+      max_output_tokens: 4000,
+      tools: agentExecuteTools,
+      tool_choice: "auto",
+      input: [
+        { role: "system", content: [{ type: "input_text", text: systemPrompt }] },
+        ...historyMessages,
+        { role: "user", content: [{ type: "input_text", text: request.prompt }] },
+      ],
+    });
+
+    const toolExecutions: ToolExecutionResult[] = [];
+
+    logger.info(
+      { prompt: request.prompt, mode: "agent_execute", outputTypes: Array.isArray(response?.output) ? response.output.map((o: any) => o?.type) : "none" },
+      "orchestrator: agent_execute initial response",
+    );
+
+    for (let step = 0; step < maxTurns; step += 1) {
+      const calls = readFunctionCalls(response);
+      logger.info({ step, callCount: calls.length, calls: calls.map((c: any) => c.name) }, "orchestrator: agent_execute tool calls");
+      if (!calls.length) break;
+
+      const outputs: Array<Record<string, unknown>> = [];
+      for (const call of calls) {
+        if (!isToolName(call.name)) {
+          outputs.push({
+            type: "function_call_output",
+            call_id: call.call_id,
+            output: JSON.stringify({ error: `Tool ${call.name} is not allowlisted.` }),
+          });
+          continue;
+        }
+
+        const execution = await resolved.toolRuntime.execute(call.name, call.arguments, request.context);
+        toolExecutions.push(execution);
+
+        if (execution.requiresConfirmation && execution.pendingActionId) {
+          return {
+            text: `Approval required: ${execution.actionSummary || execution.toolName}`,
+            blocks: undefined,
+            confidence: 0.95,
+            sources: execution.sources,
+            timeWindow: execution.timeWindow,
+            intentType: "agent_execute",
+            requiresConfirmation: true,
+            pendingActionId: execution.pendingActionId,
+          };
+        }
+
+        outputs.push({
+          type: "function_call_output",
+          call_id: call.call_id,
+          output: JSON.stringify(execution.ok ? execution.result : { error: execution.error }),
+        });
+      }
+
+      response = await resolved.responseClient.create({
+        model: resolveModel("agent_execute"),
+        temperature: 0.2,
+        max_output_tokens: 4000,
+        previous_response_id: response.id,
+        tools: agentExecuteTools,
+        input: outputs,
+      });
+    }
+
+    const finalText = readText(response);
+    return normalizeEnvelope(finalText, "agent_execute", toolExecutions);
+  };
+
   const run = async (request: OrchestratorRequest): Promise<SlackResponseEnvelope> => {
     const intentHint = classifyIntent(request.prompt);
     const orgContext = await resolved.getOrgContext().catch(() => null);
+
+    if (intentHint === "agent_execute" && env.agentExecuteEnabled && env.agentExecuteProjectRoot) {
+      return runAgentExecute(request, orgContext);
+    }
 
     const { actor } = request.context;
     const historyItems = actor.threadTs

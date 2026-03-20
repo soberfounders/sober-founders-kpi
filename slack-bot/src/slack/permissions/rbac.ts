@@ -108,8 +108,13 @@ export const canPostToChannel = async (slackUserId: string, channelId: string): 
   return true;
 };
 
+export const canExecuteAgentTools = async (slackUserId: string): Promise<boolean> => {
+  const role = await getUserRole(slackUserId);
+  return role === "admin";
+};
+
 export const isHighImpactAction = async (actionType: string, channelId?: string): Promise<boolean> => {
-  if (["assign_owner"].includes(actionType)) return true;
+  if (["assign_owner", "write_file", "run_command"].includes(actionType)) return true;
   if (actionType === "post_summary") return true;
 
   if (["send_slack_message", "post_summary"].includes(actionType) && channelId) {

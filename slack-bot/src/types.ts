@@ -2,7 +2,8 @@ export type IntentType =
   | "informational"
   | "recommendation"
   | "action_task_creation"
-  | "outbound_posting";
+  | "outbound_posting"
+  | "agent_execute";
 
 export interface SourceAttribution {
   metric: string;
