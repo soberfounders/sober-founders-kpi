@@ -209,6 +209,40 @@ function classifyDay(
 }
 
 // ---------------------------------------------------------------------------
+// Contact funnel attribution (ported from dashboard leadsGroupAnalytics.js)
+// ---------------------------------------------------------------------------
+function isPaidSocialContact(row: Record<string, unknown>): boolean {
+  const sourceBlob = [
+    row.hs_analytics_source,
+    row.hs_latest_source,
+    row.original_traffic_source,
+  ]
+    .join(" ")
+    .toUpperCase();
+  return sourceBlob.includes("PAID_SOCIAL");
+}
+
+function isPhoenixContact(row: Record<string, unknown>): boolean {
+  const blob = [
+    row.hs_analytics_source_data_2,
+    row.hs_latest_source_data_2,
+    row.campaign,
+    row.campaign_source,
+    row.membership_s,
+  ]
+    .join(" ")
+    .toLowerCase();
+  return blob.includes("phoenix");
+}
+
+function classifyContactFunnel(
+  row: Record<string, unknown>
+): "free" | "phoenix" | null {
+  if (!isPaidSocialContact(row)) return null;
+  return isPhoenixContact(row) ? "phoenix" : "free";
+}
+
+// ---------------------------------------------------------------------------
 // Metric result type
 // ---------------------------------------------------------------------------
 interface MetricRow {
@@ -231,11 +265,11 @@ async function computeLeadsMetrics(
   from: string,
   to: string
 ): Promise<MetricRow[]> {
-  // Fetch all contacts created in window with revenue + sobriety fields
+  // Fetch all contacts created in window with revenue + sobriety + source fields
   const { data: contacts, error } = await sb
     .from("raw_hubspot_contacts")
     .select(
-      "hubspot_contact_id, annual_revenue_in_usd_official, annual_revenue_in_dollars__official_, annual_revenue_in_dollars, annual_revenue, revenue, sobriety_date, sobriety_date__official_, sober_date, clean_date, sobrietydate, membership_s, is_deleted, hubspot_archived, merged_into_hubspot_contact_id"
+      "hubspot_contact_id, annual_revenue_in_usd_official, annual_revenue_in_dollars__official_, annual_revenue_in_dollars, annual_revenue, revenue, sobriety_date, sobriety_date__official_, sober_date, clean_date, sobrietydate, membership_s, is_deleted, hubspot_archived, merged_into_hubspot_contact_id, hs_analytics_source, hs_latest_source, original_traffic_source, hs_analytics_source_data_2, hs_latest_source_data_2, campaign, campaign_source"
     )
     .gte("createdate", `${from}T00:00:00.000Z`)
     .lte("createdate", `${to}T23:59:59.999Z`)
@@ -248,39 +282,45 @@ async function computeLeadsMetrics(
   const rows = contacts || [];
   const referenceDate = new Date(`${to}T23:59:59.999Z`);
 
-  let totalLeads = 0;
-  let qualifiedLeads = 0;
-  let phoenixQualified = 0;
+  // Counters: all, free funnel, phoenix funnel
+  const counts = {
+    all: { total: 0, qualified: 0, phoenixQualified: 0, great: 0 },
+    free: { total: 0, qualified: 0, phoenixQualified: 0, great: 0 },
+    phoenix: { total: 0, qualified: 0, phoenixQualified: 0, great: 0 },
+  };
 
   for (const row of rows) {
-    totalLeads++;
-    const revenue = extractEffectiveRevenue(row as Record<string, unknown>);
-    const sobrietyOk = hasOneYearSobrietyByDate(
-      row as Record<string, unknown>,
-      referenceDate
-    );
+    const r = row as Record<string, unknown>;
+    const revenue = extractEffectiveRevenue(r);
+    const sobrietyOk = hasOneYearSobrietyByDate(r, referenceDate);
+    const isQual = revenue !== null && revenue >= 250_000 && sobrietyOk;
+    const isPQ = revenue !== null && revenue >= 1_000_000 && sobrietyOk;
+    const isGreat = revenue !== null && revenue >= 1_000_000;
+    const funnel = classifyContactFunnel(r);
 
-    if (revenue !== null && revenue >= 250_000 && sobrietyOk) {
-      qualifiedLeads++;
-    }
-    if (revenue !== null && revenue >= 1_000_000 && sobrietyOk) {
-      phoenixQualified++;
+    // All
+    counts.all.total++;
+    if (isQual) counts.all.qualified++;
+    if (isPQ) counts.all.phoenixQualified++;
+    if (isGreat) counts.all.great++;
+
+    // Funnel-specific
+    if (funnel === "free" || funnel === "phoenix") {
+      counts[funnel].total++;
+      if (isQual) counts[funnel].qualified++;
+      if (isPQ) counts[funnel].phoenixQualified++;
+      if (isGreat) counts[funnel].great++;
     }
   }
 
-  return [
-    { kpi_key: "leads_created", funnel_key: "all", value: totalLeads },
-    {
-      kpi_key: "qualified_leads_created",
-      funnel_key: "all",
-      value: qualifiedLeads,
-    },
-    {
-      kpi_key: "phoenix_qualified_leads",
-      funnel_key: "all",
-      value: phoenixQualified,
-    },
-  ];
+  const results: MetricRow[] = [];
+  for (const [funnel, c] of Object.entries(counts)) {
+    results.push({ kpi_key: "leads_created", funnel_key: funnel, value: c.total });
+    results.push({ kpi_key: "qualified_leads_created", funnel_key: funnel, value: c.qualified });
+    results.push({ kpi_key: "phoenix_qualified_leads", funnel_key: funnel, value: c.phoenixQualified });
+    results.push({ kpi_key: "great_leads", funnel_key: funnel, value: c.great });
+  }
+  return results;
 }
 
 async function computePhoenixPaidMembers(
@@ -309,10 +349,10 @@ async function computeInterviews(
   from: string,
   to: string
 ): Promise<MetricRow[]> {
-  // HubSpot meeting activities matching interview/discovery patterns
-  const { count, error } = await sb
+  // Fetch interview-pattern activities with titles for funnel classification
+  const { data, error } = await sb
     .from("raw_hubspot_meeting_activities")
-    .select("*", { count: "exact", head: true })
+    .select("hubspot_activity_id, title")
     .gte("hs_timestamp", `${from}T00:00:00.000Z`)
     .lte("hs_timestamp", `${to}T23:59:59.999Z`)
     .in("activity_type", ["meeting", "MEETING"])
@@ -322,41 +362,69 @@ async function computeInterviews(
 
   if (error)
     throw new Error(`interviews_completed query failed: ${error.message}`);
+
+  const rows = data || [];
+  let total = 0;
+  let freeCount = 0;
+  let phoenixCount = 0;
+
+  for (const row of rows) {
+    total++;
+    const title = String((row as Record<string, unknown>).title || "").toLowerCase();
+    if (
+      title.includes("phoenix") ||
+      title.includes("learn more") ||
+      title.includes("good fit")
+    ) {
+      phoenixCount++;
+    } else {
+      freeCount++;
+    }
+  }
+
   return [
-    {
-      kpi_key: "interviews_completed",
-      funnel_key: "all",
-      value: count ?? 0,
-    },
+    { kpi_key: "interviews_completed", funnel_key: "all", value: total },
+    { kpi_key: "interviews_completed", funnel_key: "free", value: freeCount },
+    { kpi_key: "interviews_completed", funnel_key: "phoenix", value: phoenixCount },
   ];
 }
 
-async function computeAdSpend(
+async function computeAdMetrics(
   sb: SupabaseClient,
   from: string,
   to: string
 ): Promise<MetricRow[]> {
   const { data, error } = await sb
     .from("raw_fb_ads_insights_daily")
-    .select("spend,date_start,campaign_name")
+    .select("spend,leads,date_start,campaign_name")
     .gte("date_start", from)
     .lte("date_start", to);
 
-  if (error) throw new Error(`ad_spend query failed: ${error.message}`);
+  if (error) throw new Error(`ad_metrics query failed: ${error.message}`);
 
   const rows = data || [];
   let totalSpend = 0;
   let freeSpend = 0;
   let phoenixSpend = 0;
+  let totalAdLeads = 0;
+  let freeAdLeads = 0;
+  let phoenixAdLeads = 0;
 
   for (const row of rows) {
     const spend = Number(row.spend) || 0;
-    totalSpend += spend;
+    const leads = Number(row.leads) || 0;
     const name = String(row.campaign_name || "").toLowerCase();
-    if (name.includes("phoenix")) {
+    const isPhoenix = name.includes("phoenix");
+
+    totalSpend += spend;
+    totalAdLeads += leads;
+
+    if (isPhoenix) {
       phoenixSpend += spend;
+      phoenixAdLeads += leads;
     } else {
       freeSpend += spend;
+      freeAdLeads += leads;
     }
   }
 
@@ -364,6 +432,9 @@ async function computeAdSpend(
     { kpi_key: "ad_spend", funnel_key: "all", value: totalSpend },
     { kpi_key: "ad_spend", funnel_key: "free", value: freeSpend },
     { kpi_key: "ad_spend", funnel_key: "phoenix", value: phoenixSpend },
+    { kpi_key: "ad_leads", funnel_key: "all", value: totalAdLeads },
+    { kpi_key: "ad_leads", funnel_key: "free", value: freeAdLeads },
+    { kpi_key: "ad_leads", funnel_key: "phoenix", value: phoenixAdLeads },
   ];
 }
 
@@ -456,6 +527,27 @@ async function computeAttendanceMetrics(
   const tuesdayRepeat = computeRepeatRate(tuesdayIds);
   const thursdayRepeat = computeRepeatRate(thursdayIds);
 
+  // Day-split attendance totals (total, new, repeat per day)
+  const dayAttendees = (sessionIds: string[]) => {
+    const idSet = new Set(sessionIds);
+    const attendeeKeys = new Set<string>();
+    let total = 0;
+    for (const row of assocRows) {
+      if (!idSet.has(String(row.hubspot_activity_id))) continue;
+      const key = row.hubspot_contact_id
+        ? `id:${row.hubspot_contact_id}`
+        : `email:${String(row.contact_email || "").toLowerCase()}`;
+      if (key !== "email:") {
+        attendeeKeys.add(key);
+        total++;
+      }
+    }
+    return { total, uniqueKeys: attendeeKeys };
+  };
+
+  const tueDayData = dayAttendees(tuesdayIds);
+  const thuDayData = dayAttendees(thursdayIds);
+
   const results: MetricRow[] = [
     { kpi_key: "attendance_sessions", funnel_key: "all", value: totalSessions },
     {
@@ -463,6 +555,9 @@ async function computeAttendanceMetrics(
       funnel_key: "all",
       value: uniqueKeys.size,
     },
+    // Day-split totals
+    { kpi_key: "attendance_total", funnel_key: "tuesday", value: tueDayData.total },
+    { kpi_key: "attendance_total", funnel_key: "thursday", value: thuDayData.total },
   ];
 
   if (tuesdayRepeat !== null) {
@@ -489,39 +584,71 @@ async function computeNewAttendees(
   to: string
 ): Promise<MetricRow[]> {
   // New attendees = people whose first-ever attendance falls within [from, to]
-  // We check if the contact has any association record before `from`
+  // Also produces day-split new/repeat counts (tuesday/thursday)
+
+  // Get current-period group sessions with day classification
+  const { data: currentSessions } = await sb
+    .from("raw_hubspot_meeting_activities")
+    .select("hubspot_activity_id, title, hs_timestamp")
+    .gte("hs_timestamp", `${from}T00:00:00.000Z`)
+    .lte("hs_timestamp", `${to}T23:59:59.999Z`)
+    .in("activity_type", ["meeting", "MEETING", "call", "CALL"]);
+
+  const groupSessions = (currentSessions || []).filter(
+    (s: Record<string, unknown>) => isGroupSession(String(s.title || ""))
+  );
+
+  if (!groupSessions.length) {
+    return [
+      { kpi_key: "new_attendees", funnel_key: "all", value: 0 },
+      { kpi_key: "attendance_new", funnel_key: "tuesday", value: 0 },
+      { kpi_key: "attendance_new", funnel_key: "thursday", value: 0 },
+      { kpi_key: "attendance_repeat", funnel_key: "tuesday", value: 0 },
+      { kpi_key: "attendance_repeat", funnel_key: "thursday", value: 0 },
+    ];
+  }
+
+  // Map session ID → day
+  const sessionDayMap = new Map<string, "tuesday" | "thursday" | null>();
+  const allGroupIds: string[] = [];
+  for (const s of groupSessions as Array<Record<string, unknown>>) {
+    const id = String(s.hubspot_activity_id);
+    allGroupIds.push(id);
+    sessionDayMap.set(id, classifyDay(String(s.title || ""), String(s.hs_timestamp || "")));
+  }
+
+  // Get associations for current-period group sessions
   const { data: currentAssoc, error: curErr } = await sb
     .from("hubspot_activity_contact_associations")
     .select("hubspot_contact_id, contact_email, hubspot_activity_id")
-    .in(
-      "hubspot_activity_id",
-      (
-        await sb
-          .from("raw_hubspot_meeting_activities")
-          .select("hubspot_activity_id")
-          .gte("hs_timestamp", `${from}T00:00:00.000Z`)
-          .lte("hs_timestamp", `${to}T23:59:59.999Z`)
-          .in("activity_type", ["meeting", "MEETING", "call", "CALL"])
-      ).data?.map((r: Record<string, unknown>) => r.hubspot_activity_id) || []
-    );
+    .in("hubspot_activity_id", allGroupIds);
 
   if (curErr)
     throw new Error(`new_attendees current query failed: ${curErr.message}`);
 
   if (!currentAssoc?.length) {
-    return [{ kpi_key: "new_attendees", funnel_key: "all", value: 0 }];
+    return [
+      { kpi_key: "new_attendees", funnel_key: "all", value: 0 },
+      { kpi_key: "attendance_new", funnel_key: "tuesday", value: 0 },
+      { kpi_key: "attendance_new", funnel_key: "thursday", value: 0 },
+      { kpi_key: "attendance_repeat", funnel_key: "tuesday", value: 0 },
+      { kpi_key: "attendance_repeat", funnel_key: "thursday", value: 0 },
+    ];
   }
 
-  // Get all unique contact keys from current period
+  // Build per-contact, per-day presence map
+  const contactDays = new Map<string, Set<string>>(); // contactKey → Set<"tuesday"|"thursday">
   const currentKeys = new Set<string>();
-  const keyMap = new Map<string, string>(); // key -> contact_id or email
   for (const row of currentAssoc as Array<Record<string, unknown>>) {
     const key = row.hubspot_contact_id
       ? `id:${row.hubspot_contact_id}`
       : `email:${String(row.contact_email || "").toLowerCase()}`;
-    if (key !== "email:") {
-      currentKeys.add(key);
-      keyMap.set(key, String(row.hubspot_contact_id || row.contact_email));
+    if (key === "email:") continue;
+    currentKeys.add(key);
+    const day = sessionDayMap.get(String(row.hubspot_activity_id));
+    if (day) {
+      if (!contactDays.has(key)) contactDays.set(key, new Set());
+      contactDays.get(key)!.add(day);
     }
   }
 
@@ -535,32 +662,48 @@ async function computeNewAttendees(
         .in("activity_type", ["meeting", "MEETING", "call", "CALL"])
     ).data?.map((r: Record<string, unknown>) => r.hubspot_activity_id) || [];
 
-  if (!priorSessionIds.length) {
-    // No prior sessions means everyone is new
-    return [
-      { kpi_key: "new_attendees", funnel_key: "all", value: currentKeys.size },
-    ];
-  }
-
-  const { data: priorAssoc } = await sb
-    .from("hubspot_activity_contact_associations")
-    .select("hubspot_contact_id, contact_email")
-    .in("hubspot_activity_id", priorSessionIds);
-
   const priorKeys = new Set<string>();
-  for (const row of (priorAssoc || []) as Array<Record<string, unknown>>) {
-    const key = row.hubspot_contact_id
-      ? `id:${row.hubspot_contact_id}`
-      : `email:${String(row.contact_email || "").toLowerCase()}`;
-    if (key !== "email:") priorKeys.add(key);
+  if (priorSessionIds.length) {
+    const { data: priorAssoc } = await sb
+      .from("hubspot_activity_contact_associations")
+      .select("hubspot_contact_id, contact_email")
+      .in("hubspot_activity_id", priorSessionIds);
+
+    for (const row of (priorAssoc || []) as Array<Record<string, unknown>>) {
+      const key = row.hubspot_contact_id
+        ? `id:${row.hubspot_contact_id}`
+        : `email:${String(row.contact_email || "").toLowerCase()}`;
+      if (key !== "email:") priorKeys.add(key);
+    }
   }
 
-  let newCount = 0;
+  let newTotal = 0;
+  const dayCounts = {
+    tuesday: { newCount: 0, repeatCount: 0 },
+    thursday: { newCount: 0, repeatCount: 0 },
+  };
+
   for (const key of currentKeys) {
-    if (!priorKeys.has(key)) newCount++;
+    const isNew = !priorKeys.has(key);
+    if (isNew) newTotal++;
+    const days = contactDays.get(key);
+    if (days) {
+      for (const day of days) {
+        if (day === "tuesday" || day === "thursday") {
+          if (isNew) dayCounts[day].newCount++;
+          else dayCounts[day].repeatCount++;
+        }
+      }
+    }
   }
 
-  return [{ kpi_key: "new_attendees", funnel_key: "all", value: newCount }];
+  return [
+    { kpi_key: "new_attendees", funnel_key: "all", value: newTotal },
+    { kpi_key: "attendance_new", funnel_key: "tuesday", value: dayCounts.tuesday.newCount },
+    { kpi_key: "attendance_new", funnel_key: "thursday", value: dayCounts.thursday.newCount },
+    { kpi_key: "attendance_repeat", funnel_key: "tuesday", value: dayCounts.tuesday.repeatCount },
+    { kpi_key: "attendance_repeat", funnel_key: "thursday", value: dayCounts.thursday.repeatCount },
+  ];
 }
 
 async function computeDonationMetrics(
@@ -593,6 +736,7 @@ async function computeDonationMetrics(
 
   return [
     { kpi_key: "donations_total", funnel_key: "all", value: total },
+    { kpi_key: "donations_count", funnel_key: "all", value: rows.length },
     { kpi_key: "active_donors", funnel_key: "all", value: donorEmails.size },
     {
       kpi_key: "recurring_revenue",
@@ -790,8 +934,29 @@ async function computeOutreachMetrics(
   return results;
 }
 
+async function computeCompletedItems(
+  sb: SupabaseClient,
+  from: string,
+  to: string
+): Promise<MetricRow[]> {
+  // Notion tasks completed in window (matches dashboard operationsCompletedItems)
+  const { count, error } = await sb
+    .from("notion_todos")
+    .select("*", { count: "exact", head: true })
+    .in("status", ["Done", "Completed"])
+    .gte("updated_at", `${from}T00:00:00.000Z`)
+    .lte("updated_at", `${to}T23:59:59.999Z`);
+
+  if (error)
+    throw new Error(`completed_items query failed: ${error.message}`);
+
+  return [
+    { kpi_key: "completed_items", funnel_key: "all", value: count ?? 0 },
+  ];
+}
+
 // ---------------------------------------------------------------------------
-// Composite metrics (CPL, CPQL, CPGL)
+// Composite metrics (CPL, CPQL, CPGL) — including per-funnel
 // ---------------------------------------------------------------------------
 function computeComposites(metrics: MetricRow[]): MetricRow[] {
   const lookup = new Map<string, number>();
@@ -799,34 +964,42 @@ function computeComposites(metrics: MetricRow[]): MetricRow[] {
     lookup.set(`${m.kpi_key}:${m.funnel_key}`, m.value);
   }
 
-  const adSpend = lookup.get("ad_spend:all") ?? 0;
-  const leads = lookup.get("leads_created:all") ?? 0;
-  const qualifiedLeads = lookup.get("qualified_leads_created:all") ?? 0;
-  const phoenixLeads = lookup.get("phoenix_qualified_leads:all") ?? 0;
-
   const results: MetricRow[] = [];
+  const safeDiv = (num: number, den: number): number | null =>
+    den > 0 && num > 0 ? Math.round((num / den) * 100) / 100 : null;
 
-  if (leads > 0 && adSpend > 0) {
-    results.push({
-      kpi_key: "cpl",
-      funnel_key: "all",
-      value: Math.round((adSpend / leads) * 100) / 100,
-    });
-  }
-  if (qualifiedLeads > 0 && adSpend > 0) {
-    results.push({
-      kpi_key: "cpql",
-      funnel_key: "all",
-      value: Math.round((adSpend / qualifiedLeads) * 100) / 100,
-    });
-  }
-  if (phoenixLeads > 0 && adSpend > 0) {
-    results.push({
-      kpi_key: "cpgl",
-      funnel_key: "all",
-      value: Math.round((adSpend / phoenixLeads) * 100) / 100,
-    });
-  }
+  // All-funnel composites
+  const adSpendAll = lookup.get("ad_spend:all") ?? 0;
+  const leadsAll = lookup.get("leads_created:all") ?? 0;
+  const qualAll = lookup.get("qualified_leads_created:all") ?? 0;
+  const pqAll = lookup.get("phoenix_qualified_leads:all") ?? 0;
+
+  const cplAll = safeDiv(adSpendAll, leadsAll);
+  if (cplAll !== null) results.push({ kpi_key: "cpl", funnel_key: "all", value: cplAll });
+  const cpqlAll = safeDiv(adSpendAll, qualAll);
+  if (cpqlAll !== null) results.push({ kpi_key: "cpql", funnel_key: "all", value: cpqlAll });
+  const cpglAll = safeDiv(adSpendAll, pqAll);
+  if (cpglAll !== null) results.push({ kpi_key: "cpgl", funnel_key: "all", value: cpglAll });
+
+  // Free funnel: CPQL = free ad spend / free qualified, CPGL = free ad spend / free great
+  const freeSpend = lookup.get("ad_spend:free") ?? 0;
+  const freeQual = lookup.get("qualified_leads_created:free") ?? 0;
+  const freeGreat = lookup.get("great_leads:free") ?? 0;
+
+  const freeCpql = safeDiv(freeSpend, freeQual);
+  if (freeCpql !== null) results.push({ kpi_key: "cpql", funnel_key: "free", value: freeCpql });
+  const freeCpgl = safeDiv(freeSpend, freeGreat);
+  if (freeCpgl !== null) results.push({ kpi_key: "cpgl", funnel_key: "free", value: freeCpgl });
+
+  // Phoenix funnel: CPQL = phoenix spend / phoenix_qualified, CPGL = phoenix spend / phoenix great
+  const phxSpend = lookup.get("ad_spend:phoenix") ?? 0;
+  const phxQual = lookup.get("phoenix_qualified_leads:phoenix") ?? 0;
+  const phxGreat = lookup.get("great_leads:phoenix") ?? 0;
+
+  const phxCpql = safeDiv(phxSpend, phxQual);
+  if (phxCpql !== null) results.push({ kpi_key: "cpql", funnel_key: "phoenix", value: phxCpql });
+  const phxCpgl = safeDiv(phxSpend, phxGreat);
+  if (phxCpgl !== null) results.push({ kpi_key: "cpgl", funnel_key: "phoenix", value: phxCpgl });
 
   return results;
 }
@@ -853,7 +1026,7 @@ async function computeAllMetrics(
       fn: () => computePhoenixPaidMembers(sb, from, to),
     },
     { name: "interviews", fn: () => computeInterviews(sb, from, to) },
-    { name: "ad_spend", fn: () => computeAdSpend(sb, from, to) },
+    { name: "ad_metrics", fn: () => computeAdMetrics(sb, from, to) },
     { name: "attendance", fn: () => computeAttendanceMetrics(sb, from, to) },
     { name: "new_attendees", fn: () => computeNewAttendees(sb, from, to) },
     { name: "donations", fn: () => computeDonationMetrics(sb, from, to) },
@@ -861,6 +1034,7 @@ async function computeAllMetrics(
     { name: "seo", fn: () => computeSeoMetrics(sb, from, to) },
     { name: "operations", fn: () => computeOperationsMetrics(sb, from, to) },
     { name: "outreach", fn: () => computeOutreachMetrics(sb, from, to) },
+    { name: "completed_items", fn: () => computeCompletedItems(sb, from, to) },
   ];
 
   // Run all metric computers in parallel

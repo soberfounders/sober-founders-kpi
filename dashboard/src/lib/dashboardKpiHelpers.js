@@ -5,6 +5,16 @@ export const KPI_DIRECTION = {
   LOWER_IS_BETTER: 'lower_is_better',
 };
 
+export const DONATION_EXCLUDED_STATUSES = Object.freeze([
+  'refunded', 'refund', 'failed', 'void', 'voided', 'canceled', 'cancelled',
+]);
+
+const _donationExcludedSet = new Set(DONATION_EXCLUDED_STATUSES);
+
+export function isDonationExcludedStatus(status) {
+  return _donationExcludedSet.has(normalizeText(status));
+}
+
 export function normalizeText(value) {
   return String(value || '').trim().toLowerCase();
 }

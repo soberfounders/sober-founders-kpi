@@ -5,6 +5,7 @@ import SectionInsightBar from '../components/SectionInsightBar';
 import SendToNotionModal from '../components/SendToNotionModal';
 import notionLogo from '../assets/notion-logo.png';
 import { supabase } from '../lib/supabaseClient';
+import { fetchKpiDaily, buildMetricsFromDaily } from '../lib/kpiDailyClient';
 import { DASHBOARD_LOOKBACK_DAYS } from '../lib/env';
 import { evaluateLeadQualification, isPhoenixQualifiedLead, parseOfficialRevenue } from '../lib/leadsQualificationRules';
 import {
@@ -28,6 +29,7 @@ import {
   formatInt,
   formatPercent,
   formatValueByType,
+  isDonationExcludedStatus,
   normalizeInterviewActivities,
   normalizeText,
   toDateKey,
@@ -57,7 +59,7 @@ const PHOENIX_INTERVIEW_MATCH_TOKENS = [
 
 const ET_TIMEZONE = 'America/New_York';
 
-const DONATION_EXCLUDED_STATUSES = new Set(['refunded', 'refund', 'failed', 'void', 'voided', 'canceled', 'cancelled']);
+// Donation status filtering uses shared isDonationExcludedStatus() from dashboardKpiHelpers.
 
 const HUBSPOT_CONTACT_SELECT_COLUMNS = [
   'hubspot_contact_id',
@@ -70,10 +72,15 @@ const HUBSPOT_CONTACT_SELECT_COLUMNS = [
   'campaign',
   'campaign_source',
   'membership_s',
+  'annual_revenue_in_usd_official',
   'annual_revenue_in_dollars__official_',
   'annual_revenue_in_dollars',
+  'annual_revenue',
   'sobriety_date',
   'sobriety_date__official_',
+  'sober_date',
+  'clean_date',
+  'sobrietydate',
   'is_deleted',
   'hubspot_archived',
   'merged_into_hubspot_contact_id',
@@ -82,7 +89,12 @@ const HUBSPOT_CONTACT_SELECT_COLUMNS = [
 
 const HUBSPOT_OPTIONAL_COLUMNS = new Set([
   'campaign_source',
+  'annual_revenue_in_usd_official',
+  'annual_revenue',
   'sobriety_date__official_',
+  'sober_date',
+  'clean_date',
+  'sobrietydate',
   'hs_additional_emails',
 ]);
 
@@ -527,6 +539,7 @@ const MIN_GROUP_ATTENDEES = 3;
 const GROUP_CALL_MIN_ATTENDEE_SIGNAL = 5;
 const GROUP_CALL_ET_MINUTES = { Tuesday: 720, Thursday: 660 }; // 12 pm Tue, 11 am Thu
 const GROUP_CALL_TIME_TOLERANCE = 120; // ±2 hours primary window
+const GROUP_CALL_TIME_FALLBACK_TOLERANCE = 240; // ±4 hours fallback (meetings are ~1 hour)
 
 function inferTitleSignal(textBlob, scheduledDayType) {
   // Mirrors AttendanceDashboard.inferGroupTypeFromTitle exactly.
@@ -613,6 +626,8 @@ function normalizeHubspotAttendanceSessions(activities = [], associations = []) 
     const expectedMinute = GROUP_CALL_ET_MINUTES[dayType];
     const inPrimaryWindow = Number.isFinite(minuteOfDay) && Number.isFinite(expectedMinute)
       && Math.abs(minuteOfDay - expectedMinute) <= GROUP_CALL_TIME_TOLERANCE;
+    const inFallbackWindow = Number.isFinite(minuteOfDay) && Number.isFinite(expectedMinute)
+      && Math.abs(minuteOfDay - expectedMinute) <= GROUP_CALL_TIME_FALLBACK_TOLERANCE;
 
     const hasAttendanceSignal = attendeeCount >= GROUP_CALL_MIN_ATTENDEE_SIGNAL;
     const isCallActivity = String(row?.activity_type || '').toLowerCase() === 'call';
@@ -622,7 +637,7 @@ function normalizeHubspotAttendanceSessions(activities = [], associations = []) 
 
     // Include if any signal fires (mirrors AttendanceDashboard.getSessionCandidateSignals)
     const include = title.strongSignal || hasAttendanceSignal || inPrimaryWindow
-      || (isCallActivity && scheduledDayType === dayType);
+      || (isCallActivity && inFallbackWindow);
     if (!include) return;
 
     if (!contactKeys || contactKeys.size === 0) return;
@@ -661,7 +676,7 @@ function normalizeDonationRows(rows = []) {
       amount: toFiniteNumber(row?.amount, 0),
       status: normalizeText(row?.status),
     }))
-    .filter((row) => row.dateKey && row.amount > 0 && !DONATION_EXCLUDED_STATUSES.has(row.status));
+    .filter((row) => row.dateKey && row.amount > 0 && !isDonationExcludedStatus(row.status));
 }
 
 function parseTodoDoneDate(row) {
@@ -974,8 +989,46 @@ function computeKpiSnapshot(rawData, windows, todayKey) {
 
   const currentMetrics = buildWindowMetrics(normalizedData, windows.current);
   const previousMetrics = buildWindowMetrics(normalizedData, windows.previous);
-  const weeklyComparisons = buildWeeklyComparisons(normalizedData, todayKey);
   const attendanceTrend = buildAttendanceTrend(normalizedData.zoomSessions);
+
+  // Unified Metrics Layer (Phase 4): if fact_kpi_daily rows are available,
+  // use them for KPI card values and weekly comparisons (single source of truth).
+  // Raw-table pipeline remains for section-level insights and attendance sparklines.
+  const kpiRows = rawData.kpiDailyRows || [];
+  const hasKpiDaily = kpiRows.length > 0;
+
+  let metricValues;
+  let weeklyComparisons;
+
+  if (hasKpiDaily) {
+    const currentFlat = buildMetricsFromDaily(kpiRows, windows.current.start, windows.current.end);
+    const previousFlat = buildMetricsFromDaily(kpiRows, windows.previous.start, windows.previous.end);
+    metricValues = { current: currentFlat, previous: previousFlat };
+
+    // Build weekly comparisons from fact_kpi_daily
+    const { lastWeek, lastFourCompletedWeeks } = buildCompletedWeekWindows(todayKey);
+    const weekMetrics = lastFourCompletedWeeks.map((w) => buildMetricsFromDaily(kpiRows, w.start, w.end));
+    const lastWeekByKey = {};
+    const fourWeekAvgByKey = {};
+    Object.values(KPI_CARD_DEFINITIONS).forEach((definition) => {
+      lastWeekByKey[definition.key] = weekMetrics.length >= 1 && Number.isFinite(Number(weekMetrics[0]?.[definition.key]))
+        ? Number(weekMetrics[0][definition.key])
+        : null;
+      if (weekMetrics.length < 4) {
+        fourWeekAvgByKey[definition.key] = null;
+        return;
+      }
+      const values = weekMetrics.map((m) => m[definition.key]).filter((v) => Number.isFinite(Number(v)));
+      fourWeekAvgByKey[definition.key] = values.length === 4 ? averageFinite(values) : null;
+    });
+    weeklyComparisons = { lastWeek, lastWeekByKey, fourWeekAvgByKey };
+  } else {
+    metricValues = {
+      current: flattenMetricValues(currentMetrics),
+      previous: flattenMetricValues(previousMetrics),
+    };
+    weeklyComparisons = buildWeeklyComparisons(normalizedData, todayKey);
+  }
 
   return {
     free: {
@@ -999,10 +1052,7 @@ function computeKpiSnapshot(rawData, windows, todayKey) {
       current: currentMetrics.operations,
       previous: previousMetrics.operations,
     },
-    metricValues: {
-      current: flattenMetricValues(currentMetrics),
-      previous: flattenMetricValues(previousMetrics),
-    },
+    metricValues,
     weeklyComparisons,
     sourceRows: {
       ads: normalizedData.adsRows.length,
@@ -1011,6 +1061,7 @@ function computeKpiSnapshot(rawData, windows, todayKey) {
       sessions: normalizedData.zoomSessions.length,
       donations: normalizedData.donationRows.length,
       todos: normalizedData.todoRows.length,
+      kpiDaily: kpiRows.length,
     },
   };
 }
@@ -1539,6 +1590,7 @@ function DashboardOverview() {
     activities: [],
     donationRows: [],
     todoRows: [],
+    kpiDailyRows: [],
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -1563,12 +1615,15 @@ function DashboardOverview() {
     const startKey = addDays(todayKey, -Math.max(LOOKBACK_DAYS_SAFE, 120));
     const nextWarnings = [];
 
+    // Fetch raw tables + fact_kpi_daily in parallel
+    let kpiDailyRows = [];
     const [
       adsResponse,
       contactsResponse,
       activitiesResponse,
       donationsResponse,
       todosResponse,
+      kpiDailyResult,
     ] = await Promise.all([
       supabase
         .from('raw_fb_ads_insights_daily')
@@ -1591,7 +1646,9 @@ function DashboardOverview() {
         .select('notion_page_id,task_title,status,last_updated_at,created_at,metadata')
         .gte('last_updated_at', `${startKey}T00:00:00.000Z`)
         .order('last_updated_at', { ascending: true }),
+      fetchKpiDaily(startKey, todayKey).catch(() => []),
     ]);
+    kpiDailyRows = kpiDailyResult || [];
 
     if (adsResponse.error) {
       setError(`Failed to load Meta ads data: ${adsResponse.error.message}`);
@@ -1651,6 +1708,7 @@ function DashboardOverview() {
       associations: assocRows,
       donationRows: donationsResponse.data || [],
       todoRows: todosResponse.data || [],
+      kpiDailyRows,
     });
     setLastLoadedAt(new Date().toISOString());
     setLoading(false);

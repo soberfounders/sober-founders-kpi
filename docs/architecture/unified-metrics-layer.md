@@ -1,6 +1,6 @@
 # Unified Metrics Layer - Architecture Reference
 
-## Status: Phase 3 Complete (Schema + Seeds + Compute Engine + Slack Bot)
+## Status: Phase 4 Complete (Schema + Seeds + Compute Engine + Slack Bot + Dashboard)
 
 ## Problem
 
@@ -49,21 +49,27 @@ Layer 4: Consumption (dashboard + Slack bot read from views)
 - `phoenix_qualified_leads` - Revenue >= $1M AND sobriety > 1 year
 - `interviews_completed` - HubSpot meetings matching interview patterns
 - `phoenix_paid_members` - Active contacts with Paid Groups membership
+- `great_leads` - Revenue >= $1M (no sobriety gate)
 - `ad_spend` - Total Meta ad spend
+- `ad_leads` - Meta ad lead-form submissions
 - `cpl` - Ad spend / leads (composite)
-- `cpql` - Ad spend / qualified leads (composite)
-- `cpgl` - Ad spend / Phoenix-qualified leads (composite)
+- `cpql` - Ad spend / qualified leads (composite, per funnel)
+- `cpgl` - Ad spend / great leads (composite, per funnel)
 
 ### Attendance Domain
 - `attendance_sessions` - Total attendee-session records
 - `unique_attendees` - Deduplicated unique people
 - `new_attendees` - First-time attendees
+- `attendance_total` - Total per day type (tuesday/thursday funnel_key)
+- `attendance_new` - New attendees per day type
+- `attendance_repeat` - Repeat attendees per day type
 - `repeat_rate_tuesday` - Tuesday repeat attendance ratio
 - `repeat_rate_thursday` - Thursday repeat attendance ratio
 - `retention_14d` / `retention_30d` - Cohort return rates
 
 ### Donations Domain
 - `donations_total` - Sum of donation amounts
+- `donations_count` - Number of donation transactions
 - `active_donors` - Unique donors in window
 - `recurring_revenue` - Recurring donation amount
 
@@ -77,6 +83,7 @@ Layer 4: Consumption (dashboard + Slack bot read from views)
 ### Operations Domain
 - `sync_errors` - HubSpot sync error count
 - `sync_freshness_minutes` - Minutes since last sync
+- `completed_items` - Notion tasks completed in window
 
 ### Outreach Domain
 - `outreach_sent` - Recovery emails delivered
@@ -104,9 +111,9 @@ owner, domain, expected_impact, linked_metrics, target_date, outcome_notes.
 - Phase 1: Schema + seeds (this migration) - DONE
 - Phase 2: compute-metrics edge function (backfill + daily cron) - DONE
 - Phase 3: Slack bot reads from views (replace trends.ts aggregates) - DONE
-- Phase 4: Dashboard KPI cards read from views
-- Phase 5: Add new metrics (CPL, outreach rates, etc.)
-- Phase 6: Cleanup dead calculation code
+- Phase 4: Dashboard KPI cards read from fact_kpi_daily - DONE
+- Phase 5: Cleanup dead calculation code from raw-table pipeline
+- Phase 6: Add experiment/initiative-linked metrics
 
 ## Qualification Rules (for compute-metrics)
 

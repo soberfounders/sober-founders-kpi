@@ -129,12 +129,26 @@ const METRIC_MAP: Record<string, MetricMapping> = {
 
   // Ad spend / cost composites
   ad_spend:                      { kpi_key: "ad_spend",                 funnel_key: "all",     agg: "sum" },
+  ad_leads:                      { kpi_key: "ad_leads",                 funnel_key: "all",     agg: "sum" },
   cpl:                           { kpi_key: "cpl",                      funnel_key: "all",     agg: "avg" },
   cpql:                          { kpi_key: "cpql",                     funnel_key: "all",     agg: "avg" },
   cpgl:                          { kpi_key: "cpgl",                     funnel_key: "all",     agg: "avg" },
+  great_leads:                   { kpi_key: "great_leads",              funnel_key: "all",     agg: "sum" },
 
   // Interviews
   interviews_completed:          { kpi_key: "interviews_completed",     funnel_key: "all",     agg: "sum" },
+
+  // Day-split attendance
+  attendance_total_tuesday:      { kpi_key: "attendance_total",         funnel_key: "tuesday",  agg: "sum" },
+  attendance_total_thursday:     { kpi_key: "attendance_total",         funnel_key: "thursday", agg: "sum" },
+  attendance_new_tuesday:        { kpi_key: "attendance_new",           funnel_key: "tuesday",  agg: "sum" },
+  attendance_new_thursday:       { kpi_key: "attendance_new",           funnel_key: "thursday", agg: "sum" },
+
+  // Donations count
+  donations_count:               { kpi_key: "donations_count",          funnel_key: "all",     agg: "sum" },
+
+  // Completed items
+  completed_items:               { kpi_key: "completed_items",          funnel_key: "all",     agg: "sum" },
 };
 
 // ---------------------------------------------------------------------------

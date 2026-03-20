@@ -11,6 +11,7 @@ import {
   YAxis,
 } from 'recharts';
 import { hasSupabaseConfig, supabase } from '../lib/supabaseClient';
+import { isDonationExcludedStatus } from '../lib/dashboardKpiHelpers';
 
 const baseCardStyle = {
   background: 'var(--color-card)',
@@ -206,7 +207,7 @@ function DonationsDashboard() {
           campaign_name: String(row.campaign_name || 'Unattributed').trim() || 'Unattributed',
         };
       })
-      .filter((row) => row.amount > 0 && row.donatedAt);
+      .filter((row) => row.amount > 0 && row.donatedAt && !isDonationExcludedStatus(row.status));
   }, [rows]);
 
   const summary = useMemo(() => {
