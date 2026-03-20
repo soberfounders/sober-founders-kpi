@@ -51,7 +51,7 @@ export const getKpiSnapshot = async (
       metric,
       value: score,
       window: range.label,
-      source: "raw_hubspot_contacts + raw_hubspot_meeting_activities + donation_transactions_unified",
+      source: "fact_kpi_daily (leads_created, attendance_sessions, donations_total, phoenix_paid_members)",
       confidence: score === null ? 0.35 : 0.7,
       notes: score === null ? ["Org health is incomplete due to missing source values"] : [],
       components: [

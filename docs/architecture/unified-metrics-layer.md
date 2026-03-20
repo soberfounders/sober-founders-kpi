@@ -1,6 +1,6 @@
 # Unified Metrics Layer - Architecture Reference
 
-## Status: Phase 2 Complete (Schema + Seeds + Compute Engine)
+## Status: Phase 3 Complete (Schema + Seeds + Compute Engine + Slack Bot)
 
 ## Problem
 
@@ -103,7 +103,7 @@ owner, domain, expected_impact, linked_metrics, target_date, outcome_notes.
 
 - Phase 1: Schema + seeds (this migration) - DONE
 - Phase 2: compute-metrics edge function (backfill + daily cron) - DONE
-- Phase 3: Slack bot reads from views (replace trends.ts aggregates)
+- Phase 3: Slack bot reads from views (replace trends.ts aggregates) - DONE
 - Phase 4: Dashboard KPI cards read from views
 - Phase 5: Add new metrics (CPL, outreach rates, etc.)
 - Phase 6: Cleanup dead calculation code
