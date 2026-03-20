@@ -60,6 +60,7 @@ const envSchema = z.object({
   MANAGER_CHECKIN_HOURS_ET: z.string().optional(),
   AGENT_QUEUE_ENABLED: z.string().optional(),
   AGENT_QUEUE_CHANNEL_ID: z.string().optional(),
+  MARKETING_MANAGER_CHANNEL_ID: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -114,6 +115,7 @@ export const env = {
     .filter((h) => h >= 0),
   agentQueueEnabled: toBoolean(data.AGENT_QUEUE_ENABLED, false),
   agentQueueChannelId: data.AGENT_QUEUE_CHANNEL_ID || "",
+  marketingManagerChannelId: data.MARKETING_MANAGER_CHANNEL_ID || "",
 } as const;
 
 export type AppEnv = typeof env;

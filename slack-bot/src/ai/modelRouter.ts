@@ -10,6 +10,10 @@ export type TaskType =
   | "morning_summary"
   | "midday_checkin"
   | "evening_recap"
+  | "morning_digest"
+  | "midday_digest"
+  | "eod_digest"
+  | "nudge"
   | "proposal_expand"
   | "conversation_reply"
   | "outcome_analysis"
@@ -20,6 +24,10 @@ const CHEAP_ELIGIBLE: ReadonlySet<TaskType> = new Set([
   "morning_summary",
   "midday_checkin",
   "evening_recap",
+  "morning_digest",
+  "midday_digest",
+  "eod_digest",
+  "nudge",
   "conversation_reply",
 ]);
 
@@ -29,6 +37,10 @@ const TASK_TIER: Record<TaskType, "primary" | "fast"> = {
   morning_summary: "fast",
   midday_checkin: "fast",
   evening_recap: "fast",
+  morning_digest: "fast",
+  midday_digest: "fast",
+  eod_digest: "fast",
+  nudge: "fast",
   proposal_expand: "primary",
   conversation_reply: "fast",
   outcome_analysis: "primary",

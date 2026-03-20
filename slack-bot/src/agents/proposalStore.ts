@@ -192,6 +192,61 @@ export const getActiveProposals = async (persona: string): Promise<AgentProposal
 };
 
 // ---------------------------------------------------------------------------
+// Aggregation helpers (for Marketing Manager digests)
+// ---------------------------------------------------------------------------
+
+/** All proposals still in "proposed" status (awaiting user decision). */
+export const getPendingProposals = async (): Promise<AgentProposal[]> => {
+  const { data, error } = await supabase
+    .from("agent_proposals")
+    .select("*")
+    .eq("status", "proposed")
+    .order("created_at", { ascending: true });
+
+  if (error) throw new Error(`getPendingProposals failed: ${error.message}`);
+  return (data || []) as AgentProposal[];
+};
+
+/** Proposals created today, optionally filtered by status list. */
+export const getTodayProposals = async (
+  statuses?: string[],
+): Promise<AgentProposal[]> => {
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  let query = supabase
+    .from("agent_proposals")
+    .select("*")
+    .gte("created_at", todayStart.toISOString())
+    .order("created_at", { ascending: true });
+
+  if (statuses && statuses.length > 0) {
+    query = query.in("status", statuses);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(`getTodayProposals failed: ${error.message}`);
+  return (data || []) as AgentProposal[];
+};
+
+/** Proposals pending for longer than `olderThanMs` milliseconds. */
+export const getStalePendingProposals = async (
+  olderThanMs: number,
+): Promise<AgentProposal[]> => {
+  const cutoff = new Date(Date.now() - olderThanMs).toISOString();
+
+  const { data, error } = await supabase
+    .from("agent_proposals")
+    .select("*")
+    .eq("status", "proposed")
+    .lte("created_at", cutoff)
+    .order("created_at", { ascending: true });
+
+  if (error) throw new Error(`getStalePendingProposals failed: ${error.message}`);
+  return (data || []) as AgentProposal[];
+};
+
+// ---------------------------------------------------------------------------
 // Agent Context
 // ---------------------------------------------------------------------------
 

@@ -6,7 +6,7 @@
 
 import { WebClient } from "@slack/web-api";
 import { env } from "../config/env.js";
-import { AGENT_PERSONAS, getPersona } from "./registry.js";
+import { getPersona } from "./registry.js";
 import {
   createProposal,
   updateProposalSlackTs,
@@ -16,7 +16,7 @@ import {
   generateMorningPriorities,
 } from "./proposalBuilder.js";
 import {
-  buildProposalBlocks,
+  buildWorkLogBlocks,
   buildMorningPrioritiesBlocks,
 } from "./proposalBlocks.js";
 import { getMetricTrend } from "../data/trends.js";
@@ -66,7 +66,7 @@ const run = async () => {
       draft.baseline_value = baseline;
 
       const proposal = await createProposal(draft, channelId);
-      const blocks = buildProposalBlocks(persona, proposal);
+      const blocks = buildWorkLogBlocks(persona, proposal);
 
       const result = await slack.chat.postMessage({
         channel: channelId,

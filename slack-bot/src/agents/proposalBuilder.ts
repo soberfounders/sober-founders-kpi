@@ -5,9 +5,16 @@
 
 import { llmJson, llmText, getCostSummary } from "../ai/llmClient.js";
 import { getMetricTrend } from "../data/trends.js";
-import { getActiveContext, getProposalHistory } from "./proposalStore.js";
-import type { ProposalDraft } from "./proposalStore.js";
+import {
+  getActiveContext,
+  getProposalHistory,
+  getPendingProposals,
+  getTodayProposals,
+  getStalePendingProposals,
+} from "./proposalStore.js";
+import type { ProposalDraft, AgentProposal } from "./proposalStore.js";
 import type { AgentPersona } from "./registry.js";
+import { getPersona } from "./registry.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -320,6 +327,238 @@ Use Slack mrkdwn formatting. Be direct and concise. Do not use em dashes.`;
 
   const response = await llmText({
     taskType: "evening_recap",
+    input: [{ role: "user", content: prompt }],
+    metadata: { persona: persona.id },
+  });
+
+  return response.outputText;
+};
+
+// ---------------------------------------------------------------------------
+// Batched digest for #marketing-manager (tiered: needs input / FYI / done)
+// ---------------------------------------------------------------------------
+
+export interface DigestData {
+  needsInput: AgentProposal[];
+  autoExecuting: AgentProposal[];
+  completed: AgentProposal[];
+  denied: AgentProposal[];
+  llmSummary: string;
+}
+
+const formatProposalList = (proposals: AgentProposal[]): string => {
+  if (proposals.length === 0) return "None";
+  return proposals
+    .map((p) => {
+      const persona = getPersona(p.agent_persona);
+      const emoji = persona?.emoji || "";
+      return `- ${emoji} *${p.title}* (${p.target_metric}, expected ${p.expected_delta >= 0 ? "+" : ""}${p.expected_delta}${p.delta_type === "percentage" ? "%" : ""})`;
+    })
+    .join("\n");
+};
+
+export const generateMorningDigest = async (
+  persona: AgentPersona,
+): Promise<DigestData> => {
+  const [kpiContext, contexts, history, pending] = await Promise.all([
+    gatherKpiContext(),
+    getActiveContext(persona.id),
+    getProposalHistory(persona.id, 10),
+    getPendingProposals(),
+  ]);
+
+  const costInfo = formatCostSummary();
+
+  const prompt = `You are ${persona.displayName}. ${persona.systemPromptAddendum}
+
+## Current KPI Data
+${kpiContext}
+
+## Persistent Context
+${formatContext(contexts as any)}
+
+## Recent Proposals
+${formatHistory(history as any)}
+
+## Pending Proposals Awaiting Decision (${pending.length})
+${formatProposalList(pending)}
+
+## Big-Picture Goals (frame all priorities around these)
+1. Get people into Phoenix Forum (paid membership at $250/mo)
+2. Get people to show up to mastermind groups (Thursday free/open, Tuesday free/verified)
+3. Get them to repeat and come back (retention, community, value delivery)
+
+Write a concise morning briefing for the founder. Structure:
+1. Top 3 priorities for today (each tied to a big-picture goal)
+2. If there are pending proposals needing a decision, call them out clearly
+3. What the agents will be working on autonomously today
+
+Keep it tight - the founder checks this on mobile. Use Slack mrkdwn. Do not use em dashes.
+
+After the briefing, add:
+*AI Token Usage*
+${costInfo}`;
+
+  const response = await llmText({
+    taskType: "morning_digest",
+    input: [{ role: "user", content: prompt }],
+    metadata: { persona: persona.id },
+  });
+
+  return {
+    needsInput: pending,
+    autoExecuting: [],
+    completed: [],
+    denied: [],
+    llmSummary: response.outputText,
+  };
+};
+
+export const generateMiddayDigest = async (
+  persona: AgentPersona,
+): Promise<DigestData> => {
+  const [kpiContext, contexts, pending, todayAll] = await Promise.all([
+    gatherKpiContext(),
+    getActiveContext(persona.id),
+    getPendingProposals(),
+    getTodayProposals(),
+  ]);
+
+  const completed = todayAll.filter((p) => ["completed", "measured"].includes(p.status));
+  const denied = todayAll.filter((p) => p.status === "denied");
+  const approved = todayAll.filter((p) => p.status === "approved");
+
+  const prompt = `You are ${persona.displayName}. ${persona.systemPromptAddendum}
+
+## Current KPI Data
+${kpiContext}
+
+## Persistent Context
+${formatContext(contexts as any)}
+
+## Today's Activity So Far
+- Pending your input: ${pending.length}
+- Approved/executing: ${approved.length}
+- Completed: ${completed.length}
+- Denied: ${denied.length}
+
+## Pending Proposals
+${formatProposalList(pending)}
+
+## Completed Today
+${formatProposalList(completed)}
+
+## Big-Picture Goals
+1. Get people into Phoenix Forum (paid membership at $250/mo)
+2. Get people to show up to mastermind groups
+3. Get them to repeat and come back
+
+Write a midday check-in. Be brief:
+1. Quick status on morning progress
+2. Highlight anything blocked waiting for the founder's input
+3. Single most important thing to push this afternoon
+
+Use Slack mrkdwn. Do not use em dashes.`;
+
+  const response = await llmText({
+    taskType: "midday_digest",
+    input: [{ role: "user", content: prompt }],
+    metadata: { persona: persona.id },
+  });
+
+  return {
+    needsInput: pending,
+    autoExecuting: approved,
+    completed,
+    denied,
+    llmSummary: response.outputText,
+  };
+};
+
+export const generateEodDigest = async (
+  persona: AgentPersona,
+): Promise<DigestData> => {
+  const [kpiContext, contexts, pending, todayAll] = await Promise.all([
+    gatherKpiContext(),
+    getActiveContext(persona.id),
+    getPendingProposals(),
+    getTodayProposals(),
+  ]);
+
+  const completed = todayAll.filter((p) => ["completed", "measured"].includes(p.status));
+  const denied = todayAll.filter((p) => p.status === "denied");
+  const approved = todayAll.filter((p) => p.status === "approved");
+
+  const prompt = `You are ${persona.displayName}. ${persona.systemPromptAddendum}
+
+## Current KPI Data
+${kpiContext}
+
+## Persistent Context
+${formatContext(contexts as any)}
+
+## Today's Full Activity
+- Pending your input: ${pending.length}
+- Approved/executing: ${approved.length}
+- Completed: ${completed.length}
+- Denied: ${denied.length}
+
+## Still Pending
+${formatProposalList(pending)}
+
+## Completed Today
+${formatProposalList(completed)}
+
+## Big-Picture Goals
+1. Get people into Phoenix Forum (paid membership at $250/mo)
+2. Get people to show up to mastermind groups
+3. Get them to repeat and come back
+
+Write the end-of-day recap:
+1. What got done today (wins, completions)
+2. What's still pending your decision (be specific)
+3. Quick KPI scorecard against the 3 goals
+4. Top priority for tomorrow
+
+Keep it concise. Use Slack mrkdwn. Do not use em dashes.`;
+
+  const response = await llmText({
+    taskType: "eod_digest",
+    input: [{ role: "user", content: prompt }],
+    metadata: { persona: persona.id },
+  });
+
+  return {
+    needsInput: pending,
+    autoExecuting: approved,
+    completed,
+    denied,
+    llmSummary: response.outputText,
+  };
+};
+
+export const generateNudgeMessage = async (
+  persona: AgentPersona,
+  staleProposals: AgentProposal[],
+): Promise<string> => {
+  const items = staleProposals
+    .map((p) => {
+      const agent = getPersona(p.agent_persona);
+      const emoji = agent?.emoji || "";
+      const hoursAgo = Math.round((Date.now() - new Date(p.created_at).getTime()) / 3_600_000);
+      return `- ${emoji} *${p.title}* (${p.target_metric}) - posted ${hoursAgo}h ago`;
+    })
+    .join("\n");
+
+  const prompt = `You are ${persona.displayName}. You're following up with the founder on proposals that need their decision.
+
+These proposals have been waiting for a response:
+${items}
+
+Write a brief, friendly nudge (2-3 sentences max). Mention how many items need attention. If any are time-sensitive, flag it. Do not use em dashes. Use Slack mrkdwn.`;
+
+  const response = await llmText({
+    taskType: "nudge",
     input: [{ role: "user", content: prompt }],
     metadata: { persona: persona.id },
   });

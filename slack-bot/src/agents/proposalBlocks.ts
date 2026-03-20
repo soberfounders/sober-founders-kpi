@@ -4,12 +4,14 @@
 
 import type { AgentProposal } from "./proposalStore.js";
 import type { AgentPersona } from "./registry.js";
+import type { DigestData } from "./proposalBuilder.js";
+import { getPersona } from "./registry.js";
 
 // ---------------------------------------------------------------------------
-// Proposal card (with Approve / Deny / Tell me more buttons)
+// Work log card for #agent-queue (read-only, no buttons - reply in thread)
 // ---------------------------------------------------------------------------
 
-export const buildProposalBlocks = (
+export const buildWorkLogBlocks = (
   persona: AgentPersona,
   proposal: AgentProposal,
 ): Record<string, unknown>[] => {
@@ -57,30 +59,10 @@ export const buildProposalBlocks = (
     });
   }
 
+  // No buttons - this is a work log. Reply in thread to give feedback.
   blocks.push({
-    type: "actions",
-    elements: [
-      {
-        type: "button",
-        text: { type: "plain_text", text: "Approve", emoji: true },
-        style: "primary",
-        action_id: "agent_proposal_approve",
-        value: proposal.id,
-      },
-      {
-        type: "button",
-        text: { type: "plain_text", text: "Deny", emoji: true },
-        style: "danger",
-        action_id: "agent_proposal_deny",
-        value: proposal.id,
-      },
-      {
-        type: "button",
-        text: { type: "plain_text", text: "Tell me more", emoji: true },
-        action_id: "agent_proposal_detail",
-        value: proposal.id,
-      },
-    ],
+    type: "context",
+    elements: [{ type: "mrkdwn", text: "_Reply in thread to give feedback or request changes_" }],
   });
 
   return blocks;
@@ -172,6 +154,159 @@ export const buildOutcomeBlocks = (
     type: "section",
     text: { type: "mrkdwn", text: analysis },
   });
+
+  return blocks;
+};
+
+// ---------------------------------------------------------------------------
+// Digest blocks for #marketing-manager (tiered format)
+// ---------------------------------------------------------------------------
+
+const buildNeedsInputSection = (
+  proposals: AgentProposal[],
+): Record<string, unknown>[] => {
+  if (proposals.length === 0) return [];
+
+  const blocks: Record<string, unknown>[] = [
+    {
+      type: "header",
+      text: { type: "plain_text", text: "Needs Your Input", emoji: true },
+    },
+  ];
+
+  for (const p of proposals) {
+    const persona = getPersona(p.agent_persona);
+    const emoji = persona?.emoji || "";
+    const sign = (p.expected_delta ?? 0) >= 0 ? "+" : "";
+    const suffix = p.delta_type === "percentage" ? "%" : "";
+
+    blocks.push({
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `${emoji} *${p.title}*\n${p.description}\n_${p.target_metric}: ${sign}${p.expected_delta}${suffix} expected | ${Math.round((p.confidence ?? 0) * 100)}% confidence_`,
+      },
+    });
+
+    blocks.push({
+      type: "actions",
+      elements: [
+        {
+          type: "button",
+          text: { type: "plain_text", text: "Approve", emoji: true },
+          style: "primary",
+          action_id: "agent_proposal_approve",
+          value: p.id,
+        },
+        {
+          type: "button",
+          text: { type: "plain_text", text: "Deny", emoji: true },
+          style: "danger",
+          action_id: "agent_proposal_deny",
+          value: p.id,
+        },
+        {
+          type: "button",
+          text: { type: "plain_text", text: "Tell me more", emoji: true },
+          action_id: "agent_proposal_detail",
+          value: p.id,
+        },
+      ],
+    });
+  }
+
+  return blocks;
+};
+
+const buildCompletedSection = (
+  proposals: AgentProposal[],
+): Record<string, unknown>[] => {
+  if (proposals.length === 0) return [];
+
+  const items = proposals
+    .map((p) => {
+      const persona = getPersona(p.agent_persona);
+      const emoji = persona?.emoji || "";
+      return `${emoji} ${p.title}`;
+    })
+    .join("\n");
+
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `*Completed Today (${proposals.length})*\n${items}`,
+      },
+    },
+  ];
+};
+
+export type DigestType = "morning" | "midday" | "afternoon" | "eod";
+
+export const buildDigestBlocks = (
+  persona: AgentPersona,
+  digest: DigestData,
+  digestType: DigestType,
+): Record<string, unknown>[] => {
+  const titles: Record<DigestType, string> = {
+    morning: "Morning Briefing",
+    midday: "Midday Check-in",
+    afternoon: "Afternoon Wrap-up",
+    eod: "End of Day Recap",
+  };
+
+  const blocks: Record<string, unknown>[] = [
+    {
+      type: "header",
+      text: {
+        type: "plain_text",
+        text: `${persona.emoji} ${titles[digestType]}`,
+        emoji: true,
+      },
+    },
+    {
+      type: "section",
+      text: { type: "mrkdwn", text: digest.llmSummary },
+    },
+  ];
+
+  // Add needs-input proposals with approve/deny buttons
+  if (digest.needsInput.length > 0) {
+    blocks.push({ type: "divider" });
+    blocks.push(...buildNeedsInputSection(digest.needsInput));
+  }
+
+  // Add completed summary
+  if (digest.completed.length > 0) {
+    blocks.push({ type: "divider" });
+    blocks.push(...buildCompletedSection(digest.completed));
+  }
+
+  return blocks;
+};
+
+// ---------------------------------------------------------------------------
+// Nudge blocks for stale proposals
+// ---------------------------------------------------------------------------
+
+export const buildNudgeBlocks = (
+  persona: AgentPersona,
+  nudgeText: string,
+  staleProposals: AgentProposal[],
+): Record<string, unknown>[] => {
+  const blocks: Record<string, unknown>[] = [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `${persona.emoji} *Follow-up*\n${nudgeText}`,
+      },
+    },
+  ];
+
+  // Include approve/deny buttons for each stale proposal
+  blocks.push(...buildNeedsInputSection(staleProposals));
 
   return blocks;
 };
