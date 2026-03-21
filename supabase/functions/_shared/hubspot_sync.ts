@@ -207,7 +207,7 @@ function stringOrNull(value: any): string | null {
  * "12-25-2002", "12/2/2011", "08/07/17"
  * Returns ISO date string (YYYY-MM-DD) or null.
  */
-function parseLeadAdSobrietyDate(value: any): string | null {
+export function parseLeadAdSobrietyDate(value: any): string | null {
   if (value === null || value === undefined || value === "") return null;
   const raw = String(value).trim();
   if (!raw || raw.toLowerCase() === "invalid date") return null;
@@ -294,7 +294,7 @@ function parseLeadAdSobrietyDate(value: any): string | null {
  * "10000000" (raw number), "250k", "25,000,000"
  * Returns the lower bound as a number, or null.
  */
-function parseLeadAdRevenue(value: any): number | null {
+export function parseLeadAdRevenue(value: any): number | null {
   if (value === null || value === undefined || value === "") return null;
   const raw = String(value).trim().toLowerCase();
   if (!raw) return null;

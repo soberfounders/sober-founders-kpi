@@ -135,42 +135,31 @@ export const buildOutcomeBlocks = (
 };
 
 // ---------------------------------------------------------------------------
-// Digest blocks for #marketing-manager (tiered format)
+// Digest blocks for #marketing-manager (one idea at a time)
 // ---------------------------------------------------------------------------
 
-// Cap at 10 proposals to stay under Slack's 50-block limit
-const MAX_DIGEST_PROPOSALS = 10;
-
-const buildNeedsInputSection = (
-  proposals: AgentProposal[],
+/**
+ * Build blocks for a SINGLE focused proposal with Approve / Deny / Let's Talk More.
+ * Only one idea is presented at a time to keep things focused.
+ */
+export const buildFocusedProposalBlocks = (
+  proposal: AgentProposal,
+  queuedCount: number,
 ): Record<string, unknown>[] => {
-  if (proposals.length === 0) return [];
-
-  const shown = proposals.slice(0, MAX_DIGEST_PROPOSALS);
-  const overflow = proposals.length - shown.length;
+  const persona = getPersona(proposal.agent_persona);
+  const emoji = persona?.emoji || "";
+  const sign = (proposal.expected_delta ?? 0) >= 0 ? "+" : "";
+  const suffix = proposal.delta_type === "percentage" ? "%" : "";
 
   const blocks: Record<string, unknown>[] = [
     {
-      type: "header",
-      text: { type: "plain_text", text: `Needs Your Input (${proposals.length})`, emoji: true },
-    },
-  ];
-
-  for (const p of shown) {
-    const persona = getPersona(p.agent_persona);
-    const emoji = persona?.emoji || "";
-    const sign = (p.expected_delta ?? 0) >= 0 ? "+" : "";
-    const suffix = p.delta_type === "percentage" ? "%" : "";
-
-    blocks.push({
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `${emoji} *${p.title}*\n_${p.target_metric}: ${sign}${p.expected_delta}${suffix} expected | ${Math.round((p.confidence ?? 0) * 100)}% confidence_`,
+        text: `${emoji} *${proposal.title}*\n${proposal.description}\n\n_${proposal.target_metric}: ${sign}${proposal.expected_delta}${suffix} expected | ${Math.round((proposal.confidence ?? 0) * 100)}% confidence_`,
       },
-    });
-
-    blocks.push({
+    },
+    {
       type: "actions",
       elements: [
         {
@@ -178,35 +167,29 @@ const buildNeedsInputSection = (
           text: { type: "plain_text", text: "Approve", emoji: true },
           style: "primary",
           action_id: "agent_proposal_approve",
-          value: p.id,
+          value: proposal.id,
         },
         {
           type: "button",
           text: { type: "plain_text", text: "Deny", emoji: true },
           style: "danger",
           action_id: "agent_proposal_deny",
-          value: p.id,
+          value: proposal.id,
         },
         {
           type: "button",
-          text: { type: "plain_text", text: "Tell me more", emoji: true },
-          action_id: "agent_proposal_detail",
-          value: p.id,
-        },
-        {
-          type: "button",
-          text: { type: "plain_text", text: "Reply", emoji: true },
-          action_id: "agent_proposal_reply",
-          value: p.id,
+          text: { type: "plain_text", text: "Let's Talk More", emoji: true },
+          action_id: "agent_proposal_discuss",
+          value: proposal.id,
         },
       ],
-    });
-  }
+    },
+  ];
 
-  if (overflow > 0) {
+  if (queuedCount > 0) {
     blocks.push({
       type: "context",
-      elements: [{ type: "mrkdwn", text: `_+ ${overflow} more pending proposals. Approve or deny above to see the rest._` }],
+      elements: [{ type: "mrkdwn", text: `_I have ${queuedCount} more idea${queuedCount === 1 ? "" : "s"} queued up. Let's tackle this one first._` }],
     });
   }
 
@@ -266,10 +249,12 @@ export const buildDigestBlocks = (
     },
   ];
 
-  // Add needs-input proposals with approve/deny buttons
+  // Present ONE proposal at a time — the rest are queued
   if (digest.needsInput.length > 0) {
     blocks.push({ type: "divider" });
-    blocks.push(...buildNeedsInputSection(digest.needsInput));
+    const topProposal = digest.needsInput[0];
+    const remainingCount = digest.needsInput.length - 1;
+    blocks.push(...buildFocusedProposalBlocks(topProposal, remainingCount));
   }
 
   // Add completed summary
@@ -300,8 +285,12 @@ export const buildNudgeBlocks = (
     },
   ];
 
-  // Include approve/deny buttons for each stale proposal
-  blocks.push(...buildNeedsInputSection(staleProposals));
+  // Show one stale proposal at a time
+  if (staleProposals.length > 0) {
+    const topStale = staleProposals[0];
+    const remainingCount = staleProposals.length - 1;
+    blocks.push(...buildFocusedProposalBlocks(topStale, remainingCount));
+  }
 
   return blocks;
 };

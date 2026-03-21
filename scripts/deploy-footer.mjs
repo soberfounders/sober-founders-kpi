@@ -50,6 +50,55 @@ const headers = {
 // ---------------------------------------------------------------------------
 const FOOTER_HTML = `
 <style>
+  /* ── Astra header/menu: match blog dark background #050505 ── */
+  .main-header-bar,
+  .ast-primary-header,
+  .ast-primary-header .main-header-bar,
+  .ast-above-header-wrap .ast-above-header,
+  .ast-below-header-wrap .ast-below-header,
+  .ast-header-break-point .main-header-bar,
+  .ast-primary-header-bar,
+  .ast-mobile-header-wrap .ast-primary-header-bar,
+  .ast-mobile-header-wrap .main-header-bar,
+  .ast-header-break-point .ast-mobile-header-wrap .main-header-bar {
+    background-color: #050505 !important;
+  }
+
+  /* Sub-menus */
+  .main-header-bar .sub-menu,
+  .main-header-bar .ast-submenu-container,
+  .main-navigation .sub-menu,
+  .ast-desktop-popup-content,
+  .ast-mobile-popup-drawer .main-header-bar,
+  .ast-mobile-popup-content,
+  .ast-header-break-point .main-header-menu,
+  .ast-header-break-point .main-navigation ul,
+  .ast-header-break-point .main-navigation ul.sub-menu {
+    background-color: #050505 !important;
+  }
+
+  /* Mobile menu drawer */
+  .ast-mobile-popup-inner,
+  .ast-mobile-popup-drawer.active .ast-mobile-popup-inner,
+  .ast-mobile-header-wrap .ast-mobile-header-content {
+    background-color: #050505 !important;
+  }
+  .ast-mobile-popup-inner .menu-item > .menu-link,
+  .ast-mobile-popup-inner .ast-builder-menu-mobile .menu-item > .menu-link,
+  .ast-header-break-point .main-navigation .menu-item > .menu-link {
+    color: #ffffff !important;
+  }
+  .ast-mobile-popup-inner .menu-item > .menu-link:hover,
+  .ast-header-break-point .main-navigation .menu-item > .menu-link:hover {
+    color: #00b286 !important;
+  }
+  /* Mobile close button */
+  .ast-mobile-popup-close,
+  .ast-mobile-popup-close svg {
+    color: #ffffff !important;
+    fill: #ffffff !important;
+  }
+
   /* ── Hide Astra default footer (replaced by this custom footer) ── */
   footer#colophon {
     display: none !important;
@@ -61,11 +110,15 @@ const FOOTER_HTML = `
   }
 
   /* ── Custom footer ── */
+  .sf-site-footer-wrap {
+    background-color: #050505;
+  }
   .sf-site-footer {
     max-width: 1100px;
     margin: 0 auto;
     padding: 48px 24px 20px;
     font-family: 'Outfit', 'Inter', -apple-system, sans-serif;
+    color: #d1d5db;
   }
 
 
@@ -99,7 +152,7 @@ const FOOTER_HTML = `
     grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
     gap: 32px;
     padding-bottom: 32px;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid #2a2a2a;
     margin-bottom: 24px;
   }
   @media (max-width: 768px) {
@@ -115,14 +168,14 @@ const FOOTER_HTML = `
 
   .sf-footer-brand p {
     font-size: 0.9rem;
-    color: #667085;
+    color: #9ca3af;
     line-height: 1.65;
     margin: 0 0 16px;
     max-width: 280px;
   }
   .sf-footer-brand .sf-footer-nonprofit {
     font-size: 0.78rem;
-    color: #98a2b3;
+    color: #6b7280;
     font-weight: 500;
   }
 
@@ -130,7 +183,7 @@ const FOOTER_HTML = `
     font-family: 'DM Serif Display', serif;
     font-size: 1rem;
     font-weight: 400;
-    color: #101828;
+    color: #f3f4f6;
     margin: 0 0 14px;
   }
   .sf-footer-col ul {
@@ -143,7 +196,7 @@ const FOOTER_HTML = `
   }
   .sf-footer-col a {
     font-size: 0.88rem;
-    color: #667085 !important;
+    color: #9ca3af !important;
     text-decoration: none !important;
     transition: color 0.2s;
   }
@@ -161,11 +214,11 @@ const FOOTER_HTML = `
   }
   .sf-footer-copy p {
     font-size: 0.8rem;
-    color: #98a2b3;
+    color: #6b7280;
     margin: 0;
   }
   .sf-footer-copy a {
-    color: #98a2b3 !important;
+    color: #6b7280 !important;
     text-decoration: none !important;
   }
   .sf-footer-copy a:hover {
@@ -173,6 +226,7 @@ const FOOTER_HTML = `
   }
 </style>
 
+<div class="sf-site-footer-wrap">
 <div class="sf-site-footer">
 
   <!-- Donate button -->
@@ -234,6 +288,7 @@ const FOOTER_HTML = `
     <p><a href="/privacy-policy/">Privacy</a> &middot; <a href="/non-discrimination-equal-opportunity-statement/">Non-Discrimination</a></p>
   </div>
 
+</div>
 </div>
 `;
 

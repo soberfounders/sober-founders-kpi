@@ -1,6 +1,6 @@
 import { env } from "../../config/env.js";
 import { slackWeb } from "../../clients/slack.js";
-import { supabase } from "../../clients/supabase.js";
+import { supabase, invokeMasterSync } from "../../clients/supabase.js";
 import { getMissedCheckinStreak, storeMorningBriefing, storeCheckin } from "../../data/accountability.js";
 import { buildMorningBriefing, buildCheckin } from "./managerBriefing.js";
 import { listOpenTasks } from "../../data/managers.js";
@@ -112,6 +112,14 @@ export class DailyManagerScheduler {
     if ((existing || []).length > 0) {
       logger.info({ todayKey }, "DailyManagerScheduler: morning briefing already sent today, skipping");
       return;
+    }
+
+    // Sync Notion tasks first so the task list is current
+    try {
+      await invokeMasterSync({ action: "sync_notion" });
+      logger.info("DailyManagerScheduler: Notion tasks synced before morning briefing");
+    } catch (err) {
+      logger.error({ err }, "DailyManagerScheduler: Notion sync failed (continuing with stale data)");
     }
 
     // Build message

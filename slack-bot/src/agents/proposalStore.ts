@@ -129,6 +129,7 @@ export const getProposalByMessageTs = async (
   channelId: string,
   messageTs: string,
 ): Promise<AgentProposal | null> => {
+  // Try exact match on message_ts first
   const { data, error } = await supabase
     .from("agent_proposals")
     .select("*")
@@ -136,8 +137,19 @@ export const getProposalByMessageTs = async (
     .eq("message_ts", messageTs)
     .single();
 
-  if (error) return null;
-  return data as AgentProposal;
+  if (!error && data) return data as AgentProposal;
+
+  // Fallback: try thread_ts (handles replies in digest threads where
+  // the proposal's message_ts is from #agent-queue, not the digest)
+  const { data: threadData, error: threadError } = await supabase
+    .from("agent_proposals")
+    .select("*")
+    .eq("thread_ts", messageTs)
+    .single();
+
+  if (!threadError && threadData) return threadData as AgentProposal;
+
+  return null;
 };
 
 export const getProposalHistory = async (

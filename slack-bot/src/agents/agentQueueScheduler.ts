@@ -58,6 +58,7 @@ import {
 } from "./proposalBlocks.js";
 import { runOutcomeChecker } from "./outcomeChecker.js";
 import { getMetricTrend } from "../data/trends.js";
+import { invokeMasterSync } from "../clients/supabase.js";
 import { logger } from "../observability/logger.js";
 
 const slack = new WebClient(env.slackBotToken);
@@ -110,6 +111,7 @@ type SlotAction =
   | { type: "afternoon_digest" }
   | { type: "eod_digest" }
   | { type: "nudge" }
+  | { type: "notion_sync" }
   | { type: "outcome_check_then_propose"; personaId: string };
 
 const SLOT_SCHEDULE: Record<string, SlotAction> = {
@@ -141,6 +143,19 @@ const SLOT_SCHEDULE: Record<string, SlotAction> = {
   "16:00": { type: "outcome_check_then_propose", personaId: "strategy_agent" },
   "16:30": { type: "persona", personaId: "content_agent" },
   "17:00": { type: "eod_digest" },
+};
+
+// ---------------------------------------------------------------------------
+// Sync Notion tasks so the bot has up-to-date status
+// ---------------------------------------------------------------------------
+
+const syncNotionTasks = async (): Promise<void> => {
+  try {
+    await invokeMasterSync({ action: "sync_notion" });
+    logger.info("Notion tasks synced successfully");
+  } catch (err) {
+    logger.error({ err }, "Failed to sync Notion tasks (continuing with stale data)");
+  }
 };
 
 // ---------------------------------------------------------------------------
@@ -217,6 +232,8 @@ const executeSlot = async (action: SlotAction): Promise<void> => {
     // ----- Marketing Manager digests -> #marketing-manager -----
 
     case "morning_digest": {
+      // Sync Notion tasks before the briefing so task list is current
+      await syncNotionTasks();
       const manager = getPersona("marketing_manager")!;
       const digest = await generateMorningDigest(manager);
       const blocks = buildDigestBlocks(manager, digest, "morning");
@@ -238,6 +255,7 @@ const executeSlot = async (action: SlotAction): Promise<void> => {
     }
 
     case "midday_digest": {
+      await syncNotionTasks();
       const manager = getPersona("marketing_manager")!;
       const digest = await generateMiddayDigest(manager);
       const blocks = buildDigestBlocks(manager, digest, "midday");
@@ -259,6 +277,7 @@ const executeSlot = async (action: SlotAction): Promise<void> => {
     }
 
     case "afternoon_digest": {
+      await syncNotionTasks();
       const manager = getPersona("marketing_manager")!;
       const digest = await generateMiddayDigest(manager);
       const blocks = buildDigestBlocks(manager, digest, "afternoon");
@@ -280,6 +299,7 @@ const executeSlot = async (action: SlotAction): Promise<void> => {
     }
 
     case "eod_digest": {
+      await syncNotionTasks();
       const manager = getPersona("marketing_manager")!;
       const digest = await generateEodDigest(manager);
       const blocks = buildDigestBlocks(manager, digest, "eod");
@@ -319,6 +339,13 @@ const executeSlot = async (action: SlotAction): Promise<void> => {
       });
 
       logger.info({ channel: mmChannel, staleCount: stale.length }, "Nudge posted");
+      break;
+    }
+
+    // ----- Standalone Notion sync (keeps task list fresh between digests) -----
+
+    case "notion_sync": {
+      await syncNotionTasks();
       break;
     }
 

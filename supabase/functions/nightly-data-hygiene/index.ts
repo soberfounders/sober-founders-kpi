@@ -1,5 +1,9 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  parseLeadAdSobrietyDate,
+  parseLeadAdRevenue,
+} from "../_shared/hubspot_sync.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -324,6 +328,244 @@ function findDataQualityIssues(contacts: HsContact[]): DataQualityIssue[] {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Name whitespace trimmer                                           */
+/* ------------------------------------------------------------------ */
+
+interface NameTrimFix {
+  id: number;
+  field: "firstname" | "lastname";
+  oldValue: string;
+  newValue: string;
+  email: string;
+}
+
+function findNameTrimFixes(contacts: HsContact[]): NameTrimFix[] {
+  const fixes: NameTrimFix[] = [];
+  for (const c of contacts) {
+    if (c.firstname && c.firstname !== c.firstname.trim()) {
+      fixes.push({
+        id: c.id,
+        field: "firstname",
+        oldValue: c.firstname,
+        newValue: c.firstname.trim(),
+        email: c.email,
+      });
+    }
+    if (c.lastname && c.lastname !== c.lastname.trim()) {
+      fixes.push({
+        id: c.id,
+        field: "lastname",
+        oldValue: c.lastname,
+        newValue: c.lastname.trim(),
+        email: c.email,
+      });
+    }
+  }
+  return fixes;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Lead ad field normalizer                                          */
+/*  Finds contacts where official fields are empty but lead ad        */
+/*  alternate fields have parseable data, then writes to official.    */
+/* ------------------------------------------------------------------ */
+
+// All known alternate field names that Meta Lead Ads might create
+const SOBRIETY_ALT_FIELDS = [
+  "sobriety_date_mmddyyyy",
+  "lead_ad_prop0",
+];
+const REVENUE_ALT_FIELDS = [
+  "annual_revenue_",
+  "annual_revenue",
+  "annual_revenue_100k_minimum_to_participate",
+  "annual_revenue_250k_minimum_to_participate",
+  "what_is_your_annual_revenue_250k_minimum_to_participate",
+  "lead_ad_prop1",
+];
+
+interface FieldNormFix {
+  id: number;
+  name: string;
+  email: string;
+  field: string;
+  rawValue: string;
+  parsedValue: string;
+}
+
+async function normalizeLeadAdFields(
+  token: string,
+  dryRun: boolean,
+): Promise<{ fixes: FieldNormFix[]; failures: string[] }> {
+  const fixes: FieldNormFix[] = [];
+  const failures: string[] = [];
+
+  const allAltFields = [...SOBRIETY_ALT_FIELDS, ...REVENUE_ALT_FIELDS];
+  const fetchProps = [
+    "firstname", "lastname", "email",
+    "sobriety_date", "annual_revenue_in_dollars__official_",
+    ...allAltFields,
+  ];
+
+  // Search: contacts missing sobriety_date but having each alt field
+  for (const altField of SOBRIETY_ALT_FIELDS) {
+    let offset = 0;
+    while (true) {
+      const result = await hsPost(token, "/crm/v3/objects/contacts/search", {
+        filterGroups: [{
+          filters: [
+            { propertyName: "sobriety_date", operator: "NOT_HAS_PROPERTY" },
+            { propertyName: altField, operator: "HAS_PROPERTY" },
+          ],
+        }],
+        properties: fetchProps,
+        limit: 100,
+        ...(offset ? { after: String(offset) } : {}),
+      });
+
+      for (const r of result.results || []) {
+        const rawVal = r.properties?.[altField];
+        if (!rawVal) continue;
+        const parsed = parseLeadAdSobrietyDate(rawVal);
+        if (!parsed) continue;
+        fixes.push({
+          id: Number(r.id),
+          name: `${r.properties?.firstname || ""} ${r.properties?.lastname || ""}`.trim(),
+          email: r.properties?.email || "",
+          field: "sobriety_date",
+          rawValue: String(rawVal),
+          parsedValue: parsed,
+        });
+      }
+
+      if (!result.paging?.next?.after) break;
+      offset = Number(result.paging.next.after);
+      if (offset > 2000) break;
+    }
+  }
+
+  // Search: contacts missing revenue but having each alt field
+  for (const altField of REVENUE_ALT_FIELDS) {
+    let offset = 0;
+    while (true) {
+      const result = await hsPost(token, "/crm/v3/objects/contacts/search", {
+        filterGroups: [{
+          filters: [
+            { propertyName: "annual_revenue_in_dollars__official_", operator: "NOT_HAS_PROPERTY" },
+            { propertyName: altField, operator: "HAS_PROPERTY" },
+          ],
+        }],
+        properties: fetchProps,
+        limit: 100,
+        ...(offset ? { after: String(offset) } : {}),
+      });
+
+      for (const r of result.results || []) {
+        const rawVal = r.properties?.[altField];
+        if (!rawVal) continue;
+        const parsed = parseLeadAdRevenue(rawVal);
+        if (parsed === null || parsed <= 0) continue;
+        // Skip if already queued from a previous alt field
+        if (fixes.some((f) => f.id === Number(r.id) && f.field === "annual_revenue_in_dollars__official_")) continue;
+        fixes.push({
+          id: Number(r.id),
+          name: `${r.properties?.firstname || ""} ${r.properties?.lastname || ""}`.trim(),
+          email: r.properties?.email || "",
+          field: "annual_revenue_in_dollars__official_",
+          rawValue: String(rawVal),
+          parsedValue: String(parsed),
+        });
+      }
+
+      if (!result.paging?.next?.after) break;
+      offset = Number(result.paging.next.after);
+      if (offset > 2000) break;
+    }
+  }
+
+  // Fix contacts with future sobriety dates (after today) — blank them or re-parse
+  {
+    const today = new Date().toISOString().split("T")[0];
+    // Search for dates after today (catches both near-future and far-future)
+    const badDateResult = await hsPost(token, "/crm/v3/objects/contacts/search", {
+      filterGroups: [{
+        filters: [
+          { propertyName: "sobriety_date", operator: "HAS_PROPERTY" },
+          { propertyName: "sobriety_date", operator: "GT", value: today },
+        ],
+      }],
+      properties: fetchProps,
+      limit: 100,
+    });
+
+    for (const r of badDateResult.results || []) {
+      const name = `${r.properties?.firstname || ""} ${r.properties?.lastname || ""}`.trim();
+      const email = r.properties?.email || "";
+      const badDate = r.properties?.sobriety_date || "";
+
+      // Try to re-parse from alt fields
+      let reparsed: string | null = null;
+      for (const altField of SOBRIETY_ALT_FIELDS) {
+        const rawVal = r.properties?.[altField];
+        if (rawVal) {
+          const candidate = parseLeadAdSobrietyDate(rawVal);
+          if (candidate && candidate <= today) {
+            reparsed = candidate;
+            fixes.push({
+              id: Number(r.id),
+              name, email,
+              field: "sobriety_date",
+              rawValue: `BAD:${badDate} ALT:${rawVal}`,
+              parsedValue: reparsed,
+            });
+            break;
+          }
+        }
+      }
+
+      // If no valid alt field, blank the bad date
+      if (!reparsed) {
+        fixes.push({
+          id: Number(r.id),
+          name, email,
+          field: "sobriety_date",
+          rawValue: `FUTURE:${badDate}`,
+          parsedValue: "",
+        });
+      }
+    }
+  }
+
+  // Deduplicate by id+field
+  const seen = new Set<string>();
+  const dedupedFixes = fixes.filter((f) => {
+    const key = `${f.id}:${f.field}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  // Write fixes to HubSpot
+  if (!dryRun) {
+    for (const fix of dedupedFixes) {
+      try {
+        await hsPatch(token, `/crm/v3/objects/contacts/${fix.id}`, {
+          properties: { [fix.field]: fix.parsedValue },
+        });
+        console.log(`  NORM FIX: ${fix.id} ${fix.name} ${fix.field} = ${fix.parsedValue} (from "${fix.rawValue}")`);
+      } catch (e: any) {
+        const msg = `${fix.id} ${fix.field}: ${e.message?.slice(0, 100)}`;
+        console.error(`  NORM FAIL: ${msg}`);
+        failures.push(msg);
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+
+  return { fixes: dedupedFixes, failures };
+}
+
+/* ------------------------------------------------------------------ */
 /*  Sync health check (reads Supabase)                                */
 /* ------------------------------------------------------------------ */
 
@@ -413,7 +655,10 @@ async function sendSlackReport(report: {
   mergeFails: string[];
   zapFixes: ZapFix[];
   zapFixFails: string[];
+  nameTrimFixes: number;
   dataQualityIssues: DataQualityIssue[];
+  fieldNormFixes: FieldNormFix[];
+  fieldNormFails: string[];
   syncHealth: SyncHealthResult;
   contactsScanned: number;
   dryRun: boolean;
@@ -443,6 +688,8 @@ async function sendSlackReport(report: {
           `*Contacts scanned:* ${report.contactsScanned} (last 7 days)`,
           `*Duplicates merged:* ${report.merges.length}${report.mergeFails.length ? ` (${report.mergeFails.length} failed)` : ""}`,
           `*Zap Name fixes:* ${report.zapFixes.length}${report.zapFixFails.length ? ` (${report.zapFixFails.length} failed)` : ""}`,
+          `*Name trims:* ${report.nameTrimFixes}`,
+          `*Field normalizations:* ${report.fieldNormFixes.length}${report.fieldNormFails.length ? ` (${report.fieldNormFails.length} failed)` : ""}`,
           `*Data quality flags:* ${report.dataQualityIssues.length}`,
           `*Sync health:* ${syncStatus}`,
         ].join("\n"),
@@ -464,6 +711,24 @@ async function sendSlackReport(report: {
       text: {
         type: "mrkdwn",
         text: `*Merges:*\n${mergeLines}${report.merges.length > 15 ? `\n_...and ${report.merges.length - 15} more_` : ""}`,
+      },
+    });
+  }
+
+  // Field normalization details
+  if (report.fieldNormFixes.length > 0) {
+    const normLines = report.fieldNormFixes
+      .slice(0, 15)
+      .map(
+        (f) =>
+          `- ${f.name || "unnamed"} (${f.email || "no email"}): ${f.field} = ${f.parsedValue} (from "${f.rawValue}")`,
+      )
+      .join("\n");
+    blocks.push({
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `*Field normalizations (lead ad → official):*\n${normLines}${report.fieldNormFixes.length > 15 ? `\n_...and ${report.fieldNormFixes.length - 15} more_` : ""}`,
       },
     });
   }
@@ -512,7 +777,7 @@ async function sendSlackReport(report: {
       },
       body: JSON.stringify({
         channel,
-        text: `${prefix}Nightly Data Hygiene: ${report.merges.length} merges, ${report.zapFixes.length} zap fixes, ${report.dataQualityIssues.length} quality flags`,
+        text: `${prefix}Nightly Data Hygiene: ${report.merges.length} merges, ${report.zapFixes.length} zap fixes, ${report.fieldNormFixes.length} field norms, ${report.dataQualityIssues.length} quality flags`,
         blocks,
       }),
     });
@@ -646,19 +911,57 @@ serve(async (req: Request) => {
       zapFixResults.push(...zapFixes);
     }
 
-    // ── 8. Send Slack report ──
+    // ── 8. Trim whitespace from names ──
+    const nameTrimFixes = findNameTrimFixes(contacts);
+    console.log(`Found ${nameTrimFixes.length} name whitespace fixes`);
+    let nameTrimsDone = 0;
+    const nameTrimFails: string[] = [];
+
+    if (!dryRun) {
+      // Group by contact ID so we patch once per contact
+      const byId = new Map<number, Record<string, string>>();
+      for (const fix of nameTrimFixes) {
+        if (!byId.has(fix.id)) byId.set(fix.id, {});
+        byId.get(fix.id)![fix.field] = fix.newValue;
+      }
+      for (const [id, props] of byId) {
+        try {
+          await hsPatch(hsToken, `/crm/v3/objects/contacts/${id}`, { properties: props });
+          nameTrimsDone++;
+          console.log(`  TRIM: ${id} ${JSON.stringify(props)}`);
+        } catch (e: any) {
+          const msg = `${id}: ${e.message?.slice(0, 100)}`;
+          console.error(`  TRIM FAIL: ${msg}`);
+          nameTrimFails.push(msg);
+        }
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    } else {
+      nameTrimsDone = nameTrimFixes.length;
+    }
+
+    // ── 9. Normalize lead ad fields → official fields ──
+    console.log("Running lead ad field normalizer...");
+    const normResult = await normalizeLeadAdFields(hsToken, dryRun);
+    console.log(`Field normalizer: ${normResult.fixes.length} fixes, ${normResult.failures.length} failures`);
+
+    // ── 10. Send Slack report ──
     const slackSent = await sendSlackReport({
       merges: mergeResults,
       mergeFails,
       zapFixes: zapFixResults,
       zapFixFails,
+      nameTrimFixes: nameTrimsDone,
       dataQualityIssues,
+      fieldNormFixes: normResult.fixes,
+      fieldNormFails: normResult.failures,
       syncHealth,
       contactsScanned: contacts.length,
       dryRun,
     });
 
-    // ── 9. Log to sync_runs ──
+    // ── 11. Log to sync_runs ──
+    const allFails = mergeFails.length + zapFixFails.length + nameTrimFails.length + normResult.failures.length;
     const runMetadata = {
       contacts_scanned: contacts.length,
       duplicates_found: duplicates.length,
@@ -666,6 +969,10 @@ serve(async (req: Request) => {
       merge_failures: mergeFails.length,
       zap_fixes: dryRun ? 0 : zapFixResults.length,
       zap_fix_failures: zapFixFails.length,
+      name_trims: dryRun ? 0 : nameTrimsDone,
+      name_trim_failures: nameTrimFails.length,
+      field_norm_fixes: dryRun ? 0 : normResult.fixes.length,
+      field_norm_failures: normResult.failures.length,
       data_quality_issues: dataQualityIssues.length,
       sync_health_ok:
         syncHealth.allFresh && syncHealth.noDead && syncHealth.allHealthy,
@@ -676,12 +983,12 @@ serve(async (req: Request) => {
     await supabase.from("hubspot_sync_runs").insert({
       run_type: "nightly_data_hygiene",
       object_type: "contacts",
-      status: mergeFails.length === 0 && zapFixFails.length === 0 ? "success" : "partial",
+      status: allFails === 0 ? "success" : "partial",
       started_at: nowIso(),
       finished_at: nowIso(),
       items_read: contacts.length,
-      items_written: mergeResults.length + zapFixResults.length,
-      items_failed: mergeFails.length + zapFixFails.length,
+      items_written: mergeResults.length + zapFixResults.length + nameTrimsDone + normResult.fixes.length,
+      items_failed: allFails,
       metadata: runMetadata,
     });
 
@@ -694,6 +1001,9 @@ serve(async (req: Request) => {
       merge_failures: mergeFails.length,
       zap_fixes: dryRun ? zapFixes.length : zapFixResults.length,
       zap_fix_failures: zapFixFails.length,
+      name_trims: nameTrimsDone,
+      field_norm_fixes: normResult.fixes.length,
+      field_norm_failures: normResult.failures.length,
       data_quality_issues: dataQualityIssues.length,
       sync_health: {
         fresh: syncHealth.allFresh,

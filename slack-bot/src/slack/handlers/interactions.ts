@@ -1,11 +1,106 @@
 import type { App } from "@slack/bolt";
 import { env } from "../../config/env.js";
 import { defaultToolRuntime, summarizeToolExecution } from "../../ai/tools.js";
-import { getProposalById, updateProposalStatus } from "../../agents/proposalStore.js";
-import { executeProposal } from "../../agents/proposalExecutor.js";
+import { getProposalById, updateProposalStatus, getPendingProposals } from "../../agents/proposalStore.js";
 import { generateProposalDetail } from "../../agents/proposalBuilder.js";
 import { getPersona } from "../../agents/registry.js";
+import { llmText } from "../../ai/llmClient.js";
+import { buildFocusedProposalBlocks } from "../../agents/proposalBlocks.js";
 import { logger } from "../../observability/logger.js";
+
+// ---------------------------------------------------------------------------
+// Clarifying question generator (used after Approve)
+// ---------------------------------------------------------------------------
+
+const generateClarifyingQuestion = async (
+  proposal: Pick<import("../../agents/proposalStore.js").AgentProposal, "title" | "description" | "target_metric" | "expected_delta" | "delta_type" | "proposal_type" | "agent_persona">,
+  persona: import("../../agents/registry.js").AgentPersona | null | undefined,
+  priorConversation: string | null,
+): Promise<string> => {
+  const personaName = persona?.displayName || "Marketing Manager";
+  const personaAddendum = persona?.systemPromptAddendum || "";
+
+  const conversationContext = priorConversation
+    ? `\n\nConversation so far:\n${priorConversation}`
+    : "";
+
+  const response = await llmText({
+    taskType: "conversation_reply",
+    instructions: `You are ${personaName}. ${personaAddendum}
+
+The founder just approved this proposal:
+Title: ${proposal.title}
+Description: ${proposal.description}
+Target metric: ${proposal.target_metric}
+Expected impact: ${proposal.expected_delta} (${proposal.delta_type})
+Type: ${proposal.proposal_type}
+${conversationContext}
+
+${priorConversation
+    ? "Based on the conversation so far, ask the NEXT clarifying question. Ask only ONE question at a time. If you have enough information to execute, respond with exactly the text READY_TO_EXECUTE on its own line followed by a brief summary of the plan."
+    : "Ask the FIRST clarifying question to make sure this is right before executing. Ask only ONE question at a time. Focus on the most important thing you need to know: scope, timing, audience, budget, or specifics that would change how you'd execute this."}
+
+Rules:
+- ONE question only. Do not list multiple questions.
+- Be specific, not generic. Ask about THIS proposal, not general best practices.
+- Do not use em dashes.
+- Keep it conversational and brief.`,
+    input: [{ role: "user", content: "Generate the clarifying question." }],
+    metadata: { proposalId: proposal.title, persona: persona?.id || "unknown" },
+  });
+
+  return response.outputText;
+};
+
+// ---------------------------------------------------------------------------
+// Present the next queued proposal in the channel
+// ---------------------------------------------------------------------------
+
+export const presentNextProposal = async (
+  client: import("@slack/web-api").WebClient,
+  channelId: string,
+  threadTs?: string,
+): Promise<boolean> => {
+  const pending = await getPendingProposals();
+  if (pending.length === 0) {
+    if (threadTs) {
+      const manager = getPersona("marketing_manager");
+      const emoji = manager?.emoji || "";
+      await client.chat.postMessage({
+        channel: channelId,
+        thread_ts: threadTs,
+        text: `${emoji} That's everything for now. No more ideas in the queue. I'll bring new ones as the agents generate them.`,
+      });
+    }
+    return false;
+  }
+
+  const nextProposal = pending[0];
+  const remainingCount = pending.length - 1;
+  const manager = getPersona("marketing_manager");
+  const emoji = manager?.emoji || "";
+
+  const blocks = buildFocusedProposalBlocks(nextProposal, remainingCount);
+
+  await client.chat.postMessage({
+    channel: channelId,
+    text: `${emoji} Here's the next idea:`,
+    blocks: [
+      {
+        type: "section",
+        text: { type: "mrkdwn", text: `${emoji} *Next idea:*` },
+      },
+      ...blocks,
+    ] as any,
+  });
+
+  // Save channel reference so thread replies can find this proposal
+  await updateProposalStatus(nextProposal.id, "proposed", {
+    thread_ts: null, // Will be set when user interacts
+  });
+
+  return true;
+};
 
 export const registerInteractionHandlers = (app: App): void => {
   // -------------------------------------------------------------------------
@@ -72,7 +167,7 @@ export const registerInteractionHandlers = (app: App): void => {
   });
 
   // -------------------------------------------------------------------------
-  // Agent proposal flow (approve / deny / tell me more)
+  // Agent proposal flow (approve → clarify → execute / deny → feedback / discuss)
   // -------------------------------------------------------------------------
 
   app.action("agent_proposal_approve", async ({ ack, action, body, respond, client }) => {
@@ -104,38 +199,36 @@ export const registerInteractionHandlers = (app: App): void => {
       return;
     }
 
-    await updateProposalStatus(proposalId, "approved", {
+    // Move to "clarifying" status — don't execute yet
+    await updateProposalStatus(proposalId, "clarifying", {
       approved_by: approverUserId,
       approved_at: new Date().toISOString(),
+      thread_ts: messageTs || null,
     });
 
-    const result = await executeProposal({ ...proposal, status: "approved" });
+    const persona = getPersona(proposal.agent_persona);
+    const emoji = persona?.emoji || "";
+
+    // Generate the first clarifying question
+    const firstQuestion = await generateClarifyingQuestion(proposal, persona, null);
 
     if (channelId) {
-      const persona = getPersona(proposal.agent_persona);
-      const emoji = persona?.emoji || "";
-
-      // Post execution summary to the digest thread where they clicked approve
-      const summaryParts = [`${emoji} *Approved: ${proposal.title}*`, result.summary];
-      if (result.draft && proposal.channel_id && proposal.channel_id !== channelId) {
-        summaryParts.push("_Full draft posted in the #agent-queue thread for review._");
-      }
       await client.chat.postMessage({
         channel: channelId,
         thread_ts: messageTs || undefined,
-        text: summaryParts.join("\n"),
+        text: `${emoji} *Approved: ${proposal.title}*\n\nBefore I execute, let me make sure we're aligned.\n\n${firstQuestion}`,
       });
     }
 
     await respond({
       response_type: "ephemeral",
       replace_original: false,
-      text: `Approved: ${proposal.title}`,
+      text: `Approved: ${proposal.title} — clarifying details in thread.`,
     });
 
     logger.info(
       { proposalId, approver: approverUserId },
-      "agent_proposal_approve: proposal approved and executed",
+      "agent_proposal_approve: moved to clarifying, first question posted",
     );
   });
 
@@ -168,8 +261,9 @@ export const registerInteractionHandlers = (app: App): void => {
       return;
     }
 
-    await updateProposalStatus(proposalId, "denied", {
-      denial_reason: "User denied via button",
+    // Mark as "denied_pending_feedback" so the thread handler knows to collect feedback
+    await updateProposalStatus(proposalId, "denied_pending_feedback", {
+      thread_ts: messageTs || null,
     });
 
     if (channelId) {
@@ -178,23 +272,79 @@ export const registerInteractionHandlers = (app: App): void => {
       await client.chat.postMessage({
         channel: channelId,
         thread_ts: messageTs || undefined,
-        text: `${emoji} Denied. I'll adjust my approach for next time.`,
+        text: `${emoji} Got it, passing on this one. What didn't land about it? Was it the wrong focus, bad timing, or something else? Your feedback helps me bring better ideas next time.`,
       });
     }
 
     await respond({
       response_type: "ephemeral",
       replace_original: false,
-      text: `Denied: ${proposal.title}`,
+      text: `Denied: ${proposal.title} — feedback requested in thread.`,
     });
 
     logger.info(
       { proposalId, actor: actorUserId },
-      "agent_proposal_deny: proposal denied",
+      "agent_proposal_deny: awaiting feedback",
     );
   });
 
+  // Keep legacy "Tell me more" handler for old messages still in Slack
   app.action("agent_proposal_detail", async ({ ack, action, body, respond, client }) => {
+    await ack();
+
+    const actionPayload = action as unknown as Record<string, unknown>;
+    const bodyPayload = body as Record<string, any>;
+    const proposalId = String(actionPayload.value || "").trim();
+    const channelId = String(bodyPayload.channel?.id || "").trim();
+    const messageTs = String(bodyPayload.message?.ts || "").trim();
+
+    if (!proposalId) {
+      await respond({ response_type: "ephemeral", text: "Invalid proposal payload." });
+      return;
+    }
+
+    // Redirect to the discuss flow
+    const proposal = await getProposalById(proposalId);
+    if (!proposal) {
+      await respond({ response_type: "ephemeral", text: "Proposal not found." });
+      return;
+    }
+
+    const persona = getPersona(proposal.agent_persona);
+    if (!persona) {
+      await respond({ response_type: "ephemeral", text: "Unknown agent persona." });
+      return;
+    }
+
+    // Update thread_ts so the thread handler can find this proposal
+    if (messageTs) {
+      await updateProposalStatus(proposalId, proposal.status, { thread_ts: messageTs });
+    }
+
+    const detail = await generateProposalDetail(persona, proposal);
+
+    if (channelId) {
+      await client.chat.postMessage({
+        channel: channelId,
+        thread_ts: messageTs || undefined,
+        text: `${persona.emoji} *${proposal.title}*\n\n${detail}\n\nWhat do you think? We can discuss, or you can Approve / Deny from the buttons above.`,
+      });
+    }
+
+    await respond({
+      response_type: "ephemeral",
+      replace_original: false,
+      text: "Discussion started in thread.",
+    });
+
+    logger.info({ proposalId }, "agent_proposal_detail: discussion started");
+  });
+
+  // -------------------------------------------------------------------------
+  // "Let's Talk More" — open a discussion thread
+  // -------------------------------------------------------------------------
+
+  app.action("agent_proposal_discuss", async ({ ack, action, body, respond, client }) => {
     await ack();
 
     const actionPayload = action as unknown as Record<string, unknown>;
@@ -220,68 +370,38 @@ export const registerInteractionHandlers = (app: App): void => {
       return;
     }
 
+    // Save thread_ts so the thread handler can find this proposal
+    if (messageTs) {
+      await updateProposalStatus(proposalId, proposal.status, { thread_ts: messageTs });
+    }
+
     const detail = await generateProposalDetail(persona, proposal);
 
     if (channelId) {
       await client.chat.postMessage({
         channel: channelId,
         thread_ts: messageTs || undefined,
-        text: `${persona.emoji} *More detail on: ${proposal.title}*\n\n${detail}`,
+        text: `${persona.emoji} *${proposal.title}*\n\n${detail}\n\nWhat questions do you have? Let's talk through this before deciding.`,
       });
     }
 
     await respond({
       response_type: "ephemeral",
       replace_original: false,
-      text: "Detail posted in thread.",
+      text: "Discussion started in thread.",
     });
 
-    logger.info({ proposalId }, "agent_proposal_detail: detail posted");
+    logger.info({ proposalId }, "agent_proposal_discuss: discussion thread opened");
   });
 
-  // -------------------------------------------------------------------------
-  // Reply button - opens a thread for founder feedback on a proposal
-  // -------------------------------------------------------------------------
-
-  app.action("agent_proposal_reply", async ({ ack, action, body, respond, client }) => {
+  // Keep legacy reply handler for old messages
+  app.action("agent_proposal_reply", async ({ ack, respond }) => {
     await ack();
-
-    const actionPayload = action as unknown as Record<string, unknown>;
-    const bodyPayload = body as Record<string, any>;
-    const proposalId = String(actionPayload.value || "").trim();
-    const channelId = String(bodyPayload.channel?.id || "").trim();
-    const messageTs = String(bodyPayload.message?.ts || "").trim();
-
-    if (!proposalId) {
-      await respond({ response_type: "ephemeral", text: "Invalid proposal payload." });
-      return;
-    }
-
-    const proposal = await getProposalById(proposalId);
-    if (!proposal) {
-      await respond({ response_type: "ephemeral", text: "Proposal not found." });
-      return;
-    }
-
-    const persona = getPersona(proposal.agent_persona);
-    const emoji = persona?.emoji || "";
-
-    // Post a thread prompt so the founder can reply with feedback
-    if (channelId) {
-      await client.chat.postMessage({
-        channel: channelId,
-        thread_ts: messageTs || undefined,
-        text: `${emoji} *${proposal.title}*\nReply here with feedback, context, or instructions. If this is a timing issue, let me know when to follow up and I'll resurface it then.`,
-      });
-    }
-
     await respond({
       response_type: "ephemeral",
       replace_original: false,
-      text: "Thread opened. Reply with your feedback.",
+      text: "Reply directly in the thread to discuss.",
     });
-
-    logger.info({ proposalId }, "agent_proposal_reply: thread opened for feedback");
   });
 
   // -------------------------------------------------------------------------

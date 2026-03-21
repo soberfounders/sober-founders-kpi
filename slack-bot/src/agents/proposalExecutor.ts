@@ -138,6 +138,43 @@ const postDraftToThread = async (
 };
 
 // ---------------------------------------------------------------------------
+// Infer what manual steps remain after execution
+// ---------------------------------------------------------------------------
+
+const inferManualSteps = (proposal: AgentProposal): string[] => {
+  const title = proposal.title.toLowerCase();
+  const desc = (proposal.description || "").toLowerCase();
+  const combined = `${title} ${desc}`;
+
+  const steps: string[] = [];
+
+  if (combined.includes("email") || combined.includes("sequence") || combined.includes("follow-up") || combined.includes("followup")) {
+    steps.push("Set up the actual email sequence/automation in your email platform (HubSpot, Mailchimp, etc.)");
+  }
+  if (combined.includes("landing page") || combined.includes("page")) {
+    steps.push("Build or update the landing page (I can draft copy but can't publish)");
+  }
+  if (/\b(paid ad|facebook ad|google ad|meta ad|run ads|ad campaign|ad set|ad spend|advertising)\b/.test(combined) || combined.includes("campaign")) {
+    steps.push("Create/update the ad campaign in the ads platform");
+  }
+  if (combined.includes("blog") || combined.includes("post") || combined.includes("article")) {
+    steps.push("Review the draft and publish on WordPress");
+  }
+  if (combined.includes("social") || combined.includes("linkedin") || combined.includes("instagram")) {
+    steps.push("Post the content to your social media accounts");
+  }
+  if (combined.includes("luma") || combined.includes("event") || combined.includes("rsvp")) {
+    steps.push("Update the Luma event settings");
+  }
+
+  if (steps.length === 0) {
+    steps.push("Review the Notion task and execute the action items manually");
+  }
+
+  return steps;
+};
+
+// ---------------------------------------------------------------------------
 // Main executor
 // ---------------------------------------------------------------------------
 
@@ -204,6 +241,7 @@ export const executeProposal = async (proposal: AgentProposal): Promise<Executio
         notion_url: notionUrl || null,
         has_draft: !!draft,
         notes: `Task created in Notion. ${draft ? "Draft posted for review." : ""} Will measure ${proposal.target_metric} in ${proposal.measurement_window_days || 7} days.`,
+        manual_steps_remaining: inferManualSteps(proposal),
       },
       executed_at: new Date().toISOString(),
       measure_after: measureAfter.toISOString(),
@@ -230,15 +268,27 @@ export const executeProposal = async (proposal: AgentProposal): Promise<Executio
       "Proposal executed",
     );
 
-    // Build summary
+    // Build summary - be explicit about what was done and what needs manual action
     const parts: string[] = [];
+    parts.push("*What I did:*");
     if (notionUrl) {
-      parts.push(`Notion task created: ${notionUrl}`);
+      parts.push(`• Created a tracking task in Notion: ${notionUrl}`);
     }
     if (draft) {
-      parts.push("Draft posted in thread for your review.");
+      const isContent = CONTENT_TYPES.has(proposal.proposal_type);
+      parts.push(isContent
+        ? "• Generated draft content and posted it in this thread for your review"
+        : "• Created an execution plan and posted it in this thread");
     }
-    parts.push(`Measuring *${proposal.target_metric}* in ${proposal.measurement_window_days || 7} days.`);
+    parts.push(`• Scheduled outcome measurement for *${proposal.target_metric}* in ${proposal.measurement_window_days || 7} days`);
+
+    // Be honest about what still needs human action
+    parts.push("");
+    parts.push("*What still needs you (or a tool I don't have access to):*");
+    const manualSteps = inferManualSteps(proposal);
+    for (const step of manualSteps) {
+      parts.push(`• ${step}`);
+    }
 
     return {
       success: true,
