@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sendHubSpotEmail, lookupContactByEmail } from "../_shared/hubspot_email.ts";
 import { createNotionFollowUp } from "../_shared/notion_task.ts";
+import { queueAgentTask } from "../_shared/agent_task_queue.ts";
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -161,12 +162,15 @@ serve(async (req: Request) => {
         const hubspotToken = Deno.env.get("HUBSPOT_PRIVATE_APP_TOKEN");
         const senderEmail = Deno.env.get("HUBSPOT_SENDER_EMAIL") || "";
 
-        // Parse dry_run flag — defaults to true (safe mode)
+        // Parse mode: "queue" (default, routes to Agency dashboard) or "direct" (legacy live send)
+        let mode = "queue";
         let dryRun = true;
         try {
             const body = await req.json();
-            if (body?.dry_run === false) dryRun = false;
-        } catch { /* no body — default dry_run:true */ }
+            if (body?.mode === "direct") { mode = "direct"; dryRun = false; }
+            else if (body?.dry_run === false) { mode = "direct"; dryRun = false; }
+            // Default: mode=queue — creates agent_tasks for approval
+        } catch { /* no body — default queue mode */ }
 
         // 1. Get no-show candidates (effective date guard is in the view)
         const { data: candidates, error } = await supabase
@@ -192,9 +196,58 @@ serve(async (req: Request) => {
         let notionTasks = 0;
         let errors = 0;
         const recipients: string[] = [];
+        let tasksQueued = 0;
 
-        // Dry run: no HubSpot tasks — review candidates in the KPI dashboard
-        // OutreachReviewQueue and click Send from there.
+        // Queue mode: create agent_tasks for approval in the Agency dashboard
+        if (mode === "queue" && recoveries.length > 0) {
+            for (const recovery of recoveries) {
+                const targetInfo = targets.find(
+                    (t: any) => t.email?.toLowerCase() === recovery.email?.toLowerCase()
+                );
+                const result = await queueAgentTask({
+                    agentRoleName: "Marketing Manager",
+                    type: "email",
+                    title: `No-show follow-up: ${recovery.name || recovery.email}`,
+                    payload: {
+                        email: recovery.email,
+                        name: recovery.name,
+                        subject: recovery.subject,
+                        body: recovery.message,
+                        campaign_type: "no_show_followup",
+                        meeting_date: targetInfo?.meeting_date,
+                        prior_meeting_count: targetInfo?.prior_meeting_count ?? 0,
+                    },
+                    reasoning: `${recovery.name || recovery.email} registered for ${targetInfo?.meeting_date || "a meeting"} but did not attend. Prior meetings: ${targetInfo?.prior_meeting_count ?? 0}.`,
+                    costEstimateCents: 2, // ~$0.02 for Resend send
+                });
+                if (result.ok) tasksQueued++;
+                else if (result.budgetExceeded) { errors++; break; }
+                else errors++;
+            }
+
+            await alertSlack({
+                totalNoShows: candidates?.length || 0,
+                processed: recoveries.length,
+                emailsSent: 0,
+                notionTasks: 0,
+                errors,
+                recipients: [],
+                previews: recoveries,
+            }, true); // Show as dry-run style preview
+
+            return new Response(
+                JSON.stringify({
+                    ok: true,
+                    mode: "queue",
+                    tasks_queued: tasksQueued,
+                    processed: recoveries.length,
+                    candidates_remaining: realCandidates.length - targets.length,
+                }),
+                { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+        }
+
+        // Direct mode (legacy): send emails immediately
 
         if (!dryRun) {
             // 3b. Send live — HubSpot emails + Notion follow-ups

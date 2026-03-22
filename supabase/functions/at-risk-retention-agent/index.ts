@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sendHubSpotEmail, lookupContactByEmail } from "../_shared/hubspot_email.ts";
 import { createNotionFollowUp } from "../_shared/notion_task.ts";
+import { queueAgentTask } from "../_shared/agent_task_queue.ts";
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -137,11 +138,13 @@ serve(async (req: Request) => {
         const hubspotToken = Deno.env.get("HUBSPOT_PRIVATE_APP_TOKEN");
         const senderEmail = Deno.env.get("HUBSPOT_SENDER_EMAIL") || "";
 
+        let mode = "queue";
         let dryRun = true;
         try {
             const body = await req.json();
-            if (body?.dry_run === false) dryRun = false;
-        } catch { /* default dry_run:true */ }
+            if (body?.mode === "direct") { mode = "direct"; dryRun = false; }
+            else if (body?.dry_run === false) { mode = "direct"; dryRun = false; }
+        } catch { /* default queue mode */ }
 
         // 1a. At-risk regulars (attended 2+ times recently, gone quiet)
         const { data: atRiskData, error: atRiskError } = await supabase
@@ -200,9 +203,58 @@ serve(async (req: Request) => {
         let notionTasks = 0;
         let errors = 0;
         const recipients: string[] = [];
+        let tasksQueued = 0;
 
-        // Dry run: no HubSpot tasks — review candidates in the KPI dashboard
-        // OutreachReviewQueue and click Send from there.
+        // Queue mode: create agent_tasks for approval in the Agency dashboard
+        if (mode === "queue" && nudges.length > 0) {
+            for (const nudge of nudges) {
+                const targetInfo = targets.find(
+                    (t: any) => t.email?.toLowerCase() === nudge.email?.toLowerCase()
+                );
+                const result = await queueAgentTask({
+                    agentRoleName: "Marketing Manager",
+                    type: "email",
+                    title: `At-risk nudge: ${nudge.name || nudge.email}`,
+                    payload: {
+                        email: nudge.email,
+                        name: nudge.name,
+                        subject: nudge.subject,
+                        body: nudge.message,
+                        campaign_type: "at_risk_nudge",
+                        days_since_last: targetInfo?.days_since_last,
+                        meetings_60d: targetInfo?.meetings_60d,
+                    },
+                    reasoning: `${nudge.name || nudge.email} attended ${targetInfo?.meetings_60d || "?"}x in 60 days but has been quiet for ${targetInfo?.days_since_last || "?"}d.`,
+                    costEstimateCents: 2,
+                });
+                if (result.ok) tasksQueued++;
+                else if (result.budgetExceeded) { errors++; break; }
+                else errors++;
+            }
+
+            await alertSlack({
+                totalAtRisk: realCandidates.length,
+                processed: nudges.length,
+                emailsSent: 0,
+                notionTasks: 0,
+                errors,
+                recipients: [],
+                previews: nudges,
+            }, true);
+
+            return new Response(
+                JSON.stringify({
+                    ok: true,
+                    mode: "queue",
+                    tasks_queued: tasksQueued,
+                    processed: nudges.length,
+                    candidates_remaining: realCandidates.length - targets.length,
+                }),
+                { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+        }
+
+        // Direct mode (legacy): send emails immediately
 
         if (!dryRun) {
             const meetingDay = nextMeetingDay();

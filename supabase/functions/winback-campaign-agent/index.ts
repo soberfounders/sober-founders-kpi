@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sendHubSpotEmail, lookupContactByEmail } from "../_shared/hubspot_email.ts";
 import { createNotionFollowUp } from "../_shared/notion_task.ts";
+import { queueAgentTask } from "../_shared/agent_task_queue.ts";
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -127,12 +128,14 @@ serve(async (req: Request) => {
 
         // Parse request params
         let batchSize = 10;
+        let mode = "queue";
         let dryRun = true;
         try {
             const body = await req.json();
             if (body?.batch_size) batchSize = Math.min(Number(body.batch_size) || 10, 20);
-            if (body?.dry_run === false) dryRun = false;
-        } catch { /* defaults */ }
+            if (body?.mode === "direct") { mode = "direct"; dryRun = false; }
+            else if (body?.dry_run === false) { mode = "direct"; dryRun = false; }
+        } catch { /* default queue mode */ }
 
         // 1. Get winback candidates who haven't been contacted
         const { data: candidates, error } = await supabase
@@ -158,9 +161,59 @@ serve(async (req: Request) => {
         let notionTasks = 0;
         let errors = 0;
         const recipients: string[] = [];
+        let tasksQueued = 0;
 
-        // Dry run: no HubSpot tasks — review candidates in the KPI dashboard
-        // OutreachReviewQueue and click Send from there.
+        // Queue mode: create agent_tasks for approval in the Agency dashboard
+        if (mode === "queue" && winbacks.length > 0) {
+            for (const wb of winbacks) {
+                const targetInfo = targets.find(
+                    (t: any) => t.email?.toLowerCase() === wb.email?.toLowerCase()
+                );
+                const result = await queueAgentTask({
+                    agentRoleName: "Marketing Manager",
+                    type: "email",
+                    title: `Winback: ${wb.name || wb.email}`,
+                    payload: {
+                        email: wb.email,
+                        name: wb.name,
+                        subject: wb.subject,
+                        body: wb.message,
+                        campaign_type: "winback",
+                        days_since_last: targetInfo?.days_since_last,
+                        is_thursday_attendee: targetInfo?.is_thursday_attendee,
+                    },
+                    reasoning: `One-time attendee from ${targetInfo?.first_attended || "unknown date"}, ${targetInfo?.days_since_last || "?"}d ago. Never contacted for winback.`,
+                    costEstimateCents: 2,
+                });
+                if (result.ok) tasksQueued++;
+                else if (result.budgetExceeded) { errors++; break; }
+                else errors++;
+            }
+
+            await alertSlack({
+                totalWinback: realCandidates.length,
+                processed: winbacks.length,
+                emailsSent: 0,
+                notionTasks: 0,
+                errors,
+                remaining: realCandidates.length - targets.length,
+                recipients: [],
+                previews: winbacks,
+            }, true);
+
+            return new Response(
+                JSON.stringify({
+                    ok: true,
+                    mode: "queue",
+                    tasks_queued: tasksQueued,
+                    processed: winbacks.length,
+                    candidates_remaining: realCandidates.length - targets.length,
+                }),
+                { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+        }
+
+        // Direct mode (legacy): send emails immediately
 
         if (!dryRun) {
             for (const wb of winbacks) {

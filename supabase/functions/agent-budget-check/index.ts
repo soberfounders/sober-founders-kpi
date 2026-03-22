@@ -8,13 +8,33 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+/* ── Model routing helper ── */
+function selectModel(
+  config: Record<string, string> | null | undefined,
+  complexity: string,
+): string {
+  const defaults: Record<string, string> = {
+    simple: "gpt-4o-mini",
+    complex: "claude-opus-4-6",
+  };
+  if (!config) return defaults[complexity] || defaults.simple;
+  return config[complexity] || defaults[complexity] || defaults.simple;
+}
+
 /**
- * Budget guardrail edge function.
+ * Budget guardrail + model routing edge function.
  *
- * Called before every agent action. Returns { allowed: true/false }
- * and auto-pauses the agent if the 24h spend exceeds daily_budget_cents.
+ * Called before every agent action. Returns:
+ * - { allowed: true/false } with budget status
+ * - { recommended_model } based on task complexity and agent config
  *
- * POST body: { agent_id: string, estimated_cost_cents?: number }
+ * Auto-pauses the agent if the 24h spend exceeds daily_budget_cents.
+ *
+ * POST body: {
+ *   agent_id: string,
+ *   estimated_cost_cents?: number,
+ *   task_complexity?: "simple" | "complex"  // for model routing
+ * }
  */
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -26,7 +46,7 @@ serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const sb = createClient(supabaseUrl, serviceKey);
 
-    const { agent_id, estimated_cost_cents = 0 } = await req.json();
+    const { agent_id, estimated_cost_cents = 0, task_complexity = "simple" } = await req.json();
     if (!agent_id) {
       return new Response(
         JSON.stringify({ ok: false, error: "agent_id required" }),
@@ -34,12 +54,15 @@ serve(async (req) => {
       );
     }
 
-    // Fetch agent + rolling 24h spend in one query via the view
-    const { data: budget, error: budgetErr } = await sb
-      .from("vw_agent_budget_status")
-      .select("*")
-      .eq("agent_id", agent_id)
-      .single();
+    // Fetch agent config (for model routing) + rolling 24h spend
+    const [agentRes, budgetRes] = await Promise.all([
+      sb.from("agents").select("model_routing_config").eq("id", agent_id).single(),
+      sb.from("vw_agent_budget_status").select("*").eq("agent_id", agent_id).single(),
+    ]);
+
+    const agentConfig = agentRes.data;
+    const budget = budgetRes.data;
+    const budgetErr = budgetRes.error;
 
     if (budgetErr || !budget) {
       return new Response(
@@ -75,6 +98,7 @@ serve(async (req) => {
             ? "Budget exceeded for rolling 24h window"
             : "Agent is paused"
           : null,
+        recommended_model: selectModel(agentConfig?.model_routing_config, task_complexity),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

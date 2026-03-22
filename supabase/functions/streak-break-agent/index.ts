@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sendHubSpotEmail, lookupContactByEmail } from "../_shared/hubspot_email.ts";
 import { createNotionFollowUp } from "../_shared/notion_task.ts";
+import { queueAgentTask } from "../_shared/agent_task_queue.ts";
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -130,11 +131,13 @@ serve(async (req: Request) => {
         const hubspotToken = Deno.env.get("HUBSPOT_PRIVATE_APP_TOKEN");
         const senderEmail = Deno.env.get("HUBSPOT_SENDER_EMAIL") || "";
 
+        let mode = "queue";
         let dryRun = true;
         try {
             const body = await req.json();
-            if (body?.dry_run === false) dryRun = false;
-        } catch { /* default dry_run:true */ }
+            if (body?.mode === "direct") { mode = "direct"; dryRun = false; }
+            else if (body?.dry_run === false) { mode = "direct"; dryRun = false; }
+        } catch { /* default queue mode */ }
 
         // 1. Get streak-break candidates not reached in last 28 days
         //    (view already excludes people nudged via at_risk_nudge in last 14d)
@@ -162,9 +165,58 @@ serve(async (req: Request) => {
         let notionTasks = 0;
         let errors = 0;
         const recipients: string[] = [];
+        let tasksQueued = 0;
 
-        // Dry run: no HubSpot tasks — review candidates in the KPI dashboard
-        // OutreachReviewQueue and click Send from there.
+        // Queue mode: create agent_tasks for approval in the Agency dashboard
+        if (mode === "queue" && messages.length > 0) {
+            for (const msg of messages) {
+                const targetInfo = targets.find(
+                    (t: any) => t.email?.toLowerCase() === msg.email?.toLowerCase()
+                );
+                const result = await queueAgentTask({
+                    agentRoleName: "Marketing Manager",
+                    type: "email",
+                    title: `Streak break: ${msg.name || msg.email}`,
+                    payload: {
+                        email: msg.email,
+                        name: msg.name,
+                        subject: msg.subject,
+                        body: msg.message,
+                        campaign_type: "streak_break",
+                        total_meetings: targetInfo?.total_meetings,
+                        days_since_last: targetInfo?.days_since_last,
+                    },
+                    reasoning: `Regular attendee (${targetInfo?.total_meetings || "?"}x total) has been quiet for ${targetInfo?.days_since_last || "?"}d.`,
+                    costEstimateCents: 2,
+                });
+                if (result.ok) tasksQueued++;
+                else if (result.budgetExceeded) { errors++; break; }
+                else errors++;
+            }
+
+            await alertSlack({
+                totalCandidates: realCandidates.length,
+                processed: messages.length,
+                emailsSent: 0,
+                notionTasks: 0,
+                errors,
+                recipients: [],
+                previews: messages,
+            }, true);
+
+            return new Response(
+                JSON.stringify({
+                    ok: true,
+                    mode: "queue",
+                    tasks_queued: tasksQueued,
+                    processed: messages.length,
+                    candidates_remaining: realCandidates.length - targets.length,
+                }),
+                { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+        }
+
+        // Direct mode (legacy): send emails immediately
 
         if (!dryRun) {
             for (const msg of messages) {

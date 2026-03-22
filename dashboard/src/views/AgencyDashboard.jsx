@@ -93,11 +93,22 @@ function AgencyDashboard() {
 
   // ── Task actions ──
   const handleApprove = useCallback(async (taskId, feedback) => {
+    // 1. Mark as approved
     await supabase.from('agent_tasks').update({
       status: 'approved',
       feedback_text: feedback || null,
       resolved_at: new Date().toISOString(),
     }).eq('id', taskId);
+
+    // 2. Auto-execute via edge function
+    try {
+      await supabase.functions.invoke('agent-task-executor', {
+        body: { task_id: taskId },
+      });
+    } catch (err) {
+      console.error('Task execution failed:', err);
+    }
+
     fetchData();
   }, [fetchData]);
 
