@@ -1,7 +1,5 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { sendHubSpotEmail, lookupContactByEmail } from "../_shared/hubspot_email.ts";
-import { createNotionFollowUp } from "../_shared/notion_task.ts";
 import { queueAgentTask } from "../_shared/agent_task_queue.ts";
 
 const corsHeaders = {
@@ -123,19 +121,13 @@ serve(async (req: Request) => {
             Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
         );
 
-        const hubspotToken = Deno.env.get("HUBSPOT_PRIVATE_APP_TOKEN");
-        const senderEmail = Deno.env.get("HUBSPOT_SENDER_EMAIL") || "";
-
-        // Parse request params
+        // HITL enforcement: all outreach MUST go through the Agency approval queue.
+        // No direct send mode. Emails are only sent after explicit human approval.
         let batchSize = 10;
-        let mode = "queue";
-        let dryRun = true;
         try {
             const body = await req.json();
             if (body?.batch_size) batchSize = Math.min(Number(body.batch_size) || 10, 20);
-            if (body?.mode === "direct") { mode = "direct"; dryRun = false; }
-            else if (body?.dry_run === false) { mode = "direct"; dryRun = false; }
-        } catch { /* default queue mode */ }
+        } catch { /* no body needed */ }
 
         // 1. Get winback candidates who haven't been contacted
         const { data: candidates, error } = await supabase
@@ -157,14 +149,11 @@ serve(async (req: Request) => {
             winbacks = generateWinbackMessages(targets);
         }
 
-        let emailsSent = 0;
-        let notionTasks = 0;
         let errors = 0;
-        const recipients: string[] = [];
         let tasksQueued = 0;
 
-        // Queue mode: create agent_tasks for approval in the Agency dashboard
-        if (mode === "queue" && winbacks.length > 0) {
+        // Queue all winback messages for human approval in the Agency dashboard
+        if (winbacks.length > 0) {
             for (const wb of winbacks) {
                 const targetInfo = targets.find(
                     (t: any) => t.email?.toLowerCase() === wb.email?.toLowerCase()
@@ -213,102 +202,14 @@ serve(async (req: Request) => {
             );
         }
 
-        // Direct mode (legacy): send emails immediately
-
-        if (!dryRun) {
-            for (const wb of winbacks) {
-                const targetInfo = targets.find(
-                    (t: any) => t.email?.toLowerCase() === wb.email?.toLowerCase()
-                );
-
-                if (hubspotToken && senderEmail) {
-                    const { data: contact } = await supabase
-                        .from("raw_hubspot_contacts")
-                        .select("hubspot_contact_id")
-                        .ilike("email", wb.email)
-                        .limit(1)
-                        .single();
-
-                    let contactId = contact?.hubspot_contact_id;
-                    if (!contactId) {
-                        contactId = await lookupContactByEmail(hubspotToken, wb.email);
-                    }
-
-                    if (contactId) {
-                        const emailResult = await sendHubSpotEmail(hubspotToken, {
-                            contactId,
-                            contactEmail: wb.email,
-                            senderEmail,
-                            subject: wb.subject,
-                            htmlBody: wb.message.split("\n").map((l: string) => l ? `<p>${l}</p>` : "").join(""),
-                            campaignType: "winback",
-                        });
-
-                        if (emailResult.ok) {
-                            emailsSent++;
-                            recipients.push(`${wb.name || wb.email} (${targetInfo?.days_since_last || "?"}d ago)`);
-                        } else {
-                            wb._deliveryError = emailResult.error || "unknown";
-                            errors++;
-                        }
-                    } else {
-                        errors++;
-                    }
-                }
-
-                const notionResult = await createNotionFollowUp({
-                    title: `Winback check: ${wb.name || wb.email} — did they return?`,
-                    description: `Winback email sent to one-time attendee.\n\nFirst attended: ${targetInfo?.first_attended || "unknown"}\nDays since: ${targetInfo?.days_since_last || "?"}\nSession: ${targetInfo?.is_thursday_attendee ? "Thursday" : "Tuesday"}\n\nCheck HubSpot timeline and attendance data to see if they returned.`,
-                    dueDate: new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10),
-                    priority: "Low",
-                    tags: ["outreach", "winback", "automated"],
-                });
-
-                if (notionResult.ok) notionTasks++;
-            }
-
-            // 4. Log recovery events (successes AND failures for dashboard health monitoring)
-            if (winbacks.length > 0) {
-                const events = winbacks.map((w: any) => {
-                    const targetInfo = targets.find((t: any) => t.email === w.email);
-                    return {
-                        attendee_email: w.email,
-                        event_type: "winback",
-                        meeting_date: targetInfo?.first_attended,
-                        metadata: {
-                            ai_message: w.message,
-                            subject: w.subject,
-                            campaign_type: "winback",
-                            days_since_last: targetInfo?.days_since_last,
-                            is_thursday_attendee: targetInfo?.is_thursday_attendee,
-                            ...(w._deliveryError ? { delivery_failed: w._deliveryError } : {}),
-                        },
-                    };
-                });
-                await supabase.from("recovery_events").insert(events);
-            }
-        }
-
-        // 5. Slack summary
-        await alertSlack({
-            totalWinback: realCandidates.length,
-            processed: winbacks.length,
-            emailsSent,
-            notionTasks,
-            errors,
-            remaining: realCandidates.length - targets.length,
-            recipients,
-            previews: dryRun ? winbacks : [],
-        }, dryRun);
-
+        // No candidates to queue
         return new Response(
             JSON.stringify({
                 ok: true,
-                dry_run: dryRun,
-                processed: winbacks.length,
-                emails_sent: emailsSent,
-                notion_tasks: notionTasks,
-                candidates_remaining: realCandidates.length - targets.length,
+                mode: "queue",
+                tasks_queued: 0,
+                processed: 0,
+                candidates_remaining: realCandidates.length,
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );

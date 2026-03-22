@@ -1,7 +1,5 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { sendHubSpotEmail, lookupContactByEmail } from "../_shared/hubspot_email.ts";
-import { createNotionFollowUp } from "../_shared/notion_task.ts";
 import { queueAgentTask } from "../_shared/agent_task_queue.ts";
 
 const corsHeaders = {
@@ -128,16 +126,9 @@ serve(async (req: Request) => {
             Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
         );
 
-        const hubspotToken = Deno.env.get("HUBSPOT_PRIVATE_APP_TOKEN");
-        const senderEmail = Deno.env.get("HUBSPOT_SENDER_EMAIL") || "";
-
-        let mode = "queue";
-        let dryRun = true;
-        try {
-            const body = await req.json();
-            if (body?.mode === "direct") { mode = "direct"; dryRun = false; }
-            else if (body?.dry_run === false) { mode = "direct"; dryRun = false; }
-        } catch { /* default queue mode */ }
+        // HITL enforcement: all outreach MUST go through the Agency approval queue.
+        // No direct send mode. Emails are only sent after explicit human approval.
+        try { await req.json(); } catch { /* no body needed */ }
 
         // 1. Get streak-break candidates not reached in last 28 days
         //    (view already excludes people nudged via at_risk_nudge in last 14d)
@@ -161,14 +152,11 @@ serve(async (req: Request) => {
             messages = generateStreakBreakMessages(targets);
         }
 
-        let emailsSent = 0;
-        let notionTasks = 0;
         let errors = 0;
-        const recipients: string[] = [];
         let tasksQueued = 0;
 
-        // Queue mode: create agent_tasks for approval in the Agency dashboard
-        if (mode === "queue" && messages.length > 0) {
+        // Queue all messages for human approval in the Agency dashboard
+        if (messages.length > 0) {
             for (const msg of messages) {
                 const targetInfo = targets.find(
                     (t: any) => t.email?.toLowerCase() === msg.email?.toLowerCase()
@@ -216,104 +204,14 @@ serve(async (req: Request) => {
             );
         }
 
-        // Direct mode (legacy): send emails immediately
-
-        if (!dryRun) {
-            for (const msg of messages) {
-                const targetInfo = targets.find(
-                    (t: any) => t.email?.toLowerCase() === msg.email?.toLowerCase()
-                );
-
-                if (hubspotToken && senderEmail) {
-                    const { data: contact } = await supabase
-                        .from("raw_hubspot_contacts")
-                        .select("hubspot_contact_id")
-                        .ilike("email", msg.email)
-                        .limit(1)
-                        .single();
-
-                    let contactId = contact?.hubspot_contact_id;
-                    if (!contactId) {
-                        contactId = await lookupContactByEmail(hubspotToken, msg.email);
-                    }
-
-                    if (contactId) {
-                        const emailResult = await sendHubSpotEmail(hubspotToken, {
-                            contactId,
-                            contactEmail: msg.email,
-                            senderEmail,
-                            subject: msg.subject,
-                            htmlBody: msg.message.split("\n").map((l: string) => l ? `<p>${l}</p>` : "").join(""),
-                            campaignType: "streak_break",
-                        });
-
-                        if (emailResult.ok) {
-                            emailsSent++;
-                            recipients.push(
-                                `${msg.name || msg.email} (${targetInfo?.total_meetings || "?"}x, ${targetInfo?.days_since_last || "?"}d ago)`
-                            );
-                        } else {
-                            console.error(`Email failed for ${msg.email}:`, emailResult.error);
-                            msg._deliveryError = emailResult.error || "unknown";
-                            errors++;
-                        }
-                    } else {
-                        console.warn(`No HubSpot contact found for ${msg.email}`);
-                        errors++;
-                    }
-                }
-
-                const notionResult = await createNotionFollowUp({
-                    title: `Streak break check: ${msg.name || msg.email} — did they return?`,
-                    description: `Streak break outreach sent.\n\nTotal meetings: ${targetInfo?.total_meetings || "?"}\nDays since last: ${targetInfo?.days_since_last || "?"}\nLast session: ${targetInfo?.last_was_thursday ? "Thursday" : "Tuesday"}\n\nEmail: "${msg.subject}"\nCheck HubSpot timeline for delivery + reply.`,
-                    dueDate: new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10),
-                    priority: "Medium",
-                    tags: ["outreach", "streak-break", "automated"],
-                });
-
-                if (notionResult.ok) notionTasks++;
-            }
-
-            // Log recovery events (successes AND failures for dashboard health monitoring)
-            if (messages.length > 0) {
-                const events = messages.map((m: any) => {
-                    const targetInfo = targets.find((t: any) => t.email === m.email);
-                    return {
-                        attendee_email: m.email,
-                        event_type: "streak_break",
-                        meeting_date: targetInfo?.last_attended,
-                        metadata: {
-                            ai_message: m.message,
-                            subject: m.subject,
-                            campaign_type: "streak_break",
-                            total_meetings: targetInfo?.total_meetings,
-                            days_since_last: targetInfo?.days_since_last,
-                            ...(m._deliveryError ? { delivery_failed: m._deliveryError } : {}),
-                        },
-                    };
-                });
-                await supabase.from("recovery_events").insert(events);
-            }
-        }
-
-        await alertSlack({
-            totalCandidates: realCandidates.length,
-            processed: messages.length,
-            emailsSent,
-            notionTasks,
-            errors,
-            recipients,
-            previews: dryRun ? messages : [],
-        }, dryRun);
-
+        // No candidates to queue
         return new Response(
             JSON.stringify({
                 ok: true,
-                dry_run: dryRun,
-                processed: messages.length,
-                emails_sent: emailsSent,
-                notion_tasks: notionTasks,
-                candidates_remaining: realCandidates.length - targets.length,
+                mode: "queue",
+                tasks_queued: 0,
+                processed: 0,
+                candidates_remaining: realCandidates.length,
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );

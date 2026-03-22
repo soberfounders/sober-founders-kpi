@@ -1,7 +1,5 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { sendHubSpotEmail, lookupContactByEmail } from "../_shared/hubspot_email.ts";
-import { createNotionFollowUp } from "../_shared/notion_task.ts";
 import { queueAgentTask } from "../_shared/agent_task_queue.ts";
 
 const corsHeaders = {
@@ -135,16 +133,9 @@ serve(async (req: Request) => {
             Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
         );
 
-        const hubspotToken = Deno.env.get("HUBSPOT_PRIVATE_APP_TOKEN");
-        const senderEmail = Deno.env.get("HUBSPOT_SENDER_EMAIL") || "";
-
-        let mode = "queue";
-        let dryRun = true;
-        try {
-            const body = await req.json();
-            if (body?.mode === "direct") { mode = "direct"; dryRun = false; }
-            else if (body?.dry_run === false) { mode = "direct"; dryRun = false; }
-        } catch { /* default queue mode */ }
+        // HITL enforcement: all outreach MUST go through the Agency approval queue.
+        // No direct send mode. Emails are only sent after explicit human approval.
+        try { await req.json(); } catch { /* no body needed */ }
 
         // 1a. At-risk regulars (attended 2+ times recently, gone quiet)
         const { data: atRiskData, error: atRiskError } = await supabase
@@ -199,14 +190,11 @@ serve(async (req: Request) => {
             nudges = generateNudgeMessages(targets);
         }
 
-        let emailsSent = 0;
-        let notionTasks = 0;
         let errors = 0;
-        const recipients: string[] = [];
         let tasksQueued = 0;
 
-        // Queue mode: create agent_tasks for approval in the Agency dashboard
-        if (mode === "queue" && nudges.length > 0) {
+        // Queue all nudges for human approval in the Agency dashboard
+        if (nudges.length > 0) {
             for (const nudge of nudges) {
                 const targetInfo = targets.find(
                     (t: any) => t.email?.toLowerCase() === nudge.email?.toLowerCase()
@@ -254,104 +242,14 @@ serve(async (req: Request) => {
             );
         }
 
-        // Direct mode (legacy): send emails immediately
-
-        if (!dryRun) {
-            const meetingDay = nextMeetingDay();
-
-            for (const nudge of nudges) {
-                const targetInfo = targets.find(
-                    (t: any) => t.email?.toLowerCase() === nudge.email?.toLowerCase()
-                );
-
-                if (hubspotToken && senderEmail) {
-                    const { data: contact } = await supabase
-                        .from("raw_hubspot_contacts")
-                        .select("hubspot_contact_id")
-                        .ilike("email", nudge.email)
-                        .limit(1)
-                        .single();
-
-                    let contactId = contact?.hubspot_contact_id;
-                    if (!contactId) {
-                        contactId = await lookupContactByEmail(hubspotToken, nudge.email);
-                    }
-
-                    if (contactId) {
-                        const emailResult = await sendHubSpotEmail(hubspotToken, {
-                            contactId,
-                            contactEmail: nudge.email,
-                            senderEmail,
-                            subject: nudge.subject || "Hope to see you tomorrow",
-                            htmlBody: nudge.message.split("\n").map((l: string) => l ? `<p>${l}</p>` : "").join(""),
-                            campaignType: "at_risk_nudge",
-                        });
-
-                        if (emailResult.ok) {
-                            emailsSent++;
-                            recipients.push(
-                                `${nudge.name || nudge.email} (${targetInfo?.days_since_last || "?"}d since last)`
-                            );
-                        } else {
-                            nudge._deliveryError = emailResult.error || "unknown";
-                            errors++;
-                        }
-                    } else {
-                        errors++;
-                    }
-                }
-
-                const notionResult = await createNotionFollowUp({
-                    title: `Check: did ${nudge.name || nudge.email} attend ${meetingDay}?`,
-                    description: `At-risk nudge sent.\n\nAttendance: ${targetInfo?.meetings_60d || "?"}x in 60d, last ${targetInfo?.days_since_last || "?"}d ago.\n\nEmail: "${nudge.subject}"\nCheck HubSpot timeline for delivery + reply.`,
-                    dueDate: new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10),
-                    priority: "High",
-                    tags: ["outreach", "at-risk-retention", "automated"],
-                });
-
-                if (notionResult.ok) notionTasks++;
-            }
-
-            // Log recovery events (successes AND failures for dashboard health monitoring)
-            if (nudges.length > 0) {
-                const events = nudges.map((n: any) => {
-                    const targetInfo = targets.find((t: any) => t.email === n.email);
-                    return {
-                        attendee_email: n.email,
-                        event_type: "at_risk_nudge",
-                        meeting_date: targetInfo?.last_attended,
-                        metadata: {
-                            ai_message: n.message,
-                            subject: n.subject,
-                            campaign_type: "at_risk_nudge",
-                            days_since_last: targetInfo?.days_since_last,
-                            meetings_60d: targetInfo?.meetings_60d,
-                            ...(n._deliveryError ? { delivery_failed: n._deliveryError } : {}),
-                        },
-                    };
-                });
-                await supabase.from("recovery_events").insert(events);
-            }
-        }
-
-        await alertSlack({
-            totalAtRisk: realCandidates.length,
-            processed: nudges.length,
-            emailsSent,
-            notionTasks,
-            errors,
-            recipients,
-            previews: dryRun ? nudges : [],
-        }, dryRun);
-
+        // No candidates to queue
         return new Response(
             JSON.stringify({
                 ok: true,
-                dry_run: dryRun,
-                processed: nudges.length,
-                emails_sent: emailsSent,
-                notion_tasks: notionTasks,
-                candidates_remaining: realCandidates.length - targets.length,
+                mode: "queue",
+                tasks_queued: 0,
+                processed: 0,
+                candidates_remaining: realCandidates.length,
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );

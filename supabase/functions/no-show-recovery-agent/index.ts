@@ -1,7 +1,5 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { sendHubSpotEmail, lookupContactByEmail } from "../_shared/hubspot_email.ts";
-import { createNotionFollowUp } from "../_shared/notion_task.ts";
 import { queueAgentTask } from "../_shared/agent_task_queue.ts";
 
 const corsHeaders = {
@@ -159,18 +157,10 @@ serve(async (req: Request) => {
             Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
         );
 
-        const hubspotToken = Deno.env.get("HUBSPOT_PRIVATE_APP_TOKEN");
-        const senderEmail = Deno.env.get("HUBSPOT_SENDER_EMAIL") || "";
-
-        // Parse mode: "queue" (default, routes to Agency dashboard) or "direct" (legacy live send)
-        let mode = "queue";
-        let dryRun = true;
-        try {
-            const body = await req.json();
-            if (body?.mode === "direct") { mode = "direct"; dryRun = false; }
-            else if (body?.dry_run === false) { mode = "direct"; dryRun = false; }
-            // Default: mode=queue — creates agent_tasks for approval
-        } catch { /* no body — default queue mode */ }
+        // HITL enforcement: all outreach MUST go through the Agency approval queue.
+        // No direct send mode. dry_run and mode params are ignored.
+        // Emails are only sent after explicit human approval in the dashboard.
+        try { await req.json(); } catch { /* no body needed */ }
 
         // 1. Get no-show candidates (effective date guard is in the view)
         const { data: candidates, error } = await supabase
@@ -192,14 +182,11 @@ serve(async (req: Request) => {
             recoveries = generateRecoveryMessages(targets);
         }
 
-        let emailsSent = 0;
-        let notionTasks = 0;
         let errors = 0;
-        const recipients: string[] = [];
         let tasksQueued = 0;
 
-        // Queue mode: create agent_tasks for approval in the Agency dashboard
-        if (mode === "queue" && recoveries.length > 0) {
+        // Queue all messages for human approval in the Agency dashboard
+        if (recoveries.length > 0) {
             for (const recovery of recoveries) {
                 const targetInfo = targets.find(
                     (t: any) => t.email?.toLowerCase() === recovery.email?.toLowerCase()
@@ -247,106 +234,14 @@ serve(async (req: Request) => {
             );
         }
 
-        // Direct mode (legacy): send emails immediately
-
-        if (!dryRun) {
-            // 3b. Send live — HubSpot emails + Notion follow-ups
-            for (const recovery of recoveries) {
-                const targetInfo = targets.find(
-                    (t: any) => t.email?.toLowerCase() === recovery.email?.toLowerCase()
-                );
-
-                if (hubspotToken && senderEmail) {
-                    const { data: contact } = await supabase
-                        .from("raw_hubspot_contacts")
-                        .select("hubspot_contact_id")
-                        .ilike("email", recovery.email)
-                        .limit(1)
-                        .single();
-
-                    let contactId = contact?.hubspot_contact_id;
-                    if (!contactId) {
-                        contactId = await lookupContactByEmail(hubspotToken, recovery.email);
-                    }
-
-                    if (contactId) {
-                        const emailResult = await sendHubSpotEmail(hubspotToken, {
-                            contactId,
-                            contactEmail: recovery.email,
-                            senderEmail,
-                            subject: recovery.subject,
-                            htmlBody: recovery.message.split("\n").map((l: string) => l ? `<p>${l}</p>` : "").join(""),
-                            campaignType: "no_show_recovery",
-                        });
-
-                        if (emailResult.ok) {
-                            emailsSent++;
-                            recipients.push(`${recovery.name || recovery.email} (${recovery.email})`);
-                        } else {
-                            console.error(`Email failed for ${recovery.email}:`, emailResult.error);
-                            recovery._deliveryError = emailResult.error || "unknown";
-                            errors++;
-                        }
-                    } else {
-                        console.warn(`No HubSpot contact found for ${recovery.email}`);
-                        errors++;
-                    }
-                }
-
-                const meetingDate = targetInfo?.meeting_date || "unknown date";
-                const notionResult = await createNotionFollowUp({
-                    title: `Follow up: ${recovery.name || recovery.email} no-show (${meetingDate})`,
-                    description: `Auto recovery outreach sent.\n\nEmail: "${recovery.subject}"\nMessage: ${recovery.message}\n\nPrior meetings attended: ${targetInfo?.prior_meeting_count ?? 0}\nCheck HubSpot timeline for delivery status.`,
-                    dueDate: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10),
-                    priority: "Medium",
-                    tags: ["outreach", "no-show-recovery", "automated"],
-                });
-
-                if (notionResult.ok) notionTasks++;
-            }
-
-            // 4. Log to recovery_events (successes AND failures for dashboard health monitoring)
-            if (recoveries.length > 0) {
-                const events = recoveries.map((r: any) => {
-                    const targetInfo = targets.find((t: any) => t.email === r.email);
-                    const failed = !recipients.some((rec: string) => rec.includes(r.email));
-                    return {
-                        attendee_email: r.email,
-                        event_type: "no_show_followup",
-                        meeting_date: targetInfo?.meeting_date,
-                        metadata: {
-                            ai_message: r.message,
-                            subject: r.subject,
-                            campaign_type: "no_show_recovery",
-                            prior_meeting_count: targetInfo?.prior_meeting_count ?? 0,
-                            is_thursday: targetInfo?.is_thursday,
-                            ...(failed ? { delivery_failed: r._deliveryError || "delivery failed" } : {}),
-                        },
-                    };
-                });
-                await supabase.from("recovery_events").insert(events);
-            }
-        }
-
-        // 5. Slack summary (always — dry run shows previews, live shows recipients)
-        await alertSlack({
-            totalNoShows: candidates?.length || 0,
-            processed: recoveries.length,
-            emailsSent,
-            notionTasks,
-            errors,
-            recipients,
-            previews: dryRun ? recoveries : [],
-        }, dryRun);
-
+        // No candidates to queue
         return new Response(
             JSON.stringify({
                 ok: true,
-                dry_run: dryRun,
-                processed: recoveries.length,
-                emails_sent: emailsSent,
-                notion_tasks: notionTasks,
-                candidates_remaining: realCandidates.length - targets.length,
+                mode: "queue",
+                tasks_queued: tasksQueued,
+                processed: 0,
+                candidates_remaining: realCandidates.length,
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
