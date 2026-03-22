@@ -71,9 +71,10 @@ serve(async (req) => {
       );
     }
 
+    const exposure = Number(budget.exposure_24h_cents ?? budget.spent_24h_cents);
     const spent = Number(budget.spent_24h_cents);
     const limit = Number(budget.daily_budget_cents);
-    const projectedSpend = spent + estimated_cost_cents;
+    const projectedSpend = exposure + estimated_cost_cents;
     const allowed = projectedSpend <= limit && budget.status !== "paused";
 
     // Auto-pause if budget exceeded
@@ -91,7 +92,8 @@ serve(async (req) => {
         agent_id,
         daily_budget_cents: limit,
         spent_24h_cents: spent,
-        remaining_cents: Math.max(0, limit - spent),
+        exposure_24h_cents: exposure,
+        remaining_cents: Math.max(0, limit - exposure),
         estimated_cost_cents,
         reason: !allowed
           ? projectedSpend > limit

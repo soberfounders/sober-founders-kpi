@@ -70,14 +70,15 @@ async function checkBudget(
 
   if (!data) return { allowed: false, reason: "Agent budget status not found" };
 
-  const spent = Number(data.spent_24h_cents);
+  // Use total exposure (spent + pending/approved) not just executed spend
+  const exposure = Number(data.exposure_24h_cents ?? data.spent_24h_cents);
   const limit = Number(data.daily_budget_cents);
-  const projected = spent + estimatedCost;
+  const projected = exposure + estimatedCost;
 
   if (projected > limit) {
     // Auto-pause agent
     await sb.from("agents").update({ status: "paused" }).eq("id", agentId);
-    return { allowed: false, reason: `Budget exceeded: spent ${spent}c + est ${estimatedCost}c > limit ${limit}c` };
+    return { allowed: false, reason: `Budget exceeded: exposure ${exposure}c + est ${estimatedCost}c > limit ${limit}c` };
   }
 
   if (data.status === "paused") {

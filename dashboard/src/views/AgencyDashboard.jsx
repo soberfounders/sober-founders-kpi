@@ -91,54 +91,35 @@ function AgencyDashboard() {
     };
   }, []);
 
-  // ── Task actions ──
+  // ── Task actions (routed through service-role edge function) ──
   const handleApprove = useCallback(async (taskId, feedback) => {
-    // 1. Mark as approved
-    await supabase.from('agent_tasks').update({
-      status: 'approved',
-      feedback_text: feedback || null,
-      resolved_at: new Date().toISOString(),
-    }).eq('id', taskId);
-
-    // 2. Auto-execute via edge function
     try {
-      await supabase.functions.invoke('agent-task-executor', {
-        body: { task_id: taskId },
+      await supabase.functions.invoke('agent-task-approve', {
+        body: { task_id: taskId, action: 'approve', feedback: feedback || undefined },
       });
     } catch (err) {
-      console.error('Task execution failed:', err);
+      console.error('Approve failed:', err);
     }
-
     fetchData();
   }, [fetchData]);
 
   const handleReject = useCallback(async (taskId, feedback) => {
-    // Update task
-    await supabase.from('agent_tasks').update({
-      status: 'rejected',
-      feedback_text: feedback || null,
-      resolved_at: new Date().toISOString(),
-    }).eq('id', taskId);
-
-    // Save feedback to agent_memory for the learning loop
-    const task = tasks.find((t) => t.id === taskId);
-    if (task && feedback) {
-      await supabase.from('agent_memory').insert({
-        agent_id: task.agent_id,
-        task_id: taskId,
-        feedback_summary: `REJECTED: ${task.title}. Feedback: ${feedback}`,
+    try {
+      await supabase.functions.invoke('agent-task-approve', {
+        body: { task_id: taskId, action: 'reject', feedback: feedback || undefined },
       });
+    } catch (err) {
+      console.error('Reject failed:', err);
     }
-
     fetchData();
-  }, [fetchData, tasks]);
+  }, [fetchData]);
 
   // ── Derived data ──
   const agentsById = {};
   agents.forEach((a) => { agentsById[a.id] = a; });
 
   const pendingCount = tasks.filter((t) => t.status === 'pending').length;
-  const totalSpent = Object.values(budgetMap).reduce((sum, b) => sum + Number(b.spent_24h_cents || 0), 0);
+  const totalSpent = Object.values(budgetMap).reduce((sum, b) => sum + Number(b.exposure_24h_cents || b.spent_24h_cents || 0), 0);
   const alertCount = Object.values(rejectionMap).filter((r) => r.recommend_pause).length;
 
   if (loading) {

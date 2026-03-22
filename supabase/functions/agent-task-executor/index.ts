@@ -63,6 +63,23 @@ serve(async (req) => {
 
     for (const task of tasks) {
       try {
+        // Budget re-check before execution
+        const { data: budgetData } = await sb
+          .from("vw_agent_budget_status")
+          .select("exposure_24h_cents, daily_budget_cents")
+          .eq("agent_id", task.agent_id)
+          .single();
+
+        if (budgetData) {
+          const exposure = Number(budgetData.exposure_24h_cents);
+          const limit = Number(budgetData.daily_budget_cents);
+          if (exposure > limit) {
+            await sb.from("agents").update({ status: "paused" }).eq("id", task.agent_id);
+            results.push({ task_id: task.id, status: "error", error: "Budget exceeded at execution time" });
+            continue;
+          }
+        }
+
         let executionResult: { ok: boolean; error?: string } = { ok: false, error: "Unknown task type" };
 
         if (task.type === "email") {
@@ -205,7 +222,7 @@ async function executeEmailTask(
 /* ------------------------------------------------------------------ */
 
 async function executeWpPostTask(task: any): Promise<{ ok: boolean; error?: string }> {
-  const { title, content, status: postStatus, categories } = task.payload as any;
+  const { title, content, categories } = task.payload as any;
 
   const wpUser = Deno.env.get("WP_APPLICATION_USERNAME") || "Andrew";
   const wpPass = Deno.env.get("WP_APPLICATION_PASSWORD");

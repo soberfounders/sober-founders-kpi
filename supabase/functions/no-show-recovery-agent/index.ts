@@ -12,12 +12,6 @@ const corsHeaders = {
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-function calendarUrl(isThursday: boolean): string {
-    return isThursday
-        ? "https://soberfounders.org/thursday"
-        : "https://soberfounders.org/tuesday";
-}
-
 function sessionName(isThursday: boolean): string {
     return isThursday ? "Thursday Mastermind" : "Tuesday meeting";
 }
@@ -78,16 +72,14 @@ function generateRecoveryMessages(noShows: any[]): any[] {
 /*  Slack Alert                                                        */
 /* ------------------------------------------------------------------ */
 
-async function alertSlack(stats: any, dryRun: boolean): Promise<boolean> {
+async function alertSlack(stats: any): Promise<boolean> {
     const webhookUrl = Deno.env.get("SLACK_WEBHOOK_URL");
     if (!webhookUrl) return false;
-
-    const modeLabel = dryRun ? "DRY RUN — no emails sent" : "LIVE";
 
     const blocks: any[] = [
         {
             type: "header",
-            text: { type: "plain_text", text: `No-Show Recovery Agent — ${modeLabel}`, emoji: true },
+            text: { type: "plain_text", text: "No-Show Recovery Agent - Queued for Review", emoji: true },
         },
         {
             type: "section",
@@ -96,42 +88,24 @@ async function alertSlack(stats: any, dryRun: boolean): Promise<boolean> {
                 text: [
                     `*Recovery Summary:*`,
                     `- No-Shows Found: ${stats.totalNoShows}`,
-                    `- Queued This Run: ${stats.processed}`,
-                    dryRun ? `- Emails Sent: 0 (dry run)` : `- Emails Sent: ${stats.emailsSent}`,
-                    dryRun ? `- Review in KPI Dashboard → Outreach Queue` : `- Notion Tasks: ${stats.notionTasks}`,
+                    `- Queued for Approval: ${stats.processed}`,
+                    `- Review in KPI Dashboard -> Agency -> Action Queue`,
                     stats.errors > 0 ? `- Errors: ${stats.errors}` : "",
                 ].filter(Boolean).join("\n"),
             },
         },
     ];
 
-    if (dryRun && stats.previews?.length > 0) {
+    if (stats.previews?.length > 0) {
         blocks.push({
             type: "section",
             text: {
                 type: "mrkdwn",
-                text: `*Preview — emails that would be sent:*\n${
+                text: `*Queued emails awaiting approval:*\n${
                     stats.previews.map((p: any) =>
-                        `• *${p.name || p.email}* (${p.email})\n  _Subject:_ ${p.subject}\n  _Message:_ ${p.message}`
-                    ).join("\n\n")
+                        `- *${p.name || p.email}* (${p.email})\n  _Subject:_ ${p.subject}`
+                    ).join("\n")
                 }`,
-            },
-        });
-        blocks.push({
-            type: "section",
-            text: {
-                type: "mrkdwn",
-                text: `*Review these in the KPI Dashboard* → Attendance → Outreach Review Queue. Click Send on each one you approve.\n\n*To auto-send all:* POST \`/no-show-recovery-agent\` with \`{"dry_run": false}\``,
-            },
-        });
-    }
-
-    if (!dryRun && stats.recipients?.length > 0) {
-        blocks.push({
-            type: "section",
-            text: {
-                type: "mrkdwn",
-                text: `*Sent To:*\n${stats.recipients.map((r: string) => `• ${r}`).join("\n")}`,
             },
         });
     }
@@ -215,18 +189,16 @@ serve(async (req: Request) => {
             await alertSlack({
                 totalNoShows: candidates?.length || 0,
                 processed: recoveries.length,
-                emailsSent: 0,
-                notionTasks: 0,
                 errors,
-                recipients: [],
                 previews: recoveries,
-            }, true); // Show as dry-run style preview
+            });
 
             return new Response(
                 JSON.stringify({
-                    ok: true,
+                    ok: errors === 0,
                     mode: "queue",
                     tasks_queued: tasksQueued,
+                    errors,
                     processed: recoveries.length,
                     candidates_remaining: realCandidates.length - targets.length,
                 }),
@@ -249,7 +221,7 @@ serve(async (req: Request) => {
     } catch (err: any) {
         console.error("No-Show Agent Error:", err);
         return new Response(
-            JSON.stringify({ ok: false, error: err.message }),
+            JSON.stringify({ ok: false, mode: "queue", error: err.message }),
             { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
     }

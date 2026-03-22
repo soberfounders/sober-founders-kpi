@@ -15,8 +15,9 @@ export default function AgentDetailPanel({ agent, budgetInfo, rejectionInfo, onC
   };
 
   const saveBudget = async () => {
-    const cents = parseInt(budgetInput, 10);
-    if (isNaN(cents) || cents < 0) return;
+    if (!/^\d+$/.test(budgetInput.trim())) return;
+    const cents = Number(budgetInput.trim());
+    if (cents < 0) return;
     setSaving(true);
     await supabase.from('agents').update({ daily_budget_cents: cents }).eq('id', agent.id);
     onRefresh();

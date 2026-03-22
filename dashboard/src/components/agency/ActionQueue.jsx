@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import { CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, FileText, Mail, Globe, MessageSquare, Pencil } from 'lucide-react';
 
 const TYPE_META = {
-  email:          { icon: Mail,          label: 'Email',         color: '#3b82f6' },
-  wp_post:        { icon: FileText,      label: 'Blog Post',     color: '#8b5cf6' },
-  crm_update:     { icon: Globe,         label: 'CRM Update',    color: '#06b6d4' },
-  slack_message:  { icon: MessageSquare,  label: 'Slack',         color: '#e11d48' },
-  content_draft:  { icon: Pencil,        label: 'Content Draft', color: '#f59e0b' },
-  seo_audit:      { icon: Globe,         label: 'SEO Audit',     color: '#10b981' },
-  other:          { icon: FileText,      label: 'Task',          color: '#94a3b8' },
+  email:          { icon: Mail,          label: 'Email',         cssVar: '--color-info' },
+  wp_post:        { icon: FileText,      label: 'Blog Post',     cssVar: '--color-purple' },
+  crm_update:     { icon: Globe,         label: 'CRM Update',    cssVar: '--color-cyan' },
+  slack_message:  { icon: MessageSquare,  label: 'Slack',         cssVar: '--color-rose' },
+  content_draft:  { icon: Pencil,        label: 'Content Draft', cssVar: '--color-warning' },
+  seo_audit:      { icon: Globe,         label: 'SEO Audit',     cssVar: '--color-emerald' },
+  other:          { icon: FileText,      label: 'Task',          cssVar: '--color-neutral' },
 };
 
 function TaskCard({ task, agentName, onApprove, onReject }) {
@@ -16,6 +16,7 @@ function TaskCard({ task, agentName, onApprove, onReject }) {
   const [feedback, setFeedback] = useState('');
   const meta = TYPE_META[task.type] || TYPE_META.other;
   const Icon = meta.icon;
+  const accentColor = `var(${meta.cssVar})`;
 
   const isPending = task.status === 'pending';
   const statusStyle = {
@@ -31,10 +32,11 @@ function TaskCard({ task, agentName, onApprove, onReject }) {
         {/* Type icon */}
         <div style={{
           width: '36px', height: '36px', borderRadius: '10px',
-          background: `${meta.color}22`, border: `1px solid ${meta.color}44`,
+          background: `color-mix(in srgb, ${accentColor} 13%, transparent)`,
+          border: `1px solid color-mix(in srgb, ${accentColor} 27%, transparent)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
         }}>
-          <Icon size={16} style={{ color: meta.color }} />
+          <Icon size={16} style={{ color: accentColor }} />
         </div>
 
         {/* Content */}
