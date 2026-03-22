@@ -248,3 +248,392 @@ button:active {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-dark-green);
 }
+
+/* ═══════════════════════════════════════════════════════════
+   Autonomous Agency Module
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Summary row ── */
+.agency-summary-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.agency-summary-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  background: var(--color-card);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  min-width: 140px;
+  flex: 1;
+}
+
+.agency-summary-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  line-height: 1;
+}
+
+.agency-summary-label {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+}
+
+/* ── Tab bar ── */
+.agency-tab-bar {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  padding: 4px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  width: fit-content;
+}
+
+.agency-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  background: transparent;
+  transition: all 0.2s;
+}
+
+.agency-tab:hover {
+  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.agency-tab.active {
+  color: #0a0f18;
+  background: linear-gradient(135deg, var(--color-dark-green) 0%, var(--color-light-green) 100%);
+  font-weight: 700;
+  box-shadow: 0 4px 15px var(--color-brand-glow);
+}
+
+/* ── Office view ── */
+.agency-office-container {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.agency-dept-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.agency-manager-row {
+  width: 100%;
+  max-width: 320px;
+}
+
+.agency-tree-connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 32px;
+}
+
+.agency-tree-line-v {
+  width: 2px;
+  height: 20px;
+  background: var(--color-border-glow);
+}
+
+.agency-tree-line-h {
+  width: 60%;
+  max-width: 400px;
+  height: 2px;
+  background: var(--color-border-glow);
+}
+
+.agency-specialists-row {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.agency-specialist-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 280px;
+}
+
+.agency-tree-branch {
+  width: 2px;
+  height: 12px;
+  background: var(--color-border-glow);
+}
+
+/* ── Agent card ── */
+.agency-agent-card {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px 16px;
+  background: var(--color-card);
+  backdrop-filter: blur(16px);
+  border-radius: 16px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.agency-agent-card:hover {
+  background: var(--color-card-hover);
+  border-color: var(--color-border-glow);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), inset 0 0 0 1px var(--color-border-glow);
+  transform: translateY(-2px);
+}
+
+.agency-agent-avatar {
+  line-height: 1;
+}
+
+.agency-agent-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.agency-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* ── Pulse animation ── */
+.agency-pulse-ring {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.agency-pulse-ring::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  animation: agencyPulse 2s ease-in-out infinite;
+}
+
+.agency-pulse-active {
+  background: var(--color-success);
+}
+.agency-pulse-active::before {
+  border: 2px solid var(--color-success);
+}
+
+.agency-pulse-paused {
+  background: var(--color-warning);
+}
+.agency-pulse-paused::before {
+  border: 2px solid var(--color-warning);
+  animation-duration: 3s;
+}
+
+.agency-pulse-needs_intervention {
+  background: var(--color-danger);
+}
+.agency-pulse-needs_intervention::before {
+  border: 2px solid var(--color-danger);
+  animation-duration: 1s;
+}
+
+@keyframes agencyPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(1.8); }
+}
+
+/* ── Budget bar ── */
+.agency-budget-track {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.agency-budget-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.5s ease, background 0.3s ease;
+}
+
+/* ── Alert badge ── */
+.agency-alert-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+/* ── Kanban ── */
+.agency-kanban-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.agency-kanban-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+}
+
+.agency-kanban-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  background: transparent;
+  white-space: nowrap;
+}
+
+.agency-kanban-tab:hover {
+  color: var(--color-text-secondary);
+}
+
+.agency-kanban-tab.active {
+  color: var(--color-dark-green);
+  background: rgba(3, 218, 198, 0.1);
+  font-weight: 600;
+}
+
+.agency-kanban-count {
+  background: rgba(3, 218, 198, 0.15);
+  color: var(--color-dark-green);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 10px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.agency-kanban-columns {
+  display: flex;
+  gap: 16px;
+}
+
+.agency-kanban-column {
+  flex: 1;
+  min-width: 0;
+  display: none;
+}
+
+.agency-kanban-column.visible {
+  display: block;
+}
+
+.agency-kanban-column-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 10px;
+}
+
+.agency-kanban-column-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Desktop: show all columns side by side */
+@media (min-width: 900px) {
+  .agency-kanban-tabs {
+    display: none;
+  }
+  .agency-kanban-column {
+    display: block;
+  }
+}
+
+/* ── Task card ── */
+.agency-task-card {
+  padding: 14px 16px;
+  background: var(--color-card);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  transition: all 0.2s;
+}
+
+.agency-task-card:hover {
+  border-color: var(--color-border-glow);
+}
+
+/* ── Detail panel overlay ── */
+.agency-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 15, 24, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.agency-detail-panel {
+  background: var(--color-surface-contrast-alt);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 24px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+}
+
+.agency-detail-section {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.agency-detail-section:last-child {
+  border-bottom: none;
+}

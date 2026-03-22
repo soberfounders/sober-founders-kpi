@@ -15,6 +15,7 @@ const WebsiteTrafficDashboard = lazy(() => import('./views/WebsiteTrafficDashboa
 const AIBriefingDashboard = lazy(() => import('./views/AIBriefingDashboard'));
 const DonationsDashboard = lazy(() => import('./views/DonationsDashboard'));
 const OutreachExperimentDashboard = lazy(() => import('./views/OutreachExperimentDashboard'));
+const AgencyDashboard = lazy(() => import('./views/AgencyDashboard'));
 
 /* ── route ↔ tab mapping ── */
 const ROUTES = [
@@ -27,6 +28,7 @@ const ROUTES = [
   { path: '/marketing',        tabId: 'Marketing',        label: 'Marketing',          element: <EmailMarketingDashboard /> },
   { path: '/todos',            tabId: "To-Do's",          label: "To-Do's",            element: <TodosDashboard /> },
   { path: '/outreach',          tabId: 'Outreach',         label: 'Outreach',           element: <OutreachExperimentDashboard /> },
+  { path: '/agency',            tabId: 'Agency',           label: 'Agency',             element: <AgencyDashboard /> },
   { path: '/ai-manager',       tabId: 'AI Manager',       label: 'Board of Directors', element: <AIBriefingDashboard /> },
   { path: '/data-integrity',   tabId: 'Data Integrity',   label: 'Data Integrity',     element: <DataCleaning /> },
 ];
@@ -36,7 +38,7 @@ const TAB_BY_PATH = Object.fromEntries(ROUTES.map((r) => [r.path, r.tabId]));
 const SUPABASE_REQUIRED_TABS = new Set([
   'Dashboard', 'Attendance', 'Leads', 'Email', 'Online Discovery',
   'Website Traffic', 'SEO', 'Donations', 'Marketing', "To-Do's",
-  'Outreach', 'AI Manager', 'Data Integrity',
+  'Outreach', 'Agency', 'AI Manager', 'Data Integrity',
 ]);
 
 function PlaceholderView({ tab }) {

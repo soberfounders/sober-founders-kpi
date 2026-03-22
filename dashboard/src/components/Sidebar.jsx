@@ -11,6 +11,7 @@ import {
   Bot,
   Gift,
   Send,
+  Building2,
   ChevronLeft,
   ChevronRight,
   X,
@@ -27,6 +28,7 @@ const sidebarItems = [
   { id: 'Marketing',        icon: Megaphone,       label: 'Marketing',         path: '/marketing' },
   { id: 'Outreach',         icon: Send,            label: 'Outreach',          path: '/outreach' },
   { id: "To-Do's",          icon: CheckSquare,     label: "To-Do's",           path: '/todos' },
+  { id: 'Agency',            icon: Building2,       label: 'Agency',             path: '/agency' },
   { id: 'AI Manager',       icon: Bot,             label: 'Board of Directors', path: '/ai-manager' },
 ];
 
